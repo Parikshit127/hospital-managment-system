@@ -96,7 +96,10 @@ export async function createGLAccount(data: GLAccountInput) {
   }
 }
 
-export async function updateGLAccount(id: string, data: Partial<GLAccountInput> & { is_active?: boolean }) {
+export async function updateGLAccount(
+  id: string,
+  data: Partial<Omit<GLAccountInput, 'parent_id'>> & { is_active?: boolean; parent_id?: string | null }
+) {
   try {
     const account = await prisma.gL_Account.update({
       where: { id },
@@ -622,6 +625,7 @@ export async function postExpenseToGL(expenseId: number) {
   try {
     const expense = await prisma.expense.findUnique({
       where: { id: expenseId },
+      include: { category: true },
     });
 
     if (!expense) {
@@ -641,8 +645,15 @@ export async function postExpenseToGL(expenseId: number) {
       return { success: true, message: 'Expense already posted to GL', journal: existingEntry };
     }
 
-    // Get accounts
-    const expenseAccount = await getAccountByCode(expense.organizationId, '8000'); // Operating Expenses
+    // Resolve the ledger account from the expense's category; fall back to the
+    // generic Operating Expenses account (8000) if the category has no mapping.
+    let expenseAccount = expense.category.gl_expense_account_id
+      ? await prisma.gL_Account.findUnique({ where: { id: expense.category.gl_expense_account_id } })
+      : null;
+    if (!expenseAccount) {
+      expenseAccount = await getAccountByCode(expense.organizationId, '8000'); // Operating Expenses fallback
+    }
+
     const cashOrPayableAccount = expense.status === 'Paid'
       ? await getAccountByCode(expense.organizationId, '1110') // Cash
       : await getAccountByCode(expense.organizationId, '3110'); // Vendors Payable
@@ -652,7 +663,7 @@ export async function postExpenseToGL(expenseId: number) {
     }
 
     const lines: JournalLineInput[] = [
-      // Debit: Expense
+      // Debit: Expense (category-specific ledger, or 8000 fallback)
       {
         account_id: expenseAccount.id,
         debit_amount: expense.amount.toNumber(),
@@ -685,10 +696,71 @@ export async function postExpenseToGL(expenseId: number) {
   }
 }
 
+export async function postExpensePaymentToGL(expenseId: number, paymentMethod: string) {
+  try {
+    const expense = await prisma.expense.findUnique({ where: { id: expenseId } });
+    if (!expense) {
+      return { success: false, error: 'Expense not found' };
+    }
+
+    // Idempotency: don't double-post the payment reclass entry
+    const existingPaymentEntry = await prisma.gL_JournalEntry.findFirst({
+      where: {
+        reference_type: 'ExpensePayment',
+        reference_id: expenseId.toString(),
+        status: { not: 'Reversed' },
+      },
+    });
+    if (existingPaymentEntry) {
+      return { success: true, message: 'Expense payment already posted to GL', journal: existingPaymentEntry };
+    }
+
+    const payableAccount = await getAccountByCode(expense.organizationId, '3110'); // Vendors Payable
+    const cashOrBankAccount = paymentMethod === 'Cash'
+      ? await getAccountByCode(expense.organizationId, '1110') // Cash
+      : await getAccountByCode(expense.organizationId, '1120'); // Bank
+
+    if (!payableAccount || !cashOrBankAccount) {
+      return { success: false, error: 'Required GL accounts not found' };
+    }
+
+    const lines: JournalLineInput[] = [
+      // Debit: clear the Payable
+      {
+        account_id: payableAccount.id,
+        debit_amount: expense.amount.toNumber(),
+        credit_amount: 0,
+        description: `Payment for ${expense.description || 'expense'}`,
+      },
+      // Credit: Cash/Bank goes out
+      {
+        account_id: cashOrBankAccount.id,
+        debit_amount: 0,
+        credit_amount: expense.amount.toNumber(),
+        description: 'Cash/bank disbursed',
+      },
+    ];
+
+    const result = await createJournalEntry({
+      organizationId: expense.organizationId,
+      entry_date: new Date(),
+      entry_type: 'ExpensePayment',
+      narration: `Payment reclass - ${expense.description || 'N/A'}`,
+      lines,
+      reference_type: 'ExpensePayment',
+      reference_id: expenseId.toString(),
+    });
+
+    return result;
+  } catch (error) {
+    console.error('Error posting expense payment to GL:', error);
+    return { success: false, error: 'Failed to post expense payment to GL' };
+  }
+}
+
 export async function postDepositToGL(depositId: number) {
   try {
-    // Assuming deposit is a payment with deposit type
-    const deposit = await prisma.payments.findUnique({
+    const deposit = await prisma.patientDeposit.findUnique({
       where: { id: depositId },
     });
 
@@ -743,7 +815,7 @@ export async function postDepositToGL(depositId: number) {
 export async function postRefundToGL(refundId: number) {
   try {
     // Refund reverses revenue
-    const refund = await prisma.payments.findUnique({
+    const refund = await prisma.refund.findUnique({
       where: { id: refundId },
     });
 
@@ -762,7 +834,7 @@ export async function postRefundToGL(refundId: number) {
       // Debit: Revenue (reduces revenue)
       {
         account_id: revenueAccount.id,
-        debit_amount: refund.amount.toNumber(),
+        debit_amount: refund.amount,
         credit_amount: 0,
         description: 'Refund to patient',
       },
@@ -770,7 +842,7 @@ export async function postRefundToGL(refundId: number) {
       {
         account_id: cashOrBankAccount.id,
         debit_amount: 0,
-        credit_amount: refund.amount.toNumber(),
+        credit_amount: refund.amount,
         description: 'Cash refunded',
       },
     ];

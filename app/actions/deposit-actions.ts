@@ -2,6 +2,7 @@
 
 import { requireTenantContext } from '@/backend/tenant';
 import { generateDepositNumber as genDepNum } from '@/app/lib/sequence-generator';
+import { postDepositToGL } from './gl-actions';
 import {
     getCashThresholds,
     validateCashCompliance,
@@ -120,6 +121,10 @@ export async function collectDeposit(data: {
                 organizationId,
             },
         });
+
+        postDepositToGL(deposit.id).catch(err =>
+            console.error('Failed to post deposit to GL:', err)
+        );
 
         return { success: true, data: serialize(deposit) };
     } catch (error: any) {

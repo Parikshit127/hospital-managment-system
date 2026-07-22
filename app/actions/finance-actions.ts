@@ -5,7 +5,7 @@ import { prisma } from '@/backend/db';
 import { logAudit } from '@/app/lib/audit';
 import { sendWhatsAppMessage, formatPhoneNumber } from '@/app/lib/whatsapp';
 import { billingInvoiceMsg, paymentReceiptMsg } from '@/app/lib/whatsapp-templates';
-import { postInvoiceToGL, postPaymentToGL, reverseJournalEntry } from './gl-actions';
+import { postInvoiceToGL, postPaymentToGL, postRefundToGL, reverseJournalEntry } from './gl-actions';
 import { getCashThresholds, validateCashCompliance, normalizePan, resolveRegisteredPan, CASH_METHOD } from '@/app/lib/cash-compliance';
 import { generateInvoiceNumber as genInvNum, generateReceiptNumber as genRcpNum, createWithUniqueRetry } from '@/app/lib/sequence-generator';
 import { validateBackdate } from '@/app/lib/backdate';
@@ -2576,6 +2576,10 @@ export async function processRefund(input: {
         } catch (e) {
             console.error('referral commission recompute failed:', e);
         }
+
+        postRefundToGL(result.refund.id).catch(err =>
+            console.error('Failed to post refund to GL:', err)
+        );
 
         return { success: true, data: serialize(result) };
     } catch (error: any) {

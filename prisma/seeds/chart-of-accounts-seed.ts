@@ -687,13 +687,28 @@ const STANDARD_HOSPITAL_COA: AccountDefinition[] = [
 export async function seedChartOfAccounts(organizationId: string) {
   console.log(`Seeding Chart of Accounts for organization: ${organizationId}`);
 
-  // Create accounts in hierarchical order (parents first)
+  // Create accounts in hierarchical order (parents first). Idempotent: an
+  // account_code that already exists for this org (e.g. created earlier by a
+  // feature-specific path such as insurance-gl-actions.ts) is skipped but its
+  // id is still recorded so later accounts can resolve parent_code against it.
   const accountMap = new Map<string, string>(); // code -> id mapping
+  let created = 0;
+  let skipped = 0;
 
   for (const accountDef of STANDARD_HOSPITAL_COA) {
     const parentId = accountDef.parent_code
       ? accountMap.get(accountDef.parent_code)
       : undefined;
+
+    const existing = await prisma.gL_Account.findFirst({
+      where: { organizationId, account_code: accountDef.account_code },
+    });
+    if (existing) {
+      accountMap.set(accountDef.account_code, existing.id);
+      skipped++;
+      console.log(`  - Skipped (already exists): ${accountDef.account_code} - ${accountDef.account_name}`);
+      continue;
+    }
 
     const account = await prisma.gL_Account.create({
       data: {
@@ -713,10 +728,11 @@ export async function seedChartOfAccounts(organizationId: string) {
     });
 
     accountMap.set(accountDef.account_code, account.id);
+    created++;
     console.log(`  ✓ Created account: ${accountDef.account_code} - ${accountDef.account_name}`);
   }
 
-  console.log(`✅ Successfully seeded ${STANDARD_HOSPITAL_COA.length} accounts`);
+  console.log(`✅ Chart of accounts seed complete: ${created} created, ${skipped} already existed (${STANDARD_HOSPITAL_COA.length} total).`);
   return accountMap;
 }
 

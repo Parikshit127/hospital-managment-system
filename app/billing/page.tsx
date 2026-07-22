@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { DateField } from '@/app/components/ui/DateField';
 import Link from "next/link";
 import {
@@ -56,12 +57,6 @@ function fmtMoney(n: number | null | undefined): string {
   return v.toLocaleString("en-IN", { maximumFractionDigits: 0 });
 }
 
-function fmtDateTime(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  return d.toLocaleDateString('en-GB');
-}
-
 // ── status badges ─────────────────────────────────────────────────────────
 
 function InvoiceBadge({ status }: { status: string }) {
@@ -103,39 +98,17 @@ function PaymentBadge({ status }: { status: string }) {
   );
 }
 
-function ClaimBadge({ status }: { status: string }) {
-  if (!status) return <span className="text-[10px] text-gray-400">—</span>;
-  // Plan §8 status pill table — single source of truth for TPA claim color/label.
-  const meta: Record<string, { label: string; cls: string }> = {
-    not_submitted: { label: "TPA: Not Submitted", cls: "bg-gray-100 text-gray-700 border border-gray-200" },
-    submitted: { label: "TPA: Submitted", cls: "bg-blue-100 text-blue-700 border border-blue-200" },
-    approved: { label: "TPA: Approved — Awaiting Payment", cls: "bg-amber-100 text-amber-800 border border-amber-200" },
-    partially_settled: { label: "TPA: Partial Settlement", cls: "bg-amber-100 text-amber-800 border border-amber-200" },
-    settled: { label: "TPA: Settled", cls: "bg-emerald-100 text-emerald-700 border border-emerald-200" },
-    rejected: { label: "TPA: Rejected", cls: "bg-rose-100 text-rose-700 border border-rose-200" },
-    // Legacy values kept for backward compatibility — same palette family.
-    under_review: { label: "TPA: Under Review", cls: "bg-amber-100 text-amber-800 border border-amber-200" },
-    partially_approved: { label: "TPA: Partially Approved", cls: "bg-amber-100 text-amber-800 border border-amber-200" },
-  };
-  const m = meta[status] ?? { label: status.replace(/_/g, " "), cls: "bg-gray-100 text-gray-700 border border-gray-200" };
-  return (
-    <span
-      className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${m.cls}`}
-    >
-      {m.label}
-    </span>
-  );
-}
-
-function RiskDot({ level, reasons }: { level: "low" | "medium" | "high"; reasons: string[] }) {
-  const color =
-    level === "high" ? "bg-rose-500" : level === "medium" ? "bg-amber-400" : "bg-emerald-400";
-  return (
-    <span title={reasons.join(" · ") || "Low risk"} className="inline-flex items-center gap-1">
-      <span className={`h-2 w-2 rounded-full ${color}`} />
-      <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500">{level}</span>
-    </span>
-  );
+// Cash / Corporate / TPA payer, resolved to what the patient (or their payer)
+// is actually called — the raw `patient_type` alone doesn't tell you which
+// TPA or corporate account is on the hook.
+function payerLabel(r: any): { label: string; cls: string } {
+  if (r.patient_type === "tpa_insurance") {
+    return { label: r.tpa_provider_name || "TPA", cls: "bg-purple-50 text-purple-700" };
+  }
+  if (r.patient_type === "corporate") {
+    return { label: r.corporate_name || "Corporate", cls: "bg-blue-50 text-blue-700" };
+  }
+  return { label: "Cash", cls: "bg-gray-100 text-gray-700" };
 }
 
 // ── main page ─────────────────────────────────────────────────────────────
@@ -190,8 +163,8 @@ function presetRange(key: string): { from: string; to: string } {
 const STATUS_FILTERS = ["", "Draft", "Final", "Cancelled"];
 const PAYMENT_FILTERS = ["", "Paid", "Partial", "Overdue", "Draft", "Refunded"];
 const PATIENT_TYPES = ["", "cash", "corporate", "tpa_insurance"];
+const PATIENT_TYPE_LABELS: Record<string, string> = { cash: "Cash", corporate: "Corporate", tpa_insurance: "TPA" };
 const INVOICE_TYPES = ["", "OPD", "IPD", "LAB", "PHARMACY"];
-const RISK_LEVELS = ["", "low", "medium", "high"];
 
 export function MasterBillingContent({ shell = "app" }: { shell?: "app" | "admin" }) {
   const isAdminShell = shell === "admin";
@@ -207,7 +180,6 @@ export function MasterBillingContent({ shell = "app" }: { shell?: "app" | "admin
   const [filter, setFilter] = useState<MasterBillingFilter>({ page: 1, limit: 25 });
   const [loading, setLoading] = useState(true);
   const [searchOpen, setSearchOpen] = useState(false);
-  const [showFilters, setShowFilters] = useState(false);
   const [cancelTarget, setCancelTarget] = useState<any | null>(null);
   const [editingInvoiceId, setEditingInvoiceId] = useState<number | null>(null);
   const [exporting, setExporting] = useState(false);
@@ -253,6 +225,10 @@ export function MasterBillingContent({ shell = "app" }: { shell?: "app" | "admin
   };
 
   const clearFilters = () => setFilter({ page: 1, limit: 25 });
+  const hasActiveFilters = Boolean(
+    filter.search || filter.invoice_status || filter.payment_status ||
+    filter.patient_type || filter.invoice_type || filter.date_from || filter.date_to
+  );
 
   // Export the FULL filtered result set (all pages, respecting every active
   // filter — date range, status, search, etc.) to Excel.
@@ -317,16 +293,15 @@ export function MasterBillingContent({ shell = "app" }: { shell?: "app" | "admin
           >
             <Search className="h-3.5 w-3.5" /> Search
           </button>
-          <button
-            onClick={() => setShowFilters((s) => !s)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg ${
-              showFilters
-                ? "bg-blue-600 text-white"
-                : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"
-            }`}
-          >
-            <Filter className="h-3.5 w-3.5" /> Filters
-          </button>
+          {hasActiveFilters && (
+            <button
+              onClick={clearFilters}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 text-xs font-bold rounded-lg"
+              title="Clear all column filters"
+            >
+              <Filter className="h-3.5 w-3.5" /> Clear Filters
+            </button>
+          )}
           <button
             onClick={handleExport}
             disabled={exporting}
@@ -344,10 +319,7 @@ export function MasterBillingContent({ shell = "app" }: { shell?: "app" | "admin
       {/* KPI Cards (12) */}
       <KpiGrid kpis={kpis} />
 
-      {/* Filter pill row */}
-      {showFilters && <FilterRow filter={filter} setFilter={updateFilter} clear={clearFilters} />}
-
-      {/* Master Grid */}
+      {/* Master Grid — column filters live in the header row itself */}
       <div className="mt-5 bg-white border border-gray-200 rounded-2xl overflow-hidden">
         {loading ? (
           <div className="py-20 flex justify-center">
@@ -360,140 +332,144 @@ export function MasterBillingContent({ shell = "app" }: { shell?: "app" | "admin
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
-              <thead className="bg-gray-50 text-[10px] uppercase tracking-wider text-gray-500 font-bold sticky top-0">
+              <thead className="bg-gray-50 text-[10px] uppercase tracking-wider text-gray-500 font-bold sticky top-0 z-10">
                 <tr>
-                  <Th>Patient</Th>
+                  <ThFilter
+                    label="Type"
+                    value={filter.invoice_type ?? ""}
+                    options={INVOICE_TYPES}
+                    onChange={(v) => updateFilter({ invoice_type: v || undefined })}
+                  />
+                  <ThDateFilter filter={filter} setFilter={updateFilter} />
+                  <ThSearchFilter value={filter.search ?? ""} onChange={(v) => updateFilter({ search: v })} />
                   <Th>Doctor</Th>
-                  <Th>Bill Date</Th>
-                  <Th>Type</Th>
-                  <Th>Adm. Type</Th>
-                  <Th>Invoice #</Th>
-                  <Th>Category</Th>
-                  <Th>Payer</Th>
-                  <Th>Inv. Status</Th>
-                  <Th>Pay Status</Th>
-                  <Th>Claim</Th>
-                  <Th align="right">Total</Th>
-                  <Th align="right">Paid</Th>
+                  <ThFilter
+                    label="Payer"
+                    value={filter.patient_type ?? ""}
+                    options={PATIENT_TYPES}
+                    labels={PATIENT_TYPE_LABELS}
+                    onChange={(v) => updateFilter({ patient_type: v || undefined })}
+                  />
+                  <Th align="right">Bill Amount</Th>
+                  <Th align="right">Payment Received</Th>
                   <Th align="right">Outstanding</Th>
+                  <Th>Invoice #</Th>
+                  <ThFilter
+                    label="Inv. Status"
+                    value={filter.invoice_status ?? ""}
+                    options={STATUS_FILTERS}
+                    onChange={(v) => updateFilter({ invoice_status: v || undefined })}
+                  />
+                  <ThFilter
+                    label="Pay Status"
+                    value={filter.payment_status ?? ""}
+                    options={PAYMENT_FILTERS}
+                    onChange={(v) => updateFilter({ payment_status: v || undefined })}
+                  />
                   <Th align="right">Deposit</Th>
-                  <Th align="right">Aging</Th>
-                  <Th>Last Pay</Th>
-                  <Th>Risk</Th>
-                  <Th align="right">Actions</Th>
+                  <Th align="right" sticky>Actions</Th>
                 </tr>
               </thead>
               <tbody>
-                {grid.map((r) => (
-                  <tr key={r.invoice_id} className="border-t border-gray-100 hover:bg-blue-50/30">
-                    <Td>
-                      <Link
-                        href={`${billingRoot}/patient/${r.patient_id}`}
-                        className="font-bold text-gray-800 hover:underline"
-                      >
-                        {r.patient_name}
-                      </Link>
-                      {r.patient_phone && (
-                        <div className="text-[10px] text-gray-400">{r.patient_phone}</div>
-                      )}
-                      {r.package_name && (
-                        <div className="text-[10px] text-indigo-700 font-semibold mt-0.5">
-                          📦 {r.package_name} · ₹{Number(r.package_amount).toLocaleString('en-IN')}
-                        </div>
-                      )}
-                    </Td>
-                    <Td>{r.doctor_name ?? "-"}</Td>
-                    <Td>
-                      <span className="whitespace-nowrap text-gray-700">
-                        {r.created_at ? new Date(r.created_at).toLocaleDateString("en-IN") : "—"}
-                      </span>
-                    </Td>
-                    <Td>
-                      <span
-                        className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${
-                          r.patient_type === "corporate"
-                            ? "bg-blue-50 text-blue-700"
-                            : r.patient_type === "tpa_insurance"
-                            ? "bg-purple-50 text-purple-700"
-                            : "bg-gray-100 text-gray-700"
-                        }`}
-                      >
-                        {r.patient_type}
-                      </span>
-                    </Td>
-                    <Td>{r.admission_type}</Td>
-                    <Td><span className="font-mono">{r.invoice_number || 'Draft (unsaved)'}</span></Td>
-                    <Td>{r.billing_category ?? "—"}</Td>
-                    <Td>{r.corporate_name ?? "—"}</Td>
-                    <Td><InvoiceBadge status={r.invoice_status} /></Td>
-                    <Td><PaymentBadge status={r.payment_status} /></Td>
-                    <Td><ClaimBadge status={r.claim_status} /></Td>
-                    <Td align="right">{fmtMoney(r.total_amount)}</Td>
-                    <Td align="right">{fmtMoney(r.paid_amount)}</Td>
-                    <Td align="right">
-                      <span className={r.outstanding_amount > 0 ? "font-bold text-rose-600" : ""}>
-                        {fmtMoney(r.outstanding_amount)}
-                      </span>
-                    </Td>
-                    <Td align="right">
-                      <span className={r.deposit_balance > 0 ? "font-bold text-emerald-600" : "text-gray-400"}>
-                        {fmtMoney(r.deposit_balance)}
-                      </span>
-                    </Td>
-                    <Td align="right">
-                      <span
-                        className={
-                          r.aging_days > 30
-                            ? "text-rose-600 font-bold"
-                            : r.aging_days > 15
-                            ? "text-amber-600 font-bold"
-                            : "text-gray-500"
-                        }
-                      >
-                        {r.aging_days}d
-                      </span>
-                    </Td>
-                    <Td>{fmtDateTime(r.last_payment_date)}</Td>
-                    <Td><RiskDot level={r.risk_level} reasons={r.risk_reasons} /></Td>
-                    <Td align="right">
-                      <div className="flex items-center justify-end gap-1.5">
+                {grid.map((r) => {
+                  const payer = payerLabel(r);
+                  return (
+                    <tr key={r.invoice_id} className="group border-t border-gray-100 hover:bg-blue-50/30">
+                      <Td>
+                        <span
+                          className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${
+                            r.admission_type === "IPD"
+                              ? "bg-violet-50 text-violet-700"
+                              : r.admission_type === "OPD"
+                              ? "bg-teal-50 text-teal-700"
+                              : "bg-gray-100 text-gray-700"
+                          }`}
+                        >
+                          {r.admission_type}
+                        </span>
+                      </Td>
+                      <Td>
+                        <span className="whitespace-nowrap text-gray-700">
+                          {r.created_at ? new Date(r.created_at).toLocaleDateString("en-IN") : "—"}
+                        </span>
+                      </Td>
+                      <Td>
                         <Link
                           href={`${billingRoot}/patient/${r.patient_id}`}
-                          className="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-bold rounded"
+                          className="font-bold text-gray-800 hover:underline"
                         >
-                          Open
+                          {r.patient_name}
                         </Link>
-                        {(r.invoice_status === "Draft" || (r.invoice_status === "Final" && canEditPaid)) && (
-                          <button
-                            onClick={() => setEditingInvoiceId(Number(r.invoice_id))}
-                            className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-[10px] font-bold rounded transition-colors flex items-center gap-0.5"
-                            title={r.invoice_status === "Final" ? 'Edit finalized bill (Admin/Finance)' : 'Edit draft invoice'}
-                          >
-                            <Pencil className="h-3 w-3" /> Edit
-                          </button>
+                        {r.patient_phone && (
+                          <div className="text-[10px] text-gray-400">{r.patient_phone}</div>
                         )}
-                        {(r.tpa_claim_status === 'approved' || r.tpa_claim_status === 'partially_settled') && (
-                          <button
-                            onClick={() => setTpaPaymentTarget(r)}
-                            className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-[10px] font-bold rounded transition-colors flex items-center gap-0.5"
-                            title="Record actual money received from TPA"
-                          >
-                            <Shield className="h-3 w-3" /> Mark TPA Received
-                          </button>
+                        {r.package_name && (
+                          <div className="text-[10px] text-indigo-700 font-semibold mt-0.5">
+                            📦 {r.package_name} · ₹{Number(r.package_amount).toLocaleString('en-IN')}
+                          </div>
                         )}
-                        {canCancelInvoice(r) && canEditPaid && (
-                          <button
-                            onClick={() => setCancelTarget(r)}
-                            className="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-[10px] font-bold rounded transition-colors"
-                            title="Cancel this invoice (Admin/Finance only)"
+                      </Td>
+                      <Td>{r.doctor_name ?? "-"}</Td>
+                      <Td>
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${payer.cls}`}>
+                          {payer.label}
+                        </span>
+                      </Td>
+                      <Td align="right">{fmtMoney(r.total_amount)}</Td>
+                      <Td align="right">{fmtMoney(r.paid_amount)}</Td>
+                      <Td align="right">
+                        <span className={r.outstanding_amount > 0 ? "font-bold text-rose-600" : ""}>
+                          {fmtMoney(r.outstanding_amount)}
+                        </span>
+                      </Td>
+                      <Td><span className="font-mono">{r.invoice_number || 'Draft (unsaved)'}</span></Td>
+                      <Td><InvoiceBadge status={r.invoice_status} /></Td>
+                      <Td><PaymentBadge status={r.payment_status} /></Td>
+                      <Td align="right">
+                        <span className={r.deposit_balance > 0 ? "font-bold text-emerald-600" : "text-gray-400"}>
+                          {fmtMoney(r.deposit_balance)}
+                        </span>
+                      </Td>
+                      <Td align="right" sticky>
+                        <div className="flex items-center justify-end gap-1.5">
+                          <Link
+                            href={`${billingRoot}/patient/${r.patient_id}`}
+                            className="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-bold rounded"
                           >
-                            Cancel
-                          </button>
-                        )}
-                      </div>
-                    </Td>
-                  </tr>
-                ))}
+                            Open
+                          </Link>
+                          {(r.invoice_status === "Draft" || (r.invoice_status === "Final" && canEditPaid)) && (
+                            <button
+                              onClick={() => setEditingInvoiceId(Number(r.invoice_id))}
+                              className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-[10px] font-bold rounded transition-colors flex items-center gap-0.5"
+                              title={r.invoice_status === "Final" ? 'Edit finalized bill (Admin/Finance)' : 'Edit draft invoice'}
+                            >
+                              <Pencil className="h-3 w-3" /> Edit
+                            </button>
+                          )}
+                          {(r.tpa_claim_status === 'approved' || r.tpa_claim_status === 'partially_settled') && (
+                            <button
+                              onClick={() => setTpaPaymentTarget(r)}
+                              className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-[10px] font-bold rounded transition-colors flex items-center gap-0.5"
+                              title="Record actual money received from TPA"
+                            >
+                              <Shield className="h-3 w-3" /> Mark TPA Received
+                            </button>
+                          )}
+                          {canCancelInvoice(r) && canEditPaid && (
+                            <button
+                              onClick={() => setCancelTarget(r)}
+                              className="px-2 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-[10px] font-bold rounded transition-colors"
+                              title="Cancel this invoice (Admin/Finance only)"
+                            >
+                              Cancel
+                            </button>
+                          )}
+                        </div>
+                      </Td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -599,23 +575,229 @@ export default function MasterBillingPage() {
 
 // ── sub-components ────────────────────────────────────────────────────────
 
-function Th({ children, align = "left" }: { children: React.ReactNode; align?: "left" | "right" }) {
+function Th({
+  children,
+  align = "left",
+  sticky = false,
+}: {
+  children: React.ReactNode;
+  align?: "left" | "right";
+  sticky?: boolean;
+}) {
   return (
     <th
-      className={`px-2.5 py-2 ${align === "right" ? "text-right" : "text-left"} whitespace-nowrap`}
+      className={`px-2.5 py-2 align-top ${align === "right" ? "text-right" : "text-left"} whitespace-nowrap ${
+        sticky ? "sticky right-0 z-20 bg-gray-50 shadow-[-4px_0_6px_-6px_rgba(0,0,0,0.25)]" : ""
+      }`}
     >
       {children}
     </th>
   );
 }
 
-function Td({ children, align = "left" }: { children: React.ReactNode; align?: "left" | "right" }) {
+function Td({
+  children,
+  align = "left",
+  sticky = false,
+}: {
+  children: React.ReactNode;
+  align?: "left" | "right";
+  sticky?: boolean;
+}) {
   return (
     <td
-      className={`px-2.5 py-2 ${align === "right" ? "text-right" : "text-left"} whitespace-nowrap`}
+      className={`px-2.5 py-2 ${align === "right" ? "text-right" : "text-left"} whitespace-nowrap ${
+        sticky ? "sticky right-0 z-[5] bg-white group-hover:bg-blue-50/30 shadow-[-4px_0_6px_-6px_rgba(0,0,0,0.25)]" : ""
+      }`}
     >
       {children}
     </td>
+  );
+}
+
+// Dropdown filter embedded directly in a column header — the "column-header
+// filters" pattern replacing the old separate filter pill row.
+function ThFilter({
+  label,
+  value,
+  options,
+  labels,
+  onChange,
+  align = "left",
+}: {
+  label: string;
+  value: string;
+  options: string[];
+  labels?: Record<string, string>;
+  onChange: (v: string) => void;
+  align?: "left" | "right";
+}) {
+  const active = Boolean(value);
+  return (
+    <th className={`px-2.5 py-2 align-top ${align === "right" ? "text-right" : "text-left"}`}>
+      <div className={`flex flex-col gap-1 ${align === "right" ? "items-end" : "items-start"}`}>
+        <span className="whitespace-nowrap">{label}</span>
+        <select
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className={`normal-case text-[10px] font-semibold rounded px-1 py-0.5 border max-w-[110px] ${
+            active ? "border-blue-300 bg-blue-50 text-blue-700" : "border-gray-200 bg-white text-gray-500"
+          }`}
+        >
+          {options.map((o) => (
+            <option key={o || "_all"} value={o}>
+              {labels?.[o] ?? (o || "All")}
+            </option>
+          ))}
+        </select>
+      </div>
+    </th>
+  );
+}
+
+// Patient-column header search — matches name / phone / invoice # / doctor
+// (the server already searches all of those for one `search` term).
+function ThSearchFilter({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <th className="px-2.5 py-2 align-top text-left">
+      <div className="flex flex-col gap-1 items-start">
+        <span className="whitespace-nowrap">Patient</span>
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="Search name / phone…"
+          className={`normal-case text-[10px] font-semibold rounded px-1.5 py-0.5 border w-28 ${
+            value ? "border-blue-300 bg-blue-50 text-blue-700" : "border-gray-200 bg-white text-gray-500"
+          }`}
+        />
+      </div>
+    </th>
+  );
+}
+
+// Bill-Date header — compact button + popover so the date presets/custom
+// range don't have to live in a separate filter row above the table.
+function ThDateFilter({
+  filter,
+  setFilter,
+}: {
+  filter: MasterBillingFilter;
+  setFilter: (p: Partial<MasterBillingFilter>) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [coords, setCoords] = useState<{ top: number; left: number } | null>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+
+  // Popover renders via a portal (below) so it can't be clipped by the grid
+  // wrapper's `overflow-hidden` (needed there for the rounded card corners).
+  useEffect(() => {
+    if (!open) return;
+    const handleClick = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (btnRef.current?.contains(target) || popoverRef.current?.contains(target)) return;
+      setOpen(false);
+    };
+    const handleDismiss = () => setOpen(false);
+    document.addEventListener("mousedown", handleClick);
+    window.addEventListener("scroll", handleDismiss, true);
+    window.addEventListener("resize", handleDismiss);
+    return () => {
+      document.removeEventListener("mousedown", handleClick);
+      window.removeEventListener("scroll", handleDismiss, true);
+      window.removeEventListener("resize", handleDismiss);
+    };
+  }, [open]);
+
+  const active = Boolean(filter.date_from || filter.date_to);
+  const activeLabel =
+    DATE_PRESETS.find((key) => {
+      const r = presetRange(key);
+      return filter.date_from === r.from && filter.date_to === r.to;
+    }) ?? (active ? "Custom" : "All");
+
+  const toggle = () => {
+    if (!open && btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect();
+      setCoords({ top: rect.bottom + 6, left: rect.left });
+    }
+    setOpen((o) => !o);
+  };
+
+  return (
+    <th className="px-2.5 py-2 align-top text-left">
+      <div className="flex flex-col gap-1 items-start">
+        <span className="whitespace-nowrap">Bill Date</span>
+        <button
+          ref={btnRef}
+          type="button"
+          onClick={toggle}
+          className={`normal-case text-[10px] font-semibold rounded px-1.5 py-0.5 border flex items-center gap-1 ${
+            active ? "border-blue-300 bg-blue-50 text-blue-700" : "border-gray-200 bg-white text-gray-500"
+          }`}
+        >
+          <CalendarClock className="h-2.5 w-2.5" /> {activeLabel}
+        </button>
+      </div>
+      {open && coords && typeof document !== "undefined" && createPortal(
+        <div
+          ref={popoverRef}
+          style={{ position: "fixed", top: coords.top, left: coords.left }}
+          className="z-[100] w-60 bg-white border border-gray-200 rounded-lg shadow-lg p-3 normal-case font-normal text-gray-700"
+        >
+          <div className="flex flex-wrap gap-1 mb-2">
+            {DATE_PRESETS.map((key) => {
+              const r = presetRange(key);
+              const activeP = filter.date_from === r.from && filter.date_to === r.to;
+              return (
+                <button
+                  key={key}
+                  onClick={() => {
+                    setFilter({ date_from: r.from, date_to: r.to });
+                    setOpen(false);
+                  }}
+                  className={`px-2 py-1 rounded text-[11px] font-bold border transition-colors ${
+                    activeP
+                      ? "bg-blue-600 text-white border-blue-600"
+                      : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
+                  }`}
+                >
+                  {key}
+                </button>
+              );
+            })}
+          </div>
+          <div className="flex items-center gap-1.5 mb-2">
+            <DateField
+              value={filter.date_from ?? ""}
+              max={filter.date_to || undefined}
+              onChange={(e) => setFilter({ date_from: e.target.value || undefined })}
+              className="px-2 py-1 border border-gray-200 rounded text-xs w-full"
+            />
+            <span className="text-[10px] text-gray-400">to</span>
+            <DateField
+              value={filter.date_to ?? ""}
+              min={filter.date_from || undefined}
+              onChange={(e) => setFilter({ date_to: e.target.value || undefined })}
+              className="px-2 py-1 border border-gray-200 rounded text-xs w-full"
+            />
+          </div>
+          {active && (
+            <button
+              onClick={() => {
+                setFilter({ date_from: undefined, date_to: undefined });
+                setOpen(false);
+              }}
+              className="text-[10px] font-bold text-gray-400 hover:text-gray-600 underline"
+            >
+              Clear date filter
+            </button>
+          )}
+        </div>,
+        document.body
+      )}
+    </th>
   );
 }
 
@@ -791,129 +973,6 @@ function KpiGrid({ kpis }: { kpis: any }) {
           {c.sub && <div className="text-[10px] text-gray-400 font-medium mt-0.5">{c.sub}</div>}
         </div>
       ))}
-    </div>
-  );
-}
-
-function FilterRow({
-  filter,
-  setFilter,
-  clear,
-}: {
-  filter: MasterBillingFilter;
-  setFilter: (p: Partial<MasterBillingFilter>) => void;
-  clear: () => void;
-}) {
-  return (
-    <div className="bg-white border border-gray-200 rounded-xl p-3 mb-3 flex flex-wrap items-center gap-2">
-      <FilterSelect
-        label="Invoice"
-        value={filter.invoice_status ?? ""}
-        options={STATUS_FILTERS}
-        onChange={(v) => setFilter({ invoice_status: v || undefined })}
-      />
-      <FilterSelect
-        label="Payment"
-        value={filter.payment_status ?? ""}
-        options={PAYMENT_FILTERS}
-        onChange={(v) => setFilter({ payment_status: v || undefined })}
-      />
-      <FilterSelect
-        label="Patient type"
-        value={filter.patient_type ?? ""}
-        options={PATIENT_TYPES}
-        onChange={(v) => setFilter({ patient_type: v || undefined })}
-      />
-      <FilterSelect
-        label="Invoice type"
-        value={filter.invoice_type ?? ""}
-        options={INVOICE_TYPES}
-        onChange={(v) => setFilter({ invoice_type: v || undefined })}
-      />
-      <FilterSelect
-        label="Risk"
-        value={filter.risk_level ?? ""}
-        options={RISK_LEVELS}
-        onChange={(v) => setFilter({ risk_level: (v || undefined) as any })}
-      />
-      <div className="flex items-center gap-1.5 flex-wrap">
-        <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Date</span>
-        {DATE_PRESETS.map((key) => {
-          const r = presetRange(key);
-          const active = filter.date_from === r.from && filter.date_to === r.to;
-          return (
-            <button
-              key={key}
-              onClick={() => setFilter({ date_from: r.from, date_to: r.to })}
-              className={`px-2 py-1 rounded text-[11px] font-bold border transition-colors ${
-                active
-                  ? "bg-blue-600 text-white border-blue-600"
-                  : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
-              }`}
-            >
-              {key}
-            </button>
-          );
-        })}
-        {/* Custom range */}
-        <DateField
-          value={filter.date_from ?? ""}
-          max={filter.date_to || undefined}
-          onChange={(e) => setFilter({ date_from: e.target.value || undefined })}
-          className="px-2 py-1 border border-gray-200 rounded text-xs"
-          title="From date (invoice created on/after)"
-        />
-        <span className="text-[10px] text-gray-400">to</span>
-        <DateField
-          value={filter.date_to ?? ""}
-          min={filter.date_from || undefined}
-          onChange={(e) => setFilter({ date_to: e.target.value || undefined })}
-          className="px-2 py-1 border border-gray-200 rounded text-xs"
-          title="To date (invoice created on/before)"
-        />
-      </div>
-      <input
-        type="text"
-        placeholder="Search by name / phone / invoice…"
-        value={filter.search ?? ""}
-        onChange={(e) => setFilter({ search: e.target.value })}
-        className="ml-auto px-3 py-1.5 border border-gray-200 rounded-lg text-xs w-64"
-      />
-      <button
-        onClick={clear}
-        className="px-2.5 py-1.5 text-xs font-bold text-gray-600 hover:bg-gray-100 rounded-lg flex items-center gap-1"
-      >
-        <X className="h-3 w-3" /> Reset
-      </button>
-    </div>
-  );
-}
-
-function FilterSelect({
-  label,
-  value,
-  options,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  options: string[];
-  onChange: (v: string) => void;
-}) {
-  return (
-    <div className="flex items-center gap-1.5">
-      <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500">{label}</span>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="px-2 py-1 border border-gray-200 rounded text-xs"
-      >
-        {options.map((o) => (
-          <option key={o || "_all"} value={o}>
-            {o || "All"}
-          </option>
-        ))}
-      </select>
     </div>
   );
 }

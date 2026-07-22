@@ -2486,18 +2486,20 @@ model TicketNote {
 }
 
 model ExpenseCategory {
-  id             Int               @id @default(autoincrement())
-  name           String
-  code           String
-  parent_id      Int?
-  is_active      Boolean           @default(true)
-  organizationId String
-  created_at     DateTime          @default(now())
-  budget_lines   BudgetLine[]
-  organization   Organization      @relation(fields: [organizationId], references: [id])
-  parent         ExpenseCategory?  @relation("CategoryHierarchy", fields: [parent_id], references: [id])
-  children       ExpenseCategory[] @relation("CategoryHierarchy")
-  expenses       Expense[]
+  id                    Int               @id @default(autoincrement())
+  name                  String
+  code                  String
+  parent_id             Int?
+  is_active             Boolean           @default(true)
+  organizationId        String
+  created_at            DateTime          @default(now())
+  gl_expense_account_id String?
+  budget_lines          BudgetLine[]
+  organization          Organization      @relation(fields: [organizationId], references: [id])
+  parent                ExpenseCategory?  @relation("CategoryHierarchy", fields: [parent_id], references: [id])
+  children              ExpenseCategory[] @relation("CategoryHierarchy")
+  expenses              Expense[]
+  gl_expense_account    GL_Account?       @relation("ExpenseCategoryAccount", fields: [gl_expense_account_id], references: [id])
 
   @@unique([code, organizationId])
   @@index([organizationId])
@@ -3385,6 +3387,7 @@ model GL_Account {
   asset_categories_as_asset_account                                    AssetCategory[]   @relation("AssetAccount")
   asset_categories_as_depreciation_account                             AssetCategory[]   @relation("DepreciationAccount")
   asset_categories_as_expense_account                                  AssetCategory[]   @relation("ExpenseAccount")
+  expense_categories_as_gl_account                                     ExpenseCategory[] @relation("ExpenseCategoryAccount")
   budget_lines                                                         BudgetLine[]
   admissions                                                           admissions?       @relation(fields: [admissionsAdmission_id], references: [admission_id])
   organization                                                         Organization      @relation(fields: [organizationId], references: [id])

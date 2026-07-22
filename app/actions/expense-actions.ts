@@ -1,6 +1,6 @@
 'use server';
 
-import { postExpenseToGL } from './gl-actions';
+import { postExpenseToGL, postExpensePaymentToGL } from './gl-actions';
 import { syncExpenseToBudget } from './budget-actions';
 import { sendExpenseApprovedEmail, sendExpenseRejectedEmail, sendExpensePaidEmail } from '@/backend/email';
 import { getSignedDownloadUrl } from '@/app/lib/s3';
@@ -318,6 +318,10 @@ export async function markExpensePaid(id: number, paymentData: {
                 organizationId,
             },
         });
+
+        postExpensePaymentToGL(id, paymentData.payment_method).catch(err =>
+            console.error('Failed to post expense payment to GL:', err)
+        );
 
         // Email notification to vendor if email is available
         if ((expense as any).vendor?.email) {

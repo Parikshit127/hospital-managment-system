@@ -11,7 +11,7 @@ import { Select } from '@/app/components/ui/Select';
 import { Modal } from '@/app/components/ui/Modal';
 import { Card } from '@/app/components/ui/Card';
 import { useToast } from '@/app/components/ui/Toast';
-import { Plus, Edit, Search, BookOpen } from 'lucide-react';
+import { Plus, Edit, Search, BookOpen, List, GitBranch, ChevronRight, ChevronDown } from 'lucide-react';
 
 interface GLAccount {
   id: string;
@@ -62,10 +62,12 @@ const defaultForm = {
   account_name: '',
   account_type: 'Asset' as 'Asset' | 'Liability' | 'Equity' | 'Revenue' | 'Expense',
   account_group: '',
+  parent_id: '' as string,
   normal_balance: 'Debit' as 'Debit' | 'Credit',
   opening_balance: 0,
   tally_ledger_name: '',
   tally_group: '',
+  is_active: true,
 };
 
 export default function ChartOfAccountsPage() {
@@ -79,6 +81,8 @@ export default function ChartOfAccountsPage() {
   const [editingAccount, setEditingAccount] = useState<GLAccount | null>(null);
   const [formData, setFormData] = useState(defaultForm);
   const [orgId, setOrgId] = useState('');
+  const [viewMode, setViewMode] = useState<'flat' | 'tree'>('flat');
+  const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     fetch('/api/session')
@@ -128,10 +132,12 @@ export default function ChartOfAccountsPage() {
       account_name: account.account_name,
       account_type: account.account_type as typeof defaultForm.account_type,
       account_group: account.account_group,
+      parent_id: account.parent_id || '',
       normal_balance: account.normal_balance as typeof defaultForm.normal_balance,
       opening_balance: 0,
       tally_ledger_name: account.tally_ledger_name || '',
       tally_group: account.tally_group || '',
+      is_active: account.is_active,
     });
     setIsModalOpen(true);
   };
@@ -146,7 +152,10 @@ export default function ChartOfAccountsPage() {
     setSaving(true);
     try {
       if (editingAccount) {
-        const result = await updateGLAccount(editingAccount.id, formData);
+        const result = await updateGLAccount(editingAccount.id, {
+          ...formData,
+          parent_id: formData.parent_id || null,
+        });
         if (result.success) {
           toast.success('Account updated successfully');
           handleCloseModal();
@@ -158,6 +167,7 @@ export default function ChartOfAccountsPage() {
         const result = await createGLAccount({
           organizationId: orgId,
           ...formData,
+          parent_id: formData.parent_id || undefined,
         });
         if (result.success) {
           toast.success('Account created successfully');
@@ -172,6 +182,99 @@ export default function ChartOfAccountsPage() {
     } finally {
       setSaving(false);
     }
+  };
+
+  // Accounts eligible to be this account's parent: exclude itself and any of
+  // its own descendants (prevents creating a cycle in the tree).
+  const eligibleParents = (() => {
+    if (!editingAccount) return accounts;
+    const excluded = new Set<string>([editingAccount.id]);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const acc of accounts) {
+        if (acc.parent_id && excluded.has(acc.parent_id) && !excluded.has(acc.id)) {
+          excluded.add(acc.id);
+          changed = true;
+        }
+      }
+    }
+    return accounts.filter((a) => !excluded.has(a.id));
+  })();
+
+  const childrenByParent = new Map<string, GLAccount[]>();
+  for (const acc of accounts) {
+    const key = acc.parent_id || '__root__';
+    if (!childrenByParent.has(key)) childrenByParent.set(key, []);
+    childrenByParent.get(key)!.push(acc);
+  }
+  const rootAccounts = childrenByParent.get('__root__') || [];
+
+  const toggleCollapsed = (id: string) => {
+    setCollapsedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const renderTreeRows = (nodes: GLAccount[], depth: number): React.ReactNode[] => {
+    const term = searchTerm.toLowerCase();
+    return nodes.flatMap((account) => {
+      const children = childrenByParent.get(account.id) || [];
+      const isCollapsed = collapsedIds.has(account.id);
+      const matchesSearch = !term ||
+        account.account_code.toLowerCase().includes(term) ||
+        account.account_name.toLowerCase().includes(term);
+      const rows: React.ReactNode[] = [];
+      if (matchesSearch || children.length > 0) {
+        rows.push(
+          <TableRow key={account.id}>
+            <TableCell>
+              <div className="flex items-center gap-1" style={{ paddingLeft: depth * 20 }}>
+                {children.length > 0 ? (
+                  <button type="button" onClick={() => toggleCollapsed(account.id)} className="text-gray-400 hover:text-gray-600">
+                    {isCollapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                  </button>
+                ) : (
+                  <span className="w-3.5 inline-block" />
+                )}
+                <span className="font-mono text-xs text-gray-700 bg-gray-50 px-2 py-0.5 rounded-md border border-gray-200">
+                  {account.account_code}
+                </span>
+              </div>
+            </TableCell>
+            <TableCell>
+              <span className="font-medium text-gray-900">{account.account_name}</span>
+            </TableCell>
+            <TableCell>
+              <Badge variant={ACCOUNT_TYPE_BADGE[account.account_type] ?? 'neutral'}>
+                {account.account_type}
+              </Badge>
+            </TableCell>
+            <TableCell>
+              <span className="font-mono text-sm text-gray-800">
+                {account.current_balance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+            </TableCell>
+            <TableCell>
+              <Badge variant={account.is_active ? 'success' : 'neutral'} dot>
+                {account.is_active ? 'Active' : 'Inactive'}
+              </Badge>
+            </TableCell>
+            <TableCell>
+              <Button variant="ghost" size="sm" icon={<Edit className="w-3.5 h-3.5" />} onClick={() => handleEdit(account)}>
+                Edit
+              </Button>
+            </TableCell>
+          </TableRow>
+        );
+      }
+      if (!isCollapsed) {
+        rows.push(...renderTreeRows(children, depth + 1));
+      }
+      return rows;
+    });
   };
 
   const filteredAccounts = accounts.filter((account) => {
@@ -214,11 +317,51 @@ export default function ChartOfAccountsPage() {
                 onChange={(e) => setFilterType(e.target.value)}
               />
             </div>
+            <div className="flex rounded-lg border border-gray-200 overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setViewMode('flat')}
+                className={`px-3 py-1.5 text-xs font-medium flex items-center gap-1.5 ${viewMode === 'flat' ? 'bg-gray-900 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}
+              >
+                <List className="w-3.5 h-3.5" /> Flat
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('tree')}
+                className={`px-3 py-1.5 text-xs font-medium flex items-center gap-1.5 border-l border-gray-200 ${viewMode === 'tree' ? 'bg-gray-900 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}
+              >
+                <GitBranch className="w-3.5 h-3.5" /> Tree
+              </button>
+            </div>
           </div>
 
           {/* Table */}
           {loading ? (
             <div className="p-10 text-center text-sm text-gray-400">Loading accounts...</div>
+          ) : viewMode === 'tree' ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableCell header>Code</TableCell>
+                  <TableCell header>Account Name</TableCell>
+                  <TableCell header>Type</TableCell>
+                  <TableCell header>Balance</TableCell>
+                  <TableCell header>Status</TableCell>
+                  <TableCell header>Actions</TableCell>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {rootAccounts.length === 0 ? (
+                  <TableRow>
+                    <TableCell>
+                      <div className="py-8 text-center text-sm text-gray-400">No accounts found.</div>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  renderTreeRows(rootAccounts, 0)
+                )}
+              </TableBody>
+            </Table>
           ) : (
             <Table>
               <TableHeader>
@@ -355,15 +498,30 @@ export default function ChartOfAccountsPage() {
 
           <div className="grid grid-cols-2 gap-4">
             <Select
-              label="Normal Balance *"
-              value={formData.normal_balance}
-              options={NORMAL_BALANCE_OPTIONS}
-              onChange={(e) =>
-                setFormData({ ...formData, normal_balance: e.target.value as typeof defaultForm.normal_balance })
-              }
-              required
+              label="Parent Account (Group)"
+              value={formData.parent_id}
+              options={[
+                { value: '', label: '— No parent (top-level) —' },
+                ...eligibleParents
+                  .slice()
+                  .sort((a, b) => a.account_code.localeCompare(b.account_code))
+                  .map((a) => ({ value: a.id, label: `${a.account_code} — ${a.account_name}` })),
+              ]}
+              onChange={(e) => setFormData({ ...formData, parent_id: e.target.value })}
             />
-            {!editingAccount && (
+            {editingAccount ? (
+              <div className="flex items-end pb-2">
+                <label className="flex items-center gap-2 text-sm text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={formData.is_active}
+                    onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
+                    className="rounded border-gray-300"
+                  />
+                  Active
+                </label>
+              </div>
+            ) : (
               <Input
                 label="Opening Balance"
                 type="number"
@@ -375,6 +533,18 @@ export default function ChartOfAccountsPage() {
                 placeholder="0.00"
               />
             )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <Select
+              label="Normal Balance *"
+              value={formData.normal_balance}
+              options={NORMAL_BALANCE_OPTIONS}
+              onChange={(e) =>
+                setFormData({ ...formData, normal_balance: e.target.value as typeof defaultForm.normal_balance })
+              }
+              required
+            />
           </div>
 
           <div className="border-t border-gray-100 pt-4">
