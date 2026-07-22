@@ -43,8 +43,18 @@ export async function searchPatientsForReport(query: string) {
 }
 
 export async function getSinglePatientReport(patientId: string) {
+    const { organizationId } = await requireTenantContext();
+    return getSinglePatientReportFor(patientId, organizationId);
+}
+
+/**
+ * Same report, but for a caller that has already resolved the organisation
+ * (the printable route authenticates via resolveRouteAuth rather than the
+ * server-action tenant context).
+ */
+export async function getSinglePatientReportFor(patientId: string, organizationId: string) {
     try {
-        const { db, organizationId } = await requireTenantContext();
+        const { db } = await requireTenantContext();
         const id = (patientId || '').trim();
         if (!id) return { success: false, error: 'Patient UHID is required.' };
 

@@ -1,27 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireTenantContext } from '@/backend/tenant';
-
-// Actions that represent a record being changed or undone after the fact. The
-// Edit/Cancel Audit Report filters on this set so finance can answer "who edited
-// or cancelled this transaction" without scrolling past every login row.
-export const EDIT_CANCEL_ACTIONS = [
-  'UPDATE_PAYMENT',
-  'REVERSE_PAYMENT',
-  'VOID_PAYMENT',
-  'PROCESS_REFUND',
-  'CANCEL_DEPOSIT',
-  'UPDATE_DEPOSIT',
-  'CANCEL_INVOICE',
-  'EDIT_INVOICE',
-  'UPDATE_INVOICE',
-  'DELETE_INVOICE',
-  'CANCEL_ADMISSION',
-  'CANCEL_BILL',
-  'WRITE_OFF',
-  'DISCOUNT_APPLIED',
-  'CREDIT_NOTE_CREATED',
-  'STOCK_ADJUSTED',
-];
+import { EDIT_CANCEL_ACTIONS } from '@/app/lib/audit-actions';
 
 export async function GET(req: NextRequest) {
   try {
@@ -42,7 +21,7 @@ export async function GET(req: NextRequest) {
     const where: any = { organizationId };
     if (action) where.action = action;
     if (module) where.module = module;
-    if (scope === 'edits' && !action) where.action = { in: EDIT_CANCEL_ACTIONS };
+    if (scope === 'edits' && !action) where.action = { in: [...EDIT_CANCEL_ACTIONS] };
     if (from || to) {
       where.created_at = {};
       if (from) where.created_at.gte = new Date(from);

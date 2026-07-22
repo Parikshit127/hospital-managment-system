@@ -439,11 +439,13 @@ export default function IPDDashboard() {
             <Link href="/reception/dashboard" className="px-4 py-2 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5">
                 ← Reception
             </Link>
-            {stats?.role !== 'admin' && (
-                <Link href="/ipd/admissions-hub" className="px-4 py-2 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 rounded-xl text-xs font-bold transition-all shadow-sm hidden sm:flex items-center gap-1.5">
-                    Admissions Hub
-                </Link>
-            )}
+            {/* Shown to every role. It used to be hidden for admins via
+                `stats?.role !== 'admin'`, which is true while stats are still
+                loading — so the button appeared and then vanished mid-render,
+                and admins had no header route to the hub at all. */}
+            <Link href="/ipd/admissions-hub" className="px-4 py-2 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 rounded-xl text-xs font-bold transition-all shadow-sm hidden sm:flex items-center gap-1.5">
+                Admissions Hub
+            </Link>
             {stats?.role === 'admin' && (
                 <Link href="/admin/ipd-setup" className="px-4 py-2 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 rounded-xl text-xs font-bold transition-all shadow-sm hidden sm:flex items-center gap-1.5">
                     IPD Inventory

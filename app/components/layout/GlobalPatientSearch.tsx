@@ -118,8 +118,9 @@ export function GlobalPatientSearch({ role, patientBasePath }: GlobalPatientSear
   );
 
   // Screens are matched locally from a static index — no round trip, so they
-  // appear instantly while the patient query is still debouncing.
-  const screenMatches = searchScreens(query);
+  // appear instantly while the patient query is still debouncing. Filtered by
+  // role, so the palette never offers a module this user cannot open.
+  const screenMatches = searchScreens(query, role);
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     // Enter with no patient results but a screen match goes to the screen —

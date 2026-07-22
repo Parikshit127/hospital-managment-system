@@ -258,7 +258,11 @@ export default function ServiceMasterPage() {
   const openCreateSvc = () => { setSvcForm(EMPTY_SERVICE); setSvcMode('create'); };
   const openEditSvc = (row: any) => {
     setSvcEditingId(row.id);
-    setSvcForm({ ...EMPTY_SERVICE, ...row, default_rate: Number(row.default_rate ?? 0), tax_rate: Number(row.tax_rate ?? 0) });
+    // Spreading the DB row puts nulls into the form for every nullable column,
+    // and React throws on a controlled input whose value is null. Drop the
+    // nulls so the EMPTY_SERVICE defaults ('' etc.) survive.
+    const nonNull = Object.fromEntries(Object.entries(row).filter(([, v]) => v !== null && v !== undefined));
+    setSvcForm({ ...EMPTY_SERVICE, ...nonNull, default_rate: Number(row.default_rate ?? 0), tax_rate: Number(row.tax_rate ?? 0) });
     setSvcMode('edit');
   };
   const closeSvc = () => { setSvcMode('idle'); setSvcEditingId(null); };
@@ -797,7 +801,10 @@ export default function ServiceMasterPage() {
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-gray-600 mb-1">HSN/SAC Code</label>
-                    <input type="text" value={svcForm.hsn_sac_code}
+                    {/* Services saved without an HSN code come back as null, which
+                        React rejects for a controlled input. Coerce to '' so
+                        editing such a service doesn't throw. */}
+                    <input type="text" value={svcForm.hsn_sac_code ?? ''}
                       onChange={e => setSvcForm((p: any) => ({ ...p, hsn_sac_code: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12) }))}
                       maxLength={12}
                       pattern="[A-Z0-9]{4,12}"

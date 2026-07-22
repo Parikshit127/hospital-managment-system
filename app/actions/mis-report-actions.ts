@@ -568,10 +568,25 @@ export async function exportReportToExcel(
   }
 
   // 4. Generate the Excel buffer (sync path — data is already in memory).
+  // Name the report inside the file — an exported sheet with no title is
+  // unidentifiable once it's sitting in someone's Downloads folder.
+  const f = (filters ?? {}) as Record<string, any>;
+  const fmtDate = (v: any) => {
+    if (!v) return null;
+    const d = new Date(v);
+    return isNaN(d.getTime()) ? String(v) : d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  };
+  const period = [fmtDate(f.date_start), fmtDate(f.date_end)].filter(Boolean).join(' to ');
+
   const buffer = await generateExcelBuffer(
     reportDef.columns,
     result.rows ?? [],
-    result.totals ?? {}
+    result.totals ?? {},
+    {
+      title: reportDef.name,
+      subtitle: reportDef.description,
+      filters: period ? `Period: ${period}` : undefined,
+    }
   );
 
   // 5. Build a safe, date-stamped filename.

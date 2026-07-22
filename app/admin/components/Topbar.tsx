@@ -4,6 +4,7 @@ import Breadcrumbs from './Breadcrumbs';
 import AdminPortalNav from './AdminPortalNav';
 import { User } from 'lucide-react';
 import { NotificationBell } from '@/app/components/NotificationBell';
+import { GlobalPatientSearch } from '@/app/components/layout/GlobalPatientSearch';
 
 interface TopbarProps {
     userName?: string;
@@ -38,6 +39,11 @@ export default function Topbar({ userName, userRole, userId, organizationId }: T
             <Breadcrumbs />
 
             <div className="flex items-center gap-3 ml-auto">
+                {/* The Admin portal has its own shell, so it never mounted the
+                    global search that every other portal gets from AppShell —
+                    which meant Ctrl+K here fell through to the browser and
+                    focused the address bar instead. */}
+                {userRole && <GlobalPatientSearch role={userRole} />}
                 {userId && organizationId && <NotificationBell userId={userId} organizationId={organizationId} />}
                 <AdminPortalNav />
                 {userName && (

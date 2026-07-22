@@ -233,7 +233,11 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
     // name on those lines instead of the generic "Pharmacy" so the patient sees a
     // single hospital bill. Only the printed label changes; the service_category
     // stays "Pharmacy" everywhere else (totals, grouping, reports).
-    const pharmacyLabel = hospitalName || 'Pharmacy';
+    // The section heading carries the hospital's own name (so the patient sees
+    // one hospital bill, not a separate chemist), while the rows beneath say
+    // what they actually are — repeating the hospital name on every line made
+    // the medicine block unrecognisable as medicines.
+    const pharmacyLabel = hospitalName ? `${hospitalName} — Medicines & Consumables` : 'Pharmacy';
 
     let itemRows = '';
     for (const [cat, data] of Object.entries(categoryMap)) {
@@ -262,7 +266,7 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
             for (const g of groups) {
                 itemRows += `<tr>
                     <td style="padding:4px 12px;border-bottom:1px solid #f3f4f6;font-size:10px;color:#6b7280;white-space:nowrap;">${g.dateStr}</td>
-                    <td style="padding:4px 12px;border-bottom:1px solid #f3f4f6;font-size:10px;">${pharmacyLabel}${includeMeds ? '' : ` (${g.items.length} item${g.items.length > 1 ? 's' : ''})`}</td>
+                    <td style="padding:4px 12px;border-bottom:1px solid #f3f4f6;font-size:10px;">Medicines &amp; Consumables${includeMeds ? '' : ` (${g.items.length} item${g.items.length > 1 ? 's' : ''})`}</td>
                     <td style="padding:4px 12px;border-bottom:1px solid #f3f4f6;font-size:10px;color:#9ca3af;">-</td>
                     <td style="padding:4px 12px;border-bottom:1px solid #f3f4f6;font-size:10px;text-align:center;">${g.items.length}</td>
                     <td style="padding:4px 12px;border-bottom:1px solid #f3f4f6;font-size:10px;text-align:right;">-</td>

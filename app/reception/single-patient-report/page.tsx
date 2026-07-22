@@ -147,7 +147,10 @@ export default function SinglePatientReportPage() {
                                         <div><span className="text-gray-400">Type:</span> <span className="font-bold capitalize">{String(report.patient.patient_type || 'cash').replace('_', ' ')}</span></div>
                                     </div>
                                 </div>
-                                <button onClick={() => window.print()}
+                                {/* Opens a proper paginated document rather than
+                                    printing this screen — printing the screen
+                                    clipped everything below the first page. */}
+                                <button onClick={() => window.open(`/api/reports/single-patient/${report.patient.patient_id}`, '_blank')}
                                     className="print:hidden flex items-center gap-1.5 px-3 py-2 text-xs font-bold border border-gray-200 rounded-xl bg-white hover:bg-gray-50 shrink-0">
                                     <Printer className="h-3.5 w-3.5" /> Print
                                 </button>
@@ -220,7 +223,10 @@ export default function SinglePatientReportPage() {
                             </table>
                         </Section>
 
-                        <Section title="OPD Visits" count={report.appointments.length}>
+                        {/* Named precisely: this lists scheduled appointments. A
+                            walk-in patient billed at the counter has none, and
+                            "OPD Visits: 0" read like missing data. */}
+                        <Section title="OPD Appointments (scheduled only)" count={report.appointments.length}>
                             <table className="w-full">
                                 <thead className="bg-gray-50"><tr>
                                     <th className={th}>Date</th><th className={th}>Doctor</th>

@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { AppShell } from '@/app/components/layout/AppShell';
 import { ClipboardList, Search, Download, Loader2, AlertTriangle } from 'lucide-react';
 import { getIndentReport } from '@/app/actions/indent-report-actions';
+import { exportIndentReport } from '@/app/actions/report-export-actions';
 
 const STATUSES = ['Pending', 'Verified', 'Completed', 'Dispensed', 'Cancelled'];
 
@@ -27,6 +28,7 @@ export default function IndentReportPage() {
     const [from, setFrom] = useState('');
     const [to, setTo] = useState('');
     const [expanded, setExpanded] = useState<number | null>(null);
+    const [exporting, setExporting] = useState(false);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -46,30 +48,31 @@ export default function IndentReportPage() {
         return () => clearTimeout(t);
     }, [load]);
 
-    function exportCsv() {
-        const head = ['Indent No', 'Date', 'Patient', 'UHID', 'Raised By', 'Status', 'Lines', 'Qty Requested', 'Qty Dispensed', 'Short', 'Value'];
-        const body = rows.map(r => [
-            r.indent_number,
-            new Date(r.created_at).toLocaleString('en-IN'),
-            r.patient_name ?? '',
-            r.patient_id ?? '',
-            r.requested_by ?? '',
-            r.status ?? '',
-            r.line_count,
-            r.qty_requested,
-            r.qty_dispensed,
-            r.qty_short,
-            r.value,
-        ]);
-        const csv = [head, ...body]
-            .map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(','))
-            .join('\n');
-        const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `indent-report-${new Date().toISOString().slice(0, 10)}.csv`;
-        a.click();
-        URL.revokeObjectURL(url);
+    // Titled .xlsx with every column (including admission, verifier and the
+    // medicine lines) — the old CSV dropped those and opened unlabelled.
+    async function exportExcel() {
+        setExporting(true);
+        setError(null);
+        try {
+            const res = await exportIndentReport({ search, status, from, to });
+            if (!res.success || !res.base64) {
+                setError(res.error || 'Export failed');
+                return;
+            }
+            const bytes = Uint8Array.from(atob(res.base64), c => c.charCodeAt(0));
+            const url = URL.createObjectURL(
+                new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+            );
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = res.filename || 'indent-report.xlsx';
+            a.click();
+            URL.revokeObjectURL(url);
+        } catch (e: any) {
+            setError(e.message || 'Export failed');
+        } finally {
+            setExporting(false);
+        }
     }
 
     return (
@@ -108,9 +111,10 @@ export default function IndentReportPage() {
                         <option value="">All statuses</option>
                         {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
-                    <button onClick={exportCsv} disabled={!rows.length}
+                    <button onClick={exportExcel} disabled={!rows.length || exporting}
                         className="flex items-center gap-1.5 px-3 py-2.5 text-xs font-bold border border-gray-200 rounded-xl bg-white hover:bg-gray-50 disabled:opacity-40">
-                        <Download className="h-3.5 w-3.5" /> Export CSV
+                        {exporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+                        {exporting ? 'Preparing…' : 'Export Excel'}
                     </button>
                 </div>
 

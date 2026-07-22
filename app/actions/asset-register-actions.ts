@@ -179,6 +179,25 @@ export async function moveAsset(input: {
         const current: any = await getFixedAssets(organizationId, {});
         const asset = (current.assets ?? []).find((a: any) => a.id === input.asset_id);
         if (!asset) return { success: false, error: 'Asset not found.' };
+        if (asset.status !== 'Active') {
+            return { success: false, error: `Cannot transfer a ${String(asset.status).toLowerCase()} asset.` };
+        }
+
+        // An empty submission used to create a transfer row with no destination
+        // and no reason — a meaningless entry in the asset's history.
+        const toLocation = (input.to_location ?? '').trim();
+        const toDepartment = (input.to_department ?? '').trim();
+        const reason = (input.reason ?? '').trim();
+        if (!toLocation && !toDepartment) {
+            return { success: false, error: 'Enter a new location or a new department to transfer this asset.' };
+        }
+        if (!reason) return { success: false, error: 'A reason for the transfer is required.' };
+
+        const sameLocation = toLocation === (asset.location ?? '').trim();
+        const sameDepartment = toDepartment === (asset.department ?? '').trim();
+        if (sameLocation && sameDepartment) {
+            return { success: false, error: 'Nothing changed — the location and department are the same as now.' };
+        }
 
         const res: any = await transferAsset({
             organizationId,
@@ -187,10 +206,10 @@ export async function moveAsset(input: {
             from_department: asset.department ?? undefined,
             // Fall back to the current value so a blank field means "unchanged"
             // rather than wiping the asset's location.
-            to_location: input.to_location || asset.location || undefined,
-            to_department: input.to_department || asset.department || undefined,
+            to_location: toLocation || asset.location || undefined,
+            to_department: toDepartment || asset.department || undefined,
             transfer_date: input.transfer_date ? new Date(input.transfer_date) : new Date(),
-            transfer_reason: input.reason,
+            transfer_reason: reason,
             approved_by: session?.username,
         });
         if (!res.success) return { success: false, error: res.error };
@@ -210,17 +229,115 @@ export async function logMaintenance(input: {
 }) {
     try {
         const { organizationId } = await requireTenantContext();
+
+        // Without this an empty Save wrote a blank service record — a row in the
+        // asset's history saying nothing was done, on no date, for no reason.
+        const description = (input.description ?? '').trim();
+        if (!input.maintenance_type?.trim()) return { success: false, error: 'Select the type of service.' };
+        if (!description) return { success: false, error: 'Describe what was done — this is the service record.' };
+        const cost = Number(input.cost || 0);
+        if (!Number.isFinite(cost) || cost < 0) return { success: false, error: 'Enter a valid cost (0 or more).' };
+
+        // The service itself is recorded as happening now, so the *next* one
+        // falling due in the past is a contradiction — it would also land in the
+        // register as permanently "overdue" the moment it was saved.
+        const servicedOn = input.maintenance_date ? new Date(input.maintenance_date) : new Date();
+        if (input.next_maintenance_date) {
+            const next = new Date(input.next_maintenance_date);
+            if (isNaN(next.getTime())) return { success: false, error: 'Enter a valid next service date.' };
+            // Compare on date, not timestamp, so "today" is allowed.
+            const startOfServiceDay = new Date(servicedOn.getFullYear(), servicedOn.getMonth(), servicedOn.getDate());
+            if (next < startOfServiceDay) {
+                return { success: false, error: 'The next service date cannot be before the date of this service.' };
+            }
+        }
+
         const res: any = await recordMaintenance({
             organizationId,
             asset_id: input.asset_id,
             maintenance_type: input.maintenance_type,
             maintenance_date: input.maintenance_date ? new Date(input.maintenance_date) : new Date(),
-            cost: Number(input.cost || 0),
-            description: input.description,
+            cost,
+            description,
             next_due_date: input.next_maintenance_date ? new Date(input.next_maintenance_date) : undefined,
         });
         if (!res.success) return { success: false, error: res.error };
         return { success: true, data: serialize(res) };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Everything that has happened to one asset: where it moved, what was serviced,
+ * and how it was disposed of — each with the reason that was typed at the time.
+ * Those reasons were being recorded and then never shown anywhere.
+ */
+export async function getAssetHistory(assetId: string) {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+
+        const asset = await db.fixedAsset.findFirst({
+            where: { id: assetId, organizationId },
+            include: { category: true },
+        });
+        if (!asset) return { success: false, error: 'Asset not found.' };
+
+        const [transfers, maintenance] = await Promise.all([
+            db.assetTransfer.findMany({ where: { asset_id: assetId }, orderBy: { transfer_date: 'desc' } }),
+            db.assetMaintenance.findMany({ where: { asset_id: assetId }, orderBy: { maintenance_date: 'desc' } }),
+        ]);
+
+        // One merged, newest-first timeline is easier to read than three lists.
+        const events = [
+            {
+                kind: 'Acquired',
+                at: asset.acquisition_date,
+                detail: `${asset.category?.category_name ?? 'Asset'} added to the register`,
+                note: asset.invoice_number ? `Invoice ${asset.invoice_number}` : '',
+                amount: Number(asset.acquisition_cost || 0),
+                by: '',
+            },
+            ...transfers.map((t: any) => {
+                // Only mention the part that actually moved — showing
+                // "(Reception → Reception)" for an unchanged department is noise.
+                const locMoved = (t.from_location ?? '') !== (t.to_location ?? '');
+                const deptMoved = (t.from_department ?? '') !== (t.to_department ?? '');
+                const bits: string[] = [];
+                if (locMoved) bits.push(`location: ${t.from_location || '—'} → ${t.to_location || '—'}`);
+                if (deptMoved) bits.push(`dept: ${t.from_department || '—'} → ${t.to_department || '—'}`);
+                return {
+                    kind: 'Transferred',
+                    at: t.transfer_date,
+                    detail: bits.join('  ·  ') || 'Location updated',
+                    note: t.transfer_reason || '',
+                    amount: null as number | null,
+                    by: t.approved_by || '',
+                };
+            }),
+            ...maintenance.map((m: any) => ({
+                kind: 'Serviced',
+                at: m.maintenance_date,
+                detail: m.maintenance_type,
+                note: m.description || '',
+                amount: Number(m.cost || 0),
+                by: m.performed_by || '',
+            })),
+            ...(asset.status === 'Disposed'
+                ? [{
+                    kind: 'Disposed',
+                    at: asset.disposed_date,
+                    detail: 'Removed from the active register',
+                    note: asset.disposal_reason || '',
+                    amount: Number(asset.disposal_value || 0),
+                    by: '',
+                }]
+                : []),
+        ]
+            .filter(e => e.at)
+            .sort((a, b) => new Date(b.at as any).getTime() - new Date(a.at as any).getTime());
+
+        return { success: true, data: serialize({ asset, events }) };
     } catch (error: any) {
         return { success: false, error: error.message };
     }

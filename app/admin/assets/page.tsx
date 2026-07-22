@@ -10,12 +10,24 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { AppShell } from '@/app/components/layout/AppShell';
-import { Package, Plus, Search, Download, Loader2, AlertTriangle, X, ArrowLeftRight, Wrench } from 'lucide-react';
+import { Package, Plus, Search, Download, Loader2, AlertTriangle, X, ArrowLeftRight, Wrench, History } from 'lucide-react';
 import {
-    listAssets, listAssetCategories, addAsset, moveAsset, logMaintenance, retireAsset,
+    listAssets, listAssetCategories, addAsset, moveAsset, logMaintenance, retireAsset, getAssetHistory,
 } from '@/app/actions/asset-register-actions';
+import { exportAssetRegister } from '@/app/actions/report-export-actions';
 
 const money = (n: any) => Number(n || 0).toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 });
+
+/** How urgent the next service is. "soon" = within the next 14 days. */
+const SERVICE_SOON_DAYS = 14;
+function serviceDue(a: any): 'overdue' | 'soon' | 'ok' | null {
+    if (!a.next_maintenance_date || a.status !== 'Active') return null;
+    const due = new Date(a.next_maintenance_date).getTime();
+    const now = Date.now();
+    if (due < now) return 'overdue';
+    if (due - now <= SERVICE_SOON_DAYS * 86400000) return 'soon';
+    return 'ok';
+}
 const d = (v: any) => (v ? new Date(v).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—');
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -42,12 +54,22 @@ export default function AssetRegisterPage() {
     const [showAdd, setShowAdd] = useState(false);
     const [form, setForm] = useState({ ...EMPTY_FORM });
     const [saving, setSaving] = useState(false);
+    const [exporting, setExporting] = useState(false);
     const [formError, setFormError] = useState<string | null>(null);
 
     const [moveModal, setMoveModal] = useState<any>(null);
     const [moveForm, setMoveForm] = useState({ to_location: '', to_department: '', reason: '' });
     const [maintModal, setMaintModal] = useState<any>(null);
     const [maintForm, setMaintForm] = useState({ maintenance_type: 'Preventive', cost: '', description: '', next_maintenance_date: '' });
+
+    const [moveError, setMoveError] = useState<string | null>(null);
+    const [maintError, setMaintError] = useState<string | null>(null);
+    const [historyModal, setHistoryModal] = useState<{ asset: any; events: any[] | null } | null>(null);
+
+    const [disposeModal, setDisposeModal] = useState<any>(null);
+    const [disposeReason, setDisposeReason] = useState('');
+    const [disposeValue, setDisposeValue] = useState('');
+    const [disposeError, setDisposeError] = useState<string | null>(null);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -101,17 +123,33 @@ export default function AssetRegisterPage() {
     async function handleMove(e: React.FormEvent) {
         e.preventDefault();
         if (!moveModal) return;
+        // Guard here as well as on the server so the message lands next to the
+        // fields rather than as a banner at the top of the page.
+        if (!moveForm.to_location.trim() && !moveForm.to_department.trim()) {
+            setMoveError('Enter a new location or a new department.');
+            return;
+        }
+        if (!moveForm.reason.trim()) {
+            setMoveError('Enter a reason for the transfer.');
+            return;
+        }
         setSaving(true);
+        setMoveError(null);
         const res = await moveAsset({ asset_id: moveModal.id, ...moveForm });
         setSaving(false);
         if (res.success) { setMoveModal(null); setMoveForm({ to_location: '', to_department: '', reason: '' }); load(); }
-        else setError(res.error || 'Transfer failed');
+        else setMoveError(res.error || 'Transfer failed');
     }
 
     async function handleMaintenance(e: React.FormEvent) {
         e.preventDefault();
         if (!maintModal) return;
+        if (!maintForm.description.trim()) {
+            setMaintError('Describe what was done — this is the service record.');
+            return;
+        }
         setSaving(true);
+        setMaintError(null);
         const res = await logMaintenance({
             asset_id: maintModal.id,
             maintenance_type: maintForm.maintenance_type,
@@ -124,31 +162,71 @@ export default function AssetRegisterPage() {
             setMaintModal(null);
             setMaintForm({ maintenance_type: 'Preventive', cost: '', description: '', next_maintenance_date: '' });
             load();
-        } else setError(res.error || 'Could not record maintenance');
+        } else setMaintError(res.error || 'Could not record maintenance');
     }
 
-    async function handleRetire(a: any) {
-        const reason = window.prompt(`Dispose "${a.asset_name}"? Enter a reason:`);
-        if (!reason?.trim()) return;
-        const res = await retireAsset({ asset_id: a.id, reason: reason.trim() });
-        if (res.success) load();
-        else setError(res.error || 'Disposal failed');
+    async function openHistory(a: any) {
+        setHistoryModal({ asset: a, events: null });
+        const res = await getAssetHistory(a.id);
+        if (res.success && res.data) setHistoryModal({ asset: res.data.asset, events: res.data.events });
+        else { setHistoryModal(null); setError(res.error || 'Could not load history'); }
     }
 
-    function exportCsv() {
-        const head = ['Asset Code', 'Name', 'Category', 'Location', 'Department', 'Serial', 'Acquired', 'Cost', 'Book Value', 'Warranty', 'Status'];
-        const body = filtered.map(a => [
-            a.asset_code, a.asset_name, a.category?.category_name ?? '', a.location ?? '', a.department ?? '',
-            a.serial_number ?? '', d(a.acquisition_date), a.acquisition_cost, a.book_value,
-            a.warranty_expiry ? d(a.warranty_expiry) : '', a.status,
-        ]);
-        const csv = [head, ...body].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
-        const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `asset-register-${today()}.csv`;
-        link.click();
-        URL.revokeObjectURL(url);
+    // A browser prompt() gave no validation — pressing OK with an empty reason
+    // just closed the box and silently did nothing, so it looked broken. This
+    // is a real modal that keeps itself open until a reason is entered.
+    async function handleRetire(e: React.FormEvent) {
+        e.preventDefault();
+        if (!disposeModal) return;
+        if (!disposeReason.trim()) {
+            setDisposeError('Enter a reason for disposing this asset.');
+            return;
+        }
+        setSaving(true);
+        setDisposeError(null);
+        const res = await retireAsset({
+            asset_id: disposeModal.id,
+            reason: disposeReason.trim(),
+            disposal_value: Number(disposeValue || 0),
+        });
+        setSaving(false);
+        if (res.success) {
+            setDisposeModal(null);
+            setDisposeReason('');
+            setDisposeValue('');
+            load();
+        } else {
+            setDisposeError(res.error || 'Disposal failed');
+        }
+    }
+
+    // Titled .xlsx, same presentation as the other reports.
+    async function exportExcel() {
+        setExporting(true);
+        setError(null);
+        try {
+            const res = await exportAssetRegister({
+                status: statusFilter || undefined,
+                category_id: categoryFilter || undefined,
+            });
+            if (!res.success || !res.base64) {
+                setError(res.error || 'Export failed');
+                return;
+            }
+            const bytes = Uint8Array.from(atob(res.base64), c => c.charCodeAt(0));
+            const url = URL.createObjectURL(
+                new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+            );
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = res.filename || 'asset-register.xlsx';
+            link.click();
+            URL.revokeObjectURL(url);
+        } catch (e: any) {
+            setError(e.message || 'Export failed');
+        } finally {
+            setExporting(false);
+        }
     }
 
     return (
@@ -183,9 +261,10 @@ export default function AssetRegisterPage() {
                         <option value="">All statuses</option>
                         {['Active', 'Disposed'].map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
-                    <button onClick={exportCsv} disabled={!filtered.length}
+                    <button onClick={exportExcel} disabled={!filtered.length || exporting}
                         className="flex items-center gap-1.5 px-3 py-2.5 text-xs font-bold border border-gray-200 rounded-xl bg-white hover:bg-gray-50 disabled:opacity-40">
-                        <Download className="h-3.5 w-3.5" /> Export
+                        {exporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+                        {exporting ? 'Preparing…' : 'Export Excel'}
                     </button>
                     <button onClick={() => { setShowAdd(true); setFormError(null); }}
                         className="flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold text-white bg-indigo-600 rounded-xl hover:bg-indigo-700">
@@ -212,6 +291,7 @@ export default function AssetRegisterPage() {
                                     <th className="px-4 py-3 text-right">Cost</th>
                                     <th className="px-4 py-3 text-right">Book Value</th>
                                     <th className="px-4 py-3">Warranty</th>
+                                    <th className="px-4 py-3">Next Service</th>
                                     <th className="px-4 py-3 text-center">Status</th>
                                     <th className="px-4 py-3 text-center">Actions</th>
                                 </tr>
@@ -242,6 +322,21 @@ export default function AssetRegisterPage() {
                                             <td className="px-4 py-3 text-xs text-right font-bold">{money(a.book_value)}</td>
                                             <td className={`px-4 py-3 text-xs ${warrantyGone ? 'text-rose-600 font-bold' : 'text-gray-500'}`}>
                                                 {a.warranty_expiry ? d(a.warranty_expiry) : '—'}
+                                                {warrantyGone && <span className="block text-[10px] font-normal">expired</span>}
+                                            </td>
+                                            {/* Due status is the whole point of recording a next-service
+                                                date — a bare date tells you nothing at a glance. */}
+                                            <td className="px-4 py-3 text-xs">
+                                                {a.next_maintenance_date ? (
+                                                    <>
+                                                        <span className={serviceDue(a) === 'overdue' ? 'text-rose-600 font-bold'
+                                                            : serviceDue(a) === 'soon' ? 'text-amber-600 font-bold' : 'text-gray-500'}>
+                                                            {d(a.next_maintenance_date)}
+                                                        </span>
+                                                        {serviceDue(a) === 'overdue' && <span className="block text-[10px] text-rose-600">overdue</span>}
+                                                        {serviceDue(a) === 'soon' && <span className="block text-[10px] text-amber-600">due soon</span>}
+                                                    </>
+                                                ) : <span className="text-gray-300">not scheduled</span>}
                                             </td>
                                             <td className="px-4 py-3 text-center">
                                                 <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold border ${
@@ -249,8 +344,21 @@ export default function AssetRegisterPage() {
                                                         ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
                                                         : 'text-gray-500 bg-gray-50 border-gray-200'
                                                 }`}>{a.status}</span>
+                                                {/* The disposal reason was captured and then never shown. */}
+                                                {a.status === 'Disposed' && a.disposal_reason && (
+                                                    <span className="block mt-1 text-[10px] text-gray-500 max-w-[160px] leading-tight">
+                                                        {a.disposal_reason}
+                                                    </span>
+                                                )}
                                             </td>
                                             <td className="px-4 py-3">
+                                                <div className="flex justify-center gap-1 mb-1">
+                                                    <button onClick={() => openHistory(a)}
+                                                        title="Where it has been, what was serviced, and why"
+                                                        className="px-2 py-1 text-[10px] font-bold text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 flex items-center gap-1">
+                                                        <History className="h-3 w-3" /> History
+                                                    </button>
+                                                </div>
                                                 {a.status === 'Active' && (
                                                     <div className="flex justify-center gap-1">
                                                         <button onClick={() => { setMoveModal(a); setMoveForm({ to_location: a.location || '', to_department: a.department || '', reason: '' }); }}
@@ -261,7 +369,7 @@ export default function AssetRegisterPage() {
                                                             title="Record maintenance" className="px-2 py-1 text-[10px] font-bold text-amber-700 bg-amber-50 rounded-lg hover:bg-amber-100 flex items-center gap-1">
                                                             <Wrench className="h-3 w-3" /> Service
                                                         </button>
-                                                        <button onClick={() => handleRetire(a)}
+                                                        <button onClick={() => { setDisposeModal(a); setDisposeReason(''); setDisposeValue(''); setDisposeError(null); }}
                                                             title="Dispose" className="px-2 py-1 text-[10px] font-bold text-rose-700 bg-rose-50 rounded-lg hover:bg-rose-100">
                                                             Dispose
                                                         </button>
@@ -360,15 +468,25 @@ export default function AssetRegisterPage() {
                             <h3 className="text-lg font-black text-gray-900">Transfer {moveModal.asset_code}</h3>
                             <button type="button" onClick={() => setMoveModal(null)}><X className="h-5 w-5 text-gray-400" /></button>
                         </div>
+                        <p className="text-xs text-gray-500 -mt-2">
+                            Currently at <span className="font-bold">{moveModal.location || 'no location'}</span>
+                            {moveModal.department ? <> · <span className="font-bold">{moveModal.department}</span></> : null}
+                        </p>
                         <div><label className={label}>New Location</label>
-                            <input value={moveForm.to_location} onChange={e => setMoveForm({ ...moveForm, to_location: e.target.value })} className={input} /></div>
+                            <input value={moveForm.to_location} onChange={e => { setMoveForm({ ...moveForm, to_location: e.target.value }); setMoveError(null); }} className={input} /></div>
                         <div><label className={label}>New Department</label>
-                            <input value={moveForm.to_department} onChange={e => setMoveForm({ ...moveForm, to_department: e.target.value })} className={input} /></div>
-                        <div><label className={label}>Reason</label>
-                            <input value={moveForm.reason} onChange={e => setMoveForm({ ...moveForm, reason: e.target.value })} className={input} /></div>
+                            <input value={moveForm.to_department} onChange={e => { setMoveForm({ ...moveForm, to_department: e.target.value }); setMoveError(null); }} className={input} /></div>
+                        <div><label className={label}>Reason *</label>
+                            <input value={moveForm.reason} onChange={e => { setMoveForm({ ...moveForm, reason: e.target.value }); setMoveError(null); }}
+                                placeholder="e.g. moved to the new server room" className={input} /></div>
+                        {moveError && (
+                            <p className="text-xs font-bold text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">{moveError}</p>
+                        )}
                         <div className="flex justify-end gap-3">
                             <button type="button" onClick={() => setMoveModal(null)} className="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl">Cancel</button>
-                            <button type="submit" disabled={saving} className="px-5 py-2 text-sm font-semibold text-white bg-blue-600 rounded-xl disabled:opacity-50">Transfer</button>
+                            <button type="submit"
+                                disabled={saving || !moveForm.reason.trim() || (!moveForm.to_location.trim() && !moveForm.to_department.trim())}
+                                className="px-5 py-2 text-sm font-semibold text-white bg-blue-600 rounded-xl disabled:opacity-50">Transfer</button>
                         </div>
                     </form>
                 </div>
@@ -388,13 +506,126 @@ export default function AssetRegisterPage() {
                             </select></div>
                         <div><label className={label}>Cost (₹)</label>
                             <input type="number" min="0" step="0.01" value={maintForm.cost} onChange={e => setMaintForm({ ...maintForm, cost: e.target.value })} className={input} /></div>
-                        <div><label className={label}>Notes</label>
-                            <input value={maintForm.description} onChange={e => setMaintForm({ ...maintForm, description: e.target.value })} className={input} /></div>
-                        <div><label className={label}>Next Service Due</label>
-                            <input type="date" value={maintForm.next_maintenance_date} onChange={e => setMaintForm({ ...maintForm, next_maintenance_date: e.target.value })} className={input} /></div>
+                        <div><label className={label}>What was done? *</label>
+                            <input value={maintForm.description} onChange={e => { setMaintForm({ ...maintForm, description: e.target.value }); setMaintError(null); }}
+                                placeholder="e.g. replaced drum unit, cleaned rollers" className={input} /></div>
+                        <div>
+                            <label className={label}>Next Service Due</label>
+                            {/* `min` stops the picker offering a past date; the server
+                                rejects one too, since this service is recorded as today. */}
+                            <input type="date" min={today()} value={maintForm.next_maintenance_date}
+                                onChange={e => { setMaintForm({ ...maintForm, next_maintenance_date: e.target.value }); setMaintError(null); }}
+                                className={input} />
+                            <p className="text-[11px] text-gray-400 mt-1">
+                                Leave blank if no follow-up is needed. Admins are reminded 14 days before it falls due.
+                            </p>
+                        </div>
+                        {maintError && (
+                            <p className="text-xs font-bold text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">{maintError}</p>
+                        )}
                         <div className="flex justify-end gap-3">
                             <button type="button" onClick={() => setMaintModal(null)} className="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl">Cancel</button>
-                            <button type="submit" disabled={saving} className="px-5 py-2 text-sm font-semibold text-white bg-amber-600 rounded-xl disabled:opacity-50">Save</button>
+                            <button type="submit" disabled={saving || !maintForm.description.trim()}
+                                className="px-5 py-2 text-sm font-semibold text-white bg-amber-600 rounded-xl disabled:opacity-50">Save</button>
+                        </div>
+                    </form>
+                </div>
+            )}
+
+            {/* HISTORY — the audit trail for one asset. */}
+            {historyModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+                    <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden max-h-[85vh] flex flex-col">
+                        <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-start">
+                            <div>
+                                <h3 className="text-lg font-black text-gray-900">Asset History</h3>
+                                <p className="text-sm text-gray-500 mt-0.5">
+                                    <span className="font-semibold">{historyModal.asset.asset_code}</span> · {historyModal.asset.asset_name}
+                                </p>
+                            </div>
+                            <button onClick={() => setHistoryModal(null)}><X className="h-5 w-5 text-gray-400" /></button>
+                        </div>
+                        <div className="p-6 overflow-auto">
+                            {historyModal.events === null ? (
+                                <div className="flex items-center justify-center py-10 text-gray-400 gap-2 text-sm">
+                                    <Loader2 className="h-4 w-4 animate-spin" /> Loading history…
+                                </div>
+                            ) : historyModal.events.length === 0 ? (
+                                <p className="text-sm text-gray-400 py-8 text-center">Nothing recorded yet.</p>
+                            ) : (
+                                <ol className="space-y-3">
+                                    {historyModal.events.map((ev: any, i: number) => (
+                                        <li key={i} className="flex gap-3">
+                                            <div className="w-24 shrink-0 text-[11px] text-gray-400 pt-0.5">{d(ev.at)}</div>
+                                            <div className="flex-1 border-l-2 border-gray-100 pl-3 pb-1">
+                                                <div className="flex items-center gap-2 flex-wrap">
+                                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                                                        ev.kind === 'Acquired' ? 'text-indigo-700 bg-indigo-50 border-indigo-200'
+                                                        : ev.kind === 'Transferred' ? 'text-blue-700 bg-blue-50 border-blue-200'
+                                                        : ev.kind === 'Serviced' ? 'text-amber-700 bg-amber-50 border-amber-200'
+                                                        : 'text-rose-700 bg-rose-50 border-rose-200'}`}>
+                                                        {ev.kind}
+                                                    </span>
+                                                    <span className="text-xs font-bold text-gray-800">{ev.detail}</span>
+                                                    {ev.amount !== null && ev.amount > 0 && (
+                                                        <span className="text-xs font-bold text-gray-500">{money(ev.amount)}</span>
+                                                    )}
+                                                </div>
+                                                {ev.note && <p className="text-xs text-gray-600 mt-0.5">{ev.note}</p>}
+                                                {ev.by && <p className="text-[10px] text-gray-400 mt-0.5">by {ev.by}</p>}
+                                            </div>
+                                        </li>
+                                    ))}
+                                </ol>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* DISPOSE — reason is mandatory and the dialog stays open until given. */}
+            {disposeModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+                    <form onSubmit={handleRetire} className="bg-white w-full max-w-md rounded-2xl shadow-2xl p-6 space-y-4">
+                        <div className="flex justify-between items-start">
+                            <div>
+                                <h3 className="text-lg font-black text-gray-900">Dispose Asset</h3>
+                                <p className="text-sm text-gray-500 mt-0.5">
+                                    <span className="font-semibold">{disposeModal.asset_code}</span> · {disposeModal.asset_name}
+                                </p>
+                            </div>
+                            <button type="button" onClick={() => setDisposeModal(null)}><X className="h-5 w-5 text-gray-400" /></button>
+                        </div>
+
+                        <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 flex gap-2">
+                            <AlertTriangle className="h-4 w-4 text-rose-600 mt-0.5 shrink-0" />
+                            <p className="text-xs text-rose-800">
+                                The asset is marked Disposed and drops out of the active register.
+                                It stays on record with your reason against it.
+                            </p>
+                        </div>
+
+                        <div>
+                            <label className={label}>Disposal Value (₹)</label>
+                            <input type="number" min="0" step="0.01" value={disposeValue}
+                                onChange={e => setDisposeValue(e.target.value)} placeholder="0" className={input} />
+                        </div>
+                        <div>
+                            <label className={label}>Reason *</label>
+                            <input value={disposeReason} onChange={e => { setDisposeReason(e.target.value); setDisposeError(null); }}
+                                placeholder="e.g. damaged beyond repair" className={input} />
+                        </div>
+                        {disposeError && (
+                            <p className="text-xs font-bold text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">{disposeError}</p>
+                        )}
+
+                        <div className="flex justify-end gap-3">
+                            <button type="button" onClick={() => setDisposeModal(null)}
+                                className="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200">Keep Asset</button>
+                            <button type="submit" disabled={saving || !disposeReason.trim()}
+                                className="px-5 py-2 text-sm font-semibold text-white bg-rose-600 rounded-xl hover:bg-rose-700 disabled:opacity-50 flex items-center gap-2">
+                                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Dispose Asset
+                            </button>
                         </div>
                     </form>
                 </div>

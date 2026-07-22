@@ -165,12 +165,19 @@ export function NotificationBell({ userId, organizationId }: NotificationBellPro
                                             <p className={`text-[10px] text-gray-400 mt-0.5 ${expandedId === n.receiptId ? '' : 'line-clamp-2'}`}>{n.body}</p>
                                             <div className="flex items-center justify-between mt-1">
                                                 <span className="text-[9px] text-gray-300 font-medium">{timeAgo(n.createdAt)}</span>
-                                                {n.releaseNoteId && (
+                                                {n.releaseNoteId ? (
                                                     <Link href={`/help-center/release-notes?id=${n.releaseNoteId}`} onClick={() => setOpen(false)}
                                                         className="text-[9px] text-orange-500 font-bold flex items-center gap-0.5 hover:text-orange-600">
                                                         View <ExternalLink className="h-2 w-2" />
                                                     </Link>
-                                                )}
+                                                ) : n.link ? (
+                                                    // Direct notifications carry their own destination
+                                                    // (e.g. an asset reminder links to the register).
+                                                    <Link href={n.link} onClick={() => setOpen(false)}
+                                                        className="text-[9px] text-orange-500 font-bold flex items-center gap-0.5 hover:text-orange-600">
+                                                        View <ExternalLink className="h-2 w-2" />
+                                                    </Link>
+                                                ) : null}
                                             </div>
                                         </div>
                                         {!n.read && (

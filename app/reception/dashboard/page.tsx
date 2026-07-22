@@ -974,7 +974,7 @@ export default function ReceptionDashboard() {
                                                 <button
                                                     onClick={() => window.open(`/api/opd/${patient.patient_id}/registration-slip`, '_blank')}
                                                     className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-gray-700 transition-colors inline-flex"
-                                                    title="Registration Slip"
+                                                    title="Print OPD Slip"
                                                 >
                                                     <Printer className="h-4 w-4" />
                                                 </button>

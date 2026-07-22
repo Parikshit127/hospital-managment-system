@@ -2,7 +2,9 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { AppShell } from '@/app/components/layout/AppShell';
-import { Shield, Search, Download, AlertTriangle } from 'lucide-react';
+import { Shield, Search, Download, AlertTriangle, Loader2 } from 'lucide-react';
+import { exportAuditReport } from '@/app/actions/report-export-actions';
+import { ENTITY_TYPE_LABELS } from '@/app/lib/audit-actions';
 
 const IPD_ACTION_TYPES = [
   'admission_created', 'admission_discharged', 'ward_round_recorded',
@@ -49,6 +51,7 @@ export default function IPDAuditTrailPage() {
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [tab, setTab] = useState<'edits' | 'all'>('edits');
+  const [exporting, setExporting] = useState(false);
   const [page, setPage] = useState(0);
 
   const buildParams = useCallback((overrides: Record<string, string> = {}) => new URLSearchParams({
@@ -82,26 +85,34 @@ export default function IPDAuditTrailPage() {
   // filter on page 4 shows an empty table.
   useEffect(() => { setPage(0); }, [search, actionFilter, from, to, tab]);
 
-  function exportCsv() {
-    const head = ['Timestamp', 'Action', 'Module', 'Entity', 'User', 'Role', 'Details'];
-    const rows = logs.map(l => [
-      new Date(l.created_at).toLocaleString('en-IN'),
-      l.action ?? '',
-      l.module ?? '',
-      `${l.entity_type ?? ''}/${l.entity_id ?? ''}`,
-      l.user_display ?? '',
-      l.user_role ?? '',
-      formatDetails(l.details),
-    ]);
-    const csv = [head, ...rows]
-      .map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(','))
-      .join('\n');
-    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `edit-cancel-audit-${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+  // Exports the whole filtered result set as a titled .xlsx — not just the rows
+  // currently on screen, and not a bare CSV that opens as an unlabelled grid.
+  async function exportExcel() {
+    setExporting(true);
+    setError(null);
+    try {
+      const res = await exportAuditReport({
+        search, action: actionFilter, from, to,
+        scope: tab === 'edits' ? 'edits' : '',
+      });
+      if (!res.success || !res.base64) {
+        setError(res.error || 'Export failed');
+        return;
+      }
+      const bytes = Uint8Array.from(atob(res.base64), c => c.charCodeAt(0));
+      const url = URL.createObjectURL(
+        new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+      );
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = res.filename || 'audit-report.xlsx';
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e: any) {
+      setError(e.message || 'Export failed');
+    } finally {
+      setExporting(false);
+    }
   }
 
   const actionOptions = tab === 'edits' ? EDIT_CANCEL_ACTIONS : IPD_ACTION_TYPES;
@@ -124,9 +135,10 @@ export default function IPDAuditTrailPage() {
                 </p>
               </div>
             </div>
-            <button onClick={exportCsv} disabled={!logs.length}
+            <button onClick={exportExcel} disabled={!logs.length || exporting}
               className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold border border-gray-200 rounded-xl bg-white hover:bg-gray-50 disabled:opacity-40">
-              <Download className="h-3.5 w-3.5" /> Export CSV
+              {exporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+              {exporting ? 'Preparing…' : 'Export Excel'}
             </button>
           </div>
 
@@ -204,16 +216,37 @@ export default function IPDAuditTrailPage() {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-gray-500 capitalize">{log.module ?? '—'}</td>
-                      <td className="px-4 py-3 text-gray-700 font-mono whitespace-nowrap">
-                        {log.entity_id ? `${log.entity_type ?? ''}/${log.entity_id}` : '—'}
-                      </td>
-                      <td className="px-4 py-3 text-gray-700 font-semibold whitespace-nowrap">
-                        {log.user_display ?? '—'}
-                        {log.user_role && (
-                          <span className="block text-[10px] font-medium text-gray-400 capitalize">{log.user_role}</span>
+                      <td className="px-4 py-3 text-gray-700 whitespace-nowrap">
+                        {log.entity_id ? (
+                          <>
+                            <span className="font-mono">{log.entity_id}</span>
+                            {log.entity_type && (
+                              <span className="block text-[10px] font-medium text-gray-400">
+                                {ENTITY_TYPE_LABELS[log.entity_type] ?? log.entity_type}
+                              </span>
+                            )}
+                          </>
+                        ) : (
+                          // Older rows were written before the record id was
+                          // stamped; say so rather than showing a bare dash.
+                          <span className="text-gray-300 italic">not recorded</span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-gray-500 max-w-md">{formatDetails(log.details) || '—'}</td>
+                      <td className="px-4 py-3 text-gray-700 font-semibold whitespace-nowrap">
+                        {log.user_display ? (
+                          <>
+                            {log.user_display}
+                            {log.user_role && (
+                              <span className="block text-[10px] font-medium text-gray-400 capitalize">{log.user_role}</span>
+                            )}
+                          </>
+                        ) : (
+                          <span className="font-normal text-gray-300 italic">not recorded</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-gray-500 max-w-md">
+                        {formatDetails(log.details) || <span className="text-gray-300 italic">—</span>}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

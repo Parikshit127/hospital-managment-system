@@ -6,13 +6,28 @@ export const dynamic = 'force-dynamic';
 
 /**
  * POST /api/notifications/:id/read
- * Mark a single receipt as read. `id` is the NOTIFICATION RECEIPT id.
- * Scoped to the current user so one user cannot mark another's receipt.
+ * Mark a single notification as read.
+ *
+ * `id` is either a broadcast RECEIPT id, or `direct:<n>` for a row in the
+ * `Notification` table — the list endpoint now returns both kinds.
+ * Scoped to the current user so one user cannot mark another's as read.
  */
 export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
     try {
         const { db, session, organizationId } = await requireTenantContext();
         const { id } = await params;
+
+        if (id.startsWith('direct:')) {
+            const notificationId = Number(id.slice('direct:'.length));
+            if (!Number.isFinite(notificationId)) {
+                return NextResponse.json({ success: false, error: 'Bad id' }, { status: 400 });
+            }
+            const res = await db.notification.updateMany({
+                where: { id: notificationId, user_id: session.id, organizationId, is_read: false },
+                data: { is_read: true },
+            });
+            return NextResponse.json({ success: true, updated: res.count });
+        }
 
         // updateMany with the user_id guard: 0 rows updated => not theirs / not found.
         const result = await db.notificationReceipt.updateMany({
