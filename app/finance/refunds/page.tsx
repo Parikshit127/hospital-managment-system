@@ -81,8 +81,10 @@ export default function RefundsPage() {
                                 <tr>
                                     <th className="px-4 py-3">Date</th>
                                     <th className="px-4 py-3">Invoice</th>
-                                    <th className="px-4 py-3">Payment</th>
+                                    <th className="px-4 py-3">Original Receipt</th>
                                     <th className="px-4 py-3 text-right">Amount</th>
+                                    <th className="px-4 py-3">Collected Via</th>
+                                    <th className="px-4 py-3">Refunded Via</th>
                                     <th className="px-4 py-3">Reason</th>
                                     <th className="px-4 py-3">Processed By</th>
                                     <th className="px-4 py-3">Status</th>
@@ -95,8 +97,25 @@ export default function RefundsPage() {
                                             {new Date(r.created_at).toLocaleString('en-IN')}
                                         </td>
                                         <td className="px-4 py-3 font-mono text-xs">{r.invoice_id}</td>
-                                        <td className="px-4 py-3 font-mono text-xs text-gray-500">{r.payment_id || '—'}</td>
+                                        {/* The receipt number is what reception quotes on the phone —
+                                            the internal payment id was meaningless to them. */}
+                                        <td className="px-4 py-3 font-mono text-xs text-gray-500">
+                                            {r.original_receipt_number || r.payment_id || '—'}
+                                        </td>
                                         <td className="px-4 py-3 text-right font-bold text-rose-600">₹{fmt(Number(r.amount))}</td>
+                                        <td className="px-4 py-3 text-xs text-gray-500">{r.collected_mode || '—'}</td>
+                                        <td className="px-4 py-3 text-xs">
+                                            <span className={`font-bold ${
+                                                r.refund_mode && r.collected_mode && r.refund_mode !== r.collected_mode
+                                                    ? 'text-amber-600'
+                                                    : 'text-gray-700'
+                                            }`}>
+                                                {r.refund_mode || '—'}
+                                            </span>
+                                            {r.refund_ref && (
+                                                <span className="block text-[10px] text-gray-400 font-mono">{r.refund_ref}</span>
+                                            )}
+                                        </td>
                                         <td className="px-4 py-3 text-xs text-gray-600 max-w-[260px] truncate" title={r.reason}>{r.reason}</td>
                                         <td className="px-4 py-3 text-xs text-gray-500">{r.processed_by || '—'}</td>
                                         <td className="px-4 py-3">
@@ -106,7 +125,7 @@ export default function RefundsPage() {
                                 ))}
                                 {filtered.length === 0 && !loading && (
                                     <tr>
-                                        <td colSpan={7} className="px-4 py-16 text-center text-gray-500">
+                                        <td colSpan={9} className="px-4 py-16 text-center text-gray-500">
                                             <div className="flex flex-col items-center justify-center">
                                                 <Undo2 className="h-10 w-10 text-gray-300 mb-3" />
                                                 <p className="font-bold">No refunds {query ? 'match your search' : 'on record'}.</p>
@@ -119,7 +138,7 @@ export default function RefundsPage() {
                                 )}
                                 {loading && (
                                     <tr>
-                                        <td colSpan={7} className="px-4 py-16 text-center text-xs text-gray-400">
+                                        <td colSpan={9} className="px-4 py-16 text-center text-xs text-gray-400">
                                             Loading refunds…
                                         </td>
                                     </tr>

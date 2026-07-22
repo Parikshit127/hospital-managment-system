@@ -895,7 +895,7 @@ export async function getMyRole() {
  */
 export async function updateInvoiceDoctor(invoiceId: number, doctor_id: string | null, doctor_name: string | null) {
     try {
-        const { db, organizationId } = await requireRoleAndTenant(['admin', 'finance']);
+        const { db, organizationId, session } = await requireRoleAndTenant(['admin', 'finance']);
         const invoice = await db.invoices.findFirst({ where: { id: invoiceId, organizationId } });
         if (!invoice) return { success: false, error: 'Invoice not found' };
 
@@ -919,6 +919,10 @@ export async function updateInvoiceDoctor(invoiceId: number, doctor_id: string |
                 entity_type: 'invoice',
                 entity_id: invoice.invoice_number,
                 details: JSON.stringify({ doctor_id: doctor_id || null, doctor_name: cleanName }),
+                // Stamp the actor — the Edit/Cancel audit report is meant to
+                // answer "who changed this", and these rows were anonymous.
+                user_id: session?.id,
+                username: session?.username,
                 organizationId,
             },
         });
@@ -1022,6 +1026,8 @@ export async function cancelInvoice(invoiceId: number, reason: string) {
                     cancelled_at: now.toISOString(),
                     previous_status: existing.status,
                 }),
+                user_id: session?.id,
+                username: session?.username,
                 organizationId,
             },
         });
@@ -2550,7 +2556,12 @@ export async function processRefund(input: {
                         amount,
                         reason: input.reason.trim(),
                         invoice_number: payment.invoice.invoice_number,
+                        original_receipt: payment.receipt_number,
+                        collected_via: payment.payment_method,
+                        refunded_via: refund.payment_method ?? payment.payment_method,
                     }),
+                    username: session?.username,
+                    user_id: session?.id,
                     organizationId,
                 },
             });
@@ -2575,12 +2586,42 @@ export async function processRefund(input: {
 
 export async function getRefunds() {
     try {
-        const { db } = await requireTenantContext();
+        const { db, organizationId } = await requireTenantContext();
         const refunds = await db.refund.findMany({
+            where: { organizationId },
             orderBy: { created_at: 'desc' },
             take: 100
         });
-        return { success: true, data: serialize(refunds) };
+
+        // Refunds store payment_id as a string and have no relation, so pull the
+        // original receipts in one query. The history table shows both the mode
+        // the money came in on and the mode it went back out on — the two differ
+        // often enough that showing only one was actively misleading.
+        const paymentIds = Array.from(
+            new Set(refunds.map((r: any) => Number(r.payment_id)).filter((n: number) => Number.isFinite(n)))
+        ) as number[];
+        const payments = paymentIds.length
+            ? await db.payments.findMany({
+                where: { id: { in: paymentIds }, organizationId },
+                select: { id: true, receipt_number: true, payment_method: true, created_at: true },
+            })
+            : [];
+        const byId = new Map<number, any>(payments.map((p: any) => [p.id, p]));
+
+        const data = refunds.map((r: any) => {
+            const p = byId.get(Number(r.payment_id));
+            return {
+                ...r,
+                original_receipt_number: p?.receipt_number ?? null,
+                collected_mode: p?.payment_method ?? null,
+                original_receipt_date: p?.created_at ?? null,
+                // Legacy rows predate the refund payout mode — fall back to how
+                // it was collected.
+                refund_mode: r.payment_method ?? p?.payment_method ?? null,
+            };
+        });
+
+        return { success: true, data: serialize(data) };
     } catch (error: any) {
         return { success: false, error: error.message };
     }
@@ -3082,6 +3123,8 @@ export async function updateInvoiceItem(itemId: number, patch: {
                 entity_type: 'invoice',
                 entity_id: item.invoice.invoice_number,
                 details: JSON.stringify({ item_id: itemId, patch }),
+                user_id: session?.id,
+                username: session?.username,
                 organizationId,
             },
         });
@@ -3158,6 +3201,8 @@ export async function updateInvoiceHeader(invoiceId: number, patch: {
                 entity_type: 'invoice',
                 entity_id: invoice.invoice_number,
                 details: JSON.stringify({ patch }),
+                user_id: session?.id,
+                username: session?.username,
                 organizationId,
             },
         });
@@ -3537,6 +3582,8 @@ export async function saveInvoiceEdits(invoiceId: number, payload: {
                         balance_due: Number(updated?.balance_due ?? 0),
                     },
                 }),
+                user_id: session?.id,
+                username: session?.username,
                 organizationId,
             },
         });

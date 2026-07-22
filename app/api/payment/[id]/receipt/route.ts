@@ -36,7 +36,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
                 payment_id: String(payment.id),
                 status: { in: ['Processed', 'Approved'] },
             },
-            select: { amount: true, reason: true, created_at: true, processed_by: true },
+            select: { amount: true, reason: true, created_at: true, processed_by: true, payment_method: true, refund_ref: true },
             orderBy: { created_at: 'desc' },
         });
         const totalRefunded = refunds.reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
@@ -353,7 +353,7 @@ function generateReceiptHTML(payment: any, org: any, logoSignedUrl = '') {
             </table>
             ${refunds.length ? `<div style="margin-top:12px;border-top:1px solid #fecdd3;padding-top:10px;">
                 ${refunds.map((r: any) => `<div style="font-size:11px;color:#7f1d1d;padding:4px 0;">
-                    <strong>${fmtBillDateTime(r.created_at)}</strong> · &#8377;${Number(r.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })} ${r.processed_by ? `· by ${r.processed_by}` : ''}<br/>
+                    <strong>${fmtBillDateTime(r.created_at)}</strong> · &#8377;${Number(r.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}${r.payment_method ? ` · refunded via ${r.payment_method}` : ''}${r.refund_ref ? ` (${r.refund_ref})` : ''} ${r.processed_by ? `· by ${r.processed_by}` : ''}<br/>
                     <span style="color:#a16207;">${r.reason || ''}</span>
                 </div>`).join('')}
             </div>` : ''}

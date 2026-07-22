@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import {
     collectDeposit, getPatientDeposits, getActiveDeposits,
-    applyDepositToInvoice, refundDeposit, getDepositStats, cancelDeposit,
+    applyDepositToInvoice, refundDeposit, getDepositStats, cancelDeposit, updateDeposit,
 } from '@/app/actions/deposit-actions';
 import { getInvoices, searchPatientsForBilling } from '@/app/actions/finance-actions';
 import { getRegisteredPanForPatient } from '@/app/actions/deposit-actions';
@@ -12,7 +12,7 @@ import { CASH_COMPLIANCE_DEFAULTS, isValidPan, normalizePan } from '@/app/lib/ca
 import {
     Loader2, Search, Plus, Wallet, ArrowUpRight, ArrowDownRight,
     CheckCircle, XCircle, IndianRupee, Receipt, CreditCard, RefreshCw,
-    ChevronDown, X, Printer, AlertTriangle, Ban,
+    ChevronDown, X, Printer, AlertTriangle, Ban, Pencil,
 } from 'lucide-react';
 import { AppShell } from '@/app/components/layout/AppShell';
 import { AdminPage } from '@/app/admin/components/AdminPage';
@@ -56,6 +56,17 @@ export function DepositsContent({ shell = 'app' }: { shell?: 'app' | 'admin' }) 
     const [refundAmount, setRefundAmount] = useState('');
     const [refundLoading, setRefundLoading] = useState(false);
     const [cancelLoading, setCancelLoading] = useState<number | null>(null);
+
+    // Cancel modal — replaces the bare window.confirm so a reason is captured.
+    const [cancelModal, setCancelModal] = useState<any>(null);
+    const [cancelReason, setCancelReason] = useState('');
+
+    // Edit modal — correct a mis-keyed deposit before it is applied to a bill.
+    const [editModal, setEditModal] = useState<any>(null);
+    const [editForm, setEditForm] = useState({ amount: '', payment_method: 'Cash', payment_ref: '', notes: '' });
+    const [editReason, setEditReason] = useState('');
+    const [editLoading, setEditLoading] = useState(false);
+    const [editError, setEditError] = useState<string | null>(null);
 
     useEffect(() => { loadData(); }, []);
 
@@ -189,16 +200,62 @@ export function DepositsContent({ shell = 'app' }: { shell?: 'app' | 'admin' }) 
         setRefundLoading(false);
     }
 
-    async function handleCancel(depositId: number) {
-        if (!window.confirm('Cancel this deposit? This action cannot be undone.')) return;
-        setCancelLoading(depositId);
-        const res = await cancelDeposit(depositId);
+    async function handleCancel() {
+        if (!cancelModal) return;
+        if (!cancelReason.trim()) {
+            toast.error('Enter a reason for cancelling this deposit.');
+            return;
+        }
+        setCancelLoading(cancelModal.id);
+        const res = await cancelDeposit(cancelModal.id, cancelReason.trim());
         if (res.success) {
+            setCancelModal(null);
+            setCancelReason('');
             loadData();
         } else {
             toast.error(res.error || 'Failed to cancel deposit');
         }
         setCancelLoading(null);
+    }
+
+    function openEditModal(d: any) {
+        setEditModal(d);
+        setEditForm({
+            amount: String(Number(d.amount)),
+            payment_method: d.payment_method || 'Cash',
+            payment_ref: d.payment_ref || '',
+            notes: d.notes || '',
+        });
+        setEditReason('');
+        setEditError(null);
+    }
+
+    async function handleEditDeposit(e: React.FormEvent) {
+        e.preventDefault();
+        if (!editModal) return;
+        if (!editReason.trim()) {
+            setEditError('Enter a reason for this correction.');
+            return;
+        }
+        setEditLoading(true);
+        setEditError(null);
+        const res = await updateDeposit(
+            editModal.id,
+            {
+                amount: Number(editForm.amount),
+                payment_method: editForm.payment_method,
+                payment_ref: editForm.payment_ref,
+                notes: editForm.notes,
+            },
+            editReason.trim(),
+        );
+        setEditLoading(false);
+        if (res.success) {
+            setEditModal(null);
+            loadData();
+        } else {
+            setEditError(res.error || 'Failed to update deposit');
+        }
     }
 
     const fmt = (n: number) => n.toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 });
@@ -321,7 +378,20 @@ export function DepositsContent({ shell = 'app' }: { shell?: 'app' | 'admin' }) 
                                         const available = getAvailable(d);
                                         return (
                                             <tr key={d.id} className="hover:bg-gray-50">
-                                                <td className="px-5 py-3 text-sm font-medium text-gray-900">{d.deposit_number}</td>
+                                                <td className="px-5 py-3 text-sm font-medium text-gray-900">
+                                                    {d.deposit_number}
+                                                    {/* A cancelled deposit used to show nothing but the status
+                                                        badge. Reception asked to still see which receipt it was
+                                                        and why it was voided. */}
+                                                    {d.status === 'Cancelled' && (
+                                                        <span className="block mt-0.5 text-[10px] font-normal text-red-600 leading-tight max-w-[220px]">
+                                                            Cancelled receipt {d.deposit_number}
+                                                            {d.cancelled_by ? ` by ${d.cancelled_by}` : ''}
+                                                            {d.cancelled_at ? ` on ${new Date(d.cancelled_at).toLocaleDateString('en-GB')}` : ''}
+                                                            {d.cancelled_reason ? ` — ${d.cancelled_reason}` : ''}
+                                                        </span>
+                                                    )}
+                                                </td>
                                                 <td className="px-5 py-3">
                                                     <div className="text-sm font-medium text-gray-900">{d.patient_name || '—'}</div>
                                                     <div className="text-xs text-gray-500">{d.patient_id}</div>
@@ -358,8 +428,14 @@ export function DepositsContent({ shell = 'app' }: { shell?: 'app' | 'admin' }) 
                                                                 </button>
                                                             </>
                                                         )}
+                                                        {d.status === 'Active' && Number(d.applied_amount || 0) === 0 && Number(d.refunded_amount || 0) === 0 && (
+                                                            <button onClick={() => openEditModal(d)}
+                                                                className="px-2.5 py-1 text-xs font-medium text-indigo-700 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition flex items-center gap-1">
+                                                                <Pencil className="h-3 w-3" /> Edit
+                                                            </button>
+                                                        )}
                                                         {d.status === 'Active' && Number(d.applied_amount || 0) === 0 && (
-                                                            <button onClick={() => handleCancel(d.id)}
+                                                            <button onClick={() => { setCancelModal(d); setCancelReason(''); }}
                                                                 disabled={cancelLoading === d.id}
                                                                 className="px-2.5 py-1 text-xs font-medium text-red-700 bg-red-50 rounded-lg hover:bg-red-100 transition flex items-center gap-1 disabled:opacity-50">
                                                                 {cancelLoading === d.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Ban className="h-3 w-3" />}
@@ -592,6 +668,123 @@ export function DepositsContent({ shell = 'app' }: { shell?: 'app' | 'admin' }) 
                                 className="px-5 py-2 text-sm font-semibold text-white bg-amber-600 rounded-xl hover:bg-amber-700 transition disabled:opacity-50 flex items-center gap-2">
                                 {refundLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowDownRight className="h-4 w-4" />}
                                 Process Refund
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* EDIT DEPOSIT — corrects a mis-keyed entry before it touches a bill. */}
+            {editModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+                    <form onSubmit={handleEditDeposit} className="bg-white w-full max-w-md rounded-2xl shadow-2xl p-6">
+                        <div className="flex items-start justify-between mb-4">
+                            <div>
+                                <h3 className="text-lg font-bold text-gray-900">Edit Deposit</h3>
+                                <p className="text-sm text-gray-500 mt-0.5">
+                                    <span className="font-semibold">{editModal.deposit_number}</span> · {editModal.patient_name || editModal.patient_id}
+                                </p>
+                            </div>
+                            <button type="button" onClick={() => setEditModal(null)} className="p-1 hover:bg-gray-100 rounded-lg">
+                                <X className="h-5 w-5 text-gray-400" />
+                            </button>
+                        </div>
+
+                        <div className="space-y-3">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Amount *</label>
+                                <input type="number" min="1" step="0.01" required value={editForm.amount}
+                                    onChange={e => setEditForm({ ...editForm, amount: e.target.value })}
+                                    className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Payment Method *</label>
+                                <select value={editForm.payment_method}
+                                    onChange={e => setEditForm({ ...editForm, payment_method: e.target.value })}
+                                    className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500">
+                                    {['Cash', 'UPI', 'Card', 'Bank Transfer', 'NEFT/RTGS', 'Cheque'].map(m => (
+                                        <option key={m} value={m}>{m}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Reference</label>
+                                <input value={editForm.payment_ref}
+                                    onChange={e => setEditForm({ ...editForm, payment_ref: e.target.value })}
+                                    placeholder="UTR / cheque no (optional)"
+                                    className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                                <input value={editForm.notes}
+                                    onChange={e => setEditForm({ ...editForm, notes: e.target.value })}
+                                    className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Reason for correction *</label>
+                                <input required value={editReason} onChange={e => setEditReason(e.target.value)}
+                                    placeholder="e.g. amount keyed wrong at counter"
+                                    className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500" />
+                                <p className="text-[11px] text-gray-400 mt-1">Recorded in the Edit / Cancel audit report.</p>
+                            </div>
+                            {editError && (
+                                <p className="text-xs font-bold text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">{editError}</p>
+                            )}
+                        </div>
+
+                        <div className="flex justify-end gap-3 mt-6">
+                            <button type="button" onClick={() => setEditModal(null)}
+                                className="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition">
+                                Close
+                            </button>
+                            <button type="submit" disabled={editLoading}
+                                className="px-5 py-2 text-sm font-semibold text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 transition disabled:opacity-50 flex items-center gap-2">
+                                {editLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Pencil className="h-4 w-4" />}
+                                Save Changes
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            )}
+
+            {/* CANCEL DEPOSIT — reason is mandatory so the audit trail is readable. */}
+            {cancelModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+                    <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl p-6">
+                        <div className="flex items-start justify-between mb-4">
+                            <div>
+                                <h3 className="text-lg font-bold text-gray-900">Cancel Deposit</h3>
+                                <p className="text-sm text-gray-500 mt-0.5">
+                                    <span className="font-semibold">{cancelModal.deposit_number}</span> · {fmt(Number(cancelModal.amount))} · {cancelModal.payment_method}
+                                </p>
+                            </div>
+                            <button onClick={() => setCancelModal(null)} className="p-1 hover:bg-gray-100 rounded-lg">
+                                <X className="h-5 w-5 text-gray-400" />
+                            </button>
+                        </div>
+
+                        <div className="bg-red-50 border border-red-200 rounded-xl p-3 mb-4 flex gap-2">
+                            <AlertTriangle className="h-4 w-4 text-red-600 mt-0.5 shrink-0" />
+                            <p className="text-xs text-red-800">
+                                This cannot be undone. The receipt number stays on record and will show as
+                                cancelled with your reason against it.
+                            </p>
+                        </div>
+
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Reason *</label>
+                        <input value={cancelReason} onChange={e => setCancelReason(e.target.value)}
+                            placeholder="e.g. deposit entered against wrong patient"
+                            className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-red-500" />
+
+                        <div className="flex justify-end gap-3 mt-6">
+                            <button onClick={() => setCancelModal(null)}
+                                className="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition">
+                                Keep Deposit
+                            </button>
+                            <button onClick={handleCancel} disabled={cancelLoading === cancelModal.id || !cancelReason.trim()}
+                                className="px-5 py-2 text-sm font-semibold text-white bg-red-600 rounded-xl hover:bg-red-700 transition disabled:opacity-50 flex items-center gap-2">
+                                {cancelLoading === cancelModal.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Ban className="h-4 w-4" />}
+                                Cancel Deposit
                             </button>
                         </div>
                     </div>

@@ -4,6 +4,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { DateField } from '@/app/components/ui/DateField';
 import { fmtIstDateTime } from '@/app/lib/ist';
 import { AppShell } from '@/app/components/layout/AppShell';
+import { PatientNotes } from '@/app/components/patient/PatientNotes';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -1262,6 +1263,17 @@ export default function AdmissionDetailPage() {
                                         {data.past_ailments && <DetailRow label="Past Ailments" value={data.past_ailments} />}
                                     </div>
                                 </div>
+
+                                {/* Notes were only reachable from registration / the admit screen, so
+                                    ward and reception staff had no way to add one for a patient who was
+                                    already admitted. Same component as the patient profile — one shared
+                                    note history per UHID. */}
+                                <PatientNotes
+                                    patientId={data.patient_id}
+                                    source="admission"
+                                    title="Patient Notes"
+                                />
+
 
                                 {/* Clinical Classification */}
                                 <div className="bg-white border border-gray-200 rounded-2xl p-5 space-y-3">

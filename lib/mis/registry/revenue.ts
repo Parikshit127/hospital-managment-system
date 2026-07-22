@@ -328,35 +328,49 @@ export const revenueDoctorWiseSummaryReport: ReportDefinition = {
     const { date_start, date_end } = filters;
     // Per-doctor conditional aggregation. Postgres FILTER (WHERE ...) buckets
     // each invoice into the IPD-Cash / IPD-TPA / OPD column in a single pass.
+    // Doctor names are free text on legacy invoices, so the same consultant
+    // appears as "DR. SHIV CHOPRA", "Dr.Shiv Chopra" and "Dr Shiv Chopra" and
+    // their revenue was being split across three rows. Group on a normalised
+    // key (uppercase, punctuation and spaces stripped, honorific dropped) and
+    // display the longest spelling seen, which is usually the fullest one.
     const raw = await prisma.$queryRaw<any[]>`
+      WITH resolved AS (
+        SELECT
+          i.*,
+          COALESCE(u.name, au.name, NULLIF(TRIM(i.doctor_name), ''), NULLIF(TRIM(adm.doctor_name), ''), 'Unknown') AS resolved_doctor
+        FROM invoices i
+        LEFT JOIN "users" u ON i.doctor_id = u.id
+        LEFT JOIN "admissions" adm ON i.admission_id = adm.admission_id
+        LEFT JOIN "users" au ON adm.attending_doctor_id = au.id
+        WHERE i."organizationId" = ${orgId}
+          AND LOWER(i.status) = 'final'
+          AND i.invoice_type IN ('IPD', 'OPD')
+          AND i.created_at >= ${toStartOfDay(date_start)}
+          AND i.created_at <= ${toEndOfDay(date_end)}
+      )
       SELECT
-        COALESCE(u.name, au.name, NULLIF(TRIM(i.doctor_name), ''), NULLIF(TRIM(adm.doctor_name), ''), 'Unknown') as "doctor_name",
+        (ARRAY_AGG(resolved_doctor ORDER BY LENGTH(resolved_doctor) DESC))[1] as "doctor_name",
         COUNT(*) FILTER (
-          WHERE i.invoice_type = 'IPD' AND LOWER(i.billing_patient_type) = 'cash'
+          WHERE invoice_type = 'IPD' AND LOWER(billing_patient_type) = 'cash'
         ) as "ipd_cash_bills",
-        COALESCE(SUM(i.net_amount) FILTER (
-          WHERE i.invoice_type = 'IPD' AND LOWER(i.billing_patient_type) = 'cash'
+        COALESCE(SUM(net_amount) FILTER (
+          WHERE invoice_type = 'IPD' AND LOWER(billing_patient_type) = 'cash'
         ), 0) as "ipd_cash_revenue",
         COUNT(*) FILTER (
-          WHERE i.invoice_type = 'IPD' AND LOWER(i.billing_patient_type) <> 'cash'
+          WHERE invoice_type = 'IPD' AND LOWER(billing_patient_type) <> 'cash'
         ) as "ipd_tpa_bills",
-        COALESCE(SUM(i.net_amount) FILTER (
-          WHERE i.invoice_type = 'IPD' AND LOWER(i.billing_patient_type) <> 'cash'
+        COALESCE(SUM(net_amount) FILTER (
+          WHERE invoice_type = 'IPD' AND LOWER(billing_patient_type) <> 'cash'
         ), 0) as "ipd_tpa_net_revenue",
-        COALESCE(SUM(i.net_amount) FILTER (WHERE i.invoice_type = 'IPD'), 0) as "total_ipd_revenue",
-        COUNT(*) FILTER (WHERE i.invoice_type = 'OPD') as "opd_bills",
-        COALESCE(SUM(i.net_amount) FILTER (WHERE i.invoice_type = 'OPD'), 0) as "opd_cash_revenue",
-        COALESCE(SUM(i.net_amount), 0) as "grand_total"
-      FROM invoices i
-      LEFT JOIN "users" u ON i.doctor_id = u.id
-      LEFT JOIN "admissions" adm ON i.admission_id = adm.admission_id
-      LEFT JOIN "users" au ON adm.attending_doctor_id = au.id
-      WHERE i."organizationId" = ${orgId}
-        AND LOWER(i.status) = 'final'
-        AND i.invoice_type IN ('IPD', 'OPD')
-        AND i.created_at >= ${toStartOfDay(date_start)}
-        AND i.created_at <= ${toEndOfDay(date_end)}
-      GROUP BY COALESCE(u.name, au.name, NULLIF(TRIM(i.doctor_name), ''), NULLIF(TRIM(adm.doctor_name), ''), 'Unknown')
+        COALESCE(SUM(net_amount) FILTER (WHERE invoice_type = 'IPD'), 0) as "total_ipd_revenue",
+        COUNT(*) FILTER (WHERE invoice_type = 'OPD') as "opd_bills",
+        COALESCE(SUM(net_amount) FILTER (WHERE invoice_type = 'OPD'), 0) as "opd_cash_revenue",
+        COALESCE(SUM(net_amount), 0) as "grand_total"
+      FROM resolved
+      GROUP BY REGEXP_REPLACE(
+        REGEXP_REPLACE(UPPER(resolved_doctor), '^\\s*DR\\.?\\s*', ''),
+        '[^A-Z0-9]', '', 'g'
+      )
       ORDER BY "grand_total" DESC
     `;
 

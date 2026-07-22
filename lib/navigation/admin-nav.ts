@@ -4,7 +4,7 @@ import {
     Users, UserCog, Building2, ShieldCheck, UserRound,
     Settings, Palette, FileText, Bell, Plug, BarChart3, Lock,
     Workflow, Scissors, GitBranch, DatabaseBackup, BookOpen, Database,
-    ShieldAlert, Scale, Siren, SlidersHorizontal, UserCheck, Megaphone,
+    ShieldAlert, Scale, Siren, SlidersHorizontal, UserCheck, Megaphone, Package,
     type LucideIcon,
 } from 'lucide-react';
 
@@ -28,6 +28,8 @@ export const ADMIN_NAV_SECTIONS: NavSection[] = [
             { label: 'Dashboard', href: '/admin/dashboard', icon: LayoutDashboard },
             { label: 'Analytics', href: '/admin/analytics', icon: LineChart },
             { label: 'MIS Reports', href: '/admin/mis-reports', icon: LineChart },
+            { label: 'Single Patient Report', href: '/reception/single-patient-report', icon: FileText },
+            { label: 'Edit / Cancel Audit', href: '/ipd/audit-trail', icon: ShieldAlert },
         ],
     },
     {
@@ -69,6 +71,9 @@ export const ADMIN_NAV_SECTIONS: NavSection[] = [
         title: 'Master Data',
         items: [
             { label: 'Master Data', href: '/admin/master', icon: Database },
+            // Fixed assets (IT / housekeeping / reception), as distinct from
+            // pharmacy and lab consumable stock.
+            { label: 'Asset Register', href: '/admin/assets', icon: Package },
         ],
     },
     {

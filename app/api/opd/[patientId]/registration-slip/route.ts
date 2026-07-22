@@ -125,17 +125,28 @@ function renderOpdSlipHtml(patient: any, appt: any, b: BillBranding, org: any, d
     const accent = hospital.accentColor;
     const secondary = hospital.secondaryColor;
 
-    // Formatting date as "24 May 2026, 01:41 PM" — always the print time, not the visit/bill date.
-    // timeZone is pinned to IST so this is correct regardless of the server's local timezone.
-    const visitDate = new Date().toLocaleString('en-IN', {
+    // timeZone is pinned to IST so these are correct regardless of the server's
+    // local timezone.
+    const istOpts: Intl.DateTimeFormatOptions = {
         timeZone: 'Asia/Kolkata',
         day: '2-digit',
         month: 'short',
         year: 'numeric',
         hour: '2-digit',
         minute: '2-digit',
-        hour12: true
-    });
+        hour12: true,
+    };
+
+    // "VISIT DATE" is the appointment (or, failing that, the registration) — the
+    // clinically meaningful date. Reprinting a slip the next day used to silently
+    // change the only date on the sheet, because it showed the print time.
+    const visitSource = appt?.appointment_date || patient.created_at || null;
+    const visitDate = visitSource
+        ? new Date(visitSource).toLocaleString('en-IN', istOpts)
+        : new Date().toLocaleString('en-IN', istOpts);
+
+    // Kept as a separate, smaller line so the two are never confused.
+    const printedAt = new Date().toLocaleString('en-IN', istOpts);
 
     const tokenOrAppt = appt?.appointment_id || '';
     const doctor = doctorName || '';
@@ -444,8 +455,8 @@ function renderOpdSlipHtml(patient: any, appt: any, b: BillBranding, org: any, d
                     <tr>
                         <td class="field-label">UHID</td>
                         <td class="field-value">: ${esc(patient.patient_id)}</td>
-                        <td class="field-label">DATE</td>
-                        <td class="field-value">: ${esc(visitDate)}</td>
+                        <td class="field-label">VISIT DATE</td>
+                        <td class="field-value">: ${esc(visitDate)}<div style="font-size:8px;color:#6b7280;font-weight:400;">Printed: ${esc(printedAt)}</div></td>
                     </tr>
                     <tr>
                         <td class="field-label">Patient Name</td>

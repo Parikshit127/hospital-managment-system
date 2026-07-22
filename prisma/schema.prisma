@@ -2114,6 +2114,10 @@ model Refund {
   invoice_id     String
   amount         Float
   reason         String
+  // Reserved for the payout reference (UTR / cheque no) that accompanies a
+  // non-cash refund. The payout tender itself lives in `payment_method`,
+  // declared alongside the rest of the refund payout work.
+  refund_ref     String?
   status         String       @default("Pending")
   payment_method String?
   processed_by   String?
@@ -2640,6 +2644,12 @@ model PatientDeposit {
   refunded_amount    Decimal      @default(0)
   collected_by       String?
   notes              String?
+  // Why a deposit was cancelled, and who did it. Reception asked for this so a
+  // wrongly-entered deposit leaves a readable trail instead of just flipping to
+  // "Cancelled" with no explanation.
+  cancelled_reason   String?
+  cancelled_by       String?
+  cancelled_at       DateTime?
   organizationId     String
   created_at         DateTime     @default(now())
   updated_at         DateTime     @updatedAt

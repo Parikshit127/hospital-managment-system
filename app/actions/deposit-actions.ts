@@ -300,14 +300,21 @@ export async function cancelDeposit(depositId: number, reason?: string) {
     try {
         const { db, organizationId, session } = await requireTenantContext();
 
-        const deposit = await db.patientDeposit.findFirst({ where: { id: depositId } });
+        // Scope by org — without it one tenant could cancel another's deposit by id.
+        const deposit = await db.patientDeposit.findFirst({ where: { id: depositId, organizationId } });
         if (!deposit) return { success: false, error: 'Deposit not found' };
         if (deposit.status !== 'Active') return { success: false, error: 'Only Active deposits can be cancelled' };
         if (Number(deposit.applied_amount) > 0) return { success: false, error: 'Cannot cancel — deposit has already been applied to an invoice' };
+        if (!reason?.trim()) return { success: false, error: 'A cancellation reason is required.' };
 
         await db.patientDeposit.update({
             where: { id: depositId },
-            data: { status: 'Cancelled' },
+            data: {
+                status: 'Cancelled',
+                cancelled_reason: reason.trim(),
+                cancelled_by: session?.username ?? null,
+                cancelled_at: new Date(),
+            },
         });
 
         await db.system_audit_logs.create({
@@ -316,13 +323,96 @@ export async function cancelDeposit(depositId: number, reason?: string) {
                 module: 'finance',
                 entity_type: 'deposit',
                 entity_id: deposit.deposit_number,
-                details: JSON.stringify({ reason: reason || null }),
+                details: JSON.stringify({
+                    reason: reason.trim(),
+                    amount: Number(deposit.amount),
+                    payment_method: deposit.payment_method,
+                    patient_id: deposit.patient_id,
+                }),
                 user_id: session?.id,
+                username: session?.username,
                 organizationId,
             },
         });
 
         return { success: true };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Correct a deposit that was entered wrongly (wrong amount, mode, reference or
+ * note). Only untouched Active deposits can be edited — once money has been
+ * applied to a bill or refunded, changing the amount would silently desync the
+ * invoice, so those must be reversed through Apply/Refund instead.
+ */
+export async function updateDeposit(
+    depositId: number,
+    updates: { amount?: number; payment_method?: string; payment_ref?: string | null; notes?: string | null },
+    reason: string,
+) {
+    try {
+        const { db, organizationId, session } = await requireTenantContext();
+
+        if (!reason?.trim()) return { success: false, error: 'A reason for the correction is required.' };
+
+        const deposit = await db.patientDeposit.findFirst({ where: { id: depositId, organizationId } });
+        if (!deposit) return { success: false, error: 'Deposit not found' };
+        if (deposit.status !== 'Active') {
+            return { success: false, error: `Only Active deposits can be edited — this one is ${deposit.status}.` };
+        }
+        if (Number(deposit.applied_amount) > 0) {
+            return { success: false, error: 'Cannot edit — deposit has already been applied to an invoice. Reverse the application first.' };
+        }
+        if (Number(deposit.refunded_amount) > 0) {
+            return { success: false, error: 'Cannot edit — deposit has already been partly refunded.' };
+        }
+
+        const data: any = {};
+        if (typeof updates.amount !== 'undefined') {
+            const amt = Number(updates.amount);
+            if (!Number.isFinite(amt) || amt <= 0) return { success: false, error: 'Amount must be greater than zero.' };
+            data.amount = amt;
+        }
+        if (typeof updates.payment_method !== 'undefined' && updates.payment_method) {
+            data.payment_method = updates.payment_method;
+        }
+        if (typeof updates.payment_ref !== 'undefined') data.payment_ref = updates.payment_ref || null;
+        if (typeof updates.notes !== 'undefined') data.notes = updates.notes || null;
+
+        if (Object.keys(data).length === 0) return { success: false, error: 'Nothing to update.' };
+
+        const updated = await db.patientDeposit.update({ where: { id: depositId }, data });
+
+        // Record the before/after so the Edit/Cancel audit report can show what
+        // actually changed, not just that something did.
+        await db.system_audit_logs.create({
+            data: {
+                action: 'UPDATE_DEPOSIT',
+                module: 'finance',
+                entity_type: 'deposit',
+                entity_id: deposit.deposit_number,
+                details: JSON.stringify({
+                    reason: reason.trim(),
+                    before: {
+                        amount: Number(deposit.amount),
+                        payment_method: deposit.payment_method,
+                        payment_ref: deposit.payment_ref,
+                    },
+                    after: {
+                        amount: Number(updated.amount),
+                        payment_method: updated.payment_method,
+                        payment_ref: updated.payment_ref,
+                    },
+                }),
+                user_id: session?.id,
+                username: session?.username,
+                organizationId,
+            },
+        });
+
+        return { success: true, data: serialize(updated) };
     } catch (error: any) {
         return { success: false, error: error.message };
     }

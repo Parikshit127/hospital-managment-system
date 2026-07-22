@@ -2,12 +2,13 @@
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { Search, Loader2, User, Phone, X, Command } from "lucide-react";
+import { Search, Loader2, User, Phone, X, Command, LayoutGrid } from "lucide-react";
 import {
   globalSearchPatients,
   getPatientRouteForRole,
   type GlobalPatientResult,
 } from "@/app/actions/global-search-actions";
+import { searchScreens } from "@/app/lib/screen-index";
 
 interface GlobalPatientSearchProps {
   role: string;
@@ -116,7 +117,19 @@ export function GlobalPatientSearch({ role, patientBasePath }: GlobalPatientSear
     [role, router, patientBasePath, pathname],
   );
 
+  // Screens are matched locally from a static index — no round trip, so they
+  // appear instantly while the patient query is still debouncing.
+  const screenMatches = searchScreens(query);
+
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    // Enter with no patient results but a screen match goes to the screen —
+    // this is the common case when someone types "tpa" or "doctor invoicing".
+    if (e.key === "Enter" && results.length === 0 && screenMatches.length > 0) {
+      e.preventDefault();
+      setOpen(false);
+      router.push(screenMatches[0].href);
+      return;
+    }
     if (results.length === 0) return;
     if (e.key === "ArrowDown") {
       e.preventDefault();
@@ -178,7 +191,7 @@ export function GlobalPatientSearch({ role, patientBasePath }: GlobalPatientSear
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={onKeyDown}
-                placeholder="Search by name, phone, patient ID, or ABHA…"
+                placeholder="Search patients or jump to a screen (TPA, refunds, indent report…)"
                 className="flex-1 outline-none text-sm font-medium text-gray-800 placeholder:text-gray-400 bg-transparent"
               />
               {loading && <Loader2 className="h-4 w-4 text-gray-400 animate-spin" />}
@@ -195,12 +208,43 @@ export function GlobalPatientSearch({ role, patientBasePath }: GlobalPatientSear
             <div className="max-h-[55vh] overflow-y-auto">
               {!loading && query.trim().length < 2 && (
                 <div className="px-4 py-6 text-center text-xs text-gray-400 font-medium">
-                  Type at least 2 characters — name, phone, ID, or ABHA.
+                  Type at least 2 characters — patient name, phone, ID, or a screen name.
                 </div>
               )}
-              {!loading && query.trim().length >= 2 && results.length === 0 && (
+
+              {/* Screens first: they resolve instantly and are usually what the
+                  user means when the query isn't a patient identifier. */}
+              {screenMatches.length > 0 && (
+                <>
+                  <div className="px-4 pt-3 pb-1 text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                    Screens
+                  </div>
+                  {screenMatches.map((s) => (
+                    <button
+                      key={s.href}
+                      onClick={() => { setOpen(false); router.push(s.href); }}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-left border-b border-gray-50 hover:bg-gray-50 transition-colors"
+                    >
+                      <div className="p-2 rounded-lg shrink-0 bg-indigo-50 text-indigo-600">
+                        <LayoutGrid className="h-4 w-4" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-gray-800 truncate">{s.label}</p>
+                        <p className="text-[11px] text-gray-400 font-medium">{s.group} · {s.href}</p>
+                      </div>
+                    </button>
+                  ))}
+                  {results.length > 0 && (
+                    <div className="px-4 pt-3 pb-1 text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                      Patients
+                    </div>
+                  )}
+                </>
+              )}
+
+              {!loading && query.trim().length >= 2 && results.length === 0 && screenMatches.length === 0 && (
                 <div className="px-4 py-6 text-center text-xs text-gray-400 font-medium">
-                  No patients matched &ldquo;{query}&rdquo;.
+                  Nothing matched &ldquo;{query}&rdquo;.
                 </div>
               )}
               {results.map((p, idx) => (

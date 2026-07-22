@@ -228,9 +228,17 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
         categoryMap[cat].total += Number(item.net_price);
     }
 
+    // The pharmacy block on an IPD bill is the hospital dispensing to its own
+    // inpatient — it is not a separate chemist shop. Reception asked for our own
+    // name on those lines instead of the generic "Pharmacy" so the patient sees a
+    // single hospital bill. Only the printed label changes; the service_category
+    // stays "Pharmacy" everywhere else (totals, grouping, reports).
+    const pharmacyLabel = hospitalName || 'Pharmacy';
+
     let itemRows = '';
     for (const [cat, data] of Object.entries(categoryMap)) {
-        itemRows += `<tr style="background:#f0fdf4;"><td colspan="8" style="padding:5px 12px;font-size:11px;font-weight:700;color:#059669;">${cat} — ${data.total.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>`;
+        const catLabel = cat.toLowerCase() === 'pharmacy' ? pharmacyLabel : cat;
+        itemRows += `<tr style="background:#f0fdf4;"><td colspan="8" style="padding:5px 12px;font-size:11px;font-weight:700;color:#059669;">${catLabel} — ${data.total.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>`;
         // Medicine-name toggle: when off, keep the Pharmacy total line but hide the
         // individual medicine rows. The amount stays in the totals (items not removed).
         const isBulkPharmacy = cat.toLowerCase() === 'pharmacy';
@@ -254,7 +262,7 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
             for (const g of groups) {
                 itemRows += `<tr>
                     <td style="padding:4px 12px;border-bottom:1px solid #f3f4f6;font-size:10px;color:#6b7280;white-space:nowrap;">${g.dateStr}</td>
-                    <td style="padding:4px 12px;border-bottom:1px solid #f3f4f6;font-size:10px;">Pharmacy${includeMeds ? '' : ` (${g.items.length} item${g.items.length > 1 ? 's' : ''})`}</td>
+                    <td style="padding:4px 12px;border-bottom:1px solid #f3f4f6;font-size:10px;">${pharmacyLabel}${includeMeds ? '' : ` (${g.items.length} item${g.items.length > 1 ? 's' : ''})`}</td>
                     <td style="padding:4px 12px;border-bottom:1px solid #f3f4f6;font-size:10px;color:#9ca3af;">-</td>
                     <td style="padding:4px 12px;border-bottom:1px solid #f3f4f6;font-size:10px;text-align:center;">${g.items.length}</td>
                     <td style="padding:4px 12px;border-bottom:1px solid #f3f4f6;font-size:10px;text-align:right;">-</td>
@@ -266,7 +274,7 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
                     for (const item of g.items) {
                         itemRows += `<tr>
                             <td style="padding:3px 12px;border-bottom:1px solid #f9fafb;"></td>
-                            <td style="padding:3px 12px 3px 24px;border-bottom:1px solid #f9fafb;font-size:9px;color:#6b7280;" colspan="6">${item.description} × ${item.quantity}</td>
+                            <td style="padding:3px 12px 3px 24px;border-bottom:1px solid #f9fafb;font-size:9px;color:#6b7280;" colspan="6">${String(item.description || '').replace(/^\s*Pharmacy\s*:\s*/i, '')} × ${item.quantity}</td>
                             <td style="padding:3px 12px;border-bottom:1px solid #f9fafb;font-size:9px;text-align:right;color:#6b7280;">${Number(item.net_price).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
                         </tr>`;
                     }

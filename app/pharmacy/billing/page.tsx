@@ -13,6 +13,7 @@ import { useDebouncedValue } from '@/app/lib/hooks/useDebouncedValue';
 import { searchPatientsForBilling, removeInvoiceItem, updateInvoiceItem } from '@/app/actions/finance-actions';
 import { getDoctorsForDropdown } from '@/app/actions/admin-actions';
 import { AppShell } from '@/app/components/layout/AppShell';
+import { StockCorrectionModal } from '@/app/components/pharmacy/StockCorrectionModal';
 import { fetchBillBranding, fetchPharmacyBranding } from '@/app/actions/branding-actions';
 import type { BillBranding } from '@/app/lib/bill-branding';
 import type { PharmacyBranding } from '@/app/lib/pharmacy-branding';
@@ -115,6 +116,7 @@ export default function PharmacyPage() {
     const [showInvoiceModal, setShowInvoiceModal] = useState(false);
     const [invoiceResult, setInvoiceResult] = useState<any>(null);
     const [showInventoryModal, setShowInventoryModal] = useState(false);
+    const [showStockCorrection, setShowStockCorrection] = useState(false);
     const [branding, setBranding] = useState<BillBranding | null>(null);
     const [pharmacyBranding, setPharmacyBranding] = useState<PharmacyBranding | null>(null);
 
@@ -590,6 +592,14 @@ export default function PharmacyPage() {
                             className="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 hover:border-teal-400 hover:text-teal-700 hover:bg-teal-50 transition-all shrink-0"
                         >
                             <Plus className="h-3.5 w-3.5" /> Add Stock
+                        </button>
+                        {/* Add Stock only creates a new batch. Correcting a wrong quantity
+                            used to mean leaving dispensing for the Stock screen. */}
+                        <button
+                            onClick={() => setShowStockCorrection(true)}
+                            className="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 hover:border-orange-400 hover:text-orange-700 hover:bg-orange-50 transition-all shrink-0"
+                        >
+                            <Pencil className="h-3.5 w-3.5" /> Edit Stock
                         </button>
                     </div>
 
@@ -2022,6 +2032,13 @@ export default function PharmacyPage() {
                 </div>
                 );
             })()}
+
+            {/* EDIT / CORRECT STOCK */}
+            <StockCorrectionModal
+                open={showStockCorrection}
+                onClose={() => setShowStockCorrection(false)}
+                onChanged={() => { void loadInventory(debouncedSearch); }}
+            />
 
             {/* INVENTORY MODAL */}
             {showInventoryModal && (

@@ -225,6 +225,7 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
       title: "Reports",
       items: [
         { label: "Patient Reports", href: "/reception/reports", icon: BarChart3 },
+        { label: "Single Patient Report", href: "/reception/single-patient-report", icon: FileText },
         { label: "MIS Reports", href: "/reception/mis-reports", icon: FileSpreadsheet },
       ],
     },
@@ -268,6 +269,7 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
       title: "Reports",
       items: [
         { label: "Pharmacy Reports", href: "/pharmacy/reports", icon: BarChart3 },
+        { label: "Indent Report", href: "/pharmacy/indent-report", icon: ClipboardList },
         { label: "MIS Reports", href: "/pharmacy/mis-reports", icon: FileSpreadsheet },
       ],
     },

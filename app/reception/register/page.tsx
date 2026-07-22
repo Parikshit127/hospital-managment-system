@@ -7,7 +7,7 @@ import {
     User, MapPin, Shield, Calendar, Loader2, Mail,
     AlertCircle, Heart, Users, FileCheck,
     Building2, CreditCard, FileText, GitMerge, CalendarPlus,
-    Receipt, UserCheck, X
+    Receipt, UserCheck, X, ShieldCheck
 } from 'lucide-react';
 import { registerPatient, checkDuplicatePatient } from '@/app/actions/register-patient';
 import { lookupInsuranceByPhone } from '@/app/actions/insurance-lookup';
@@ -738,8 +738,99 @@ export default function ReceptionPage() {
                                         </div>
                                     </div>
 
-                                    {/* Patient type (Cash / Corporate / TPA) is set at admission, not registration */}
-                                    <input type="hidden" name="patient_type" value="cash" />
+                                    {/* Payment type — reception needs this at registration, not only at
+                                        admission. It used to be hardcoded to "cash" here, which forced the
+                                        team to re-do TPA patients through the admission screen. The server
+                                        action has always accepted these fields. */}
+                                    <div className="mb-6 border-t border-gray-200 pt-6">
+                                        <div className="flex items-center gap-2 mb-4">
+                                            <ShieldCheck className="h-4 w-4 text-teal-500" />
+                                            <span className="text-xs font-black text-gray-500">Payment Type</span>
+                                        </div>
+                                        <input type="hidden" name="patient_type" value={patientType} />
+                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
+                                            {PATIENT_TYPES.map(pt => {
+                                                const active = patientType === pt.value;
+                                                return (
+                                                    <button
+                                                        key={pt.value}
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setPatientType(pt.value);
+                                                            if (pt.value !== 'corporate') setSelectedCorporate(null);
+                                                        }}
+                                                        className={`px-4 py-3 rounded-xl border-2 text-sm font-black transition-all ${
+                                                            active
+                                                                ? 'border-orange-500 bg-orange-50 text-orange-700'
+                                                                : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300'
+                                                        }`}
+                                                    >
+                                                        {pt.label}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+
+                                        {patientType === 'corporate' && (
+                                            <div className="space-y-1.5">
+                                                <label className={labelClass}>Corporate / Company</label>
+                                                <select
+                                                    name="corporate_id"
+                                                    className={selectClass}
+                                                    value={selectedCorporate?.id ?? ''}
+                                                    onChange={(e) => {
+                                                        const c = corporates.find(x => x.id === e.target.value) || null;
+                                                        setSelectedCorporate(c);
+                                                    }}
+                                                >
+                                                    <option value="">Select company</option>
+                                                    {corporates.map(c => (
+                                                        <option key={c.id} value={c.id}>
+                                                            {c.company_name} ({c.company_code})
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                                {selectedCorporate && (
+                                                    <p className="text-[11px] font-bold text-teal-600 ml-1">
+                                                        Contracted discount: {selectedCorporate.discount_percentage}%
+                                                    </p>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        {patientType === 'tpa_insurance' && (
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                                <div className="space-y-1.5">
+                                                    <label className={labelClass}>TPA / Insurance Provider</label>
+                                                    <select name="tpa_provider_id" className={selectClass} defaultValue="">
+                                                        <option value="">Select provider</option>
+                                                        {tpaProviders.map(p => (
+                                                            <option key={p.id} value={p.id}>
+                                                                {p.provider_name} ({p.provider_code})
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                                <div className="space-y-1.5">
+                                                    <label className={labelClass}>Policy Number</label>
+                                                    <input
+                                                        name="insurance_policy_number"
+                                                        maxLength={60}
+                                                        className={inputClass}
+                                                        placeholder="Policy / card number"
+                                                    />
+                                                </div>
+                                                <div className="space-y-1.5">
+                                                    <label className={labelClass}>Valid From</label>
+                                                    <input name="insurance_validity_start" type="date" className={inputClass} />
+                                                </div>
+                                                <div className="space-y-1.5">
+                                                    <label className={labelClass}>Valid Until</label>
+                                                    <input name="insurance_validity_end" type="date" className={inputClass} />
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
                                     {/* Notes */}
                                     <div className="mb-6 border-t border-gray-200 pt-6">
                                         <div className="flex items-center gap-2 mb-4">
