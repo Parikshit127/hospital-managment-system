@@ -24,6 +24,28 @@ const INPUT = 'w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm focu
 
 const esc = (s: any) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] as string));
 
+// Has this patient's money actually come in from the payer?
+//   pending  — nothing received yet
+//   partial  — part received, a balance is still due
+//   received — nothing left outstanding
+// Deliberately keyed off cash received (not claim status), because a claim can
+// read "approved" for weeks before a single rupee arrives.
+type ReceiptState = 'pending' | 'partial' | 'received';
+function receiptState(r: any): ReceiptState {
+  const received = Number(r.received || 0);
+  const outstanding = Number(r.outstanding || 0);
+  if (received <= 0) return 'pending';
+  return outstanding > 0.01 ? 'partial' : 'received';
+}
+const RECEIPT_LABEL: Record<ReceiptState, string> = {
+  pending: 'Pending', partial: 'Part received', received: 'Received',
+};
+const RECEIPT_PILL: Record<ReceiptState, string> = {
+  pending: 'bg-rose-100 text-rose-700',
+  partial: 'bg-amber-100 text-amber-700',
+  received: 'bg-emerald-100 text-emerald-700',
+};
+
 // Download the currently-filtered rows as CSV. Excel-safe quoting; what you see
 // on screen is exactly what lands in the file.
 function downloadCsv(filename: string, headers: string[], rows: (string | number)[][]) {
@@ -812,6 +834,10 @@ export function BillWiseSanction({ providers }: { providers: any[] }) {
   const [status, setStatus] = useState('');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
+  // "Whose receipt has come in and whose is still due" — the claim status column
+  // answers a different question (where the claim is in its lifecycle), so this
+  // tracks the money itself.
+  const [receiptFilter, setReceiptFilter] = useState<'' | 'pending' | 'partial' | 'received'>('');
 
   // Typing in the search box used to fire a query per keystroke; debounce it so
   // a bill number can be typed out without hammering the server.
@@ -835,23 +861,46 @@ export function BillWiseSanction({ providers }: { providers: any[] }) {
 
   const payerLabel = providerId ? (providers.find((p: any) => String(p.id) === providerId)?.provider_name || 'Payer') : 'All payers';
   const periodLabel = from || to ? `${from || '…'} to ${to || '…'}` : 'All dates';
-  const HEADERS = ['Bill #', 'Patient', 'Payer', 'Claim #', 'Claim Amt', 'Sanctioned', 'Received', 'TDS', 'Short-Pay', 'Outstanding', 'Status'];
+
+  const allRows: any[] = data?.rows || [];
+  const counts = {
+    pending: allRows.filter((r) => receiptState(r) === 'pending').length,
+    partial: allRows.filter((r) => receiptState(r) === 'partial').length,
+    received: allRows.filter((r) => receiptState(r) === 'received').length,
+  };
+  const rows = receiptFilter ? allRows.filter((r) => receiptState(r) === receiptFilter) : allRows;
+  // Totals follow what's on screen, so a filtered view adds up to what it shows.
+  const totals = rows.reduce((t: any, r: any) => ({
+    claim_amount: t.claim_amount + Number(r.claim_amount || 0),
+    sanctioned: t.sanctioned + Number(r.sanctioned || 0),
+    received: t.received + Number(r.received || 0),
+    tds: t.tds + Number(r.tds || 0),
+    short_pay: t.short_pay + Number(r.short_pay || 0),
+    outstanding: t.outstanding + Number(r.outstanding || 0),
+  }), { claim_amount: 0, sanctioned: 0, received: 0, tds: 0, short_pay: 0, outstanding: 0 });
+
+  const HEADERS = ['Bill #', 'Patient', 'Payer', 'Receipt', 'Claim Amt', 'Sanctioned', 'Received', 'TDS', 'Short-Pay', 'Outstanding', 'Claim Status'];
   const ALIGN: ('left' | 'right')[] = ['left', 'left', 'left', 'left', 'right', 'right', 'right', 'right', 'right', 'right', 'left'];
-  const asRows = () => (data?.rows || []).map((r: any) => [
-    r.invoice_number, r.patient_name, r.provider_name || 'Unmapped', r.claim_number || '-',
+  const asRows = () => rows.map((r: any) => [
+    r.invoice_number, r.patient_name, r.provider_name || 'Unmapped', RECEIPT_LABEL[receiptState(r)],
     fmt(r.claim_amount), fmt(r.sanctioned), fmt(r.received), fmt(r.tds), fmt(r.short_pay), fmt(r.outstanding),
     String(r.status || '').replace(/_/g, ' '),
   ]);
   const totalsRow = () => data ? [
     'TOTAL', '', '', '',
-    fmt(data.totals.claim_amount), fmt(data.totals.sanctioned), fmt(data.totals.received),
-    fmt(data.totals.tds), fmt(data.totals.short_pay), fmt(data.totals.outstanding), '',
+    fmt(totals.claim_amount), fmt(totals.sanctioned), fmt(totals.received),
+    fmt(totals.tds), fmt(totals.short_pay), fmt(totals.outstanding), '',
   ] : undefined;
 
   const handlePrint = () => printTable({
     title: 'Bill-Wise Sanction Report',
     subtitle: payerLabel,
-    meta: [periodLabel, status ? `Status: ${status.replace(/_/g, ' ')}` : 'All statuses', `${data?.rows?.length || 0} bill(s)`],
+    meta: [
+      periodLabel,
+      receiptFilter ? `Receipt: ${RECEIPT_LABEL[receiptFilter]} only` : 'All receipt states',
+      `${rows.length} bill(s)`,
+      `Pending ${counts.pending} · Part ${counts.partial} · Received ${counts.received}`,
+    ],
     headers: HEADERS, align: ALIGN, rows: asRows(), footer: totalsRow(),
   });
 
@@ -860,7 +909,7 @@ export function BillWiseSanction({ providers }: { providers: any[] }) {
     HEADERS, [...asRows(), ...(totalsRow() ? [totalsRow() as any] : [])],
   );
 
-  const busy = loading || !data || data.rows.length === 0;
+  const busy = loading || !data || rows.length === 0;
 
   return (
     <div>
@@ -879,12 +928,12 @@ export function BillWiseSanction({ providers }: { providers: any[] }) {
         <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="rounded-md border border-gray-300 px-2 py-1.5 text-sm" />
         <span className="text-xs text-gray-400">to</span>
         <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="rounded-md border border-gray-300 px-2 py-1.5 text-sm" />
-        {(providerId || status || search || from || to) && (
-          <button onClick={() => { setProviderId(''); setStatus(''); setSearch(''); setFrom(''); setTo(''); }}
+        {(providerId || status || search || from || to || receiptFilter) && (
+          <button onClick={() => { setProviderId(''); setStatus(''); setSearch(''); setFrom(''); setTo(''); setReceiptFilter(''); }}
             className="text-xs font-bold text-gray-400 hover:text-gray-700 underline">Clear</button>
         )}
         <div className="ml-auto flex items-center gap-3">
-          {data && <span className="text-xs font-bold text-gray-400">{data.rows.length} bill(s)</span>}
+          {data && <span className="text-xs font-bold text-gray-400">{rows.length} bill(s)</span>}
           <button onClick={handleCsv} disabled={busy} className="flex items-center gap-1.5 rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-bold text-gray-600 hover:bg-gray-50 disabled:opacity-40">
             <Download className="h-3.5 w-3.5" /> CSV
           </button>
@@ -894,6 +943,24 @@ export function BillWiseSanction({ providers }: { providers: any[] }) {
           <button onClick={load} className="flex items-center gap-1.5 text-xs font-bold text-gray-500 hover:text-gray-700"><RefreshCw className="h-3.5 w-3.5" /> Refresh</button>
         </div>
       </div>
+
+      {/* Whose money has come in, and whose hasn't — click to show only those. */}
+      {data && (
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          {([
+            ['', 'All', allRows.length, 'border-gray-300 bg-white text-gray-600'],
+            ['pending', 'Receipt pending', counts.pending, 'border-rose-300 bg-rose-50 text-rose-700'],
+            ['partial', 'Part received', counts.partial, 'border-amber-300 bg-amber-50 text-amber-700'],
+            ['received', 'Received', counts.received, 'border-emerald-300 bg-emerald-50 text-emerald-700'],
+          ] as const).map(([key, label, count, tone]) => (
+            <button key={key} onClick={() => setReceiptFilter(key as any)}
+              className={`rounded-full border px-3 py-1 text-xs font-bold transition-all ${tone} ${receiptFilter === key ? 'ring-2 ring-blue-400 ring-offset-1' : 'opacity-80 hover:opacity-100'}`}>
+              {label} <span className="ml-0.5 font-black">{count}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
       {loading ? <Spinner /> : !data ? <Empty msg="No data" /> : (
         // Capped height + sticky header: with 50+ bills the column headings used
         // to scroll away, leaving a wall of unlabelled numbers.
@@ -904,7 +971,7 @@ export function BillWiseSanction({ providers }: { providers: any[] }) {
                 <th className="px-3 py-2.5 text-left font-black text-[11px] uppercase tracking-wider">Bill #</th>
                 <th className="px-3 py-2.5 text-left font-black text-[11px] uppercase tracking-wider">Patient</th>
                 <th className="px-3 py-2.5 text-left font-black text-[11px] uppercase tracking-wider">Payer</th>
-                <th className="px-3 py-2.5 text-left font-black text-[11px] uppercase tracking-wider">Claim #</th>
+                <th className="px-3 py-2.5 text-left font-black text-[11px] uppercase tracking-wider">Receipt</th>
                 <th className="px-3 py-2.5 text-right font-black text-[11px] uppercase tracking-wider">Claim Amt</th>
                 <th className="px-3 py-2.5 text-right font-black text-[11px] uppercase tracking-wider">Sanctioned</th>
                 <th className="px-3 py-2.5 text-right font-black text-[11px] uppercase tracking-wider">Received</th>
@@ -915,7 +982,7 @@ export function BillWiseSanction({ providers }: { providers: any[] }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {data.rows.map((r: any) => (
+              {rows.map((r: any) => (
                 <tr key={r.invoice_id} className="hover:bg-slate-50">
                   {/* Bill numbers and patient names are identifiers — wrapping
                       them across three lines made every row three rows tall. */}
@@ -926,7 +993,11 @@ export function BillWiseSanction({ providers }: { providers: any[] }) {
                   <td className="px-3 py-2 max-w-[150px]">{r.provider_name
                     ? <span className="text-gray-700 block truncate" title={r.provider_name}>{r.provider_name}</span>
                     : <span className="text-amber-600 font-bold text-xs">Unmapped</span>}</td>
-                  <td className="px-3 py-2 text-gray-500 whitespace-nowrap">{r.claim_number || '-'}</td>
+                  <td className="px-3 py-2 whitespace-nowrap">
+                    <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-bold ${RECEIPT_PILL[receiptState(r)]}`}>
+                      {RECEIPT_LABEL[receiptState(r)]}
+                    </span>
+                  </td>
                   <td className="px-3 py-2 text-right">{fmt(r.claim_amount)}</td>
                   <td className="px-3 py-2 text-right">{fmt(r.sanctioned)}</td>
                   <td className="px-3 py-2 text-right">{fmt(r.received)}</td>
@@ -936,19 +1007,23 @@ export function BillWiseSanction({ providers }: { providers: any[] }) {
                   <td className="px-3 py-2"><StatusPill status={r.status} /></td>
                 </tr>
               ))}
-              {data.rows.length === 0 && <tr><td colSpan={11} className="px-4 py-8 text-center text-gray-400">No bills</td></tr>}
+              {rows.length === 0 && (
+                <tr><td colSpan={11} className="px-4 py-8 text-center text-gray-400">
+                  {allRows.length > 0 && receiptFilter ? `No bills with receipt "${RECEIPT_LABEL[receiptFilter]}"` : 'No bills'}
+                </td></tr>
+              )}
             </tbody>
             {/* Totals pinned to the bottom of the scroll box — otherwise you
                 have to scroll past every bill to see what they add up to. */}
             <tfoot className="bg-slate-100 font-black text-gray-800 sticky bottom-0" style={{ boxShadow: 'inset 0 1px 0 #e5e7eb' }}>
               <tr>
                 <td className="px-3 py-2.5" colSpan={4}>TOTAL</td>
-                <td className="px-3 py-2.5 text-right">{fmt(data.totals.claim_amount)}</td>
-                <td className="px-3 py-2.5 text-right">{fmt(data.totals.sanctioned)}</td>
-                <td className="px-3 py-2.5 text-right">{fmt(data.totals.received)}</td>
-                <td className="px-3 py-2.5 text-right">{fmt(data.totals.tds)}</td>
-                <td className="px-3 py-2.5 text-right">{fmt(data.totals.short_pay)}</td>
-                <td className="px-3 py-2.5 text-right">{fmt(data.totals.outstanding)}</td>
+                <td className="px-3 py-2.5 text-right">{fmt(totals.claim_amount)}</td>
+                <td className="px-3 py-2.5 text-right">{fmt(totals.sanctioned)}</td>
+                <td className="px-3 py-2.5 text-right">{fmt(totals.received)}</td>
+                <td className="px-3 py-2.5 text-right">{fmt(totals.tds)}</td>
+                <td className="px-3 py-2.5 text-right">{fmt(totals.short_pay)}</td>
+                <td className="px-3 py-2.5 text-right">{fmt(totals.outstanding)}</td>
                 <td></td>
               </tr>
             </tfoot>
