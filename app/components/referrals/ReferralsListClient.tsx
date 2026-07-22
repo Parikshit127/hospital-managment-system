@@ -105,7 +105,7 @@ export default function ReferralsListClient({ basePath }: { basePath: string }) 
             <div className="flex items-center justify-between mb-6">
                 <div>
                     <h1 className="text-2xl font-black text-gray-800 flex items-center gap-2">
-                        <UserCheck className="h-6 w-6 text-teal-500" /> Referrals & Commission
+                        <UserCheck className="h-6 w-6 text-teal-500" /> Consultant Charges
                     </h1>
                     <p className="text-sm text-gray-400">Manage referrers, commission rates and payouts.</p>
                 </div>

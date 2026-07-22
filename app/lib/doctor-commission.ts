@@ -33,12 +33,75 @@ function toNum(v: unknown): number {
 
 type AnyDb = any;
 
-/** Commission for one doctor's share of the bill, given their own config. */
-function computeCommission(
+/**
+ * Split a bill's net total across the doctors who earned it.
+ *
+ * Each "rendered by" line item credits its own doctor with that line's net_price;
+ * whatever net is left over (lines with no specific rendering doctor) belongs to
+ * the bill's attending/consulting doctor. A doctor who is both gets one merged
+ * entry, never two.
+ *
+ * Exported so the payout statement can show a doctor's attributed share of every
+ * bill WITHOUT depending on a commission row existing — commission is only
+ * accrued once a rate is configured, but the doctor's clinical work (and the
+ * patients behind it) must be listable either way.
+ */
+export function computeDoctorNetShares(
+    items: Array<{ net_price?: unknown; rendered_by_doctor_id?: string | null }>,
+    netAmountRaw: unknown,
+    attendingDoctorId: string | null | undefined,
+): { shares: Map<string, number>; netAmount: number; renderedTotal: number } {
+    const shares = new Map<string, number>();
+    let renderedTotal = 0;
+    for (const it of items) {
+        if (it.rendered_by_doctor_id) {
+            const net = toNum(it.net_price);
+            shares.set(it.rendered_by_doctor_id, (shares.get(it.rendered_by_doctor_id) || 0) + net);
+            renderedTotal += net;
+        }
+    }
+    const netAmount = toNum(netAmountRaw) || items.reduce((s, it) => s + toNum(it.net_price), 0);
+    const remainderNet = Math.max(0, netAmount - renderedTotal);
+    if (attendingDoctorId && remainderNet > 0) {
+        shares.set(attendingDoctorId, (shares.get(attendingDoctorId) || 0) + remainderNet);
+    }
+    return { shares, netAmount, renderedTotal };
+}
+
+const norm = (s: unknown) => String(s ?? '').trim().toLowerCase();
+
+/**
+ * Resolve the per_service percent for one bill line.
+ * A rate naming the service wins over the invoice_type bucket rate, so a hospital
+ * can pay (say) 5% on IPD generally but 12% on one specific procedure.
+ */
+function rateForLine(config: any, invoiceType: string, description: unknown): number {
+    const rates: any[] = config?.service_rates ?? [];
+    const named = rates.find((r) => r.service_name && norm(r.service_name) === norm(description));
+    if (named) return toNum(named.percent);
+    const bucket = rates.find((r) => !r.service_name && r.service_type === invoiceType);
+    return bucket ? toNum(bucket.percent) : 0;
+}
+
+/**
+ * Commission for one doctor's share of the bill, given their own config.
+ *
+ * `lines` are THIS doctor's attributed lines with the collected amount apportioned
+ * to each. When supplied, per_service configs are evaluated line by line so a
+ * named-service rate can differ from the bucket rate. Without lines the whole
+ * collected amount is charged at the bucket rate (previous behaviour), which keeps
+ * every existing caller working.
+ *
+ * The returned `rate` is the effective blended percent — for a bill mixing a 5%
+ * room charge and a 12% procedure it lands between the two, which is what the
+ * statement should display.
+ */
+export function computeCommission(
     config: any,
     invoiceType: string,
     collected: number,
     defaultPercent: number,
+    lines?: Array<{ description?: unknown; collected: number }>,
 ): { rate: number; amount: number } {
     let rate = 0;
     let amount = 0;
@@ -47,9 +110,18 @@ function computeCommission(
             rate = toNum(config.flat_percent);
             amount = (collected * rate) / 100;
         } else if (config.commission_type === 'per_service') {
-            const match = config.service_rates.find((r: any) => r.service_type === invoiceType);
-            rate = match ? toNum(match.percent) : 0;
-            amount = (collected * rate) / 100;
+            if (lines?.length) {
+                for (const ln of lines) {
+                    amount += (toNum(ln.collected) * rateForLine(config, invoiceType, ln.description)) / 100;
+                }
+                rate = collected > 0 ? (amount / collected) * 100 : 0;
+            } else {
+                const match = (config.service_rates ?? []).find(
+                    (r: any) => !r.service_name && r.service_type === invoiceType,
+                );
+                rate = match ? toNum(match.percent) : 0;
+                amount = (collected * rate) / 100;
+            }
         } else if (config.commission_type === 'fixed_per_bill') {
             rate = 0;
             amount = collected > 0 ? toNum(config.fixed_amount_per_bill) : 0;
@@ -59,6 +131,35 @@ function computeCommission(
         amount = (collected * rate) / 100;
     }
     return { rate, amount };
+}
+
+/**
+ * The individual bill lines a doctor is credited for, with the collected amount
+ * apportioned to each — the input `computeCommission` needs for per-service rates,
+ * and the source of the service names shown on the doctor's invoice.
+ *
+ * A doctor is credited for the lines they personally rendered; if they are also
+ * (or only) the attending doctor they additionally get every line nobody else
+ * rendered.
+ */
+export function doctorLineShares(
+    items: Array<{ net_price?: unknown; rendered_by_doctor_id?: string | null; description?: unknown }>,
+    netAmount: number,
+    paidAmount: number,
+    attendingDoctorId: string | null | undefined,
+    doctorId: string,
+): Array<{ description: string; net: number; collected: number }> {
+    const ratio = netAmount > 0 ? paidAmount / netAmount : 0;
+    const out: Array<{ description: string; net: number; collected: number }> = [];
+    for (const it of items) {
+        const mine = it.rendered_by_doctor_id
+            ? it.rendered_by_doctor_id === doctorId
+            : attendingDoctorId === doctorId;
+        if (!mine) continue;
+        const net = toNum(it.net_price);
+        out.push({ description: String(it.description ?? ''), net, collected: net * ratio });
+    }
+    return out;
 }
 
 /**
@@ -97,26 +198,16 @@ export async function recomputeInvoiceDoctorCommission(
 
     const items = await db.invoice_items.findMany({
         where: { invoice_id: invoiceId },
-        select: { net_price: true, rendered_by_doctor_id: true },
+        // description is needed so per-named-service rates can match the line.
+        select: { net_price: true, rendered_by_doctor_id: true, description: true },
     });
 
-    // Split the bill's net total by doctor: each rendered-by doctor gets the sum
-    // of their own lines' net_price; whatever's left (lines with no specific
-    // rendering doctor) goes to the bill's attending/consulting doctor.
-    const doctorNetShare = new Map<string, number>();
-    let renderedTotal = 0;
-    for (const it of items) {
-        if (it.rendered_by_doctor_id) {
-            const net = toNum(it.net_price);
-            doctorNetShare.set(it.rendered_by_doctor_id, (doctorNetShare.get(it.rendered_by_doctor_id) || 0) + net);
-            renderedTotal += net;
-        }
-    }
-    const netAmount = toNum(invoice.net_amount) || items.reduce((s: number, it: any) => s + toNum(it.net_price), 0);
-    const remainderNet = Math.max(0, netAmount - renderedTotal);
-    if (invoice.doctor_id && remainderNet > 0) {
-        doctorNetShare.set(invoice.doctor_id, (doctorNetShare.get(invoice.doctor_id) || 0) + remainderNet);
-    }
+    // Split the bill's net total by doctor (see computeDoctorNetShares).
+    const { shares: doctorNetShare, netAmount } = computeDoctorNetShares(
+        items,
+        invoice.net_amount,
+        invoice.doctor_id,
+    );
 
     const existingRows = await db.doctorCommission.findMany({ where: { invoice_id: invoiceId } });
     const lockedDoctorIds = new Set(
@@ -156,7 +247,14 @@ export async function recomputeInvoiceDoctorCommission(
         const netShare = doctorNetShare.get(doctorId)!;
         const collectedForDoctor = netAmount > 0 ? collected * (netShare / netAmount) : 0;
         const config = configByDoctor.get(doctorId);
-        const { rate, amount } = computeCommission(config, invoice.invoice_type, collectedForDoctor, defaultPercent);
+        const lines = doctorLineShares(items, netAmount, collected, invoice.doctor_id, doctorId);
+        const { rate, amount } = computeCommission(
+            config,
+            invoice.invoice_type,
+            collectedForDoctor,
+            defaultPercent,
+            lines,
+        );
 
         if (amount <= 0) continue;
         seenDoctorIds.add(doctorId);

@@ -4773,12 +4773,14 @@ model ReferrerServiceRate {
   referrer_id    String
   // matches invoices.invoice_type: OPD | IPD | Pharmacy | Lab | Procedure
   service_type   String
+  // See DoctorServiceRate.service_name — "" = whole bucket, a name = that one service.
+  service_name   String @default("")
   percent        Float  @default(0)
 
   organization Organization @relation(fields: [organizationId], references: [id])
   referrer     Referrer     @relation(fields: [referrer_id], references: [id], onDelete: Cascade)
 
-  @@unique([referrer_id, service_type])
+  @@unique([referrer_id, service_type, service_name])
   @@index([organizationId])
   @@map("referrer_service_rates")
 }
@@ -4818,6 +4820,8 @@ model ReferralPayoutStatement {
   id             String   @id @default(uuid())
   organizationId String
   referrer_id    String
+  // Human-readable consultant-charge invoice number, e.g. AVS-CNI-26-27-001.
+  statement_number String? @unique
   period_start   DateTime
   period_end     DateTime
 
@@ -4883,12 +4887,16 @@ model DoctorServiceRate {
   doctor_id      String
   // matches invoices.invoice_type: OPD | IPD | Pharmacy | Lab | Procedure
   service_type   String
+  // Optional named service (matches invoice_items.description / ipd_service_master.service_name).
+  // "" = the rate applies to the whole service_type bucket; a name = a rate for that
+  // one service only, which overrides the bucket rate on lines matching it.
+  service_name   String @default("")
   percent        Float  @default(0)
 
   organization Organization           @relation(fields: [organizationId], references: [id])
   config       DoctorCommissionConfig @relation(fields: [organizationId, doctor_id], references: [organizationId, doctor_id], onDelete: Cascade)
 
-  @@unique([doctor_id, service_type])
+  @@unique([doctor_id, service_type, service_name])
   @@index([organizationId])
   @@index([organizationId, doctor_id])
   @@map("doctor_service_rates")
@@ -4931,6 +4939,9 @@ model DoctorPayoutStatement {
   id             String   @id @default(uuid())
   organizationId String
   doctor_id      String
+  // Human-readable doctor invoice number, e.g. AVS-DRI-26-27-001. Nullable so the
+  // pre-existing rows created before numbering was introduced stay valid.
+  statement_number String? @unique
   period_start   DateTime
   period_end     DateTime
 

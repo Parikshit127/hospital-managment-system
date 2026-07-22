@@ -31,7 +31,7 @@ function getFYStartDate(date: Date = new Date()): Date {
     return new Date(fyStartYear, 3, 1); // April 1st
 }
 
-export type NumberType = 'OPD' | 'IPD' | 'RCP' | 'DEP' | 'PHM' | 'CN' | 'EXP' | 'CLM' | 'WO' | 'REF' | 'IRC' | 'BILL' | 'IND';
+export type NumberType = 'OPD' | 'IPD' | 'RCP' | 'DEP' | 'PHM' | 'CN' | 'EXP' | 'CLM' | 'WO' | 'REF' | 'IRC' | 'BILL' | 'IND' | 'DRI' | 'CNI';
 
 /**
  * Generate a sequential number for the given org and type.
@@ -130,6 +130,24 @@ export async function generateSequentialNumber(
             },
         });
         lastSeq = count;
+    } else if (type === 'CNI') {
+        // Consultant / referrer payout invoice number.
+        const count = await database.referralPayoutStatement.count({
+            where: {
+                organizationId,
+                statement_number: { startsWith: prefix },
+            },
+        });
+        lastSeq = count;
+    } else if (type === 'DRI') {
+        // Doctor payout invoice / statement number.
+        const count = await database.doctorPayoutStatement.count({
+            where: {
+                organizationId,
+                statement_number: { startsWith: prefix },
+            },
+        });
+        lastSeq = count;
     } else {
         const count = await database.invoices.count({
             where: {
@@ -147,8 +165,8 @@ export async function generateSequentialNumber(
     let finalNumber = candidate;
     let attempt = lastSeq + 1;
     while (true) {
-        const field = type === 'RCP' ? 'receipt_number' : type === 'DEP' ? 'deposit_number' : type === 'CN' ? 'credit_note_number' : type === 'IRC' ? 'receipt_number' : type === 'BILL' ? 'final_bill_number' : type === 'IND' ? 'indent_number' : 'invoice_number';
-        const table = type === 'RCP' ? database.payments : type === 'DEP' ? database.patientDeposit : type === 'CN' ? database.creditNote : type === 'IRC' ? database.insuranceReceipt : type === 'IND' ? database.pharmacy_orders : database.invoices;
+        const field = type === 'RCP' ? 'receipt_number' : type === 'DEP' ? 'deposit_number' : type === 'CN' ? 'credit_note_number' : type === 'IRC' ? 'receipt_number' : type === 'BILL' ? 'final_bill_number' : type === 'IND' ? 'indent_number' : type === 'DRI' || type === 'CNI' ? 'statement_number' : 'invoice_number';
+        const table = type === 'RCP' ? database.payments : type === 'DEP' ? database.patientDeposit : type === 'CN' ? database.creditNote : type === 'IRC' ? database.insuranceReceipt : type === 'IND' ? database.pharmacy_orders : type === 'DRI' ? database.doctorPayoutStatement : type === 'CNI' ? database.referralPayoutStatement : database.invoices;
         const existing = await table.findFirst({
             where: { [field]: finalNumber },
             select: { id: true },
@@ -255,6 +273,16 @@ export async function createWithUniqueRetry<T>(fn: () => Promise<T>, maxAttempts
  */
 export async function generateDepositNumber(organizationId: string, db?: any): Promise<string> {
     return generateSequentialNumber(organizationId, 'DEP', db);
+}
+
+/** Doctor payout invoice number, e.g. AVS-DRI-26-27-001. */
+export async function generateDoctorInvoiceNumber(organizationId: string, db?: any): Promise<string> {
+    return generateSequentialNumber(organizationId, 'DRI', db);
+}
+
+/** Consultant / referrer payout invoice number, e.g. AVS-CNI-26-27-001. */
+export async function generateConsultantInvoiceNumber(organizationId: string, db?: any): Promise<string> {
+    return generateSequentialNumber(organizationId, 'CNI', db);
 }
 
 export async function generateIndentNumber(organizationId: string, db?: any): Promise<string> {

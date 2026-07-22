@@ -8,10 +8,12 @@ import {
     saveDoctorConfig,
     setDoctorConfigActive,
     setDefaultDoctorCommission,
+    getCommissionServiceOptions,
+    applyDoctorConfigToAll,
 } from '@/app/actions/doctor-commission-actions';
 import { DOCTOR_COMMISSION_TYPES, DOCTOR_SERVICE_TYPES } from '@/app/lib/doctor-commission-constants';
 
-type ServiceRate = { service_type: string; percent: number };
+type ServiceRate = { service_type: string; service_name?: string; percent: number };
 type Row = {
     id: string;
     name: string;
@@ -43,8 +45,11 @@ function commissionSummary(r: Row): string {
     if (!r.configured) return 'not configured';
     if (r.commission_type === 'flat_percent') return `${r.flat_percent ?? 0}%`;
     if (r.commission_type === 'fixed_per_bill') return inr(r.fixed_amount_per_bill ?? 0) + '/bill';
-    if (r.commission_type === 'per_service')
-        return r.service_rates.map((s) => `${s.service_type} ${s.percent}%`).join(', ') || 'no rates';
+    if (r.commission_type === 'per_service') {
+        // Named-service overrides read better as "Service 12%" than "IPD 12%".
+        const parts = r.service_rates.map((s) => `${s.service_name || s.service_type} ${s.percent}%`);
+        return parts.join(', ') || 'no rates';
+    }
     return '—';
 }
 
@@ -98,9 +103,9 @@ export default function DoctorCommissionListClient({ basePath }: { basePath: str
             <div className="flex items-center justify-between mb-6">
                 <div>
                     <h1 className="text-2xl font-black text-gray-800 flex items-center gap-2">
-                        <Stethoscope className="h-6 w-6 text-indigo-500" /> Doctor Invoicing & Commission
+                        <Stethoscope className="h-6 w-6 text-indigo-500" /> Doctor Invoicing & Consultant Charges
                     </h1>
-                    <p className="text-sm text-gray-400">Per-bill commission for the doctor assigned to each invoice.</p>
+                    <p className="text-sm text-gray-400">Per-bill consultant charges for the doctor assigned to each invoice.</p>
                 </div>
                 {/* Shortcut into the MIS "Doctor Wise Revenue Summary" report (admin/finance portal). */}
                 <Link
@@ -113,8 +118,8 @@ export default function DoctorCommissionListClient({ basePath }: { basePath: str
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
                 <SummaryCard label="Business (collected)" value={inr(totals.business)} />
-                <SummaryCard label="Commission accrued" value={inr(totals.accrued)} />
-                <SummaryCard label="Commission paid" value={inr(totals.paid)} />
+                <SummaryCard label="Consultant charges accrued" value={inr(totals.accrued)} />
+                <SummaryCard label="Consultant charges paid" value={inr(totals.paid)} />
             </div>
 
             <div className="flex flex-wrap items-center gap-3 mb-4">
@@ -139,7 +144,7 @@ export default function DoctorCommissionListClient({ basePath }: { basePath: str
                     <thead className="bg-gray-50 text-[10px] uppercase tracking-wider text-gray-400 font-black">
                         <tr>
                             <th className="text-left px-4 py-3">Doctor</th>
-                            <th className="text-left px-4 py-3">Commission</th>
+                            <th className="text-left px-4 py-3">Consultant charge</th>
                             <th className="text-right px-4 py-3">Bills</th>
                             <th className="text-right px-4 py-3">Business</th>
                             <th className="text-right px-4 py-3">Accrued</th>
@@ -305,27 +310,72 @@ function ConfigModal({
     const [commissionType, setCommissionType] = useState(doctor.commission_type || 'flat_percent');
     const [flatPercent, setFlatPercent] = useState(String(doctor.flat_percent ?? ''));
     const [fixedAmount, setFixedAmount] = useState(String(doctor.fixed_amount_per_bill ?? ''));
+    // Bucket rates (whole OPD/IPD/... category)
     const [rates, setRates] = useState<Record<string, string>>(() => {
         const m: Record<string, string> = {};
         for (const st of DOCTOR_SERVICE_TYPES) m[st] = '';
-        for (const r of doctor.service_rates || []) m[r.service_type] = String(r.percent);
+        for (const r of doctor.service_rates || []) if (!r.service_name) m[r.service_type] = String(r.percent);
         return m;
     });
+    // Named-service rates — a specific service the doctor performs, at its own %.
+    const [namedRates, setNamedRates] = useState<Array<{ service_type: string; service_name: string; percent: string }>>(
+        () =>
+            (doctor.service_rates || [])
+                .filter((r: any) => r.service_name)
+                .map((r: any) => ({ service_type: r.service_type, service_name: r.service_name, percent: String(r.percent) })),
+    );
+    type Opt = { name: string; category: string; rate?: number; performed?: boolean };
+    const [options, setOptions] = useState<Opt[]>([]);
+    const [pick, setPick] = useState('');
+    const [pickType, setPickType] = useState('IPD');
     const [saving, setSaving] = useState(false);
+    const [applying, setApplying] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [notice, setNotice] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (commissionType !== 'per_service' || options.length) return;
+        getCommissionServiceOptions(doctor.id).then((r) => { if (r.success) setOptions(r.data as any); });
+    }, [commissionType, options.length, doctor.id]);
+
+    // The whole list is always on screen; the search box only narrows it.
+    const filteredOptions = useMemo(() => {
+        const q = pick.trim().toLowerCase();
+        return q ? options.filter((o) => o.name.toLowerCase().includes(q)) : options;
+    }, [options, pick]);
+
+    const performedOptions = useMemo(() => filteredOptions.filter((o) => o.performed), [filteredOptions]);
+    const otherOptions = useMemo(() => filteredOptions.filter((o) => !o.performed), [filteredOptions]);
+
+    /** Current % typed against a service, for the active bill type. */
+    const rateFor = (name: string) =>
+        namedRates.find((r) => r.service_type === pickType && r.service_name.toLowerCase() === name.toLowerCase())?.percent ?? '';
+
+    /** Typing a % adds/updates the row; clearing it removes the row entirely. */
+    const setRateFor = (name: string, percent: string) =>
+        setNamedRates((prev) => {
+            const i = prev.findIndex(
+                (r) => r.service_type === pickType && r.service_name.toLowerCase() === name.toLowerCase(),
+            );
+            if (percent.trim() === '') return i === -1 ? prev : prev.filter((_, j) => j !== i);
+            if (i === -1) return [...prev, { service_type: pickType, service_name: name, percent }];
+            return prev.map((r, j) => (j === i ? { ...r, percent } : r));
+        });
+
+    const buildPayload = () => ({
+        commission_type: commissionType,
+        flat_percent: flatPercent,
+        fixed_amount_per_bill: fixedAmount,
+        service_rates: [
+            ...DOCTOR_SERVICE_TYPES.map((st) => ({ service_type: st, service_name: '', percent: rates[st] || 0 })),
+            ...namedRates.map((r) => ({ service_type: r.service_type, service_name: r.service_name, percent: r.percent || 0 })),
+        ].filter((r) => Number(r.percent) > 0),
+    });
 
     const save = async () => {
         setSaving(true);
         setError(null);
-        const payload = {
-            commission_type: commissionType,
-            flat_percent: flatPercent,
-            fixed_amount_per_bill: fixedAmount,
-            service_rates: DOCTOR_SERVICE_TYPES.map((st) => ({ service_type: st, percent: rates[st] || 0 })).filter(
-                (r) => Number(r.percent) > 0,
-            ),
-        };
-        const res = await saveDoctorConfig(doctor.id, payload);
+        const res = await saveDoctorConfig(doctor.id, buildPayload());
         setSaving(false);
         if (!res.success) {
             setError(res.error || 'Failed to save');
@@ -334,11 +384,26 @@ function ConfigModal({
         onSaved();
     };
 
+    const applyAll = async () => {
+        if (!confirm('Apply this exact commission setup to EVERY active doctor?\n\nThis overwrites each doctor’s existing commission config.')) return;
+        setApplying(true);
+        setError(null);
+        setNotice(null);
+        const res = await applyDoctorConfigToAll(buildPayload());
+        setApplying(false);
+        if (!res.success) {
+            setError(res.error || 'Failed to apply to all');
+            return;
+        }
+        setNotice(`Applied to ${(res.data as any)?.applied} doctors.`);
+        onSaved();
+    };
+
     return (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6">
                 <div className="flex items-center justify-between mb-1">
-                    <h2 className="text-lg font-black text-gray-800">Commission — {doctor.name}</h2>
+                    <h2 className="text-lg font-black text-gray-800">Consultant Charges — {doctor.name}</h2>
                     <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
                         <X className="h-5 w-5" />
                     </button>
@@ -347,7 +412,7 @@ function ConfigModal({
 
                 <div className="space-y-3">
                     <div className="space-y-1">
-                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Commission type</label>
+                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Charge type</label>
                         <select value={commissionType} onChange={(e) => setCommissionType(e.target.value)} className={ctlClass}>
                             {DOCTOR_COMMISSION_TYPES.map((c) => (
                                 <option key={c} value={c}>
@@ -368,26 +433,110 @@ function ConfigModal({
                         </Labeled>
                     )}
                     {commissionType === 'per_service' && (
-                        <div>
-                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Rates by service (%)</label>
-                            <div className="grid grid-cols-2 gap-2 mt-1">
-                                {DOCTOR_SERVICE_TYPES.map((st) => (
-                                    <div key={st} className="flex items-center gap-2">
-                                        <span className="text-xs text-gray-500 w-20">{st}</span>
-                                        <input
-                                            type="number"
-                                            value={rates[st]}
-                                            onChange={(e) => setRates((prev) => ({ ...prev, [st]: e.target.value }))}
-                                            className={ctlClass}
-                                            placeholder="0"
-                                        />
-                                    </div>
-                                ))}
+                        <div className="space-y-4">
+                            <div>
+                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">
+                                    Default rate by bill type (%)
+                                </label>
+                                <p className="text-[11px] text-gray-400 mb-1">Applies to every line on that kind of bill.</p>
+                                <div className="grid grid-cols-2 gap-2 mt-1">
+                                    {DOCTOR_SERVICE_TYPES.map((st) => (
+                                        <div key={st} className="flex items-center gap-2">
+                                            <span className="text-xs text-gray-500 w-20">{st}</span>
+                                            <input
+                                                type="number"
+                                                value={rates[st]}
+                                                onChange={(e) => setRates((prev) => ({ ...prev, [st]: e.target.value }))}
+                                                className={ctlClass}
+                                                placeholder="0"
+                                            />
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Per-service overrides: pick the exact service the doctor performs
+                                and set its own cut. Beats the bill-type rate on matching lines. */}
+                            <div className="border-t border-gray-100 pt-3">
+                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider">
+                                    Rate for a specific service (%)
+                                </label>
+                                <p className="text-[11px] text-gray-400 mb-2">
+                                    Overrides the rate above, for that one service only.
+                                </p>
+
+                                <div className="flex items-center gap-2 mb-2">
+                                    <select
+                                        value={pickType}
+                                        onChange={(e) => setPickType(e.target.value)}
+                                        className="w-24 shrink-0 px-2 py-2 border border-gray-200 rounded-lg text-sm bg-white"
+                                    >
+                                        {DOCTOR_SERVICE_TYPES.map((st) => <option key={st} value={st}>{st}</option>)}
+                                    </select>
+                                    <input
+                                        value={pick}
+                                        onChange={(e) => setPick(e.target.value)}
+                                        placeholder="Filter services…"
+                                        className="flex-1 min-w-0 px-3 py-2 border border-gray-200 rounded-lg text-sm"
+                                    />
+                                </div>
+
+                                {/* Every service is listed inline — nothing to open, nothing to
+                                    type from memory. Services this doctor has actually billed are
+                                    pinned to the top in bold; the rest are dimmed to show they have
+                                    never appeared on one of their bills. */}
+                                <div className="max-h-64 overflow-y-auto rounded-xl border border-gray-200 divide-y divide-gray-50">
+                                    {options.length === 0 ? (
+                                        <div className="px-3 py-4 text-sm text-gray-400 text-center">Loading services…</div>
+                                    ) : filteredOptions.length === 0 ? (
+                                        <div className="px-3 py-4 text-sm text-gray-400 text-center">No matching service.</div>
+                                    ) : (
+                                        <>
+                                            {performedOptions.length > 0 && (
+                                                <div className="sticky top-0 bg-gray-900 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-white">
+                                                    Done by {doctor.name} · {performedOptions.length}
+                                                </div>
+                                            )}
+                                            {performedOptions.map((o) => (
+                                                <ServiceRateRow
+                                                    key={`p-${o.name}`}
+                                                    name={o.name}
+                                                    category={o.category}
+                                                    performed
+                                                    value={rateFor(o.name)}
+                                                    onChange={(v) => setRateFor(o.name, v)}
+                                                />
+                                            ))}
+                                            {otherOptions.length > 0 && (
+                                                <div className="sticky top-0 bg-gray-100 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-gray-500">
+                                                    Not billed by this doctor · {otherOptions.length}
+                                                </div>
+                                            )}
+                                            {otherOptions.map((o) => (
+                                                <ServiceRateRow
+                                                    key={`o-${o.name}`}
+                                                    name={o.name}
+                                                    category={o.category}
+                                                    value={rateFor(o.name)}
+                                                    onChange={(v) => setRateFor(o.name, v)}
+                                                />
+                                            ))}
+                                        </>
+                                    )}
+                                </div>
+
+                                {namedRates.length > 0 && (
+                                    <p className="mt-2 text-[11px] text-gray-500">
+                                        <span className="font-black text-indigo-600">{namedRates.length}</span> service rate(s) set —
+                                        clear a box to remove it.
+                                    </p>
+                                )}
                             </div>
                         </div>
                     )}
 
                     {error && <p className="text-sm text-red-500">{error}</p>}
+                    {notice && <p className="text-sm text-emerald-600 font-bold">{notice}</p>}
 
                     <div className="flex items-center justify-between pt-2">
                         {doctor.configured && (
@@ -395,16 +544,24 @@ function ConfigModal({
                                 onClick={() => onToggleActive(doctor.id, !doctor.config_active)}
                                 className="text-xs font-bold text-gray-400 hover:text-gray-600"
                             >
-                                {doctor.config_active ? 'Disable commission' : 'Enable commission'}
+                                {doctor.config_active ? 'Disable consultant charges' : 'Enable consultant charges'}
                             </button>
                         )}
                         <div className="flex gap-2 ml-auto">
+                            <button
+                                onClick={applyAll}
+                                disabled={applying || saving}
+                                title="Give every active doctor this same commission setup"
+                                className="inline-flex items-center gap-1 px-4 py-2 rounded-xl border border-indigo-200 text-indigo-600 font-bold text-sm hover:bg-indigo-50 disabled:opacity-50"
+                            >
+                                {applying && <Loader2 className="h-4 w-4 animate-spin" />} Apply to all doctors
+                            </button>
                             <button onClick={onClose} className="px-4 py-2 rounded-xl text-gray-500 font-bold text-sm hover:bg-gray-100">
                                 Cancel
                             </button>
                             <button
                                 onClick={save}
-                                disabled={saving}
+                                disabled={saving || applying}
                                 className="inline-flex items-center gap-1 px-4 py-2 rounded-xl bg-indigo-500 text-white font-bold text-sm hover:bg-indigo-600 disabled:opacity-50"
                             >
                                 {saving && <Loader2 className="h-4 w-4 animate-spin" />} Save
@@ -412,6 +569,47 @@ function ConfigModal({
                         </div>
                     </div>
                 </div>
+            </div>
+        </div>
+    );
+}
+
+/**
+ * One row in the inline service list. `performed` = this doctor has actually
+ * billed this service, so it is rendered in solid black; everything else is
+ * dimmed to signal it has never appeared on one of their bills.
+ */
+function ServiceRateRow({
+    name,
+    category,
+    performed,
+    value,
+    onChange,
+}: {
+    name: string;
+    category: string;
+    performed?: boolean;
+    value: string;
+    onChange: (v: string) => void;
+}) {
+    const set = value.trim() !== '';
+    return (
+        <div className={`flex items-center gap-2 px-3 py-1.5 ${set ? 'bg-indigo-50/60' : performed ? 'bg-white' : 'bg-gray-50/40'}`}>
+            <div className="min-w-0 flex-1">
+                <div className={`truncate text-sm ${performed ? 'font-bold text-gray-900' : 'font-normal text-gray-400'}`} title={name}>
+                    {name}
+                </div>
+                <div className="text-[10px] text-gray-400">{category}</div>
+            </div>
+            <div className="flex items-center gap-1 shrink-0">
+                <input
+                    type="number"
+                    value={value}
+                    onChange={(e) => onChange(e.target.value)}
+                    placeholder="—"
+                    className="w-16 px-2 py-1 border border-gray-200 rounded-lg text-sm text-right"
+                />
+                <span className="text-xs text-gray-400">%</span>
             </div>
         </div>
     );

@@ -1,35 +1,29 @@
 'use client';
 
 /**
- * DoctorPayoutStatementClient
- * ---------------------------
- * Doctor invoicing worksheet.
- *
- * Lists every patient a doctor is attributable for — as the bill's attending /
- * consulting doctor, or as the "Rendered by" doctor on individual line items —
- * grouped one card per patient. The biller ticks the patients (or individual
- * bills) to include and raises a doctor invoice for exactly that subset: pick 15
- * of 20 patients and the invoice, its totals and its printout cover only those 15.
- *
- * Visibility is driven by the BILLS, not by the commission ledger, so patients
- * appear even when no commission rate is configured (the common case) — in that
- * situation the payout column is ₹0 and a banner says so, instead of the page
- * wrongly reporting that there is nothing to invoice.
+ * ConsultantChargeStatementClient
+ * -------------------------------
+ * Consultant-charge worksheet — the referrer counterpart of the doctor invoicing
+ * worksheet. Lists every patient this consultant referred, grouped one card per
+ * patient, with each bill and the services behind it. The biller ticks the
+ * patients (or individual bills) to include and raises a consultant invoice for
+ * exactly that subset: pick 15 of 20 and the invoice, its totals and its printout
+ * cover only those 15.
  */
 
 import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
     ArrowLeft, Loader2, CheckCircle2, Wallet, Printer, Search, Users,
-    FileText, AlertTriangle, ChevronDown, ChevronRight, Lock, Stethoscope, Filter,
+    FileText, AlertTriangle, ChevronDown, ChevronRight, Lock, Filter,
 } from 'lucide-react';
-import { getDoctorStatementWorkload, createDoctorInvoiceForBills } from '@/app/actions/doctor-commission-actions';
+import { getConsultantWorkload, createConsultantInvoiceForBills } from '@/app/actions/consultant-charge-actions';
 import { fmtIstDate, fmtIstDateTime } from '@/app/lib/ist';
 
 const inr = (n: number) => '₹' + (n || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 });
-/** Blended per-service rates rarely land on a whole number — keep them readable. */
 const round2 = (n: number) => Math.round((n || 0) * 100) / 100;
 
+type Service = { name: string; net: number; collected: number; rate: number; amount: number };
 type Bill = {
     invoice_id: number;
     invoice_number: string;
@@ -38,17 +32,13 @@ type Bill = {
     created_at: string;
     bill_net: number;
     bill_paid: number;
-    doctor_net: number;
-    doctor_collected: number;
-    attribution: 'attending' | 'rendered' | 'both';
-    rendered_services: string[];
-    services: Array<{ name: string; net: number; collected: number; rate: number; amount: number }>;
+    collected: number;
+    services: Service[];
     rate_applied: number;
     commission_amount: number;
     commission_status: string | null;
     locked: boolean;
 };
-
 type Patient = {
     patient_id: string;
     patient_name: string;
@@ -56,31 +46,28 @@ type Patient = {
     bills: Bill[];
     visit_count: number;
     last_visit: string | null;
-    total_net: number;
     total_collected: number;
     total_commission: number;
     selectable_count: number;
 };
-
 type Data = {
-    doctor: { id: string; name: string; specialty?: string | null };
+    referrer: { id: string; name: string; category?: string | null };
     org: { name: string; address: string | null; phone: string | null; license_no: string | null };
-    config: { commission_type: string; flat_percent: number | null; is_active: boolean } | null;
-    default_percent: number;
+    commission_type: string;
     commission_configured: boolean;
     patients: Patient[];
-    totals: { patients: number; bills: number; net: number; collected: number; commission: number };
+    totals: { patients: number; bills: number; collected: number; commission: number };
 };
 
 const INVOICE_TYPES = ['all', 'OPD', 'IPD', 'Pharmacy', 'Lab', 'Procedure'];
 
-const ATTRIBUTION_BADGE: Record<Bill['attribution'], { label: string; cls: string }> = {
-    attending: { label: 'Attending', cls: 'bg-blue-50 text-blue-600 border-blue-200' },
-    rendered: { label: 'Rendered by', cls: 'bg-violet-50 text-violet-600 border-violet-200' },
-    both: { label: 'Attending + Rendered', cls: 'bg-emerald-50 text-emerald-600 border-emerald-200' },
-};
-
-export default function DoctorPayoutStatementClient({ doctorId, basePath }: { doctorId: string; basePath: string }) {
+export default function ConsultantChargeStatementClient({
+    referrerId,
+    basePath,
+}: {
+    referrerId: string;
+    basePath: string;
+}) {
     const [data, setData] = useState<Data | null>(null);
     const [loading, setLoading] = useState(true);
     const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -92,7 +79,6 @@ export default function DoctorPayoutStatementClient({ doctorId, basePath }: { do
     const [error, setError] = useState<string | null>(null);
     const [done, setDone] = useState<string | null>(null);
 
-    // Filters
     const [from, setFrom] = useState('');
     const [to, setTo] = useState('');
     const [invoiceType, setInvoiceType] = useState('all');
@@ -102,7 +88,7 @@ export default function DoctorPayoutStatementClient({ doctorId, basePath }: { do
 
     const load = async () => {
         setLoading(true);
-        const res = await getDoctorStatementWorkload(doctorId, {
+        const res = await getConsultantWorkload(referrerId, {
             from: from || undefined,
             to: to || undefined,
             invoice_type: invoiceType,
@@ -121,15 +107,10 @@ export default function DoctorPayoutStatementClient({ doctorId, basePath }: { do
     useEffect(() => {
         load();
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [doctorId, from, to, invoiceType, settlement, appliedSearch]);
+    }, [referrerId, from, to, invoiceType, settlement, appliedSearch]);
 
     const patients = data?.patients ?? [];
-
-    /** Every bill the biller is allowed to put on an invoice. */
-    const selectableBills = useMemo(
-        () => patients.flatMap((p) => p.bills.filter((b) => !b.locked)),
-        [patients],
-    );
+    const selectableBills = useMemo(() => patients.flatMap((p) => p.bills.filter((b) => !b.locked)), [patients]);
     const allSelected = selectableBills.length > 0 && selected.size === selectableBills.length;
 
     const toggleBill = (id: number) =>
@@ -139,7 +120,6 @@ export default function DoctorPayoutStatementClient({ doctorId, basePath }: { do
             return next;
         });
 
-    /** Ticking a patient takes/drops ALL of that patient's selectable bills at once. */
     const togglePatient = (p: Patient) =>
         setSelected((prev) => {
             const next = new Set(prev);
@@ -161,7 +141,6 @@ export default function DoctorPayoutStatementClient({ doctorId, basePath }: { do
             return next;
         });
 
-    /** The chosen subset — this is what totals, the printout and the invoice all use. */
     const selection = useMemo(() => {
         const rows = patients
             .map((p) => ({ ...p, bills: p.bills.filter((b) => selected.has(b.invoice_id)) }))
@@ -170,8 +149,7 @@ export default function DoctorPayoutStatementClient({ doctorId, basePath }: { do
         return {
             patients: rows,
             billCount: bills.length,
-            net: bills.reduce((s, b) => s + b.doctor_net, 0),
-            collected: bills.reduce((s, b) => s + b.doctor_collected, 0),
+            collected: bills.reduce((s, b) => s + b.collected, 0),
             commission: bills.reduce((s, b) => s + b.commission_amount, 0),
         };
     }, [patients, selected]);
@@ -181,8 +159,8 @@ export default function DoctorPayoutStatementClient({ doctorId, basePath }: { do
         setBusy(true);
         setError(null);
         setDone(null);
-        const res = await createDoctorInvoiceForBills({
-            doctorId,
+        const res = await createConsultantInvoiceForBills({
+            referrerId,
             invoiceIds: Array.from(selected),
             payment_mode: mode,
             payment_reference: reference || undefined,
@@ -190,12 +168,12 @@ export default function DoctorPayoutStatementClient({ doctorId, basePath }: { do
         });
         setBusy(false);
         if (!res.success) {
-            setError(res.error || 'Failed to raise doctor invoice');
+            setError(res.error || 'Failed to raise consultant invoice');
             return;
         }
         const d = res.data as any;
         setDone(
-            `Doctor invoice ${d.statementNumber} raised — ${d.billCount} bill(s), ${inr(d.total)}` +
+            `Consultant invoice ${d.statementNumber} raised — ${d.billCount} bill(s), ${inr(d.total)}` +
                 (d.skipped ? ` · ${d.skipped} skipped (already invoiced)` : ''),
         );
         setReference('');
@@ -205,19 +183,18 @@ export default function DoctorPayoutStatementClient({ doctorId, basePath }: { do
     if (loading && !data) {
         return (
             <div className="p-10 text-center text-gray-400">
-                <Loader2 className="h-6 w-6 animate-spin inline" /> Loading doctor invoicing…
+                <Loader2 className="h-6 w-6 animate-spin inline" /> Loading consultant charges…
             </div>
         );
     }
-    if (!data) return <div className="p-10 text-center text-gray-400">{error || 'Doctor not found.'}</div>;
+    if (!data) return <div className="p-10 text-center text-gray-400">{error || 'Consultant not found.'}</div>;
 
-    const d = data.doctor;
+    const r = data.referrer;
     const printedAt = fmtIstDateTime(new Date());
-    // Nothing ticked yet → the printout falls back to everything on screen.
     const printPatients = selection.patients.length ? selection.patients : patients;
     const printTotals = selection.patients.length
-        ? { net: selection.net, collected: selection.collected, commission: selection.commission, bills: selection.billCount }
-        : { net: data.totals.net, collected: data.totals.collected, commission: data.totals.commission, bills: data.totals.bills };
+        ? { collected: selection.collected, commission: selection.commission, bills: selection.billCount }
+        : { collected: data.totals.collected, commission: data.totals.commission, bills: data.totals.bills };
 
     return (
         <div className="p-6 max-w-7xl mx-auto print:p-0 print:max-w-none">
@@ -236,8 +213,8 @@ export default function DoctorPayoutStatementClient({ doctorId, basePath }: { do
                         )}
                     </div>
                     <div className="text-right">
-                        <div className="text-[9px] uppercase tracking-[0.2em] font-black text-gray-500">Doctor Invoice</div>
-                        <div className="text-base font-black text-black">Professional Fee Statement</div>
+                        <div className="text-[9px] uppercase tracking-[0.2em] font-black text-gray-500">Consultant Charges</div>
+                        <div className="text-base font-black text-black">Consultant Charge Invoice</div>
                         <div className="text-[11px] text-gray-700">Generated: {printedAt}</div>
                     </div>
                 </div>
@@ -245,13 +222,13 @@ export default function DoctorPayoutStatementClient({ doctorId, basePath }: { do
                 <div className="mb-3 flex items-end justify-between text-[12px] text-gray-800">
                     <div>
                         <div>
-                            <span className="font-black text-black">Doctor:</span> {d.name}
-                            {d.specialty ? ` — ${d.specialty}` : ''}
+                            <span className="font-black text-black">Consultant:</span> {r.name}
+                            {r.category ? ` — ${r.category}` : ''}
                         </div>
                         {(from || to) && (
                             <div>
-                                <span className="font-black text-black">Period:</span>{' '}
-                                {from ? fmtIstDate(from) : '—'} to {to ? fmtIstDate(to) : '—'}
+                                <span className="font-black text-black">Period:</span> {from ? fmtIstDate(from) : '—'} to{' '}
+                                {to ? fmtIstDate(to) : '—'}
                             </div>
                         )}
                     </div>
@@ -275,7 +252,6 @@ export default function DoctorPayoutStatementClient({ doctorId, basePath }: { do
                             <th className="py-1.5 pr-2">Bill No.</th>
                             <th className="py-1.5 pr-2">Type</th>
                             <th className="py-1.5 pr-2">Date</th>
-                            <th className="py-1.5 pr-2 text-right">Attributed</th>
                             <th className="py-1.5 pr-2 text-right">Collected</th>
                             <th className="py-1.5 pr-2 text-right">Rate</th>
                             <th className="py-1.5 text-right">Payable</th>
@@ -292,13 +268,10 @@ export default function DoctorPayoutStatementClient({ doctorId, basePath }: { do
                                         <td className="py-1 pr-2">{b.invoice_number}</td>
                                         <td className="py-1 pr-2">{b.invoice_type}</td>
                                         <td className="py-1 pr-2">{fmtIstDate(b.created_at)}</td>
-                                        <td className="py-1 pr-2 text-right">{inr(b.doctor_net)}</td>
-                                        <td className="py-1 pr-2 text-right">{inr(b.doctor_collected)}</td>
+                                        <td className="py-1 pr-2 text-right">{inr(b.collected)}</td>
                                         <td className="py-1 pr-2 text-right">{b.rate_applied ? `${round2(b.rate_applied)}%` : '—'}</td>
                                         <td className="py-1 text-right font-bold">{inr(b.commission_amount)}</td>
                                     </tr>
-                                    {/* Named services behind this bill, each with the rate that applied —
-                                        so the doctor can see exactly what they are being paid for. */}
                                     {(b.services || []).map((s, si) => (
                                         <tr key={`${b.invoice_id}-s${si}`} className="text-[10px] text-gray-600">
                                             <td />
@@ -306,7 +279,6 @@ export default function DoctorPayoutStatementClient({ doctorId, basePath }: { do
                                                 ↳ {s.name}
                                             </td>
                                             <td />
-                                            <td className="py-0.5 pr-2 text-right">{inr(s.net)}</td>
                                             <td className="py-0.5 pr-2 text-right">{inr(s.collected)}</td>
                                             <td className="py-0.5 pr-2 text-right">{s.rate ? `${round2(s.rate)}%` : '—'}</td>
                                             <td className="py-0.5 text-right">{inr(s.amount)}</td>
@@ -321,7 +293,6 @@ export default function DoctorPayoutStatementClient({ doctorId, basePath }: { do
                             <td className="py-2" colSpan={6}>
                                 TOTAL — {printPatients.length} patient(s), {printTotals.bills} bill(s)
                             </td>
-                            <td className="py-2 text-right">{inr(printTotals.net)}</td>
                             <td className="py-2 text-right">{inr(printTotals.collected)}</td>
                             <td />
                             <td className="py-2 text-right">{inr(printTotals.commission)}</td>
@@ -331,7 +302,7 @@ export default function DoctorPayoutStatementClient({ doctorId, basePath }: { do
 
                 <div className="flex justify-between mt-16 text-[12px] text-gray-800">
                     <div className="border-t border-gray-700 pt-1 w-48 text-center">Prepared by</div>
-                    <div className="border-t border-gray-700 pt-1 w-48 text-center">Doctor&apos;s signature</div>
+                    <div className="border-t border-gray-700 pt-1 w-48 text-center">Consultant&apos;s signature</div>
                     <div className="border-t border-gray-700 pt-1 w-48 text-center">Authorised signatory</div>
                 </div>
             </div>
@@ -339,26 +310,20 @@ export default function DoctorPayoutStatementClient({ doctorId, basePath }: { do
             {/* ══ INTERACTIVE WORKSHEET ════════════════════════════════════════ */}
             <div className="print:hidden">
                 <Link
-                    href={`${basePath}/${doctorId}`}
+                    href={`${basePath}/${referrerId}`}
                     className="inline-flex items-center gap-1 text-sm text-gray-400 hover:text-gray-600 mb-4"
                 >
-                    <ArrowLeft className="h-4 w-4" /> Back to doctor
+                    <ArrowLeft className="h-4 w-4" /> Back to consultant
                 </Link>
 
                 <div className="flex items-start justify-between mb-5 flex-wrap gap-4">
                     <div>
                         <h1 className="text-2xl font-black text-gray-800 flex items-center gap-2">
-                            <Wallet className="h-6 w-6 text-indigo-500" /> Doctor Invoicing
+                            <Wallet className="h-6 w-6 text-teal-500" /> Consultant Charges
                         </h1>
                         <div className="flex items-center gap-2 mt-1 text-sm text-gray-500">
-                            <span className="font-bold text-gray-700">{d.name}</span>
-                            {d.specialty && <span>· {d.specialty}</span>}
-                            {data.config?.is_active && data.config.commission_type === 'flat_percent' && data.config.flat_percent != null && (
-                                <span className="text-[11px] text-indigo-500 font-bold">Flat {data.config.flat_percent}%</span>
-                            )}
-                            {!data.config?.is_active && data.default_percent > 0 && (
-                                <span className="text-[11px] text-gray-400 font-bold">Org default {data.default_percent}%</span>
-                            )}
+                            <span className="font-bold text-gray-700">{r.name}</span>
+                            {r.category && <span>· {r.category}</span>}
                         </div>
                     </div>
                     <button
@@ -371,13 +336,12 @@ export default function DoctorPayoutStatementClient({ doctorId, basePath }: { do
                     </button>
                 </div>
 
-                {/* Summary strip */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
                     {[
-                        { label: 'Patients', value: String(data.totals.patients), icon: Users, tone: 'text-indigo-500' },
+                        { label: 'Patients', value: String(data.totals.patients), icon: Users, tone: 'text-teal-500' },
                         { label: 'Bills', value: String(data.totals.bills), icon: FileText, tone: 'text-blue-500' },
-                        { label: 'Collected (doctor share)', value: inr(data.totals.collected), icon: Wallet, tone: 'text-emerald-500' },
-                        { label: 'Payable', value: inr(data.totals.commission), icon: Stethoscope, tone: 'text-violet-500' },
+                        { label: 'Collected', value: inr(data.totals.collected), icon: Wallet, tone: 'text-emerald-500' },
+                        { label: 'Payable', value: inr(data.totals.commission), icon: CheckCircle2, tone: 'text-violet-500' },
                     ].map((c) => (
                         <div key={c.label} className="bg-white rounded-2xl border border-gray-100 p-4">
                             <div className="flex items-center gap-2 text-[10px] uppercase text-gray-400 font-black">
@@ -392,14 +356,12 @@ export default function DoctorPayoutStatementClient({ doctorId, basePath }: { do
                     <div className="mb-4 flex items-start gap-2 rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800">
                         <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
                         <span>
-                            No commission rate is configured for this doctor and the organisation default is 0%, so every
-                            <b> Payable</b> figure below is ₹0. The patients and bills are still correct — set a rate on the
-                            doctor&apos;s profile (or an org default) to compute the payout.
+                            No charge rate is configured for this consultant, so every <b>Payable</b> figure below is ₹0.
+                            The patients and bills are still correct — set a rate on the consultant&apos;s profile to compute the payout.
                         </span>
                     </div>
                 )}
 
-                {/* Filters */}
                 <div className="bg-white rounded-2xl border border-gray-100 p-4 mb-5">
                     <div className="flex items-center gap-2 text-[10px] uppercase text-gray-400 font-black mb-3">
                         <Filter className="h-3.5 w-3.5" /> Filters
@@ -407,25 +369,21 @@ export default function DoctorPayoutStatementClient({ doctorId, basePath }: { do
                     <div className="flex flex-wrap items-end gap-3">
                         <label className="flex flex-col gap-1">
                             <span className="text-[10px] uppercase text-gray-400 font-black">From</span>
-                            <input type="date" value={from} onChange={(e) => setFrom(e.target.value)}
-                                className="px-3 py-2 border border-gray-200 rounded-lg text-sm" />
+                            <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="px-3 py-2 border border-gray-200 rounded-lg text-sm" />
                         </label>
                         <label className="flex flex-col gap-1">
                             <span className="text-[10px] uppercase text-gray-400 font-black">To</span>
-                            <input type="date" value={to} onChange={(e) => setTo(e.target.value)}
-                                className="px-3 py-2 border border-gray-200 rounded-lg text-sm" />
+                            <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="px-3 py-2 border border-gray-200 rounded-lg text-sm" />
                         </label>
                         <label className="flex flex-col gap-1">
                             <span className="text-[10px] uppercase text-gray-400 font-black">Bill type</span>
-                            <select value={invoiceType} onChange={(e) => setInvoiceType(e.target.value)}
-                                className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white">
+                            <select value={invoiceType} onChange={(e) => setInvoiceType(e.target.value)} className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white">
                                 {INVOICE_TYPES.map((t) => <option key={t} value={t}>{t === 'all' ? 'All types' : t}</option>)}
                             </select>
                         </label>
                         <label className="flex flex-col gap-1">
                             <span className="text-[10px] uppercase text-gray-400 font-black">Status</span>
-                            <select value={settlement} onChange={(e) => setSettlement(e.target.value)}
-                                className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white">
+                            <select value={settlement} onChange={(e) => setSettlement(e.target.value)} className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white">
                                 <option value="pending">Not yet invoiced</option>
                                 <option value="invoiced">Already invoiced</option>
                                 <option value="all">All</option>
@@ -462,29 +420,19 @@ export default function DoctorPayoutStatementClient({ doctorId, basePath }: { do
                     </div>
                 )}
                 {error && (
-                    <div className="mb-4 rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm font-bold text-red-600">
-                        {error}
-                    </div>
+                    <div className="mb-4 rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm font-bold text-red-600">{error}</div>
                 )}
 
                 {loading ? (
-                    <div className="p-10 text-center text-gray-400">
-                        <Loader2 className="h-5 w-5 animate-spin inline" /> Loading…
-                    </div>
+                    <div className="p-10 text-center text-gray-400"><Loader2 className="h-5 w-5 animate-spin inline" /> Loading…</div>
                 ) : patients.length === 0 ? (
                     <div className="bg-white rounded-2xl border border-gray-100 p-10 text-center text-gray-400">
-                        No patients found for this doctor with the current filters.
+                        No patients found for this consultant with the current filters.
                     </div>
                 ) : (
                     <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
                         <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100 bg-gray-50/60">
-                            <input
-                                type="checkbox"
-                                checked={allSelected}
-                                onChange={toggleAll}
-                                disabled={selectableBills.length === 0}
-                                aria-label="Select all patients"
-                            />
+                            <input type="checkbox" checked={allSelected} onChange={toggleAll} disabled={selectableBills.length === 0} aria-label="Select all patients" />
                             <span className="text-[11px] uppercase tracking-wider text-gray-400 font-black">
                                 Select all · {patients.length} patient(s), {selectableBills.length} selectable bill(s)
                             </span>
@@ -499,8 +447,7 @@ export default function DoctorPayoutStatementClient({ doctorId, basePath }: { do
                                 const isOpen = expanded.has(p.patient_id);
 
                                 return (
-                                    <div key={p.patient_id} className={isFull || isPartial ? 'bg-indigo-50/40' : ''}>
-                                        {/* Patient row */}
+                                    <div key={p.patient_id} className={isFull || isPartial ? 'bg-teal-50/40' : ''}>
                                         <div className="flex items-center gap-3 px-4 py-3">
                                             <input
                                                 type="checkbox"
@@ -510,10 +457,7 @@ export default function DoctorPayoutStatementClient({ doctorId, basePath }: { do
                                                 disabled={ids.length === 0}
                                                 aria-label={`Select ${p.patient_name}`}
                                             />
-                                            <button
-                                                onClick={() => toggleExpand(p.patient_id)}
-                                                className="flex-1 flex items-center gap-3 text-left min-w-0"
-                                            >
+                                            <button onClick={() => toggleExpand(p.patient_id)} className="flex-1 flex items-center gap-3 text-left min-w-0">
                                                 {isOpen ? <ChevronDown className="h-4 w-4 text-gray-400 shrink-0" /> : <ChevronRight className="h-4 w-4 text-gray-400 shrink-0" />}
                                                 <div className="min-w-0">
                                                     <div className="font-bold text-gray-800 truncate">
@@ -540,7 +484,6 @@ export default function DoctorPayoutStatementClient({ doctorId, basePath }: { do
                                             </div>
                                         </div>
 
-                                        {/* Per-bill breakdown */}
                                         {isOpen && (
                                             <div className="px-4 pb-3 pl-12">
                                                 <table className="w-full text-xs">
@@ -548,65 +491,55 @@ export default function DoctorPayoutStatementClient({ doctorId, basePath }: { do
                                                         <tr>
                                                             <th className="py-2 w-8" />
                                                             <th className="py-2 text-left">Bill</th>
-                                                            <th className="py-2 text-left">Attribution</th>
+                                                            <th className="py-2 text-left">Services</th>
                                                             <th className="py-2 text-left">Date</th>
-                                                            <th className="py-2 text-right">Attributed</th>
                                                             <th className="py-2 text-right">Collected</th>
                                                             <th className="py-2 text-right">Payable</th>
                                                         </tr>
                                                     </thead>
                                                     <tbody className="divide-y divide-gray-50">
-                                                        {p.bills.map((b) => {
-                                                            const badge = ATTRIBUTION_BADGE[b.attribution];
-                                                            return (
-                                                                <tr key={b.invoice_id} className={b.locked ? 'opacity-50' : ''}>
-                                                                    <td className="py-2">
-                                                                        <input
-                                                                            type="checkbox"
-                                                                            checked={selected.has(b.invoice_id)}
-                                                                            onChange={() => toggleBill(b.invoice_id)}
-                                                                            disabled={b.locked}
-                                                                            aria-label={`Select ${b.invoice_number}`}
-                                                                        />
-                                                                    </td>
-                                                                    <td className="py-2">
-                                                                        <div className="font-bold text-gray-700">{b.invoice_number}</div>
-                                                                        <div className="text-gray-400">{b.invoice_type}</div>
-                                                                    </td>
-                                                                    <td className="py-2">
-                                                                        <span className={`inline-block px-2 py-0.5 rounded-full border text-[10px] font-black ${badge.cls}`}>
-                                                                            {badge.label}
-                                                                        </span>
-                                                                        {/* What the doctor is being paid for, and at what rate. */}
-                                                                        {(b.services || []).length > 0 && (
-                                                                            <div className="mt-1 space-y-0.5">
-                                                                                {b.services.map((s, si) => (
-                                                                                    <div key={si} className="text-[10px] text-gray-500 flex items-center gap-1.5">
-                                                                                        <span className="max-w-[200px] truncate" title={s.name}>{s.name}</span>
-                                                                                        <span className="text-gray-300">·</span>
-                                                                                        <span>{inr(s.collected)}</span>
-                                                                                        <span className={`font-bold ${s.rate ? 'text-indigo-500' : 'text-gray-300'}`}>
-                                                                                            @{round2(s.rate)}%
-                                                                                        </span>
-                                                                                        <span className="text-gray-300">=</span>
-                                                                                        <span className="font-bold text-gray-600">{inr(s.amount)}</span>
-                                                                                    </div>
-                                                                                ))}
-                                                                            </div>
-                                                                        )}
-                                                                        {b.locked && (
-                                                                            <div className="text-[10px] text-gray-400 mt-1 inline-flex items-center gap-1">
-                                                                                <Lock className="h-3 w-3" /> {b.commission_status === 'paid' ? 'paid' : 'on a draft invoice'}
-                                                                            </div>
-                                                                        )}
-                                                                    </td>
-                                                                    <td className="py-2 text-gray-500">{fmtIstDate(b.created_at)}</td>
-                                                                    <td className="py-2 text-right text-gray-600">{inr(b.doctor_net)}</td>
-                                                                    <td className="py-2 text-right text-gray-600">{inr(b.doctor_collected)}</td>
-                                                                    <td className="py-2 text-right font-bold text-gray-800">{inr(b.commission_amount)}</td>
-                                                                </tr>
-                                                            );
-                                                        })}
+                                                        {p.bills.map((b) => (
+                                                            <tr key={b.invoice_id} className={b.locked ? 'opacity-50' : ''}>
+                                                                <td className="py-2">
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        checked={selected.has(b.invoice_id)}
+                                                                        onChange={() => toggleBill(b.invoice_id)}
+                                                                        disabled={b.locked}
+                                                                        aria-label={`Select ${b.invoice_number}`}
+                                                                    />
+                                                                </td>
+                                                                <td className="py-2">
+                                                                    <div className="font-bold text-gray-700">{b.invoice_number}</div>
+                                                                    <div className="text-gray-400">{b.invoice_type}</div>
+                                                                </td>
+                                                                <td className="py-2">
+                                                                    {(b.services || []).length === 0 ? (
+                                                                        <span className="text-gray-300">—</span>
+                                                                    ) : (
+                                                                        <div className="space-y-0.5">
+                                                                            {b.services.map((s, si) => (
+                                                                                <div key={si} className="text-[10px] text-gray-500 flex items-center gap-1.5">
+                                                                                    <span className="max-w-[180px] truncate" title={s.name}>{s.name}</span>
+                                                                                    <span className="text-gray-300">·</span>
+                                                                                    <span className={`font-bold ${s.rate ? 'text-teal-600' : 'text-gray-300'}`}>@{round2(s.rate)}%</span>
+                                                                                    <span className="text-gray-300">=</span>
+                                                                                    <span className="font-bold text-gray-600">{inr(s.amount)}</span>
+                                                                                </div>
+                                                                            ))}
+                                                                        </div>
+                                                                    )}
+                                                                    {b.locked && (
+                                                                        <div className="text-[10px] text-gray-400 mt-1 inline-flex items-center gap-1">
+                                                                            <Lock className="h-3 w-3" /> {b.commission_status === 'paid' ? 'paid' : 'on a draft invoice'}
+                                                                        </div>
+                                                                    )}
+                                                                </td>
+                                                                <td className="py-2 text-gray-500">{fmtIstDate(b.created_at)}</td>
+                                                                <td className="py-2 text-right text-gray-600">{inr(b.collected)}</td>
+                                                                <td className="py-2 text-right font-bold text-gray-800">{inr(b.commission_amount)}</td>
+                                                            </tr>
+                                                        ))}
                                                     </tbody>
                                                 </table>
                                             </div>
@@ -616,11 +549,9 @@ export default function DoctorPayoutStatementClient({ doctorId, basePath }: { do
                             })}
                         </div>
 
-                        {/* Action bar — everything here reflects the SELECTION, not the full list */}
                         <div className="flex flex-wrap items-center justify-between gap-4 border-t border-gray-100 bg-gray-50/60 px-4 py-4">
                             <div className="flex flex-wrap items-center gap-3">
-                                <select value={mode} onChange={(e) => setMode(e.target.value)}
-                                    className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white">
+                                <select value={mode} onChange={(e) => setMode(e.target.value)} className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white">
                                     {['Bank Transfer', 'Cash', 'UPI', 'Cheque', 'Other'].map((m) => <option key={m}>{m}</option>)}
                                 </select>
                                 <input
@@ -647,7 +578,7 @@ export default function DoctorPayoutStatementClient({ doctorId, basePath }: { do
                                     className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-500 text-white font-bold text-sm hover:bg-emerald-600 disabled:opacity-40 disabled:cursor-not-allowed"
                                 >
                                     {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
-                                    Raise Doctor Invoice
+                                    Raise Consultant Invoice
                                 </button>
                             </div>
                         </div>

@@ -693,6 +693,29 @@ export async function getInvoiceDetail(invoiceId: number) {
         });
 
         if (!invoice) return { success: false, error: 'Invoice not found' };
+
+        // Attach the rendering doctor's name to any line item that carries one, so
+        // the bill can show WHO performed that specific service (invoice_items only
+        // stores the id). Single lookup for all distinct doctors on the bill.
+        const renderedByIds = [
+            ...new Set(
+                (invoice.items || [])
+                    .map((it: any) => it.rendered_by_doctor_id)
+                    .filter((id: string | null): id is string => !!id),
+            ),
+        ];
+        if (renderedByIds.length) {
+            const docs = await db.user.findMany({
+                where: { id: { in: renderedByIds } },
+                select: { id: true, name: true, username: true },
+            });
+            const nameById = new Map(docs.map((d: any) => [d.id, d.name || d.username]));
+            invoice.items = (invoice.items || []).map((it: any) => ({
+                ...it,
+                rendered_by_name: it.rendered_by_doctor_id ? nameById.get(it.rendered_by_doctor_id) ?? null : null,
+            }));
+        }
+
         return { success: true, data: serialize(invoice) };
     } catch (error: any) {
         console.error('getInvoiceDetail error:', error);

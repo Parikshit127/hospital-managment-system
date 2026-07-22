@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Loader2, FileText, Plus, Check, Trash2 } from 'lucide-react';
+import { ArrowLeft, Loader2, FileText, Plus, Check, Trash2, Wallet } from 'lucide-react';
 import {
     getDoctorCommissionDetail,
     createDoctorPayoutStatement,
@@ -26,12 +26,18 @@ const STATUS_BADGE: Record<string, string> = {
 export default function DoctorCommissionDetailClient({ doctorId, basePath }: { doctorId: string; basePath: string }) {
     const [data, setData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState<string | null>(null);
     const [tab, setTab] = useState<'bills' | 'ledger' | 'statements'>('bills');
 
     const load = async () => {
         setLoading(true);
+        setLoadError(null);
         const res = await getDoctorCommissionDetail(doctorId);
         if (res.success) setData(res.data);
+        // Surface the real reason. This used to fall through to a blanket
+        // "Doctor not found", which hid genuine failures (e.g. a schema/migration
+        // mismatch) behind a message implying the doctor record was missing.
+        else setLoadError(res.error || 'Failed to load doctor');
         setLoading(false);
     };
     useEffect(() => {
@@ -45,7 +51,20 @@ export default function DoctorCommissionDetailClient({ doctorId, basePath }: { d
             </div>
         );
     }
-    if (!data) return <div className="p-10 text-center text-gray-400">Doctor not found.</div>;
+    if (!data) {
+        return (
+            <div className="p-10 text-center">
+                <p className="text-gray-500 font-bold">{loadError ? 'Could not load this doctor' : 'Doctor not found.'}</p>
+                {loadError && <p className="mt-2 text-sm text-red-500 max-w-2xl mx-auto break-words">{loadError}</p>}
+                <button
+                    onClick={load}
+                    className="mt-4 px-4 py-2 rounded-xl border border-gray-200 text-gray-600 font-bold text-sm hover:bg-gray-50"
+                >
+                    Retry
+                </button>
+            </div>
+        );
+    }
 
     const d = data.doctor;
     const totalAccrued = data.commissions
@@ -70,12 +89,23 @@ export default function DoctorCommissionDetailClient({ doctorId, basePath }: { d
                         {!data.config && <span className="text-amber-500 font-bold">No commission config — set one on the list page.</span>}
                     </div>
                 </div>
-                <div className="text-right">
-                    <div className="text-[10px] uppercase text-gray-400 font-black">Outstanding</div>
-                    <div className="text-xl font-black text-gray-800">{inr(totalAccrued - totalPaid)}</div>
-                    <div className="text-[11px] text-gray-400">
-                        {inr(totalAccrued)} accrued · {inr(totalPaid)} paid
+                <div className="flex items-start gap-5">
+                    <div className="text-right">
+                        <div className="text-[10px] uppercase text-gray-400 font-black">Outstanding</div>
+                        <div className="text-xl font-black text-gray-800">{inr(totalAccrued - totalPaid)}</div>
+                        <div className="text-[11px] text-gray-400">
+                            {inr(totalAccrued)} accrued · {inr(totalPaid)} paid
+                        </div>
                     </div>
+                    {/* Entry point to the patient-wise invoicing worksheet. Without this the
+                        page was a dead end — the worksheet was only reachable from a small
+                        icon on the doctors list. */}
+                    <Link
+                        href={`${basePath}/${doctorId}/statement`}
+                        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 text-white font-bold text-sm hover:bg-indigo-700 shadow-sm"
+                    >
+                        <Wallet className="h-4 w-4" /> Raise Doctor Invoice
+                    </Link>
                 </div>
             </div>
 
@@ -98,6 +128,7 @@ export default function DoctorCommissionDetailClient({ doctorId, basePath }: { d
             {tab === 'statements' && (
                 <StatementsTab
                     doctorId={doctorId}
+                    basePath={basePath}
                     statements={data.statements}
                     commissions={data.commissions}
                     doctor={data.doctor}
@@ -151,12 +182,14 @@ function LedgerTab({ commissions }: { commissions: any[] }) {
 
 function StatementsTab({
     doctorId,
+    basePath,
     statements,
     commissions,
     doctor,
     onChange,
 }: {
     doctorId: string;
+    basePath: string;
     statements: any[];
     commissions: any[];
     doctor: any;
@@ -224,13 +257,31 @@ function StatementsTab({
 
     return (
         <div>
-            <div className="flex justify-end mb-3">
-                <button
-                    onClick={() => setShowCreate((s) => !s)}
-                    className="inline-flex items-center gap-1 px-3 py-2 rounded-xl bg-indigo-500 text-white font-bold text-sm hover:bg-indigo-600"
-                >
-                    <Plus className="h-4 w-4" /> New statement
-                </button>
+            {/* Two ways to raise a payout, made explicit — the date-range sweep below
+                takes whatever accrued in a period, while the worksheet lets the biller
+                pick the exact patients to bill for. */}
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+                <p className="text-xs text-gray-400">
+                    Pick patients individually in the{' '}
+                    <Link href={`${basePath}/${doctorId}/statement`} className="font-bold text-indigo-600 hover:underline">
+                        invoicing worksheet
+                    </Link>
+                    , or sweep a whole date range with <span className="font-bold text-gray-500">New statement</span>.
+                </p>
+                <div className="flex items-center gap-2">
+                    <Link
+                        href={`${basePath}/${doctorId}/statement`}
+                        className="inline-flex items-center gap-1 px-3 py-2 rounded-xl border border-indigo-200 text-indigo-600 font-bold text-sm hover:bg-indigo-50"
+                    >
+                        <Wallet className="h-4 w-4" /> Select patients
+                    </Link>
+                    <button
+                        onClick={() => setShowCreate((s) => !s)}
+                        className="inline-flex items-center gap-1 px-3 py-2 rounded-xl bg-indigo-500 text-white font-bold text-sm hover:bg-indigo-600"
+                    >
+                        <Plus className="h-4 w-4" /> New statement
+                    </button>
+                </div>
             </div>
 
             {showCreate && (

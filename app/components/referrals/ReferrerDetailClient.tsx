@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Loader2, FileText, Plus, Check, Trash2 } from 'lucide-react';
+import { ArrowLeft, Loader2, FileText, Plus, Check, Trash2, Wallet } from 'lucide-react';
 import {
     getReferrerDetail,
     createPayoutStatement,
@@ -76,12 +76,21 @@ export default function ReferrerDetailClient({ referrerId, basePath }: { referre
                         {r.email && <span>{r.email}</span>}
                     </div>
                 </div>
-                <div className="text-right">
-                    <div className="text-[10px] uppercase text-gray-400 font-black">Outstanding</div>
-                    <div className="text-xl font-black text-gray-800">{inr(totalAccrued - totalPaid)}</div>
-                    <div className="text-[11px] text-gray-400">
-                        {inr(totalAccrued)} accrued · {inr(totalPaid)} paid
+                <div className="flex items-start gap-5">
+                    <div className="text-right">
+                        <div className="text-[10px] uppercase text-gray-400 font-black">Outstanding</div>
+                        <div className="text-xl font-black text-gray-800">{inr(totalAccrued - totalPaid)}</div>
+                        <div className="text-[11px] text-gray-400">
+                            {inr(totalAccrued)} accrued · {inr(totalPaid)} paid
+                        </div>
                     </div>
+                    {/* Entry point to the patient-wise consultant-charge worksheet. */}
+                    <Link
+                        href={`${basePath}/${referrerId}/statement`}
+                        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-teal-600 text-white font-bold text-sm hover:bg-teal-700 shadow-sm"
+                    >
+                        <Wallet className="h-4 w-4" /> Raise Consultant Invoice
+                    </Link>
                 </div>
             </div>
 

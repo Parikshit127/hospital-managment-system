@@ -351,6 +351,13 @@ export default function InvoiceDetailPage() {
                                                 {Number(item.discount) > 0 && <span className="text-green-600 ml-2">-{fmt(Number(item.discount))}</span>}
                                                 {Number(item.tax_rate) > 0 && <span className="text-gray-400 ml-2">GST {item.tax_rate}%</span>}
                                                 {item.hsn_sac_code && <span className="text-gray-300 ml-2 font-mono">HSN:{item.hsn_sac_code}</span>}
+                                                {/* Who actually performed this line — drives that doctor's payout
+                                                    share, so it belongs on the bill and not only on the charge screen. */}
+                                                {(item.rendered_by_name || item.rendered_by_doctor_id) && (
+                                                    <span className="ml-2 inline-flex items-center rounded-full border border-teal-200 bg-teal-50 px-1.5 py-0.5 text-[10px] font-bold text-teal-700">
+                                                        Rendered by: {formatDoctorName(item.rendered_by_name) || item.rendered_by_doctor_id}
+                                                    </span>
+                                                )}
                                             </div>
                                             <div className="flex items-center gap-2">
                                                 <span className="font-medium text-gray-700">{fmt(Number(item.net_price) + Number(item.tax_amount || 0))}</span>

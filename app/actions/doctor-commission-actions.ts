@@ -3,8 +3,9 @@
 import { z } from 'zod';
 import { requireRoleAndTenant } from '@/backend/tenant';
 import { revalidatePath } from 'next/cache';
-import { backfillDoctorCommissions } from '@/app/lib/doctor-commission';
+import { backfillDoctorCommissions, computeDoctorNetShares, computeCommission, doctorLineShares } from '@/app/lib/doctor-commission';
 import { DOCTOR_SERVICE_TYPES, DOCTOR_COMMISSION_TYPES } from '@/app/lib/doctor-commission-constants';
+import { generateDoctorInvoiceNumber } from '@/app/lib/sequence-generator';
 
 const MANAGE_ROLES = ['admin', 'finance'];
 
@@ -15,10 +16,13 @@ function num(v: unknown): number {
 
 // ── List with aggregates ───────────────────────────────────────────────────
 
-export async function getDoctorCommissionOverview() {
+export async function getDoctorCommissionOverview(opts?: { includeInactive?: boolean }) {
     try {
         const { db, organizationId } = await requireRoleAndTenant(MANAGE_ROLES);
 
+        // Fetch every doctor including inactive ones — the decision to hide a row is
+        // made below, AFTER bill/commission aggregates are known, so that a
+        // deactivated doctor who still has real billing history is never hidden.
         const doctors = await db.user.findMany({
             where: { organizationId, role: 'doctor' },
             select: { id: true, name: true, username: true, specialty: true, is_active: true },
@@ -86,7 +90,21 @@ export async function getDoctorCommissionOverview() {
             });
         }
 
-        const data = doctors.map((d: any) => {
+        // Hide duplicate/retired rows so one doctor never appears twice:
+        //  · "[MERGED] X" — a duplicate already merged into the surviving record.
+        //  · a deactivated doctor with NO bills and NO commission history.
+        // A deactivated doctor who still has billing history is kept (flagged
+        // is_active: false) — hiding it would silently drop real money from the list.
+        const isNoise = (d: any) => {
+            if (opts?.includeInactive) return false;
+            if (/^\s*\[MERGED\]/i.test(d.name || '')) return true;
+            if (d.is_active) return false;
+            const a = aggMap.get(d.id) || { accrued: 0, paid: 0 };
+            const inv = invoiceAggMap.get(d.id) || { bills: 0, business: 0 };
+            return inv.bills === 0 && a.accrued === 0 && a.paid === 0;
+        };
+
+        const data = doctors.filter((d: any) => !isNoise(d)).map((d: any) => {
             const cfg = configMap.get(d.id);
             const a = aggMap.get(d.id) || { accrued: 0, paid: 0 };
             const inv = invoiceAggMap.get(d.id) || { bills: 0, business: 0 };
@@ -127,7 +145,9 @@ type ConfigInput = {
     pan_number?: string;
     bank_account?: string;
     ifsc?: string;
-    service_rates?: Array<{ service_type: string; percent: number | string }>;
+    // service_name omitted/'' => the rate covers the whole service_type bucket;
+    // a name => a rate for that one service, overriding the bucket on matching lines.
+    service_rates?: Array<{ service_type: string; service_name?: string; percent: number | string }>;
 };
 
 function sanitizeConfig(input: ConfigInput) {
@@ -146,9 +166,129 @@ function sanitizeConfig(input: ConfigInput) {
 
 function buildRateRows(input: ConfigInput) {
     if (input.commission_type !== 'per_service' || !Array.isArray(input.service_rates)) return [];
+    const seen = new Set<string>();
     return input.service_rates
         .filter((r) => (DOCTOR_SERVICE_TYPES as readonly string[]).includes(r.service_type))
-        .map((r) => ({ service_type: r.service_type, percent: num(r.percent) }));
+        .map((r) => ({
+            service_type: r.service_type,
+            service_name: (r.service_name ?? '').trim(),
+            percent: num(r.percent),
+        }))
+        // Drop duplicates up front — the unique index is (doctor, type, name) and a
+        // repeated pair would otherwise abort the whole createMany.
+        .filter((r) => {
+            const k = `${r.service_type}::${r.service_name.toLowerCase()}`;
+            if (seen.has(k)) return false;
+            seen.add(k);
+            return true;
+        });
+}
+
+/**
+ * Named services a rate can target — the full service master, in the order the
+ * config screen shows them: the ones this doctor has ACTUALLY billed first
+ * (`performed: true`), then everything else.
+ *
+ * Names come from the service master so they match what lands in
+ * invoice_items.description, which is what the rate is matched against at billing
+ * time. The "performed" flag is derived from real bill lines the doctor is
+ * attributed for — their own bills, bills where they are the admission's attending
+ * doctor, and individual lines they are the rendered-by doctor on.
+ */
+export async function getCommissionServiceOptions(doctorId?: string) {
+    try {
+        const { db, organizationId } = await requireRoleAndTenant(MANAGE_ROLES);
+
+        const services = await (db as any).ipdServiceMaster.findMany({
+            where: { organizationId, is_active: true },
+            select: { service_name: true, service_category: true, default_rate: true },
+            orderBy: [{ service_category: 'asc' }, { service_name: 'asc' }],
+        });
+
+        // Distinct service names appearing on bill lines credited to this doctor.
+        const performed = new Set<string>();
+        if (doctorId) {
+            const lines = await db.invoice_items.findMany({
+                where: {
+                    organizationId,
+                    OR: [
+                        { rendered_by_doctor_id: doctorId },
+                        {
+                            rendered_by_doctor_id: null,
+                            invoice: {
+                                OR: [
+                                    { doctor_id: doctorId },
+                                    { doctor_id: null, admission: { attending_doctor_id: doctorId } },
+                                ],
+                            },
+                        },
+                    ],
+                },
+                select: { description: true },
+                distinct: ['description'],
+                take: 2000,
+            });
+            for (const l of lines) performed.add(String(l.description ?? '').trim().toLowerCase());
+        }
+
+        const data = services.map((s: any) => ({
+            name: s.service_name,
+            category: s.service_category ?? 'Other',
+            rate: num(s.default_rate),
+            performed: performed.has(String(s.service_name ?? '').trim().toLowerCase()),
+        }));
+        // Performed-by-this-doctor first; stable alphabetical within each group.
+        data.sort((a: any, b: any) =>
+            a.performed === b.performed ? a.name.localeCompare(b.name) : a.performed ? -1 : 1,
+        );
+
+        return { success: true, data, performed_count: data.filter((d: any) => d.performed).length };
+    } catch (error) {
+        console.error('getCommissionServiceOptions error:', error);
+        return { success: false, data: [], error: 'Failed to load services' };
+    }
+}
+
+/**
+ * Copy one config to EVERY doctor in the org ("apply for all").
+ * Doctors already carrying a manually-set config are overwritten too — the caller
+ * confirms in the UI first, since that is the point of the button.
+ */
+export async function applyDoctorConfigToAll(input: ConfigInput) {
+    try {
+        const { db, session, organizationId } = await requireRoleAndTenant(MANAGE_ROLES);
+        const data = sanitizeConfig(input);
+        const rates = buildRateRows(input);
+
+        const doctors = await db.user.findMany({
+            where: { organizationId, role: 'doctor', is_active: true },
+            select: { id: true },
+        });
+        if (!doctors.length) return { success: false, error: 'No active doctors found' };
+
+        await (db as any).$transaction(async (tx: any) => {
+            for (const d of doctors) {
+                await tx.doctorCommissionConfig.upsert({
+                    where: { organizationId_doctor_id: { organizationId, doctor_id: d.id } },
+                    create: { organizationId, doctor_id: d.id, ...data, created_by: session?.username ?? null },
+                    update: data,
+                });
+                await tx.doctorServiceRate.deleteMany({ where: { organizationId, doctor_id: d.id } });
+                if (rates.length) {
+                    await tx.doctorServiceRate.createMany({
+                        data: rates.map((r) => ({ organizationId, doctor_id: d.id, ...r })),
+                    });
+                }
+            }
+        });
+
+        revalidatePath('/admin/doctor-invoicing');
+        revalidatePath('/finance/doctor-invoicing');
+        return { success: true, data: { applied: doctors.length } };
+    } catch (error) {
+        console.error('applyDoctorConfigToAll error:', error);
+        return { success: false, error: error instanceof Error ? error.message : 'Failed to apply to all doctors' };
+    }
 }
 
 /** Create or update a doctor's commission config (upsert by doctor). */
@@ -319,7 +459,10 @@ export async function getDoctorCommissionDetail(doctorId: string) {
         };
     } catch (error) {
         console.error('getDoctorCommissionDetail error:', error);
-        return { success: false, error: 'Failed to load doctor' };
+        // Return the real message — a swallowed error here surfaced to the user as
+        // "Doctor not found", which sent debugging down entirely the wrong path.
+        const msg = error instanceof Error ? error.message.split('\n').filter(Boolean).slice(-2).join(' ') : 'Failed to load doctor';
+        return { success: false, error: msg };
     }
 }
 
@@ -646,6 +789,426 @@ export async function settleDoctorCommissions(input: SettleInput) {
     } catch (error) {
         console.error('settleDoctorCommissions error:', error);
         return { success: false, error: error instanceof Error ? error.message : 'Failed to settle invoices' };
+    }
+}
+
+// ── Doctor invoicing — bill/patient driven ────────────────────────────────────
+// The legacy statement above reads the doctor_commissions ledger, so it can only
+// ever show bills that already ACCRUED money. With no commission % configured
+// (the common case) that ledger is empty and the statement claims "everything is
+// settled" while the doctor has hundreds of real patients. The flow below is
+// driven by the BILLS instead: every patient the doctor attended (invoices.doctor_id
+// or the admission's attending doctor) or personally rendered a line item for
+// (invoice_items.rendered_by_doctor_id) is listed, grouped per patient, so the
+// biller can tick the patients to include and raise a doctor invoice for exactly
+// that subset. Commission is shown when configured but never gates visibility.
+
+export type DoctorWorkloadFilters = {
+    from?: string;
+    to?: string;
+    invoice_type?: string;
+    /** all | pending (not yet on any doctor invoice) | invoiced */
+    settlement?: string;
+    search?: string;
+};
+
+type WorkloadBill = {
+    invoice_id: number;
+    invoice_number: string;
+    invoice_type: string;
+    status: string;
+    created_at: Date;
+    bill_net: number;
+    bill_paid: number;
+    /** Portion of the bill's net attributed to THIS doctor. */
+    doctor_net: number;
+    /** Portion of the money actually collected attributed to this doctor. */
+    doctor_collected: number;
+    attribution: 'attending' | 'rendered' | 'both';
+    rendered_services: string[];
+    /** Per-service breakdown of this doctor's share, with the rate applied to each. */
+    services: Array<{ name: string; net: number; collected: number; rate: number; amount: number }>;
+    rate_applied: number;
+    commission_amount: number;
+    commission_status: string | null;
+    /** Already pulled onto a doctor invoice (draft or paid) — not selectable again. */
+    locked: boolean;
+};
+
+/**
+ * Every patient + bill attributable to a doctor, grouped per patient.
+ * Independent of whether a commission row exists.
+ */
+export async function getDoctorStatementWorkload(doctorId: string, filters?: DoctorWorkloadFilters) {
+    try {
+        const { db, organizationId } = await requireRoleAndTenant(MANAGE_ROLES);
+        if (!doctorId) return { success: false, error: 'Doctor is required' };
+
+        const doctor = await db.user.findFirst({
+            where: { id: doctorId, organizationId, role: 'doctor' },
+            select: { id: true, name: true, username: true, specialty: true },
+        });
+        if (!doctor) return { success: false, error: 'Doctor not found' };
+
+        const [org, config, orgConfig] = await Promise.all([
+            db.organization.findUnique({
+                where: { id: organizationId },
+                select: { name: true, address: true, phone: true, license_no: true },
+            }),
+            (db as any).doctorCommissionConfig.findFirst({
+                where: { organizationId, doctor_id: doctorId },
+                include: { service_rates: true },
+            }),
+            (db as any).organizationConfig.findUnique({
+                where: { organizationId },
+                select: { default_doctor_commission_percent: true },
+            }),
+        ]);
+        const defaultPercent = num(orgConfig?.default_doctor_commission_percent);
+
+        // Date window (inclusive of the whole end day).
+        const from = filters?.from ? new Date(filters.from) : null;
+        const to = filters?.to ? new Date(filters.to) : null;
+        if (to) to.setHours(23, 59, 59, 999);
+        const createdFilter =
+            from || to
+                ? { created_at: { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } }
+                : {};
+
+        const where: any = {
+            organizationId,
+            ...createdFilter,
+            OR: [
+                { doctor_id: doctorId },
+                { items: { some: { rendered_by_doctor_id: doctorId } } },
+                // IPD bills often carry no doctor_id — fall back to the admission's
+                // attending doctor so those patients are not silently lost.
+                { doctor_id: null, admission: { attending_doctor_id: doctorId } },
+            ],
+        };
+        if (filters?.invoice_type && filters.invoice_type !== 'all') {
+            where.invoice_type = filters.invoice_type;
+        }
+
+        const invoices = await db.invoices.findMany({
+            where,
+            select: {
+                id: true,
+                invoice_number: true,
+                invoice_type: true,
+                patient_id: true,
+                net_amount: true,
+                paid_amount: true,
+                status: true,
+                created_at: true,
+                doctor_id: true,
+                patient: { select: { full_name: true, phone: true } },
+                admission: { select: { attending_doctor_id: true } },
+                items: {
+                    select: { net_price: true, rendered_by_doctor_id: true, description: true },
+                },
+            },
+            orderBy: { created_at: 'desc' },
+            take: 2000,
+        });
+
+        // Existing ledger rows tell us what is already on a doctor invoice.
+        const existing = await (db as any).doctorCommission.findMany({
+            where: { organizationId, doctor_id: doctorId, invoice_id: { in: invoices.map((i: any) => i.id) } },
+            select: { invoice_id: true, status: true, statement_id: true },
+        });
+        const ledgerByInvoice = new Map<number, any>(existing.map((c: any) => [c.invoice_id, c]));
+
+        const term = (filters?.search || '').trim().toLowerCase();
+
+        const patients = new Map<string, any>();
+        for (const inv of invoices) {
+            if (String(inv.status || '').toLowerCase() === 'cancelled') continue;
+
+            const attendingId = inv.doctor_id ?? inv.admission?.attending_doctor_id ?? null;
+            const { shares, netAmount } = computeDoctorNetShares(inv.items, inv.net_amount, attendingId);
+            const doctorNet = shares.get(doctorId) ?? 0;
+            if (doctorNet <= 0) continue;
+
+            const paid = num(inv.paid_amount);
+            const doctorCollected = netAmount > 0 ? paid * (doctorNet / netAmount) : 0;
+            // Per-line so a named-service rate can override the invoice_type rate.
+            const lineShares = doctorLineShares(inv.items, netAmount, paid, attendingId, doctorId);
+            const activeConfig = config && config.is_active ? config : null;
+            const { rate, amount } = computeCommission(
+                activeConfig,
+                inv.invoice_type,
+                doctorCollected,
+                defaultPercent,
+                lineShares,
+            );
+
+            // Every service on this doctor's share of the bill, with the rate that
+            // actually applied to each — shown on the statement and its printout.
+            const services = lineShares.map((ln) => {
+                const lineRate = activeConfig
+                    ? computeCommission(activeConfig, inv.invoice_type, ln.collected, defaultPercent, [ln]).rate
+                    : defaultPercent;
+                return {
+                    name: ln.description || '—',
+                    net: ln.net,
+                    collected: ln.collected,
+                    rate: lineRate,
+                    amount: (ln.collected * lineRate) / 100,
+                };
+            });
+
+            const renderedServices = inv.items
+                .filter((it: any) => it.rendered_by_doctor_id === doctorId)
+                .map((it: any) => it.description)
+                .filter(Boolean);
+            const isAttending = attendingId === doctorId;
+            const attribution: WorkloadBill['attribution'] =
+                renderedServices.length && isAttending ? 'both' : renderedServices.length ? 'rendered' : 'attending';
+
+            const ledger = ledgerByInvoice.get(inv.id);
+            const locked = !!ledger && ledger.status !== 'accrued' && ledger.status !== 'void';
+
+            if (filters?.settlement === 'pending' && locked) continue;
+            if (filters?.settlement === 'invoiced' && !locked) continue;
+
+            const name = inv.patient?.full_name ?? '';
+            if (term && !(name.toLowerCase().includes(term) || String(inv.patient_id).toLowerCase().includes(term) || String(inv.invoice_number).toLowerCase().includes(term))) {
+                continue;
+            }
+
+            const bill: WorkloadBill = {
+                invoice_id: inv.id,
+                invoice_number: inv.invoice_number,
+                invoice_type: inv.invoice_type,
+                status: inv.status,
+                created_at: inv.created_at,
+                bill_net: netAmount,
+                bill_paid: paid,
+                doctor_net: doctorNet,
+                doctor_collected: doctorCollected,
+                attribution,
+                rendered_services: renderedServices,
+                services,
+                rate_applied: rate,
+                commission_amount: amount,
+                commission_status: ledger?.status ?? null,
+                locked,
+            };
+
+            const key = inv.patient_id;
+            if (!patients.has(key)) {
+                patients.set(key, {
+                    patient_id: key,
+                    patient_name: name,
+                    phone: inv.patient?.phone ?? null,
+                    bills: [] as WorkloadBill[],
+                });
+            }
+            patients.get(key).bills.push(bill);
+        }
+
+        const list = [...patients.values()].map((p: any) => {
+            const bills: WorkloadBill[] = p.bills;
+            return {
+                ...p,
+                visit_count: bills.length,
+                last_visit: bills[0]?.created_at ?? null,
+                total_net: bills.reduce((s, b) => s + b.doctor_net, 0),
+                total_collected: bills.reduce((s, b) => s + b.doctor_collected, 0),
+                total_commission: bills.reduce((s, b) => s + b.commission_amount, 0),
+                selectable_count: bills.filter((b) => !b.locked).length,
+            };
+        });
+        list.sort((a, b) => new Date(b.last_visit ?? 0).getTime() - new Date(a.last_visit ?? 0).getTime());
+
+        const allBills = list.flatMap((p: any) => p.bills as WorkloadBill[]);
+        return {
+            success: true,
+            data: {
+                doctor: { id: doctor.id, name: doctor.name || doctor.username, specialty: doctor.specialty },
+                org: {
+                    name: org?.name ?? 'Hospital OS',
+                    address: org?.address ?? null,
+                    phone: org?.phone ?? null,
+                    license_no: org?.license_no ?? null,
+                },
+                config: config
+                    ? { commission_type: config.commission_type, flat_percent: config.flat_percent, is_active: config.is_active }
+                    : null,
+                default_percent: defaultPercent,
+                // Surfaced so the UI can warn instead of silently showing ₹0 everywhere.
+                commission_configured: !!(config && config.is_active) || defaultPercent > 0,
+                patients: list,
+                totals: {
+                    patients: list.length,
+                    bills: allBills.length,
+                    net: allBills.reduce((s, b) => s + b.doctor_net, 0),
+                    collected: allBills.reduce((s, b) => s + b.doctor_collected, 0),
+                    commission: allBills.reduce((s, b) => s + b.commission_amount, 0),
+                },
+            },
+        };
+    } catch (error) {
+        console.error('getDoctorStatementWorkload error:', error);
+        return { success: false, error: 'Failed to load doctor workload' };
+    }
+}
+
+const doctorInvoiceSchema = z.object({
+    doctorId: z.string().min(1, 'Doctor is required'),
+    invoiceIds: z.array(z.number().int().positive()).min(1, 'Select at least one patient').max(2000),
+    payment_mode: z.string().trim().max(40).optional(),
+    payment_reference: z.string().trim().max(120).optional(),
+    notes: z.string().trim().max(500).optional(),
+    /** true → raise and settle in one step; false → leave as a draft to approve later. */
+    mark_paid: z.boolean().optional(),
+});
+
+export type DoctorInvoiceInput = z.input<typeof doctorInvoiceSchema>;
+
+/**
+ * Raise a doctor invoice for an explicitly chosen set of bills.
+ *
+ * Unlike settleDoctorCommissions (which requires ledger rows to already exist),
+ * this recomputes each bill's doctor share on the spot and upserts the ledger row,
+ * so it works even when nothing has accrued yet — including at a 0% rate, where
+ * the invoice documents the work done without claiming any payout.
+ */
+export async function createDoctorInvoiceForBills(input: DoctorInvoiceInput) {
+    try {
+        const parsed = doctorInvoiceSchema.safeParse(input);
+        if (!parsed.success) {
+            return { success: false, error: parsed.error.issues[0]?.message || 'Invalid request' };
+        }
+        const { doctorId, invoiceIds, payment_mode, payment_reference, notes, mark_paid } = parsed.data;
+        const { db, session, organizationId } = await requireRoleAndTenant(MANAGE_ROLES);
+
+        const statementNumber = await generateDoctorInvoiceNumber(organizationId, db);
+
+        const result = await (db as any).$transaction(async (tx: any) => {
+            const config = await tx.doctorCommissionConfig.findFirst({
+                where: { organizationId, doctor_id: doctorId },
+                include: { service_rates: true },
+            });
+            const orgConfig = await tx.organizationConfig.findUnique({
+                where: { organizationId },
+                select: { default_doctor_commission_percent: true },
+            });
+            const defaultPercent = num(orgConfig?.default_doctor_commission_percent);
+
+            const invoices = await tx.invoices.findMany({
+                where: { id: { in: invoiceIds }, organizationId },
+                select: {
+                    id: true, patient_id: true, invoice_type: true, net_amount: true,
+                    paid_amount: true, status: true, doctor_id: true, created_at: true,
+                    admission: { select: { attending_doctor_id: true } },
+                    items: { select: { net_price: true, rendered_by_doctor_id: true, description: true } },
+                },
+            });
+            if (!invoices.length) throw new Error('None of the selected bills are available');
+
+            // Never re-invoice a bill already sitting on a draft/paid doctor invoice.
+            const already = await tx.doctorCommission.findMany({
+                where: {
+                    organizationId, doctor_id: doctorId,
+                    invoice_id: { in: invoices.map((i: any) => i.id) },
+                    status: { in: ['included_in_statement', 'paid'] },
+                },
+                select: { invoice_id: true },
+            });
+            const lockedIds = new Set(already.map((a: any) => a.invoice_id));
+
+            const eligible = invoices.filter(
+                (i: any) => !lockedIds.has(i.id) && String(i.status || '').toLowerCase() !== 'cancelled',
+            );
+            if (!eligible.length) {
+                throw new Error('Every selected bill is already on a doctor invoice');
+            }
+
+            const dates = eligible.map((i: any) => new Date(i.created_at).getTime());
+            const statement = await tx.doctorPayoutStatement.create({
+                data: {
+                    organizationId,
+                    doctor_id: doctorId,
+                    statement_number: statementNumber,
+                    period_start: new Date(Math.min(...dates)),
+                    period_end: new Date(Math.max(...dates)),
+                    total_commission: '0',
+                    status: mark_paid ? 'paid' : 'draft',
+                    ...(mark_paid
+                        ? { paid_at: new Date(), payment_mode: payment_mode || null, payment_reference: payment_reference || null }
+                        : {}),
+                    notes: notes || null,
+                    created_by: session?.username ?? null,
+                },
+            });
+
+            let total = 0;
+            for (const inv of eligible) {
+                const attendingId = inv.doctor_id ?? inv.admission?.attending_doctor_id ?? null;
+                const { shares, netAmount } = computeDoctorNetShares(inv.items, inv.net_amount, attendingId);
+                const doctorNet = shares.get(doctorId) ?? 0;
+                if (doctorNet <= 0) continue;
+
+                const doctorCollected = netAmount > 0 ? num(inv.paid_amount) * (doctorNet / netAmount) : 0;
+                const { rate, amount } = computeCommission(
+                    config && config.is_active ? config : null,
+                    inv.invoice_type,
+                    doctorCollected,
+                    defaultPercent,
+                    doctorLineShares(inv.items, netAmount, num(inv.paid_amount), attendingId, doctorId),
+                );
+                total += amount;
+
+                const row = {
+                    organizationId,
+                    doctor_id: doctorId,
+                    patient_id: inv.patient_id,
+                    invoice_id: inv.id,
+                    invoice_type: inv.invoice_type,
+                    eligible_base: doctorCollected.toFixed(2),
+                    rate_applied: rate,
+                    commission_amount: amount.toFixed(2),
+                    status: mark_paid ? 'paid' : 'included_in_statement',
+                    statement_id: statement.id,
+                };
+                await tx.doctorCommission.upsert({
+                    where: { invoice_id_doctor_id: { invoice_id: inv.id, doctor_id: doctorId } },
+                    create: row,
+                    update: {
+                        eligible_base: row.eligible_base,
+                        rate_applied: row.rate_applied,
+                        commission_amount: row.commission_amount,
+                        invoice_type: row.invoice_type,
+                        status: row.status,
+                        statement_id: statement.id,
+                    },
+                });
+            }
+
+            await tx.doctorPayoutStatement.update({
+                where: { id: statement.id },
+                data: {
+                    total_commission: total.toFixed(2),
+                    ...(mark_paid ? { paid_amount: total.toFixed(2) } : {}),
+                },
+            });
+
+            return {
+                statementId: statement.id,
+                statementNumber,
+                billCount: eligible.length,
+                skipped: invoices.length - eligible.length,
+                total,
+            };
+        });
+
+        revalidateStatement(doctorId);
+        return { success: true, data: result };
+    } catch (error) {
+        console.error('createDoctorInvoiceForBills error:', error);
+        return { success: false, error: error instanceof Error ? error.message : 'Failed to raise doctor invoice' };
     }
 }
 

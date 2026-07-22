@@ -286,7 +286,7 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
         { label: "All Invoices", href: "/finance/invoices", icon: FileText },
         { label: "Patients (OPD/IPD)", href: "/finance/patients", icon: Users },
         { label: "Payment Ledger", href: "/finance/payments", icon: CreditCard },
-        { label: "Referrals", href: "/finance/referrals", icon: UserCheck },
+        { label: "Consultant Charges", href: "/finance/referrals", icon: UserCheck },
         { label: "Doctor Invoicing", href: "/finance/doctor-invoicing", icon: Stethoscope },
         { label: "Expenses", href: "/finance/expenses", icon: Banknote },
         { label: "Income & Expense", href: "/finance/income-expense", icon: TrendingUp },
