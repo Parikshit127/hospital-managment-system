@@ -48,6 +48,11 @@ const SEGMENT_LABELS: Record<string, string> = {
     'finance-settings': 'Finance Settings',
 };
 
+// Paths that exist only to nest a dynamic child — /admin/billing/patient holds
+// [patientId] and has no page of its own. They still belong in the trail for
+// orientation, but linking them lands the user on a 404.
+const NON_NAVIGABLE_PATHS = new Set(['/admin/billing/patient']);
+
 function labelForSegment(segment: string): string {
     return SEGMENT_LABELS[segment] ?? segment.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
@@ -78,11 +83,17 @@ export default function Breadcrumbs() {
         <nav className="flex items-center gap-1 text-[12px]" aria-label="Breadcrumb">
             {crumbs.map((crumb, i) => {
                 const isLast = i === crumbs.length - 1;
+                const isPlainText = isLast || NON_NAVIGABLE_PATHS.has(crumb.href);
                 return (
                     <span key={crumb.href} className="flex items-center gap-1">
                         {i > 0 && <ChevronRight className="h-3 w-3 text-gray-400 shrink-0" />}
-                        {isLast ? (
-                            <span className="font-medium text-gray-700">{crumb.label}</span>
+                        {isPlainText ? (
+                            // The trailing crumb is the current page, so it reads as
+                            // emphasised; a non-navigable middle crumb keeps the muted
+                            // colour of its neighbours and simply isn't clickable.
+                            <span className={isLast ? 'font-medium text-gray-700' : 'text-gray-400'}>
+                                {crumb.label}
+                            </span>
                         ) : (
                             <Link
                                 href={crumb.href}

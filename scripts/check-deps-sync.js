@@ -26,6 +26,27 @@ const root = path.resolve(__dirname, '..');
 const pkg = readJSON(path.join(root, 'package.json'));
 if (!pkg) process.exit(0);
 
+// Running a Node major outside `engines` breaks in ways that never point back
+// at the Node version. The one that cost us real time was
+//   TypeError: controller[kState].transformAlgorithm is not a function
+// thrown from Node's own web-streams internals on Node 24, with every frame
+// ignore-listed so the stack named nothing in this repo. CI, Docker and EC2 all
+// pin a supported major, so this only ever bites local dev.
+const declaredEngine = pkg.engines?.node || '';
+const declaredMajor = (declaredEngine.match(/(\d+)/) || [])[1];
+const runningMajor = process.versions.node.split('.')[0];
+if (declaredMajor && runningMajor !== declaredMajor) {
+    console.error('\n\x1b[33m┌───────────────────────────────────────────────────────────────────┐\x1b[0m');
+    console.error('\x1b[33m│ ⚠  Unsupported Node version.                                      │\x1b[0m');
+    console.error('\x1b[33m├───────────────────────────────────────────────────────────────────┤\x1b[0m');
+    console.error('\x1b[33m│ \x1b[0m' + `running=v${process.versions.node}  engines=${declaredEngine}`.padEnd(65) + '\x1b[33m │\x1b[0m');
+    console.error('\x1b[33m├───────────────────────────────────────────────────────────────────┤\x1b[0m');
+    console.error('\x1b[33m│ Symptom: TypeError: controller[kState].transformAlgorithm is not  │\x1b[0m');
+    console.error('\x1b[33m│ a function — thrown from Node internals, stack shows no app code. │\x1b[0m');
+    console.error('\x1b[33m│ \x1b[0m' + `Fix:  install Node ${declaredMajor} LTS, then re-run npm install.`.padEnd(65) + '\x1b[33m │\x1b[0m');
+    console.error('\x1b[33m└───────────────────────────────────────────────────────────────────┘\x1b[0m\n');
+}
+
 const declaredPrisma = (pkg.dependencies?.['@prisma/client'] || '').replace(/^[~^]/, '');
 const declaredCli = (pkg.dependencies?.['prisma'] || '').replace(/^[~^]/, '');
 

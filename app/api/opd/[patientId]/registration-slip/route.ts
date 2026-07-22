@@ -155,8 +155,13 @@ function renderOpdSlipHtml(patient: any, appt: any, b: BillBranding, org: any, d
     const genderVal = patient.gender || '';
     const ageAndGender = [ageVal, genderVal].filter(Boolean).join(', ');
 
+    // An org can point logo_url at a file that was never uploaded. Rendering the
+    // hospital name as alt text next to a broken-image icon looks worse than no
+    // logo at all, so fall back to the bundled mark and, failing that, drop the
+    // image entirely — the name is already spelled out beside it.
     const logoSrc = hospital.logoUrl || '/logo.jpeg';
-    const logoHtml = `<img src="${logoSrc}" alt="${esc(hospital.name)}" style="height:65px;width:auto;display:block;object-fit:contain;" />`;
+    const logoFallback = "if(this.dataset.fallback){this.style.display='none'}else{this.dataset.fallback='1';this.src='/logo.jpeg'}";
+    const logoHtml = `<img src="${esc(logoSrc)}" alt="" onerror="${esc(logoFallback)}" style="height:65px;width:auto;display:block;object-fit:contain;" />`;
 
     return `<!DOCTYPE html>
 <html lang="en">
@@ -404,11 +409,16 @@ function renderOpdSlipHtml(patient: any, appt: any, b: BillBranding, org: any, d
             }
             .slip-outer {
                 max-width: 100%;
-                padding: 0;
+                padding: 12mm 15mm;
                 min-height: 100vh;
             }
+            /* Zero page margin is what suppresses the browser's own header and
+               footer — the "OPD Slip — <name>" title, the URL and the print
+               date, none of which belong on a document handed to a patient.
+               The physical margin moves onto .slip-outer above so the layout is
+               unchanged. */
             @page {
-                margin: 12mm 15mm;
+                margin: 0;
             }
             body.hide-letterhead .digital-letterhead-header,
             body.hide-letterhead .digital-letterhead-footer {

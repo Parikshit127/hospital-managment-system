@@ -587,7 +587,9 @@ function Th({
   return (
     <th
       className={`px-2.5 py-2 align-top ${align === "right" ? "text-right" : "text-left"} whitespace-nowrap ${
-        sticky ? "sticky right-0 z-20 bg-gray-50 shadow-[-4px_0_6px_-6px_rgba(0,0,0,0.25)]" : ""
+        sticky
+          ? "sticky right-0 z-20 bg-gray-50 border-l border-gray-200 shadow-[-6px_0_8px_-6px_rgba(0,0,0,0.18)]"
+          : ""
       }`}
     >
       {children}
@@ -607,7 +609,13 @@ function Td({
   return (
     <td
       className={`px-2.5 py-2 ${align === "right" ? "text-right" : "text-left"} whitespace-nowrap ${
-        sticky ? "sticky right-0 z-[5] bg-white group-hover:bg-blue-50/30 shadow-[-4px_0_6px_-6px_rgba(0,0,0,0.25)]" : ""
+        // A sticky cell must be fully opaque or the columns scrolling underneath
+        // show through it. The row's hover tint is bg-blue-50/30, which is 30%
+        // over white — #fafcff is that same colour with no transparency, so the
+        // pinned Actions column matches the row without letting anything bleed.
+        sticky
+          ? "sticky right-0 z-[5] bg-white group-hover:bg-[#fafcff] border-l border-gray-200 shadow-[-6px_0_8px_-6px_rgba(0,0,0,0.18)]"
+          : ""
       }`}
     >
       {children}
