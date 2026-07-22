@@ -130,7 +130,7 @@ body{font-family:'Segoe UI',Arial,sans-serif;color:#1f2937;background:#fff}
     <!-- Letterhead -->
     <div style="border-bottom:3px solid ${accent};padding-bottom:14px;margin-bottom:18px;display:flex;justify-content:space-between;align-items:flex-start;gap:16px;">
         <div>
-            ${b.logoUrl ? `<img src="${esc(b.logoUrl)}" alt="${esc(b.hospitalName)}" style="height:50px;max-width:200px;object-fit:contain;margin-bottom:8px;display:block;" />` : ''}
+            ${b.logoUrl ? `<img src="${esc(b.logoUrl)}" alt="" onerror="this.style.display='none'" style="height:50px;max-width:200px;object-fit:contain;margin-bottom:8px;display:block;" />` : ''}
             <h1 style="font-size:21px;font-weight:800;color:${accent};">${esc(b.hospitalName)}</h1>
             ${b.hospitalAddress ? `<p style="font-size:11px;color:#6b7280;max-width:340px;">${esc(b.hospitalAddress)}</p>` : ''}
             <p style="font-size:11px;color:#6b7280;">${b.hospitalPhone ? `Phone: ${esc(b.hospitalPhone)}` : ''}${b.hospitalPhone && b.hospitalEmail ? ' | ' : ''}${b.hospitalEmail ? `Email: ${esc(b.hospitalEmail)}` : ''}</p>

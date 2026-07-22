@@ -10,16 +10,31 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Inbox, Loader2, RefreshCw, IndianRupee, Clock, XCircle, FileWarning,
-  ArrowDownToLine, AlertTriangle, Plus, X, Printer, Download,
+  ArrowDownToLine, AlertTriangle, Plus, X, Printer, Download, Undo2,
 } from 'lucide-react';
 import { getTpaDeskDashboard, getInsuranceOutstanding, getBillWiseSanction } from '@/app/actions/insurance-aging-actions';
+import { getHospitalBillingInfo } from '@/app/actions/admin-actions';
 import {
   getInsuranceReceiptSummary, listInsuranceReceipts,
-  allocateReceipt, getPendingAdvices, recordAndAllocateReceipt,
+  allocateReceipt, getPendingAdvices, recordAndAllocateReceipt, reverseInsuranceReceipt,
 } from '@/app/actions/insurance-receipts-actions';
 
 const fmt = (n: number) =>
   new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(n || 0));
+
+// Hospital identity for report letterheads. Fetched once per page load and
+// shared, so each tab doesn't re-query it.
+let hospitalCache: any = null;
+function useHospital() {
+  const [hospital, setHospital] = useState<any>(hospitalCache);
+  useEffect(() => {
+    if (hospitalCache) return;
+    getHospitalBillingInfo().then((r: any) => {
+      if (r?.success && r.data) { hospitalCache = r.data; setHospital(r.data); }
+    }).catch(() => { /* letterhead is cosmetic — never block the report */ });
+  }, []);
+  return hospital;
+}
 const INPUT = 'w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500';
 
 const esc = (s: any) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] as string));
@@ -46,17 +61,54 @@ const RECEIPT_PILL: Record<ReceiptState, string> = {
   received: 'bg-emerald-100 text-emerald-700',
 };
 
-// Download the currently-filtered rows as CSV. Excel-safe quoting; what you see
-// on screen is exactly what lands in the file.
-function downloadCsv(filename: string, headers: string[], rows: (string | number)[][]) {
-  const cell = (v: any) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-  const csv = [headers, ...rows].map((r) => r.map(cell).join(',')).join('\r\n');
-  const blob = new Blob([`﻿${csv}`], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = filename;
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+// A column definition shared by the on-screen export paths: `val` returns the
+// RAW value (number stays a number) so Excel can sum it, while the print path
+// formats it for display.
+type ExportCol = { header: string; val: (r: any) => string | number; num?: boolean; width?: number; nowrap?: boolean };
+
+// Export to a real .xlsx rather than CSV. CSV carried no column widths, so Excel
+// collapsed the money columns to "#####", and it had no way to say what the
+// report was. This writes a titled sheet with sized columns and numeric cells.
+async function downloadXlsx(opts: {
+  filename: string; sheetName: string; title: string; hospital?: string;
+  meta: string[]; cols: ExportCol[]; rows: any[]; totals?: (string | number)[];
+}) {
+  const XLSX = await import('xlsx');
+  const { title, hospital, meta, cols, rows, totals } = opts;
+  const width = cols.length;
+  const pad = (arr: (string | number)[]) => [...arr, ...Array(Math.max(0, width - arr.length)).fill('')];
+
+  // Title block so anyone opening the file knows what it is and how it was filtered.
+  const aoa: (string | number)[][] = [];
+  if (hospital) aoa.push(pad([hospital]));
+  aoa.push(pad([title]));
+  meta.filter(Boolean).forEach((m) => aoa.push(pad([m])));
+  aoa.push(pad([`Generated: ${new Date().toLocaleString('en-GB')}`]));
+  aoa.push(pad([]));
+  const headerRowIdx = aoa.length;
+  aoa.push(cols.map((c) => c.header));
+  rows.forEach((r) => aoa.push(cols.map((c) => c.val(r))));
+  if (totals) aoa.push(pad(totals));
+
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = cols.map((c) => ({ wch: c.width ?? Math.max(12, c.header.length + 4) }));
+  // Title lines span the full table width so they read as a heading.
+  ws['!merges'] = aoa.slice(0, headerRowIdx).map((_, i) => ({ s: { r: i, c: 0 }, e: { r: i, c: width - 1 } }));
+
+  // Money cells: real numbers with a thousands separator, so they stay summable
+  // in Excel. (Fonts/fills are deliberately not set — cell styling is a no-op in
+  // the open-source SheetJS build, so it would be dead code.)
+  const range = XLSX.utils.decode_range(ws['!ref'] as string);
+  for (let R = headerRowIdx + 1; R <= range.e.r; R++) {
+    for (let C = 0; C <= range.e.c; C++) {
+      const cell = ws[XLSX.utils.encode_cell({ r: R, c: C })];
+      if (cell && typeof cell.v === 'number' && cols[C]?.num) cell.z = '#,##0.00';
+    }
+  }
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, opts.sheetName.slice(0, 31));
+  XLSX.writeFile(wb, opts.filename);
 }
 
 // Open a print-ready page for a table in a new tab and trigger the print dialog
@@ -65,34 +117,54 @@ function printTable(opts: {
   title: string; subtitle?: string; meta?: string[];
   headers: string[]; align?: ('left' | 'right')[];
   rows: (string | number)[][]; footer?: (string | number)[];
+  hospital?: any; nowrap?: boolean[];
 }) {
-  const { title, subtitle, meta = [], headers, align = [], rows, footer } = opts;
+  const { title, subtitle, meta = [], headers, align = [], rows, footer, hospital, nowrap = [] } = opts;
   const at = (i: number) => align[i] === 'right' ? 'right' : 'left';
+  // Identifiers and money must never be broken across lines — wrapping them was
+  // what made every row three lines tall and the sheet look cramped.
+  const wrapCss = (i: number) => (nowrap[i] || align[i] === 'right') ? 'white-space:nowrap;' : '';
+  // Hospital letterhead — these reports go out to payers and auditors, so they
+  // have to carry the hospital's identity, not just a bare table.
+  const letterhead = hospital?.name ? `
+<div style="border-bottom:3px solid #1e3a6e;padding-bottom:10px;margin-bottom:14px;">
+  <h1 style="font-size:19px;font-weight:800;color:#1e3a6e;">${esc(hospital.name)}</h1>
+  ${hospital.address ? `<p style="font-size:10.5px;color:#6b7280;">${esc(hospital.address)}</p>` : ''}
+  <p style="font-size:10.5px;color:#6b7280;">${hospital.phone ? `Phone: ${esc(hospital.phone)}` : ''}${hospital.phone && hospital.email ? ' | ' : ''}${hospital.email ? `Email: ${esc(hospital.email)}` : ''}${hospital.organization_gstin ? ` | GSTIN: ${esc(hospital.organization_gstin)}` : ''}</p>
+</div>` : '';
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${esc(title)}</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:'Segoe UI',Arial,sans-serif;color:#1f2937;padding:24px}
 h1{font-size:19px;font-weight:800}
-table{width:100%;border-collapse:collapse;margin-top:14px}
-th,td{border:1px solid #e5e7eb;padding:6px 8px;font-size:11px}
-thead th{background:#f1f5f9;font-weight:800;text-transform:uppercase;letter-spacing:.04em;font-size:10px}
-tfoot td{background:#f1f5f9;font-weight:800}
-tbody tr:nth-child(even){background:#fafafa}
+table{width:100%;border-collapse:collapse;margin-top:12px}
+th,td{border:1px solid #e5e7eb;padding:7px 9px;font-size:11px;line-height:1.35}
+thead th{background:#1e3a6e;color:#fff;font-weight:700;text-transform:uppercase;letter-spacing:.04em;font-size:9.5px}
+tfoot td{background:#eef2f7;font-weight:800}
+tbody tr:nth-child(even){background:#fafbfc}
+thead{display:table-header-group}
+tr{page-break-inside:avoid}
 @media print{.no-print{display:none!important}@page{size:A4 landscape;margin:10mm}}
 </style></head><body>
 <div class="no-print" style="text-align:right;margin-bottom:10px;">
-  <button onclick="window.print()" style="padding:9px 22px;background:#2563eb;color:#fff;border:none;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;">Print / Save PDF</button>
+  <button onclick="window.print()" style="padding:9px 22px;background:#1e3a6e;color:#fff;border:none;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;">Print / Save PDF</button>
 </div>
-<h1>${esc(title)}</h1>
-${subtitle ? `<p style="font-size:12px;color:#6b7280;margin-top:2px;">${esc(subtitle)}</p>` : ''}
-${meta.length ? `<p style="font-size:11px;color:#6b7280;margin-top:6px;">${meta.map(esc).join(' &nbsp;·&nbsp; ')}</p>` : ''}
+${letterhead}
+<div style="display:flex;justify-content:space-between;align-items:flex-end;gap:16px;">
+  <div>
+    <h1>${esc(title)}</h1>
+    ${subtitle ? `<p style="font-size:12px;color:#6b7280;margin-top:2px;">${esc(subtitle)}</p>` : ''}
+    ${meta.length ? `<p style="font-size:10.5px;color:#6b7280;margin-top:5px;">${meta.map(esc).join(' &nbsp;·&nbsp; ')}</p>` : ''}
+  </div>
+  <p style="font-size:10px;color:#9ca3af;white-space:nowrap;">Generated: ${esc(new Date().toLocaleString('en-GB'))}</p>
+</div>
 <table>
-<thead><tr>${headers.map((h, i) => `<th style="text-align:${at(i)}">${esc(h)}</th>`).join('')}</tr></thead>
-<tbody>${rows.map((r) => `<tr>${r.map((c, i) => `<td style="text-align:${at(i)}">${esc(c)}</td>`).join('')}</tr>`).join('')
+<thead><tr>${headers.map((h, i) => `<th style="text-align:${at(i)};${wrapCss(i)}">${esc(h)}</th>`).join('')}</tr></thead>
+<tbody>${rows.map((r) => `<tr>${r.map((c, i) => `<td style="text-align:${at(i)};${wrapCss(i)}">${esc(c)}</td>`).join('')}</tr>`).join('')
     || `<tr><td colspan="${headers.length}" style="text-align:center;color:#9ca3af;padding:18px;">No rows</td></tr>`}</tbody>
-${footer ? `<tfoot><tr>${footer.map((c, i) => `<td style="text-align:${at(i)}">${esc(c)}</td>`).join('')}</tr></tfoot>` : ''}
+${footer ? `<tfoot><tr>${footer.map((c, i) => `<td style="text-align:${at(i)};${wrapCss(i)}">${esc(c)}</td>`).join('')}</tr></tfoot>` : ''}
 </table>
-<p style="margin-top:16px;font-size:10px;color:#9ca3af;text-align:center;">Computer-generated report · printed ${esc(new Date().toLocaleString('en-GB'))}</p>
+<p style="margin-top:14px;font-size:10px;color:#9ca3af;text-align:center;">Computer-generated report${hospital?.name ? ` · ${esc(hospital.name)}` : ''}</p>
 <script>window.onload=function(){setTimeout(function(){window.print()},250)}<\/script>
 </body></html>`;
   const w = window.open('', '_blank');
@@ -164,6 +236,7 @@ export function ReceivablesDashboard({ providers = [] }: { providers?: any[] }) 
 // OUTSTANDING & AGING
 // ─────────────────────────────────────────────────────────────────────────────
 export function OutstandingAging({ providers = [] }: { providers?: any[] }) {
+  const hospital = useHospital();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [agingDays, setAgingDays] = useState(60);
@@ -175,26 +248,44 @@ export function OutstandingAging({ providers = [] }: { providers?: any[] }) {
   }, [agingDays, providerId]);
   useEffect(() => { load(); }, [load]);
 
-  const HEADERS = ['Company Name', 'Opening', `Below ${agingDays} Days`, `Above ${agingDays} Days`, 'Unmapped Receipt', 'Balance'];
-  const ALIGN: ('left' | 'right')[] = ['left', 'right', 'right', 'right', 'right', 'right'];
-  const asRows = () => (data?.rows || []).map((r: any) => [
-    r.payer_name, r.opening ? fmt(r.opening) : '-', fmt(r.below), fmt(r.above), fmt(r.unmapped_receipt), fmt(r.balance),
-  ]);
+  const payerLabel = providerId ? (providers.find((p: any) => String(p.id) === providerId)?.provider_name || 'Payer') : 'All payers';
+  const COLS: ExportCol[] = [
+    { header: 'Company Name', val: (r) => r.payer_name || '', width: 40 },
+    { header: 'Opening', val: (r) => Number(r.opening || 0), num: true, width: 15 },
+    { header: `Below ${agingDays} Days`, val: (r) => Number(r.below || 0), num: true, width: 17 },
+    { header: `Above ${agingDays} Days`, val: (r) => Number(r.above || 0), num: true, width: 17 },
+    { header: 'Unmapped Receipt', val: (r) => Number(r.unmapped_receipt || 0), num: true, width: 18 },
+    { header: 'Balance', val: (r) => Number(r.balance || 0), num: true, width: 16 },
+  ];
+  const ALIGN = COLS.map((c) => (c.num ? 'right' : 'left')) as ('left' | 'right')[];
+  const metaLines = [
+    `Payer: ${payerLabel}`,
+    `Aging threshold: ${agingDays} days`,
+    `${data?.rows?.length || 0} payer(s)`,
+  ];
+  const printRows = () => (data?.rows || []).map((r: any) => COLS.map((c) => (c.num ? fmt(c.val(r) as number) : c.val(r))));
   const totalsRow = () => data ? [
-    'TOTAL', data.totals.opening ? fmt(data.totals.opening) : '-', fmt(data.totals.below),
-    fmt(data.totals.above), fmt(data.totals.unmapped_receipt), fmt(data.totals.balance),
+    'TOTAL', Number(data.totals.opening || 0), Number(data.totals.below || 0),
+    Number(data.totals.above || 0), Number(data.totals.unmapped_receipt || 0), Number(data.totals.balance || 0),
   ] : undefined;
+  const printTotals = () => { const t = totalsRow(); return t && t.map((v, i) => (COLS[i]?.num ? fmt(v as number) : v)); };
 
   const handlePrint = () => printTable({
     title: 'Insurance Outstanding & Aging',
-    subtitle: providerId ? (providers.find((p: any) => String(p.id) === providerId)?.provider_name || 'Payer') : 'All payers',
-    meta: [`Aging threshold: ${agingDays} days`, `${data?.rows?.length || 0} payer(s)`],
-    headers: HEADERS, align: ALIGN, rows: asRows(), footer: totalsRow(),
+    subtitle: payerLabel,
+    meta: metaLines.slice(1),
+    headers: COLS.map((c) => c.header), align: ALIGN,
+    nowrap: COLS.map((c) => !!c.nowrap),
+    rows: printRows(), footer: printTotals(), hospital,
   });
-  const handleCsv = () => downloadCsv(
-    `insurance-outstanding-${new Date().toISOString().slice(0, 10)}.csv`,
-    HEADERS, [...asRows(), ...(totalsRow() ? [totalsRow() as any] : [])],
-  );
+  const handleExcel = () => downloadXlsx({
+    filename: `Insurance-Outstanding-${new Date().toISOString().slice(0, 10)}.xlsx`,
+    sheetName: 'Outstanding & Aging',
+    title: 'Insurance Outstanding & Aging',
+    hospital: hospital?.name,
+    meta: metaLines,
+    cols: COLS, rows: data?.rows || [], totals: totalsRow(),
+  });
 
   return (
     <div>
@@ -207,8 +298,8 @@ export function OutstandingAging({ providers = [] }: { providers?: any[] }) {
           {providers.map((p: any) => <option key={p.id} value={p.id}>{p.provider_name}</option>)}
         </select>
         <div className="ml-auto flex items-center gap-3">
-          <button onClick={handleCsv} disabled={!data || data.rows.length === 0} className="flex items-center gap-1.5 rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-bold text-gray-600 hover:bg-gray-50 disabled:opacity-40">
-            <Download className="h-3.5 w-3.5" /> CSV
+          <button onClick={handleExcel} disabled={!data || data.rows.length === 0} className="flex items-center gap-1.5 rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-bold text-gray-600 hover:bg-gray-50 disabled:opacity-40">
+            <Download className="h-3.5 w-3.5" /> Excel
           </button>
           <button onClick={handlePrint} disabled={!data || data.rows.length === 0} className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-blue-700 disabled:opacity-40">
             <Printer className="h-3.5 w-3.5" /> Print
@@ -274,6 +365,10 @@ export function InsuranceReceipts({ providers }: { providers: any[] }) {
   // Allocating an already-recorded (unallocated) receipt is a different job and
   // now hangs off the receipt row itself, where the unmapped money is visible.
   const [allocFor, setAllocFor] = useState<any>(null);
+  // A wrong receipt (fat-fingered amount, bounced transfer) previously had no
+  // undo — the settlement engine has a full reversal routine, but nothing in the
+  // UI reached it, so a mistyped figure permanently settled the bill.
+  const [reverseFor, setReverseFor] = useState<any>(null);
   const [providerId, setProviderId] = useState('');
   const [payerSearch, setPayerSearch] = useState('');
   const [onlyPending, setOnlyPending] = useState(false);
@@ -436,6 +531,12 @@ export function InsuranceReceipts({ providers }: { providers: any[] }) {
                         className="inline-flex items-center rounded-lg border border-gray-300 p-1.5 text-gray-500 hover:bg-gray-50 hover:text-gray-800">
                         <Printer className="h-3.5 w-3.5" />
                       </a>
+                      {r.status !== 'Reversed' && (
+                        <button onClick={() => setReverseFor(r)} title="Reverse this receipt"
+                          className="inline-flex items-center rounded-lg border border-gray-300 p-1.5 text-gray-400 hover:border-rose-300 hover:bg-rose-50 hover:text-rose-600">
+                          <Undo2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -456,6 +557,7 @@ export function InsuranceReceipts({ providers }: { providers: any[] }) {
         />
       )}
       {allocFor && <AllocateModal payer={allocFor} onClose={() => setAllocFor(null)} onSaved={() => { setAllocFor(null); load(); }} />}
+      {reverseFor && <ReverseReceiptModal receipt={reverseFor} onClose={() => setReverseFor(null)} onDone={() => { setReverseFor(null); load(); }} />}
     </div>
   );
 }
@@ -715,6 +817,70 @@ export function NewReceiptModal({ providers, onClose, onSaved, defaultProviderId
   );
 }
 
+// Undo a receipt: unwinds the bill's settlement, voids the payment rows and
+// posts reversing GL entries. Destructive, so it demands a typed reason (the
+// server action rejects a blank one) and spells out what will be undone.
+function ReverseReceiptModal({ receipt, onClose, onDone }: any) {
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [warnings, setWarnings] = useState<string[]>([]);
+
+  const run = async () => {
+    setError(''); setBusy(true);
+    const res: any = await reverseInsuranceReceipt(receipt.id, reason.trim());
+    setBusy(false);
+    if (!res?.success) { setError(res?.error || 'Reversal failed'); return; }
+    if (res.glWarnings?.length) { setWarnings(res.glWarnings); return; }
+    onDone();
+  };
+
+  if (warnings.length) {
+    return (
+      <Modal title="Receipt Reversed — with warnings" onClose={onDone}>
+        <div className="space-y-3">
+          <p className="text-sm text-gray-700">The receipt was reversed, but some ledger entries could not be unwound:</p>
+          <ul className="list-disc space-y-1 pl-5 text-xs text-amber-700">{warnings.map((w, i) => <li key={i}>{w}</li>)}</ul>
+          <p className="text-xs text-gray-500">Pass this to accounts — the bill and payment are already reversed.</p>
+          <div className="flex justify-end"><button onClick={onDone} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white">Close</button></div>
+        </div>
+      </Modal>
+    );
+  }
+
+  return (
+    <Modal title={`Reverse receipt ${receipt.receipt_number}`} onClose={onClose}>
+      {error && <div className="mb-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
+      <div className="space-y-3">
+        <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-xs text-rose-800">
+          <p className="font-bold">This will undo the settlement.</p>
+          <p className="mt-1">
+            The bill(s) go back to <strong>approved / awaiting receipt</strong>, the payment entries are voided,
+            any write-off is cancelled, and reversing entries are posted to the ledger.
+          </p>
+        </div>
+        <div className="rounded-lg border border-gray-200 px-3 py-2 text-xs text-gray-600">
+          <div><span className="text-gray-400">Payer:</span> <strong>{receipt.provider?.provider_name || receipt.corporate?.company_name || '—'}</strong></div>
+          <div><span className="text-gray-400">Amount credited:</span> <strong>{fmt(receipt.total_amount)}</strong></div>
+          <div><span className="text-gray-400">Reference:</span> <span className="font-mono">{receipt.reference_number}</span></div>
+          {receipt.patients?.length ? <div><span className="text-gray-400">Patient(s):</span> {receipt.patients.join(', ')}</div> : null}
+        </div>
+        <Field label="Reason *">
+          <input className={INPUT} autoFocus value={reason} onChange={(e) => setReason(e.target.value)}
+            placeholder="e.g. wrong amount entered, payment bounced" />
+        </Field>
+      </div>
+      <div className="mt-4 flex justify-end gap-2">
+        <button onClick={onClose} className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-bold">Cancel</button>
+        <button onClick={run} disabled={busy || !reason.trim()}
+          className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-bold text-white hover:bg-rose-700 disabled:opacity-50">
+          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Reverse Receipt'}
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
 function AllocateModal({ payer, onClose, onSaved }: any) {
   const [advices, setAdvices] = useState<any[]>([]);
   const [receipts, setReceipts] = useState<any[]>([]);
@@ -826,6 +992,7 @@ function AllocateModal({ payer, onClose, onSaved }: any) {
 // BILL-WISE SANCTION
 // ─────────────────────────────────────────────────────────────────────────────
 export function BillWiseSanction({ providers }: { providers: any[] }) {
+  const hospital = useHospital();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [providerId, setProviderId] = useState('');
@@ -879,35 +1046,52 @@ export function BillWiseSanction({ providers }: { providers: any[] }) {
     outstanding: t.outstanding + Number(r.outstanding || 0),
   }), { claim_amount: 0, sanctioned: 0, received: 0, tds: 0, short_pay: 0, outstanding: 0 });
 
-  const HEADERS = ['Bill #', 'Patient', 'Payer', 'Receipt', 'Claim Amt', 'Sanctioned', 'Received', 'TDS', 'Short-Pay', 'Outstanding', 'Claim Status'];
-  const ALIGN: ('left' | 'right')[] = ['left', 'left', 'left', 'left', 'right', 'right', 'right', 'right', 'right', 'right', 'left'];
-  const asRows = () => rows.map((r: any) => [
-    r.invoice_number, r.patient_name, r.provider_name || 'Unmapped', RECEIPT_LABEL[receiptState(r)],
-    fmt(r.claim_amount), fmt(r.sanctioned), fmt(r.received), fmt(r.tds), fmt(r.short_pay), fmt(r.outstanding),
-    String(r.status || '').replace(/_/g, ' '),
-  ]);
+  const COLS: ExportCol[] = [
+    { header: 'Bill #', val: (r) => r.invoice_number || '', width: 22, nowrap: true },
+    { header: 'Patient', val: (r) => r.patient_name || '', width: 26 },
+    { header: 'Payer', val: (r) => r.provider_name || 'Unmapped', width: 34 },
+    { header: 'Receipt', val: (r) => RECEIPT_LABEL[receiptState(r)], width: 15, nowrap: true },
+    { header: 'Claim Amt', val: (r) => Number(r.claim_amount || 0), num: true, width: 15 },
+    { header: 'Sanctioned', val: (r) => Number(r.sanctioned || 0), num: true, width: 15 },
+    { header: 'Received', val: (r) => Number(r.received || 0), num: true, width: 15 },
+    { header: 'TDS', val: (r) => Number(r.tds || 0), num: true, width: 13 },
+    { header: 'Short-Pay', val: (r) => Number(r.short_pay || 0), num: true, width: 14 },
+    { header: 'Outstanding', val: (r) => Number(r.outstanding || 0), num: true, width: 15 },
+    { header: 'Claim Status', val: (r) => String(r.status || '').replace(/_/g, ' '), width: 17, nowrap: true },
+  ];
+  const ALIGN = COLS.map((c) => (c.num ? 'right' : 'left')) as ('left' | 'right')[];
+  const metaLines = [
+    `Payer: ${payerLabel}`,
+    `Period: ${periodLabel}`,
+    receiptFilter ? `Receipt state: ${RECEIPT_LABEL[receiptFilter]} only` : 'Receipt state: all',
+    `${rows.length} bill(s) — pending ${counts.pending}, part received ${counts.partial}, received ${counts.received}`,
+  ];
+  // Print gets display-formatted text; Excel gets the raw numbers above.
+  const printRows = () => rows.map((r: any) => COLS.map((c) => (c.num ? fmt(c.val(r) as number) : c.val(r))));
   const totalsRow = () => data ? [
     'TOTAL', '', '', '',
-    fmt(totals.claim_amount), fmt(totals.sanctioned), fmt(totals.received),
-    fmt(totals.tds), fmt(totals.short_pay), fmt(totals.outstanding), '',
+    totals.claim_amount, totals.sanctioned, totals.received,
+    totals.tds, totals.short_pay, totals.outstanding, '',
   ] : undefined;
+  const printTotals = () => { const t = totalsRow(); return t && t.map((v, i) => (COLS[i]?.num ? fmt(v as number) : v)); };
 
   const handlePrint = () => printTable({
     title: 'Bill-Wise Sanction Report',
     subtitle: payerLabel,
-    meta: [
-      periodLabel,
-      receiptFilter ? `Receipt: ${RECEIPT_LABEL[receiptFilter]} only` : 'All receipt states',
-      `${rows.length} bill(s)`,
-      `Pending ${counts.pending} · Part ${counts.partial} · Received ${counts.received}`,
-    ],
-    headers: HEADERS, align: ALIGN, rows: asRows(), footer: totalsRow(),
+    meta: metaLines.slice(1),
+    headers: COLS.map((c) => c.header), align: ALIGN,
+    nowrap: COLS.map((c) => !!c.nowrap),
+    rows: printRows(), footer: printTotals(), hospital,
   });
 
-  const handleCsv = () => downloadCsv(
-    `bill-wise-sanction-${new Date().toISOString().slice(0, 10)}.csv`,
-    HEADERS, [...asRows(), ...(totalsRow() ? [totalsRow() as any] : [])],
-  );
+  const handleExcel = () => downloadXlsx({
+    filename: `Bill-Wise-Sanction-${new Date().toISOString().slice(0, 10)}.xlsx`,
+    sheetName: 'Bill-Wise Sanction',
+    title: 'Bill-Wise Sanction Report',
+    hospital: hospital?.name,
+    meta: metaLines,
+    cols: COLS, rows, totals: totalsRow(),
+  });
 
   const busy = loading || !data || rows.length === 0;
 
@@ -934,8 +1118,8 @@ export function BillWiseSanction({ providers }: { providers: any[] }) {
         )}
         <div className="ml-auto flex items-center gap-3">
           {data && <span className="text-xs font-bold text-gray-400">{rows.length} bill(s)</span>}
-          <button onClick={handleCsv} disabled={busy} className="flex items-center gap-1.5 rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-bold text-gray-600 hover:bg-gray-50 disabled:opacity-40">
-            <Download className="h-3.5 w-3.5" /> CSV
+          <button onClick={handleExcel} disabled={busy} className="flex items-center gap-1.5 rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-bold text-gray-600 hover:bg-gray-50 disabled:opacity-40">
+            <Download className="h-3.5 w-3.5" /> Excel
           </button>
           <button onClick={handlePrint} disabled={busy} className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-blue-700 disabled:opacity-40">
             <Printer className="h-3.5 w-3.5" /> Print
