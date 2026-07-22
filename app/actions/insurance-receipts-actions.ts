@@ -421,13 +421,20 @@ export async function recordAndAllocateReceipt(input: {
   }>;
 }) {
   const { lines, settle_gross, ...header } = input;
-  const created: any = await createInsuranceReceipt(header);
-  if (!created?.success) return created;
-  const receiptId = created.data?.id;
 
   const validLines = (lines || []).filter(
     (l) => l && l.invoice_id && (Number(l.allocated_amount || 0) + Number(l.disallowed_amount || 0) + Number(l.tds_amount || 0)) > 0,
   );
+
+  // allocateReceipt ROLLS UP tds_total from the allocation lines (it increments
+  // the header). Seeding the header with the same TDS here as well double-counted
+  // it — the receipt list then showed 2× the real TDS. When lines carry the TDS,
+  // let the allocation be the single source of truth; only the unallocated path
+  // (no lines to roll up from) records TDS on the header directly.
+  const headerForCreate = validLines.length ? { ...header, tds_amount: 0 } : header;
+  const created: any = await createInsuranceReceipt(headerForCreate);
+  if (!created?.success) return created;
+  const receiptId = created.data?.id;
   if (validLines.length === 0 || !receiptId) {
     return { success: true, data: created.data, allocated: 0, receipt_number: created.data?.receipt_number };
   }
@@ -566,6 +573,13 @@ export async function getInsuranceReceiptSummary(filters?: { from?: string; to?:
 // Pending advices list (drill-down): approved claims awaiting receipt.
 export async function getPendingAdvices(providerId?: number) {
   const { db, organizationId } = await requireTenantContext();
+  // NOTE: kept strict on billing_patient_type on purpose. Bill Sanction is
+  // drift-tolerant (it treats any approved claim as a TPA bill), so a bill whose
+  // type drifted off 'tpa_insurance' shows as outstanding there but is absent
+  // here. Widening this filter to match would only surface bills that
+  // allocateReceipt then rejects on its payer-type guard, stranding the money on
+  // an unallocated receipt. Fixing it properly means aligning that guard too —
+  // deliberately out of scope for this change.
   const where: any = {
     organizationId, billing_patient_type: 'tpa_insurance',
     tpa_claim_status: { in: ['approved', 'partially_settled'] }, tpa_payable: { gt: 0 },

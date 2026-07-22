@@ -6,7 +6,7 @@ import Link from 'next/link';
 import * as XLSX from 'xlsx';
 import {
     Shield, Building2, Users, Loader2, ArrowLeft, ExternalLink, Search, BedDouble,
-    Plus, Download, FileText, Receipt,
+    Plus, Download, FileText, Receipt, Printer,
 } from 'lucide-react';
 import { AppShell } from '@/app/components/layout/AppShell';
 import { getInsuranceProviders, getPatientsByProvider, getInsuranceClaims } from '@/app/actions/insurance-actions';
@@ -254,10 +254,10 @@ function ReceiptsTab({ receipts, onExport }: any) {
             <Card>
                 <table className="w-full text-sm">
                     <thead><tr className="bg-gray-50 border-b border-gray-200">
-                        <th className={TH}>Receipt #</th><th className={TH}>Date</th><th className={TH}>Ref No</th><th className={THR}>Received</th><th className={THR}>Claim</th><th className={THR}>Sanctioned</th><th className={THR}>TDS</th><th className={THR}>Svc Chg</th><th className={THR}>Disallowed</th><th className={TH}>Status</th>
+                        <th className={TH}>Receipt #</th><th className={TH}>Date</th><th className={TH}>Ref No</th><th className={THR}>Received</th><th className={THR}>Claim</th><th className={THR}>Sanctioned</th><th className={THR}>TDS</th><th className={THR}>Svc Chg</th><th className={THR}>Disallowed</th><th className={TH}>Status</th><th className={TH}></th>
                     </tr></thead>
                     <tbody className="divide-y divide-gray-100">
-                        {receipts.length === 0 ? <EmptyRow cols={10} msg="No receipts in this period" /> : receipts.map((r: any) => {
+                        {receipts.length === 0 ? <EmptyRow cols={11} msg="No receipts in this period" /> : receipts.map((r: any) => {
                             const disallowed = Math.max(0, Number(r.claim_amount || 0) - Number(r.sanctioned_amount || 0));
                             return (
                                 <tr key={r.id} className="hover:bg-gray-50">
@@ -271,6 +271,12 @@ function ReceiptsTab({ receipts, onExport }: any) {
                                     <td className="px-3 py-3 text-right text-gray-600">{Number(r.service_charge) ? fmtMoney(r.service_charge) : '—'}</td>
                                     <td className="px-3 py-3 text-right text-rose-600">{disallowed ? fmtMoney(disallowed) : '—'}</td>
                                     <td className="px-3 py-3"><span className="text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wide bg-gray-100 text-gray-600">{r.status}</span></td>
+                                    <td className="px-3 py-3">
+                                        <a href={`/api/insurance/receipt/${r.id}/print`} target="_blank" rel="noopener noreferrer" title="Print receipt"
+                                            className="inline-flex items-center p-1.5 text-gray-400 hover:text-gray-700 rounded-lg hover:bg-gray-100">
+                                            <Printer className="h-3.5 w-3.5" />
+                                        </a>
+                                    </td>
                                 </tr>
                             );
                         })}

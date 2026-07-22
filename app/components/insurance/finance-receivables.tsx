@@ -10,7 +10,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Inbox, Loader2, RefreshCw, IndianRupee, Clock, XCircle, FileWarning,
-  ArrowDownToLine, AlertTriangle, Plus, X,
+  ArrowDownToLine, AlertTriangle, Plus, X, Printer, Download,
 } from 'lucide-react';
 import { getTpaDeskDashboard, getInsuranceOutstanding, getBillWiseSanction } from '@/app/actions/insurance-aging-actions';
 import {
@@ -21,6 +21,63 @@ import {
 const fmt = (n: number) =>
   new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(n || 0));
 const INPUT = 'w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500';
+
+const esc = (s: any) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] as string));
+
+// Download the currently-filtered rows as CSV. Excel-safe quoting; what you see
+// on screen is exactly what lands in the file.
+function downloadCsv(filename: string, headers: string[], rows: (string | number)[][]) {
+  const cell = (v: any) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const csv = [headers, ...rows].map((r) => r.map(cell).join(',')).join('\r\n');
+  const blob = new Blob([`﻿${csv}`], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// Open a print-ready page for a table in a new tab and trigger the print dialog
+// (the browser's "Save as PDF" is the PDF path, same as the rest of the app).
+function printTable(opts: {
+  title: string; subtitle?: string; meta?: string[];
+  headers: string[]; align?: ('left' | 'right')[];
+  rows: (string | number)[][]; footer?: (string | number)[];
+}) {
+  const { title, subtitle, meta = [], headers, align = [], rows, footer } = opts;
+  const at = (i: number) => align[i] === 'right' ? 'right' : 'left';
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${esc(title)}</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',Arial,sans-serif;color:#1f2937;padding:24px}
+h1{font-size:19px;font-weight:800}
+table{width:100%;border-collapse:collapse;margin-top:14px}
+th,td{border:1px solid #e5e7eb;padding:6px 8px;font-size:11px}
+thead th{background:#f1f5f9;font-weight:800;text-transform:uppercase;letter-spacing:.04em;font-size:10px}
+tfoot td{background:#f1f5f9;font-weight:800}
+tbody tr:nth-child(even){background:#fafafa}
+@media print{.no-print{display:none!important}@page{size:A4 landscape;margin:10mm}}
+</style></head><body>
+<div class="no-print" style="text-align:right;margin-bottom:10px;">
+  <button onclick="window.print()" style="padding:9px 22px;background:#2563eb;color:#fff;border:none;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;">Print / Save PDF</button>
+</div>
+<h1>${esc(title)}</h1>
+${subtitle ? `<p style="font-size:12px;color:#6b7280;margin-top:2px;">${esc(subtitle)}</p>` : ''}
+${meta.length ? `<p style="font-size:11px;color:#6b7280;margin-top:6px;">${meta.map(esc).join(' &nbsp;·&nbsp; ')}</p>` : ''}
+<table>
+<thead><tr>${headers.map((h, i) => `<th style="text-align:${at(i)}">${esc(h)}</th>`).join('')}</tr></thead>
+<tbody>${rows.map((r) => `<tr>${r.map((c, i) => `<td style="text-align:${at(i)}">${esc(c)}</td>`).join('')}</tr>`).join('')
+    || `<tr><td colspan="${headers.length}" style="text-align:center;color:#9ca3af;padding:18px;">No rows</td></tr>`}</tbody>
+${footer ? `<tfoot><tr>${footer.map((c, i) => `<td style="text-align:${at(i)}">${esc(c)}</td>`).join('')}</tr></tfoot>` : ''}
+</table>
+<p style="margin-top:16px;font-size:10px;color:#9ca3af;text-align:center;">Computer-generated report · printed ${esc(new Date().toLocaleString('en-GB'))}</p>
+<script>window.onload=function(){setTimeout(function(){window.print()},250)}<\/script>
+</body></html>`;
+  const w = window.open('', '_blank');
+  if (!w) { alert('Please allow pop-ups for this site to print the report.'); return; }
+  w.document.write(html);
+  w.document.close();
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // RECEIVABLES DASHBOARD
@@ -96,6 +153,27 @@ export function OutstandingAging({ providers = [] }: { providers?: any[] }) {
   }, [agingDays, providerId]);
   useEffect(() => { load(); }, [load]);
 
+  const HEADERS = ['Company Name', 'Opening', `Below ${agingDays} Days`, `Above ${agingDays} Days`, 'Unmapped Receipt', 'Balance'];
+  const ALIGN: ('left' | 'right')[] = ['left', 'right', 'right', 'right', 'right', 'right'];
+  const asRows = () => (data?.rows || []).map((r: any) => [
+    r.payer_name, r.opening ? fmt(r.opening) : '-', fmt(r.below), fmt(r.above), fmt(r.unmapped_receipt), fmt(r.balance),
+  ]);
+  const totalsRow = () => data ? [
+    'TOTAL', data.totals.opening ? fmt(data.totals.opening) : '-', fmt(data.totals.below),
+    fmt(data.totals.above), fmt(data.totals.unmapped_receipt), fmt(data.totals.balance),
+  ] : undefined;
+
+  const handlePrint = () => printTable({
+    title: 'Insurance Outstanding & Aging',
+    subtitle: providerId ? (providers.find((p: any) => String(p.id) === providerId)?.provider_name || 'Payer') : 'All payers',
+    meta: [`Aging threshold: ${agingDays} days`, `${data?.rows?.length || 0} payer(s)`],
+    headers: HEADERS, align: ALIGN, rows: asRows(), footer: totalsRow(),
+  });
+  const handleCsv = () => downloadCsv(
+    `insurance-outstanding-${new Date().toISOString().slice(0, 10)}.csv`,
+    HEADERS, [...asRows(), ...(totalsRow() ? [totalsRow() as any] : [])],
+  );
+
   return (
     <div>
       <div className="flex flex-wrap items-center gap-3 mb-3">
@@ -106,7 +184,15 @@ export function OutstandingAging({ providers = [] }: { providers?: any[] }) {
           <option value="">All payers</option>
           {providers.map((p: any) => <option key={p.id} value={p.id}>{p.provider_name}</option>)}
         </select>
-        <button onClick={load} className="ml-auto flex items-center gap-1.5 text-xs font-bold text-gray-500 hover:text-gray-700"><RefreshCw className="h-3.5 w-3.5" /> Refresh</button>
+        <div className="ml-auto flex items-center gap-3">
+          <button onClick={handleCsv} disabled={!data || data.rows.length === 0} className="flex items-center gap-1.5 rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-bold text-gray-600 hover:bg-gray-50 disabled:opacity-40">
+            <Download className="h-3.5 w-3.5" /> CSV
+          </button>
+          <button onClick={handlePrint} disabled={!data || data.rows.length === 0} className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-blue-700 disabled:opacity-40">
+            <Printer className="h-3.5 w-3.5" /> Print
+          </button>
+          <button onClick={load} className="flex items-center gap-1.5 text-xs font-bold text-gray-500 hover:text-gray-700"><RefreshCw className="h-3.5 w-3.5" /> Refresh</button>
+        </div>
       </div>
       {loading ? <Spinner /> : !data ? <Empty msg="No data" /> : (
         <div className="overflow-x-auto rounded-2xl border border-gray-200 bg-white shadow-sm">
@@ -159,8 +245,16 @@ export function InsuranceReceipts({ providers }: { providers: any[] }) {
   const [receipts, setReceipts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showNew, setShowNew] = useState(false);
+  // The per-payer RECEIPT button opens the SAME "Record Insurance Receipt" flow
+  // as the New Receipt button — the only difference is the payer arrives
+  // pre-selected, so the biller never re-picks a payer they already clicked.
+  const [receiptForPayer, setReceiptForPayer] = useState<any>(null);
+  // Allocating an already-recorded (unallocated) receipt is a different job and
+  // now hangs off the receipt row itself, where the unmapped money is visible.
   const [allocFor, setAllocFor] = useState<any>(null);
   const [providerId, setProviderId] = useState('');
+  const [payerSearch, setPayerSearch] = useState('');
+  const [onlyPending, setOnlyPending] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -175,18 +269,43 @@ export function InsuranceReceipts({ providers }: { providers: any[] }) {
 
   if (loading) return <Spinner />;
 
+  // Payers awaiting a receipt are the work; payers with nothing pending are
+  // reference. Sort the work to the top instead of listing 25 payers
+  // alphabetically with the actionable ones scattered among them.
+  const q = payerSearch.trim().toLowerCase();
+  const visibleSummary = summary
+    .filter((s: any) => (!q || String(s.provider_name || '').toLowerCase().includes(q))
+      && (!onlyPending || Number(s.pending_advices) > 0))
+    .sort((a: any, b: any) =>
+      Number(b.pending_advices || 0) - Number(a.pending_advices || 0)
+      || String(a.provider_name || '').localeCompare(String(b.provider_name || '')));
+  const pendingPayers = summary.filter((s: any) => Number(s.pending_advices) > 0).length;
+  const sumTotals = visibleSummary.reduce((t: any, s: any) => ({
+    receipts: t.receipts + Number(s.total_receipts || 0),
+    amount: t.amount + Number(s.total_receipt_amount || 0),
+    advices: t.advices + Number(s.pending_advices || 0),
+  }), { receipts: 0, amount: 0, advices: 0 });
+
   return (
     <div className="space-y-5">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-wrap justify-between items-center gap-3">
         <h3 className="text-sm font-black text-gray-700">Insurance Summary</h3>
-        <button onClick={() => setShowNew(true)} className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-blue-700">
-          <Plus className="h-4 w-4" /> New Receipt
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <input value={payerSearch} onChange={(e) => setPayerSearch(e.target.value)} placeholder="Find payer…"
+            className="rounded-md border border-gray-300 px-2 py-1.5 text-sm w-44" />
+          <button onClick={() => setOnlyPending((v) => !v)}
+            className={`rounded-lg border px-2.5 py-1.5 text-xs font-bold transition-colors ${onlyPending ? 'border-amber-300 bg-amber-50 text-amber-700' : 'border-gray-300 text-gray-500 hover:bg-gray-50'}`}>
+            Awaiting receipt{pendingPayers ? ` (${pendingPayers})` : ''}
+          </button>
+          <button onClick={() => setShowNew(true)} className="flex items-center gap-1.5 rounded-xl bg-blue-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-blue-700">
+            <Plus className="h-4 w-4" /> New Receipt
+          </button>
+        </div>
       </div>
 
-      <div className="overflow-x-auto rounded-2xl border border-gray-200 bg-white shadow-sm">
+      <div className="max-h-[52vh] overflow-auto rounded-2xl border border-gray-200 bg-white shadow-sm">
         <table className="min-w-full text-sm">
-          <thead className="bg-slate-50 text-gray-600">
+          <thead className="bg-slate-50 text-gray-600 sticky top-0 z-10" style={{ boxShadow: 'inset 0 -1px 0 #e5e7eb' }}>
             <tr>
               <th className="px-4 py-2.5 text-left font-black text-[11px] uppercase tracking-wider">Insurance / TPA</th>
               <th className="px-4 py-2.5 text-right font-black text-[11px] uppercase tracking-wider">Total Receipts</th>
@@ -196,20 +315,36 @@ export function InsuranceReceipts({ providers }: { providers: any[] }) {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {summary.map((s: any) => (
+            {visibleSummary.map((s: any) => (
               <tr key={s.provider_id} className="hover:bg-slate-50">
                 <td className="px-4 py-2.5 font-bold text-gray-800">{s.provider_name}</td>
                 <td className="px-4 py-2.5 text-right">{s.total_receipts}</td>
                 <td className="px-4 py-2.5 text-right">{fmt(s.total_receipt_amount)}</td>
                 <td className="px-4 py-2.5 text-right">{s.pending_advices > 0 ? <span className="text-amber-600 font-bold">{s.pending_advices}</span> : 0}</td>
                 <td className="px-4 py-2.5 text-right">
-                  <button onClick={() => setAllocFor({ provider_id: s.provider_id, provider_name: s.provider_name })}
+                  <button onClick={() => setReceiptForPayer({ provider_id: s.provider_id, provider_name: s.provider_name })}
+                    title={`Record a receipt for ${s.provider_name}`}
                     className="rounded-lg bg-blue-600 px-3 py-1 text-[11px] font-bold text-white hover:bg-blue-700">RECEIPT</button>
                 </td>
               </tr>
             ))}
-            {summary.length === 0 && <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-400">No payers</td></tr>}
+            {visibleSummary.length === 0 && (
+              <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-400">
+                {summary.length === 0 ? 'No payers' : 'No payers match this filter'}
+              </td></tr>
+            )}
           </tbody>
+          {visibleSummary.length > 0 && (
+            <tfoot className="bg-slate-100 font-black text-gray-800 sticky bottom-0" style={{ boxShadow: 'inset 0 1px 0 #e5e7eb' }}>
+              <tr>
+                <td className="px-4 py-2.5">TOTAL{visibleSummary.length !== summary.length ? ` (${visibleSummary.length} of ${summary.length})` : ''}</td>
+                <td className="px-4 py-2.5 text-right">{sumTotals.receipts}</td>
+                <td className="px-4 py-2.5 text-right">{fmt(sumTotals.amount)}</td>
+                <td className="px-4 py-2.5 text-right">{sumTotals.advices}</td>
+                <td></td>
+              </tr>
+            </tfoot>
+          )}
         </table>
       </div>
 
@@ -221,9 +356,9 @@ export function InsuranceReceipts({ providers }: { providers: any[] }) {
             {providers.map((p: any) => <option key={p.id} value={p.id}>{p.provider_name}</option>)}
           </select>
         </div>
-        <div className="overflow-x-auto rounded-2xl border border-gray-200 bg-white shadow-sm">
+        <div className="max-h-[60vh] overflow-auto rounded-2xl border border-gray-200 bg-white shadow-sm">
           <table className="min-w-full text-sm">
-            <thead className="bg-slate-50 text-gray-600">
+            <thead className="bg-slate-50 text-gray-600 sticky top-0 z-10" style={{ boxShadow: 'inset 0 -1px 0 #e5e7eb' }}>
               <tr>
                 <th className="px-3 py-2.5 text-left font-black text-[11px] uppercase tracking-wider">Receipt #</th>
                 <th className="px-3 py-2.5 text-left font-black text-[11px] uppercase tracking-wider">Date</th>
@@ -237,16 +372,22 @@ export function InsuranceReceipts({ providers }: { providers: any[] }) {
                 <th className="px-3 py-2.5 text-right font-black text-[11px] uppercase tracking-wider">Svc Chg</th>
                 <th className="px-3 py-2.5 text-right font-black text-[11px] uppercase tracking-wider">Disallowed</th>
                 <th className="px-3 py-2.5 text-left font-black text-[11px] uppercase tracking-wider">Status</th>
+                <th className="px-3 py-2.5"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {receipts.map((r: any) => {
                 const disallowed = Math.max(0, Number(r.claim_amount || 0) - Number(r.sanctioned_amount || 0));
+                const unmapped = Number(r.unmapped_amount || 0);
                 return (
                 <tr key={r.id} className="hover:bg-slate-50">
-                  <td className="px-3 py-2.5 font-mono text-xs text-gray-700">{r.receipt_number}</td>
+                  <td className="px-3 py-2.5 font-mono text-xs text-gray-700 whitespace-nowrap">{r.receipt_number}</td>
                   <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{r.receipt_date ? new Date(r.receipt_date).toLocaleDateString('en-GB') : '-'}</td>
-                  <td className="px-3 py-2.5 text-gray-800">{r.provider?.provider_name || r.corporate?.company_name || '-'}</td>
+                  <td className="px-3 py-2.5 text-gray-800 max-w-[150px]">
+                    <span className="block truncate" title={r.provider?.provider_name || r.corporate?.company_name || ''}>
+                      {r.provider?.provider_name || r.corporate?.company_name || '-'}
+                    </span>
+                  </td>
                   <td className="px-3 py-2.5 text-gray-600 text-xs max-w-[180px] truncate" title={(r.patients || []).join(', ')}>
                     {r.patients?.length ? r.patients.join(', ') : <span className="text-gray-300">Unallocated</span>}
                   </td>
@@ -258,15 +399,40 @@ export function InsuranceReceipts({ providers }: { providers: any[] }) {
                   <td className="px-3 py-2.5 text-right text-gray-600">{Number(r.service_charge) ? fmt(r.service_charge) : '—'}</td>
                   <td className="px-3 py-2.5 text-right text-rose-600">{disallowed ? fmt(disallowed) : '—'}</td>
                   <td className="px-3 py-2.5"><StatusPill status={r.status} /></td>
+                  <td className="px-3 py-2.5">
+                    <div className="flex items-center justify-end gap-1.5">
+                      {unmapped > 0 && r.provider_id ? (
+                        <button
+                          onClick={() => setAllocFor({ provider_id: r.provider_id, provider_name: r.provider?.provider_name || 'Payer', receipt_id: r.id })}
+                          title={`₹${fmt(unmapped)} still unmapped — map it to patient bills`}
+                          className="rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-700 hover:bg-amber-100 whitespace-nowrap">
+                          Map ₹{fmt(unmapped)}
+                        </button>
+                      ) : null}
+                      <a href={`/api/insurance/receipt/${r.id}/print`} target="_blank" rel="noopener noreferrer"
+                        title="Print receipt"
+                        className="inline-flex items-center rounded-lg border border-gray-300 p-1.5 text-gray-500 hover:bg-gray-50 hover:text-gray-800">
+                        <Printer className="h-3.5 w-3.5" />
+                      </a>
+                    </div>
+                  </td>
                 </tr>
               );})}
-              {receipts.length === 0 && <tr><td colSpan={12} className="px-4 py-8 text-center text-gray-400">No receipts yet</td></tr>}
+              {receipts.length === 0 && <tr><td colSpan={13} className="px-4 py-8 text-center text-gray-400">No receipts yet</td></tr>}
             </tbody>
           </table>
         </div>
       </div>
 
       {showNew && <NewReceiptModal providers={providers} onClose={() => setShowNew(false)} onSaved={() => { setShowNew(false); load(); }} />}
+      {receiptForPayer && (
+        <NewReceiptModal
+          providers={providers}
+          defaultProviderId={receiptForPayer.provider_id}
+          onClose={() => setReceiptForPayer(null)}
+          onSaved={() => { setReceiptForPayer(null); load(); }}
+        />
+      )}
       {allocFor && <AllocateModal payer={allocFor} onClose={() => setAllocFor(null)} onSaved={() => { setAllocFor(null); load(); }} />}
     </div>
   );
@@ -280,15 +446,20 @@ export function NewReceiptModal({ providers, onClose, onSaved, defaultProviderId
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [partialMsg, setPartialMsg] = useState(''); // receipt saved but mapping failed → recoverable
+  // Saved receipt, kept so the biller can print it immediately instead of
+  // hunting for the row afterwards.
+  const [saved, setSaved] = useState<{ id: number; number: string } | null>(null);
 
   // ── Patient-bill mapping (merged in from the old separate "Allocate" step) ──
   const [advices, setAdvices] = useState<any[]>([]);
   const [advLoading, setAdvLoading] = useState(false);
-  // The biller enters only the cash RECEIVED per bill. TDS (10%) and the
-  // disallowed remainder are derived, so recording a receipt fully settles the
-  // GROSS bill:  Bill = Received + TDS + Disallowed. For each bill the biller also
-  // picks what happens to the disallowed gap — write it off, or recover it from
-  // the patient.
+  // The biller enters the amount the payer SETTLED per bill. TDS (10%) is
+  // withheld out of that amount — it is not added on top — so the bank credit is
+  // Received − TDS, and the rest of the bill is the disallowed gap:
+  //     Bill = Received + Disallowed,  Received = Bank credit + TDS
+  // e.g. bill 69,675 with 50,000 received → TDS 5,000, banked 45,000,
+  // disallowed 19,675. For each bill the biller also picks what happens to the
+  // disallowed gap — write it off, or recover it from the patient.
   const [received, setReceived] = useState<Record<number, string>>({});
   const [dispo, setDispo] = useState<Record<number, 'WriteOff' | 'ToRecover'>>({});
 
@@ -308,12 +479,13 @@ export function NewReceiptModal({ providers, onClose, onSaved, defaultProviderId
   // Bill = the GROSS hospital bill (net_amount).
   const rowCalc = (a: any) => {
     const bill = Number(a.net_amount || 0);
-    const rcv = num(received[a.id]);
-    const tds = round2(rcv * TDS_RATE);
-    const disallowed = round2(Math.max(0, bill - rcv - tds));
+    const rcv = num(received[a.id]);           // gross settled by the payer
+    const tds = round2(rcv * TDS_RATE);        // withheld out of `rcv`
+    const cash = round2(rcv - tds);            // what actually hits the bank
+    const disallowed = round2(Math.max(0, bill - rcv));
     const disposition: 'WriteOff' | 'ToRecover' = dispo[a.id] || 'WriteOff';
-    const invalid = rcv > 0 && rcv + tds - bill > 0.01; // received (+10% TDS) can't exceed the bill
-    return { bill, rcv, tds, disallowed, disposition, invalid };
+    const invalid = rcv > 0 && rcv - bill > 0.01; // can't settle more than the bill
+    return { bill, rcv, tds, cash, disallowed, disposition, invalid };
   };
 
   const rows = advices.map((a: any) => ({ a, ...rowCalc(a) }));
@@ -321,6 +493,7 @@ export function NewReceiptModal({ providers, onClose, onSaved, defaultProviderId
   const totalBill = round2(active.reduce((s, r) => s + r.bill, 0));
   const totalReceived = round2(active.reduce((s, r) => s + r.rcv, 0));
   const totalTds = round2(active.reduce((s, r) => s + r.tds, 0));
+  const totalCash = round2(active.reduce((s, r) => s + r.cash, 0));
   const totalDisallowed = round2(active.reduce((s, r) => s + r.disallowed, 0));
   const totalRecover = round2(active.reduce((s, r) => s + (r.disposition === 'ToRecover' ? r.disallowed : 0), 0));
   const totalWriteOff = round2(totalDisallowed - totalRecover);
@@ -328,14 +501,25 @@ export function NewReceiptModal({ providers, onClose, onSaved, defaultProviderId
 
   const manualReceived = num(form.manual_received); // fallback when the payer has no mapped bills yet
   const hasAdvices = advices.length > 0;
-  const receiptTotal = hasAdvices ? totalReceived : manualReceived;
-  const canSave = !!form.provider_id && !!form.reference_number && !anyInvalid && receiptTotal > 0;
+  // The receipt's own amount is the BANK CREDIT — TDS never reaches the bank, so
+  // it is excluded here. The allocation engine also caps allocated cash at this
+  // total, so sending the gross would over-state the receipt.
+  const receiptTotal = hasAdvices ? totalCash : manualReceived;
+  const canSave = !!form.provider_id && !!form.reference_number.trim() && !anyInvalid && receiptTotal > 0;
+  const blockReason =
+    !form.provider_id ? 'Select the payer to continue'
+      : !form.reference_number.trim() ? 'Enter the reference / UTR number'
+        : anyInvalid ? 'Fix the highlighted received amount'
+          : receiptTotal <= 0 ? (hasAdvices ? 'Enter the amount received against at least one bill' : 'Enter the amount received')
+            : '';
 
   const save = async () => {
     setError(''); setPartialMsg(''); setSaving(true);
+    // allocated_amount is the CASH applied to the bill (a payments row is written
+    // for it), with TDS reported separately. cash + tds + disallowed = bill.
     const payload = active.map((r) => ({
       invoice_id: r.a.id,
-      allocated_amount: r.rcv,
+      allocated_amount: r.cash,
       disallowed_amount: r.disallowed,
       tds_amount: r.tds,
       disposition: r.disposition,
@@ -353,22 +537,50 @@ export function NewReceiptModal({ providers, onClose, onSaved, defaultProviderId
     });
     setSaving(false);
     if (!res?.success) { setError(res?.error || 'Failed to create receipt'); return; }
+    if (res.data?.id) setSaved({ id: res.data.id, number: res.receipt_number || res.data.receipt_number });
     if (res.allocationError) {
       // Money is safely recorded; only the mapping failed. Keep the modal open with
       // a clear amber notice instead of silently closing.
       setPartialMsg(`Receipt ${res.receipt_number} saved, but mapping to bills failed: ${res.allocationError}. The money is recorded (unallocated) — map it via the RECEIPT button.`);
       return;
     }
-    onSaved();
+    // Fully saved: hold the modal open on a short confirmation so the receipt can
+    // be printed straight away. If we somehow have no id to print, just close.
+    if (!res.data?.id) onSaved();
   };
+
+  // Fully-saved confirmation: print now, or close.
+  if (saved && !partialMsg) {
+    return (
+      <Modal title="Receipt Recorded" onClose={onSaved}>
+        <div className="space-y-4">
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+            <p className="text-sm font-bold text-emerald-800">Receipt {saved.number} saved.</p>
+            <p className="mt-0.5 text-xs text-emerald-700">
+              {fmt(receiptTotal)} credited{hasAdvices ? ` · ${active.length} bill(s) settled` : ' · unallocated'}
+              {totalTds > 0 ? ` · TDS ${fmt(totalTds)} withheld by the payer` : ''}
+            </p>
+          </div>
+          <div className="flex justify-end gap-2">
+            <button onClick={onSaved} className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-bold">Done</button>
+            <a href={`/api/insurance/receipt/${saved.id}/print`} target="_blank" rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700">
+              <Printer className="h-4 w-4" /> Print Receipt
+            </a>
+          </div>
+        </div>
+      </Modal>
+    );
+  }
 
   return (
     <Modal title="Record Insurance Receipt" onClose={onClose} wide>
       {error && <div className="mb-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
       {partialMsg && <div className="mb-3 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">{partialMsg}</div>}
       <div className="space-y-3">
-        <Field label="Insurance / TPA">
-          <select value={form.provider_id} onChange={(e) => setForm({ ...form, provider_id: e.target.value })} className={INPUT} disabled={!!defaultProviderId}>
+        <Field label="Insurance / TPA *">
+          <select value={form.provider_id} onChange={(e) => setForm({ ...form, provider_id: e.target.value })}
+            className={`${INPUT} ${defaultProviderId ? 'bg-gray-50 font-bold text-gray-700' : ''}`} disabled={!!defaultProviderId}>
             <option value="">Select payer…</option>
             {providers.map((p: any) => <option key={p.id} value={p.id}>{p.provider_name}</option>)}
           </select>
@@ -379,7 +591,7 @@ export function NewReceiptModal({ providers, onClose, onSaved, defaultProviderId
               {['NEFT', 'RTGS', 'Cheque', 'UPI', 'Other'].map((i) => <option key={i}>{i}</option>)}
             </select>
           </Field>
-          <Field label="Reference / UTR"><input className={INPUT} value={form.reference_number} onChange={(e) => setForm({ ...form, reference_number: e.target.value })} /></Field>
+          <Field label="Reference / UTR *"><input className={INPUT} placeholder="UTR / cheque no." value={form.reference_number} onChange={(e) => setForm({ ...form, reference_number: e.target.value })} /></Field>
           <Field label="Receipt Date"><input type="date" className={INPUT} value={form.receipt_date} onChange={(e) => setForm({ ...form, receipt_date: e.target.value })} /></Field>
         </div>
 
@@ -387,7 +599,7 @@ export function NewReceiptModal({ providers, onClose, onSaved, defaultProviderId
         <div className="rounded-xl border border-blue-200 bg-blue-50/40 p-3 space-y-2">
           <div className="flex items-center justify-between">
             <p className="text-[11px] font-black uppercase tracking-wider text-blue-700">Map to Patient Bills</p>
-            <p className="text-[10px] text-gray-500">Bill = Received + TDS (10%) + Disallowed</p>
+            <p className="text-[10px] text-gray-500">Bill = Received + Disallowed &nbsp;·&nbsp; TDS (10%) is deducted <em>from</em> Received</p>
           </div>
           {!form.provider_id ? (
             <p className="text-xs text-gray-400">Select a payer to see its approved bills awaiting receipt.</p>
@@ -409,21 +621,23 @@ export function NewReceiptModal({ providers, onClose, onSaved, defaultProviderId
                       <th className="px-2 py-1.5 text-right font-bold text-[11px]">Bill Amount</th>
                       <th className="px-2 py-1.5 text-right font-bold text-[11px]">Received</th>
                       <th className="px-2 py-1.5 text-right font-bold text-[11px]">TDS (10%)</th>
+                      <th className="px-2 py-1.5 text-right font-bold text-[11px]">In Bank</th>
                       <th className="px-2 py-1.5 text-right font-bold text-[11px]">Disallowed</th>
                       <th className="px-2 py-1.5 text-left font-bold text-[11px]">Disallowed gap →</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {rows.map(({ a, bill, rcv, tds, disallowed, disposition, invalid }) => (
+                    {rows.map(({ a, bill, rcv, tds, cash, disallowed, disposition, invalid }) => (
                       <tr key={a.id} className={invalid ? 'bg-red-50' : ''}>
-                        <td className="px-2 py-1 font-mono text-[11px]">{a.invoice_number}</td>
-                        <td className="px-2 py-1 text-xs">{a.patient?.full_name || a.patient_id}</td>
+                        <td className="px-2 py-1 font-mono text-[11px] whitespace-nowrap">{a.invoice_number}</td>
+                        <td className="px-2 py-1 text-xs whitespace-nowrap">{a.patient?.full_name || a.patient_id}</td>
                         <td className="px-2 py-1 text-right text-xs font-semibold">{fmt(bill)}</td>
                         <td className="px-2 py-1">
                           <input type="number" className={`w-24 rounded border px-1.5 py-0.5 text-right text-xs ${invalid ? 'border-red-400' : 'border-gray-300'}`}
                             value={received[a.id] || ''} onChange={(e) => setReceived((p) => ({ ...p, [a.id]: e.target.value }))} />
                         </td>
                         <td className="px-2 py-1 text-right text-xs text-gray-500">{rcv > 0 ? fmt(tds) : '—'}</td>
+                        <td className="px-2 py-1 text-right text-xs font-semibold text-gray-700">{rcv > 0 ? fmt(cash) : '—'}</td>
                         <td className="px-2 py-1 text-right text-xs text-rose-600">{rcv > 0 ? fmt(disallowed) : '—'}</td>
                         <td className="px-2 py-1">
                           {rcv > 0 && disallowed > 0 ? (
@@ -439,12 +653,13 @@ export function NewReceiptModal({ providers, onClose, onSaved, defaultProviderId
                   </tbody>
                 </table>
               </div>
-              {anyInvalid && <p className="text-[11px] text-red-600">Received + 10% TDS cannot exceed the bill amount — reduce the received value.</p>}
+              {anyInvalid && <p className="text-[11px] text-red-600">Received cannot exceed the bill amount — reduce the received value.</p>}
               {totalReceived > 0 && (
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-gray-600">
                   <span>Bill <strong>{fmt(totalBill)}</strong></span>
                   <span>Received <strong className="text-gray-900">{fmt(totalReceived)}</strong></span>
                   <span>TDS <strong>{fmt(totalTds)}</strong></span>
+                  <span>In bank <strong className="text-gray-900">{fmt(totalCash)}</strong></span>
                   <span>Disallowed <strong className="text-rose-600">{fmt(totalDisallowed)}</strong></span>
                   {totalWriteOff > 0 && <span>· written off <strong>{fmt(totalWriteOff)}</strong></span>}
                   {totalRecover > 0 && <span>· from patient <strong className="text-amber-700">{fmt(totalRecover)}</strong></span>}
@@ -457,7 +672,15 @@ export function NewReceiptModal({ providers, onClose, onSaved, defaultProviderId
 
         <Field label="Remarks"><input className={INPUT} value={form.remarks} onChange={(e) => setForm({ ...form, remarks: e.target.value })} /></Field>
       </div>
-      <div className="mt-4 flex justify-end gap-2">
+      <div className="mt-4 flex items-center justify-end gap-3">
+        {/* Say WHY Save is greyed out instead of leaving the biller guessing. */}
+        {!partialMsg && !canSave && <span className="mr-auto text-[11px] font-bold text-amber-600">{blockReason}</span>}
+        {partialMsg && saved && (
+          <a href={`/api/insurance/receipt/${saved.id}/print`} target="_blank" rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-4 py-2 text-sm font-bold text-gray-600 hover:bg-gray-50">
+            <Printer className="h-4 w-4" /> Print Receipt
+          </a>
+        )}
         <button onClick={partialMsg ? onSaved : onClose} className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-bold">{partialMsg ? 'Close' : 'Cancel'}</button>
         {!partialMsg && (
           <button onClick={save} disabled={saving || !canSave}
@@ -482,12 +705,21 @@ function AllocateModal({ payer, onClose, onSaved }: any) {
   useEffect(() => {
     Promise.all([
       getPendingAdvices(payer.provider_id),
-      listInsuranceReceipts({ payer_type: 'tpa_insurance', provider_id: payer.provider_id, status: 'Open' }),
+      // Any receipt with money still unmapped is allocatable — not just status
+      // 'Open'. A PartiallyAllocated receipt still has a balance to map.
+      listInsuranceReceipts({ payer_type: 'tpa_insurance', provider_id: payer.provider_id }),
     ]).then(([a, r]: any[]) => {
       if (a?.success) setAdvices(a.data);
-      if (r?.success) { setReceipts(r.data); if (r.data?.[0]) setReceiptId(String(r.data[0].id)); }
+      if (r?.success) {
+        r = { ...r, data: (r.data || []).filter((x: any) => Number(x.unmapped_amount || 0) > 0) };
+        setReceipts(r.data);
+        // Opened from a specific receipt row → pre-select that receipt; otherwise
+        // fall back to the most recent open one.
+        const preset = payer.receipt_id && r.data?.some((x: any) => x.id === payer.receipt_id) ? payer.receipt_id : r.data?.[0]?.id;
+        if (preset) setReceiptId(String(preset));
+      }
     }).finally(() => setLoading(false));
-  }, [payer.provider_id]);
+  }, [payer.provider_id, payer.receipt_id]);
 
   const setLine = (id: number, field: 'allocated' | 'disallowed' | 'tds', val: string) =>
     setLines((p) => {
@@ -576,20 +808,59 @@ export function BillWiseSanction({ providers }: { providers: any[] }) {
   const [loading, setLoading] = useState(true);
   const [providerId, setProviderId] = useState('');
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [status, setStatus] = useState('');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
+
+  // Typing in the search box used to fire a query per keystroke; debounce it so
+  // a bill number can be typed out without hammering the server.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search.trim()), 350);
+    return () => clearTimeout(t);
+  }, [search]);
 
   const load = useCallback(() => {
     setLoading(true);
     getBillWiseSanction({
       provider_id: providerId ? Number(providerId) : undefined,
-      search: search || undefined,
+      search: debouncedSearch || undefined,
+      status: status || undefined,
       from: from || undefined,
       to: to || undefined,
     })
       .then((r: any) => { if (r?.success) setData(r.data); }).finally(() => setLoading(false));
-  }, [providerId, search, from, to]);
+  }, [providerId, debouncedSearch, status, from, to]);
   useEffect(() => { load(); }, [load]);
+
+  const payerLabel = providerId ? (providers.find((p: any) => String(p.id) === providerId)?.provider_name || 'Payer') : 'All payers';
+  const periodLabel = from || to ? `${from || '…'} to ${to || '…'}` : 'All dates';
+  const HEADERS = ['Bill #', 'Patient', 'Payer', 'Claim #', 'Claim Amt', 'Sanctioned', 'Received', 'TDS', 'Short-Pay', 'Outstanding', 'Status'];
+  const ALIGN: ('left' | 'right')[] = ['left', 'left', 'left', 'left', 'right', 'right', 'right', 'right', 'right', 'right', 'left'];
+  const asRows = () => (data?.rows || []).map((r: any) => [
+    r.invoice_number, r.patient_name, r.provider_name || 'Unmapped', r.claim_number || '-',
+    fmt(r.claim_amount), fmt(r.sanctioned), fmt(r.received), fmt(r.tds), fmt(r.short_pay), fmt(r.outstanding),
+    String(r.status || '').replace(/_/g, ' '),
+  ]);
+  const totalsRow = () => data ? [
+    'TOTAL', '', '', '',
+    fmt(data.totals.claim_amount), fmt(data.totals.sanctioned), fmt(data.totals.received),
+    fmt(data.totals.tds), fmt(data.totals.short_pay), fmt(data.totals.outstanding), '',
+  ] : undefined;
+
+  const handlePrint = () => printTable({
+    title: 'Bill-Wise Sanction Report',
+    subtitle: payerLabel,
+    meta: [periodLabel, status ? `Status: ${status.replace(/_/g, ' ')}` : 'All statuses', `${data?.rows?.length || 0} bill(s)`],
+    headers: HEADERS, align: ALIGN, rows: asRows(), footer: totalsRow(),
+  });
+
+  const handleCsv = () => downloadCsv(
+    `bill-wise-sanction-${new Date().toISOString().slice(0, 10)}.csv`,
+    HEADERS, [...asRows(), ...(totalsRow() ? [totalsRow() as any] : [])],
+  );
+
+  const busy = loading || !data || data.rows.length === 0;
 
   return (
     <div>
@@ -598,19 +869,41 @@ export function BillWiseSanction({ providers }: { providers: any[] }) {
           <option value="">All payers</option>
           {providers.map((p: any) => <option key={p.id} value={p.id}>{p.provider_name}</option>)}
         </select>
+        <select value={status} onChange={(e) => setStatus(e.target.value)} className="rounded-md border border-gray-300 px-2 py-1.5 text-sm">
+          <option value="">All statuses</option>
+          {['not_submitted', 'submitted', 'under_review', 'approved', 'partially_settled', 'settled', 'rejected'].map((s) => (
+            <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>
+          ))}
+        </select>
         <input placeholder="Search bill / claim #" value={search} onChange={(e) => setSearch(e.target.value)} className="rounded-md border border-gray-300 px-2 py-1.5 text-sm" />
         <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="rounded-md border border-gray-300 px-2 py-1.5 text-sm" />
         <span className="text-xs text-gray-400">to</span>
         <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="rounded-md border border-gray-300 px-2 py-1.5 text-sm" />
-        <button onClick={load} className="ml-auto flex items-center gap-1.5 text-xs font-bold text-gray-500 hover:text-gray-700"><RefreshCw className="h-3.5 w-3.5" /> Refresh</button>
+        {(providerId || status || search || from || to) && (
+          <button onClick={() => { setProviderId(''); setStatus(''); setSearch(''); setFrom(''); setTo(''); }}
+            className="text-xs font-bold text-gray-400 hover:text-gray-700 underline">Clear</button>
+        )}
+        <div className="ml-auto flex items-center gap-3">
+          {data && <span className="text-xs font-bold text-gray-400">{data.rows.length} bill(s)</span>}
+          <button onClick={handleCsv} disabled={busy} className="flex items-center gap-1.5 rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-bold text-gray-600 hover:bg-gray-50 disabled:opacity-40">
+            <Download className="h-3.5 w-3.5" /> CSV
+          </button>
+          <button onClick={handlePrint} disabled={busy} className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-blue-700 disabled:opacity-40">
+            <Printer className="h-3.5 w-3.5" /> Print
+          </button>
+          <button onClick={load} className="flex items-center gap-1.5 text-xs font-bold text-gray-500 hover:text-gray-700"><RefreshCw className="h-3.5 w-3.5" /> Refresh</button>
+        </div>
       </div>
       {loading ? <Spinner /> : !data ? <Empty msg="No data" /> : (
-        <div className="overflow-x-auto rounded-2xl border border-gray-200 bg-white shadow-sm">
+        // Capped height + sticky header: with 50+ bills the column headings used
+        // to scroll away, leaving a wall of unlabelled numbers.
+        <div className="max-h-[65vh] overflow-auto rounded-2xl border border-gray-200 bg-white shadow-sm">
           <table className="min-w-full text-sm">
-            <thead className="bg-slate-50 text-gray-600">
+            <thead className="bg-slate-50 text-gray-600 sticky top-0 z-10" style={{ boxShadow: 'inset 0 -1px 0 #e5e7eb' }}>
               <tr>
                 <th className="px-3 py-2.5 text-left font-black text-[11px] uppercase tracking-wider">Bill #</th>
                 <th className="px-3 py-2.5 text-left font-black text-[11px] uppercase tracking-wider">Patient</th>
+                <th className="px-3 py-2.5 text-left font-black text-[11px] uppercase tracking-wider">Payer</th>
                 <th className="px-3 py-2.5 text-left font-black text-[11px] uppercase tracking-wider">Claim #</th>
                 <th className="px-3 py-2.5 text-right font-black text-[11px] uppercase tracking-wider">Claim Amt</th>
                 <th className="px-3 py-2.5 text-right font-black text-[11px] uppercase tracking-wider">Sanctioned</th>
@@ -624,9 +917,16 @@ export function BillWiseSanction({ providers }: { providers: any[] }) {
             <tbody className="divide-y divide-gray-100">
               {data.rows.map((r: any) => (
                 <tr key={r.invoice_id} className="hover:bg-slate-50">
-                  <td className="px-3 py-2 font-mono text-xs">{r.invoice_number}</td>
-                  <td className="px-3 py-2">{r.patient_name}</td>
-                  <td className="px-3 py-2 text-gray-500">{r.claim_number || '-'}</td>
+                  {/* Bill numbers and patient names are identifiers — wrapping
+                      them across three lines made every row three rows tall. */}
+                  <td className="px-3 py-2 font-mono text-xs whitespace-nowrap">{r.invoice_number}</td>
+                  <td className="px-3 py-2 whitespace-nowrap">{r.patient_name}</td>
+                  {/* An approved bill with no payer attached can never be
+                      receipted — call it out rather than showing a blank cell. */}
+                  <td className="px-3 py-2 max-w-[150px]">{r.provider_name
+                    ? <span className="text-gray-700 block truncate" title={r.provider_name}>{r.provider_name}</span>
+                    : <span className="text-amber-600 font-bold text-xs">Unmapped</span>}</td>
+                  <td className="px-3 py-2 text-gray-500 whitespace-nowrap">{r.claim_number || '-'}</td>
                   <td className="px-3 py-2 text-right">{fmt(r.claim_amount)}</td>
                   <td className="px-3 py-2 text-right">{fmt(r.sanctioned)}</td>
                   <td className="px-3 py-2 text-right">{fmt(r.received)}</td>
@@ -636,11 +936,13 @@ export function BillWiseSanction({ providers }: { providers: any[] }) {
                   <td className="px-3 py-2"><StatusPill status={r.status} /></td>
                 </tr>
               ))}
-              {data.rows.length === 0 && <tr><td colSpan={10} className="px-4 py-8 text-center text-gray-400">No bills</td></tr>}
+              {data.rows.length === 0 && <tr><td colSpan={11} className="px-4 py-8 text-center text-gray-400">No bills</td></tr>}
             </tbody>
-            <tfoot className="bg-slate-100 font-black text-gray-800">
+            {/* Totals pinned to the bottom of the scroll box — otherwise you
+                have to scroll past every bill to see what they add up to. */}
+            <tfoot className="bg-slate-100 font-black text-gray-800 sticky bottom-0" style={{ boxShadow: 'inset 0 1px 0 #e5e7eb' }}>
               <tr>
-                <td className="px-3 py-2.5" colSpan={3}>TOTAL</td>
+                <td className="px-3 py-2.5" colSpan={4}>TOTAL</td>
                 <td className="px-3 py-2.5 text-right">{fmt(data.totals.claim_amount)}</td>
                 <td className="px-3 py-2.5 text-right">{fmt(data.totals.sanctioned)}</td>
                 <td className="px-3 py-2.5 text-right">{fmt(data.totals.received)}</td>
@@ -746,7 +1048,9 @@ function StatusPill({ status }: { status: string }) {
 function Modal({ title, children, onClose, wide }: any) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <div className={`w-full ${wide ? 'max-w-3xl' : 'max-w-lg'} rounded-2xl bg-white p-5 shadow-xl`} onClick={(e) => e.stopPropagation()}>
+      {/* max-h + scroll: the receipt/allocation modals carry tables and used to
+          run off the bottom of shorter laptop screens, hiding the Save button. */}
+      <div className={`w-full ${wide ? 'max-w-5xl' : 'max-w-lg'} max-h-[92vh] overflow-y-auto rounded-2xl bg-white p-5 shadow-xl`} onClick={(e) => e.stopPropagation()}>
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-base font-black text-gray-900">{title}</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X className="h-5 w-5" /></button>

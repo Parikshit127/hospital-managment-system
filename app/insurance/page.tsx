@@ -12,8 +12,8 @@ import { usePathname } from 'next/navigation';
 import {
     getInsuranceProviders, getInsuranceClaims, getInsuranceStats,
     getAllPolicies, addInsuranceProvider, updateInsuranceProvider,
-    submitInsuranceClaim, getRevenueLeakage, getClaimableInvoices,
-    getProviderPerformance, autoSubmitClaim
+    submitInsuranceClaim, getClaimableInvoices,
+    getProviderPerformance
 } from '@/app/actions/insurance-actions';
 import { isSemiDischarged } from '@/app/lib/admission-status';
 import { AppShell } from '@/app/components/layout/AppShell';
@@ -51,10 +51,6 @@ export default function InsuranceDashboard() {
     const [newClaimAmount, setNewClaimAmount] = useState('');
     const [newClaimLoading, setNewClaimLoading] = useState(false);
 
-    // Revenue leakage
-    const [leakage, setLeakage] = useState<any[]>([]);
-    const [autoSubmitting, setAutoSubmitting] = useState<number | null>(null);
-
     // Provider performance
     const [providerPerf, setProviderPerf] = useState<any[]>([]);
 
@@ -66,19 +62,17 @@ export default function InsuranceDashboard() {
     const loadData = async () => {
         setLoading(true);
         try {
-            const [s, p, c, pol, leak, perf] = await Promise.all([
+            const [s, p, c, pol, perf] = await Promise.all([
                 getInsuranceStats(),
                 getInsuranceProviders(),
                 getInsuranceClaims(),
                 getAllPolicies(),
-                getRevenueLeakage(),
                 getProviderPerformance(),
             ]);
             if (s.success) setStats(s.data);
             if (p.success) setProviders(p.data || []);
             if (c.success) setClaims(c.data || []);
             if (pol.success) setPolicies(pol.data || []);
-            if (leak.success) setLeakage(leak.data || []);
             if (perf.success) setProviderPerf(perf.data || []);
         } catch (err) { console.error('Insurance load error:', err); }
         setLoading(false);
@@ -161,17 +155,6 @@ export default function InsuranceDashboard() {
         }
     };
 
-    const handleAutoSubmit = async (invoiceId: number) => {
-        setAutoSubmitting(invoiceId);
-        const res = await autoSubmitClaim(invoiceId);
-        if (res.success) {
-            loadData();
-        } else {
-            toast.error(res.error || 'Failed to auto-submit claim');
-        }
-        setAutoSubmitting(null);
-    };
-
     const getClaimStatusColor = (status: string) => {
         const map: Record<string, string> = {
             Submitted: 'text-blue-400 bg-blue-500/10',
@@ -208,7 +191,6 @@ export default function InsuranceDashboard() {
                         {[
                             { k: 'overview', l: 'Overview' },
                             { k: 'providers', l: 'Providers' },
-                            { k: 'leakage', l: 'Leakage' },
                             { k: 'receivables', l: 'Receivables' },
                             { k: 'receipts', l: 'Receipts' },
                             { k: 'outstanding', l: 'Outstanding' },
@@ -393,69 +375,6 @@ export default function InsuranceDashboard() {
                                 </div>
                             )}
                         </>)}
-
-                        {/* REVENUE LEAKAGE TAB */}
-                        {activeTab === 'leakage' && (
-                            <div className="space-y-4">
-                                <div className="flex items-center gap-3 p-4 bg-rose-500/5 border border-rose-500/20 rounded-xl">
-                                    <AlertTriangle className="h-5 w-5 text-rose-400 shrink-0" />
-                                    <div>
-                                        <p className="text-sm font-bold text-rose-400">Revenue Leakage Alert</p>
-                                        <p className="text-xs text-gray-500">Finalized invoices for insured patients with no insurance claim filed. {leakage.length} invoice(s) found.</p>
-                                    </div>
-                                </div>
-                                <div className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden">
-                                    <div className="overflow-x-auto">
-                                        <table className="w-full">
-                                            <thead>
-                                                <tr className="border-b border-gray-200">
-                                                    <th className="text-left px-5 py-3.5 text-[10px] font-black text-gray-400 uppercase tracking-wider">Invoice #</th>
-                                                    <th className="text-left px-5 py-3.5 text-[10px] font-black text-gray-400 uppercase tracking-wider">Patient</th>
-                                                    <th className="text-left px-5 py-3.5 text-[10px] font-black text-gray-400 uppercase tracking-wider">Type</th>
-                                                    <th className="text-right px-5 py-3.5 text-[10px] font-black text-gray-400 uppercase tracking-wider">Net Amount</th>
-                                                    <th className="text-center px-5 py-3.5 text-[10px] font-black text-gray-400 uppercase tracking-wider">Status</th>
-                                                    <th className="text-center px-5 py-3.5 text-[10px] font-black text-gray-400 uppercase tracking-wider">Date</th>
-                                                    <th className="text-center px-5 py-3.5 text-[10px] font-black text-gray-400 uppercase tracking-wider">Action</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {leakage.length === 0 ? (
-                                                    <tr>
-                                                        <td colSpan={7} className="px-5 py-16 text-center text-gray-300">
-                                                            <CheckCircle className="h-8 w-8 mx-auto mb-2 text-emerald-400/40" />
-                                                            <p className="text-xs font-bold text-emerald-400/60">No revenue leakage detected</p>
-                                                        </td>
-                                                    </tr>
-                                                ) : leakage.map((inv: any) => (
-                                                    <tr key={inv.id} className="border-b border-gray-200 hover:bg-rose-50">
-                                                        <td className="px-5 py-3.5 text-xs font-mono font-bold text-gray-700">{inv.invoice_number}</td>
-                                                        <td className="px-5 py-3.5">
-                                                            <p className="text-xs font-bold text-gray-700">{inv.patient?.full_name || '-'}</p>
-                                                            <p className="text-[10px] text-gray-400">{inv.patient?.patient_id}</p>
-                                                        </td>
-                                                        <td className="px-5 py-3.5 text-xs text-gray-500">{inv.invoice_type}</td>
-                                                        <td className="px-5 py-3.5 text-right text-xs font-bold text-rose-400">{'\u20B9'}{Number(inv.net_amount).toLocaleString()}</td>
-                                                        <td className="px-5 py-3.5 text-center">
-                                                            <span className="text-[10px] font-black px-2 py-0.5 rounded bg-gray-100 text-gray-500">{inv.status}</span>
-                                                        </td>
-                                                        <td className="px-5 py-3.5 text-center text-[10px] text-gray-500">
-                                                            {new Date(inv.created_at).toLocaleDateString('en-GB')}
-                                                        </td>
-                                                        <td className="px-5 py-3.5 text-center">
-                                                            <button onClick={() => handleAutoSubmit(inv.id)} disabled={autoSubmitting === inv.id}
-                                                                className="px-3 py-1.5 text-[10px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition disabled:opacity-50 inline-flex items-center gap-1">
-                                                                {autoSubmitting === inv.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <ArrowUpRight className="h-3 w-3" />}
-                                                                Auto-Submit
-                                                            </button>
-                                                        </td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
 
                         {/* PROVIDERS TAB */}
                         {activeTab === 'providers' && (
