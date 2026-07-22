@@ -155,13 +155,15 @@ function renderOpdSlipHtml(patient: any, appt: any, b: BillBranding, org: any, d
     const genderVal = patient.gender || '';
     const ageAndGender = [ageVal, genderVal].filter(Boolean).join(', ');
 
-    // An org can point logo_url at a file that was never uploaded. Rendering the
-    // hospital name as alt text next to a broken-image icon looks worse than no
-    // logo at all, so fall back to the bundled mark and, failing that, drop the
-    // image entirely — the name is already spelled out beside it.
-    const logoSrc = hospital.logoUrl || '/logo.jpeg';
-    const logoFallback = "if(this.dataset.fallback){this.style.display='none'}else{this.dataset.fallback='1';this.src='/logo.jpeg'}";
-    const logoHtml = `<img src="${esc(logoSrc)}" alt="" onerror="${esc(logoFallback)}" style="height:65px;width:auto;display:block;object-fit:contain;" />`;
+    // Only ever render the org's OWN logo. An org can point logo_url at a file
+    // that was never uploaded, and the bundled /logo.jpeg is Axten's mark — using
+    // it as a fallback stamps one hospital's branding onto another hospital's
+    // document, which is worse than showing nothing. So: no logo, or the right
+    // one. alt is empty so a failed load never prints the name as stray text
+    // beside a broken-image icon; the name is already set in the header.
+    const logoHtml = hospital.logoUrl
+        ? `<img src="${esc(hospital.logoUrl)}" alt="" onerror="this.style.display='none'" style="height:65px;width:auto;display:block;object-fit:contain;" />`
+        : '';
 
     return `<!DOCTYPE html>
 <html lang="en">
@@ -285,6 +287,33 @@ function renderOpdSlipHtml(patient: any, appt: any, b: BillBranding, org: any, d
             display: flex;
             justify-content: flex-end;
             align-items: center;
+        }
+
+        /* Document type. Suppressing the browser's print header removed the only
+           thing on the sheet that named the document, so the slip states it
+           itself — and unlike the browser header it survives being photocopied
+           or filed. Sits between the letterhead and the patient details. */
+        .doc-title-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .doc-title-row::before,
+        .doc-title-row::after {
+            content: "";
+            flex: 1;
+            height: 1px;
+            background: ${accent};
+            opacity: 0.25;
+        }
+        .doc-title {
+            font-size: 13px;
+            font-weight: 800;
+            letter-spacing: 2.5px;
+            text-transform: uppercase;
+            color: ${accent};
+            white-space: nowrap;
         }
 
         /* Patient Details Grid */
@@ -424,7 +453,12 @@ function renderOpdSlipHtml(patient: any, appt: any, b: BillBranding, org: any, d
             body.hide-letterhead .digital-letterhead-footer {
                 display: none !important;
             }
-            body.hide-letterhead .patient-card-container {
+            /* On pre-printed stationery the rendered letterhead is hidden and the
+               body is pushed clear of the printed header. The offset belongs on
+               whichever block now comes first — that is the document title, not
+               the patient card, or the title would land on top of the pre-printed
+               header. */
+            body.hide-letterhead .doc-title-row {
                 margin-top: ${220}px;
             }
         }
@@ -457,6 +491,9 @@ function renderOpdSlipHtml(patient: any, appt: any, b: BillBranding, org: any, d
             <div class="header-right">
             </div>
         </div>
+
+        <!-- Document type -->
+        <div class="doc-title-row"><span class="doc-title">OPD Slip</span></div>
 
         <!-- Patient details box -->
         <div class="patient-card-container">
