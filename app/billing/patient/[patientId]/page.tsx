@@ -260,6 +260,12 @@ export function PatientFinancialProfileContent({ shell = "app" }: { shell?: "app
             <RefreshCw className={`h-3.5 w-3.5 ${reconciling ? 'animate-spin' : ''}`} /> Reconcile Overpayments
           </button>
           <button
+            onClick={() => window.open(`/api/opd/${patientId}/registration-slip`, '_blank')}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-teal-200 hover:bg-teal-50 text-teal-700 text-xs font-bold rounded-lg"
+          >
+            <Printer className="h-3.5 w-3.5" /> Print OPD Slip
+          </button>
+          <button
             onClick={() => window.open(`/api/patient/${patientId}/stickers`, '_blank')}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 text-xs font-bold rounded-lg"
           >

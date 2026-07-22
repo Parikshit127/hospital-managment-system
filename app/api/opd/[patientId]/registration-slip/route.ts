@@ -6,7 +6,9 @@ import {
     type BillBranding,
 } from '@/app/lib/bill-branding';
 
-const ALLOWED_STAFF_ROLES = ['admin', 'receptionist', 'doctor', 'opd_manager', 'nurse'];
+// 'finance' / 'ipd_manager' are here because Master Billing → patient financial
+// profile exposes the same "Print OPD Slip" action from its header.
+const ALLOWED_STAFF_ROLES = ['admin', 'receptionist', 'doctor', 'opd_manager', 'nurse', 'finance', 'ipd_manager'];
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ patientId: string }> }) {
     try {
