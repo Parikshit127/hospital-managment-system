@@ -12,12 +12,8 @@ import { usePathname } from 'next/navigation';
 import {
     getInsuranceProviders, getInsuranceClaims, getInsuranceStats,
     getAllPolicies, addInsuranceProvider, updateInsuranceProvider,
-<<<<<<< Updated upstream
     submitInsuranceClaim, getClaimableInvoices,
     getProviderPerformance
-=======
-    getRevenueLeakage, getProviderPerformance, autoSubmitClaim
->>>>>>> Stashed changes
 } from '@/app/actions/insurance-actions';
 import { isSemiDischarged } from '@/app/lib/admission-status';
 import { AppShell } from '@/app/components/layout/AppShell';
@@ -47,7 +43,6 @@ export default function InsuranceDashboard() {
     const [editProvider, setEditProvider] = useState<any>(null);
     const [editProviderForm, setEditProviderForm] = useState({ provider_name: '', contact_email: '', contact_phone: '', address: '', pre_auth_required: false, default_discount_percentage: 0, is_active: true });
 
-<<<<<<< Updated upstream
     // New claim submission modal
     const [newClaimModal, setNewClaimModal] = useState(false);
     const [newClaimPolicyId, setNewClaimPolicyId] = useState('');
@@ -55,11 +50,6 @@ export default function InsuranceDashboard() {
     const [newClaimInvoiceId, setNewClaimInvoiceId] = useState('');
     const [newClaimAmount, setNewClaimAmount] = useState('');
     const [newClaimLoading, setNewClaimLoading] = useState(false);
-=======
-    // Revenue leakage
-    const [leakage, setLeakage] = useState<any[]>([]);
-    const [autoSubmitting, setAutoSubmitting] = useState<number | null>(null);
->>>>>>> Stashed changes
 
     // Provider performance
     const [providerPerf, setProviderPerf] = useState<any[]>([]);
@@ -128,7 +118,6 @@ export default function InsuranceDashboard() {
         }
     };
 
-<<<<<<< Updated upstream
     const handleOpenNewClaim = () => {
         setNewClaimModal(true);
         setNewClaimPolicyId('');
@@ -164,17 +153,6 @@ export default function InsuranceDashboard() {
         } else {
             toast.error(res.error || 'Failed to submit claim');
         }
-=======
-    const handleAutoSubmit = async (invoiceId: number) => {
-        setAutoSubmitting(invoiceId);
-        const res = await autoSubmitClaim(invoiceId);
-        if (res.success) {
-            loadData();
-        } else {
-            toast.error(res.error || 'Failed to auto-submit claim');
-        }
-        setAutoSubmitting(null);
->>>>>>> Stashed changes
     };
 
     const getClaimStatusColor = (status: string) => {
@@ -192,6 +170,9 @@ export default function InsuranceDashboard() {
 
     const headerActions = (
         <>
+            <button onClick={handleOpenNewClaim} className="px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-xl text-xs font-bold text-white shadow-lg shadow-emerald-500/20 flex items-center gap-2">
+                <Plus className="h-3.5 w-3.5" /> Submit Claim
+            </button>
             <button onClick={() => setProviderModal(true)} className="px-4 py-2 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-xl text-xs font-bold text-white shadow-lg shadow-blue-500/20 flex items-center gap-2">
                 <Plus className="h-3.5 w-3.5" /> Add Provider
             </button>
@@ -490,6 +471,69 @@ export default function InsuranceDashboard() {
                         <button onClick={handleAddProvider} disabled={!providerForm.provider_name}
                             className="w-full py-3 bg-gradient-to-r from-blue-500 to-cyan-500 text-white text-sm font-black rounded-xl hover:shadow-lg hover:shadow-blue-500/25 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
                             <Plus className="h-4 w-4" /> Add Provider
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* NEW CLAIM SUBMISSION MODAL */}
+            {newClaimModal && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+                    <div className="bg-white border border-gray-200 shadow-sm rounded-2xl w-full max-w-md p-6 space-y-5">
+                        <div className="flex items-center justify-between">
+                            <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
+                                <FileText className="h-5 w-5 text-emerald-400" /> Submit Insurance Claim
+                            </h3>
+                            <button onClick={() => setNewClaimModal(false)} className="text-gray-400 hover:text-gray-900 text-xl">&times;</button>
+                        </div>
+                        <div className="space-y-3">
+                            <div>
+                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-wider block mb-1">Select Policy</label>
+                                <select value={newClaimPolicyId} onChange={e => handlePolicyChange(e.target.value)}
+                                    className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-900 focus:outline-none">
+                                    <option value="" className="bg-white text-gray-900">Choose a policy...</option>
+                                    {policies.filter((p: any) => p.status === 'Active').map((pol: any) => (
+                                        <option key={pol.id} value={pol.id} className="bg-white text-gray-900">
+                                            {pol.patient?.full_name} — {pol.provider?.provider_name} ({pol.policy_number})
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                            {newClaimPolicyId && (
+                                <div>
+                                    <label className="text-[10px] font-black text-gray-500 uppercase tracking-wider block mb-1">Select Invoice</label>
+                                    {newClaimInvoices.length === 0 ? (
+                                        <p className="text-xs text-gray-400 py-2">No claimable invoices for this patient</p>
+                                    ) : (
+                                        <select value={newClaimInvoiceId} onChange={e => {
+                                            setNewClaimInvoiceId(e.target.value);
+                                            const inv = newClaimInvoices.find((i: any) => i.id === parseInt(e.target.value));
+                                            if (inv) setNewClaimAmount(String(inv.net_amount));
+                                        }}
+                                            className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-900 focus:outline-none">
+                                            <option value="" className="bg-white text-gray-900">Choose invoice...</option>
+                                            {newClaimInvoices.map((inv: any) => (
+                                                <option key={inv.id} value={inv.id} className="bg-white text-gray-900">
+                                                    {inv.invoice_number} — {'\u20B9'}{Number(inv.net_amount).toLocaleString()} ({inv.status})
+                                                </option>
+                                            ))}
+                                        </select>
+                                    )}
+                                </div>
+                            )}
+                            {newClaimInvoiceId && (
+                                <div>
+                                    <label className="text-[10px] font-black text-gray-500 uppercase tracking-wider block mb-1">Claim Amount</label>
+                                    <input type="number" value={newClaimAmount} onChange={e => setNewClaimAmount(e.target.value)}
+                                        className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-xl text-sm text-gray-900 focus:outline-none"
+                                        placeholder="Amount to claim" />
+                                </div>
+                            )}
+                        </div>
+                        <button onClick={handleSubmitNewClaim} disabled={!newClaimPolicyId || !newClaimInvoiceId || !newClaimAmount || newClaimLoading}
+                            className="w-full py-3 bg-gradient-to-r from-emerald-500 to-teal-500 text-white text-sm font-black rounded-xl hover:shadow-lg hover:shadow-emerald-500/25 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
+                            {newClaimLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
+                            Submit Claim
                         </button>
                     </div>
                 </div>
