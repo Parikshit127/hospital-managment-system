@@ -1,0 +1,78 @@
+# HospitalOS scheduled jobs — crontab for the production server
+# ---------------------------------------------------------------------------
+# The app ships 13 cron ROUTES but nothing was ever calling them, so none of the
+# scheduled work was running: no appointment reminders, no SLA checks, no queued
+# email delivery, no scheduled MIS report delivery.
+#
+# Install with:   bash aws/cron/install-cron.sh
+# Inspect with:   crontab -l
+# Logs:           /home/ubuntu/hospitalos/logs/cron.log
+#
+# Every endpoint is called with GET — most of these routes only implement GET
+# (they answer 405 to POST), which is also how Vercel Cron invokes them.
+#
+# Requires two shell variables, set by the installer from the app's .env:
+#   APP_URL       e.g. http://localhost:3000   (loopback: no public round trip)
+#   CRON_SECRET   must match CRON_SECRET in .env, or every call gets 401
+# ---------------------------------------------------------------------------
+
+SHELL=/bin/bash
+PATH=/usr/local/bin:/usr/bin:/bin
+APP_URL=http://localhost:3000
+CRON_SECRET=__CRON_SECRET__
+LOG=/home/ubuntu/hospitalos/logs/cron.log
+
+# --- Frequent queues ---------------------------------------------------------
+# Outbound email queue. Drains PENDING jobs in batches with a retry cap.
+*/2 * * * * curl -fsS -m 60 -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/cron/email-dispatch" >> $LOG 2>&1
+
+# Scheduled broadcasts — sends the ones staff queued for a future time.
+*/5 * * * * curl -fsS -m 60 -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/cron/broadcast-dispatch" >> $LOG 2>&1
+
+# TPA / claim SLA breaches — raises internal alerts only.
+*/15 * * * * curl -fsS -m 120 -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/cron/sla-check" >> $LOG 2>&1
+
+# Nursing assessment alerts — internal alerts for overdue assessments.
+*/30 * * * * curl -fsS -m 120 -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/cron/assessment-alerts" >> $LOG 2>&1
+
+# --- Hourly ------------------------------------------------------------------
+# Scheduled MIS report delivery. Without this, the "Schedule" button on a report
+# stores a schedule that never fires.
+5 * * * * curl -fsS -m 300 -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/cron/mis-scheduled-delivery" >> $LOG 2>&1
+
+# --- Daily -------------------------------------------------------------------
+# Patient WhatsApp reminders for TOMORROW's appointments only. Guarded by
+# reminder24Sent, so a patient is never messaged twice and there is no backlog
+# to flush on first run.
+0 18 * * * curl -fsS -m 300 -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/cron/appointment-reminders" >> $LOG 2>&1
+
+# Budget threshold alerts — internal.
+0 0 * * * curl -fsS -m 300 -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/cron/budget-alerts" >> $LOG 2>&1
+
+# MIS pre-aggregation, then cleanup of old report jobs/files.
+30 2 * * * curl -fsS -m 900 -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/cron/mis-rollup" >> $LOG 2>&1
+0 2 * * *  curl -fsS -m 300 -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/cron/mis-cleanup" >> $LOG 2>&1
+
+# Asset maintenance / warranty reminders — in-app notification to admins.
+0 3 * * * curl -fsS -m 300 -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/cron/asset-maintenance-reminders" >> $LOG 2>&1
+
+# ---------------------------------------------------------------------------
+# DELIBERATELY NOT SCHEDULED — each needs a decision, not a default:
+#
+#   /api/cron/depreciation
+#       Posts monthly depreciation JOURNAL ENTRIES to the general ledger.
+#       Turning it on writes to the books, and if it has never run there may be
+#       catch-up periods. Finance should agree the first period before enabling:
+#           0 0 1 * *   (1st of each month)
+#
+#   /api/cron/pill-reminders
+#       Fires only for reminders whose schedule_times contains the exact current
+#       HH:MM, so it must run EVERY MINUTE or most doses are missed. It also
+#       resolves the tenant from a user session, which a cron does not have —
+#       confirm it actually sends for a test patient before scheduling:
+#           * * * * *   (every minute)
+#
+#   /api/cron/mis-jobs
+#       Retired. It answers 410 Gone on purpose, to tell a scheduler to stop
+#       calling it. Do not schedule.
+# ---------------------------------------------------------------------------

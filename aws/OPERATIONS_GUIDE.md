@@ -30,7 +30,43 @@ pm2 reload hospitalos             # Zero-downtime reload (preferred)
 free -h                           # Memory usage
 df -h                             # Disk space
 htop                              # Process monitor (q to quit)
+
+# Scheduled jobs
+crontab -l                        # What is scheduled
+tail -f logs/cron.log             # Watch scheduled jobs run
+bash aws/cron/install-cron.sh --verify   # Are the endpoints answering?
 ```
+
+---
+
+## 1a. Scheduled Jobs (cron)
+
+The app exposes its background work as HTTP routes under `/api/cron/*`, but a
+route only runs when something calls it. Install the schedule once per server:
+
+```bash
+cd /home/ubuntu/hospitalos
+bash aws/cron/install-cron.sh --dry-run   # preview (secret masked)
+bash aws/cron/install-cron.sh             # install
+bash aws/cron/install-cron.sh --verify    # confirm every endpoint answers 200
+```
+
+Re-running is safe: it replaces only the HospitalOS block in the crontab and
+leaves other entries alone. Re-run it after a deploy that adds a new job.
+
+What this turns on: queued email delivery, scheduled broadcasts, SLA checks,
+nursing assessment alerts, scheduled MIS report delivery, 24-hour appointment
+reminders (WhatsApp), budget alerts, MIS rollup/cleanup, and asset
+maintenance/warranty reminders.
+
+Three jobs are deliberately left out — see the comments at the bottom of
+`aws/cron/hospitalos-crontab` for why: `depreciation` (posts GL journal
+entries — needs finance sign-off on the first period), `pill-reminders` (must
+run every minute, and its tenant lookup needs confirming), and `mis-jobs`
+(retired; it answers 410 to stop schedulers calling it).
+
+If the secret is wrong every job silently 401s, so check `logs/cron.log` after
+the first hour.
 
 ---
 
