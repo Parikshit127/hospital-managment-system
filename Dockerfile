@@ -1,5 +1,16 @@
+# Node 22 to match `engines` in package.json and the Node the CI and EC2 deploy
+# both run. This image was on node:20, which reached end-of-life on 2026-04-30
+# and no longer receives security patches.
+#
+# Deliberately not Node 24, even though 24 is the current Active LTS: the app
+# does not run on it yet. Node 24 throws
+#   TypeError: controller[kState].transformAlgorithm is not a function
+# from its web-streams internals with this Next/next-ws combination. Moving to
+# 24 is worth doing, but as its own change with a real build-and-test pass —
+# not as a side effect of getting off an EOL base image.
+
 # ── Stage 1: Dependencies ────────────────────────────────────────────────────
-FROM node:20-alpine AS deps
+FROM node:22-alpine AS deps
 RUN apk add --no-cache libc6-compat openssl
 WORKDIR /app
 
@@ -8,7 +19,7 @@ COPY prisma ./prisma/
 RUN npm ci --no-audit --no-fund
 
 # ── Stage 2: Build ───────────────────────────────────────────────────────────
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 RUN apk add --no-cache libc6-compat openssl
 WORKDIR /app
 
@@ -24,7 +35,7 @@ ENV NODE_ENV=production
 RUN npm run build
 
 # ── Stage 3: Production ─────────────────────────────────────────────────────
-FROM node:20-alpine AS runner
+FROM node:22-alpine AS runner
 RUN apk add --no-cache libc6-compat openssl curl
 WORKDIR /app
 
