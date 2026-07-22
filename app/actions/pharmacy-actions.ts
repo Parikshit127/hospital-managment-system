@@ -18,6 +18,7 @@ import { logAudit } from '@/app/lib/audit';
 import { checkDrugInteractions } from '@/app/lib/drug-safety';
 import { getPatientBalances } from '@/app/actions/balance-actions';
 import { postChargeToIpdBill } from '@/app/actions/ipd-finance-actions';
+import { notifyUsersByRole } from '@/app/actions/notification-actions';
 import { isBillClosedForCharges, BILL_FINALIZED_INTENT_MSG } from '@/app/lib/bill-status';
 import { scheduleMedicationAdministrations } from '@/app/actions/ipd-emr-actions';
 import { postInvoiceToGL } from '@/app/actions/gl-actions';
@@ -1232,6 +1233,16 @@ export async function dispenseMedicine(orderId: number, dispensedItems: any[]) {
         let totalTax = 0;
         const dispensedDetails: any[] = [];
 
+        // Partial-dispense tracking. When the pharmacist can only supply part of an
+        // indent (e.g. 3 of 4 in stock), we still dispense what we have, mark the
+        // shortfall per line, and notify the ward. Populated inside the transaction
+        // and consumed after it (for the shortage notification + return payload).
+        let shortageList: { medicine_name: string; requested: number; dispensed: number; short: number }[] = [];
+
+        // Accumulate dispensed quantity per order item so a single line can be filled
+        // from MULTIPLE batches without the per-item update clobbering earlier batches.
+        const dispByItem = new Map<number, { qty: number; net: number; tax: number; unitPrice: number; rate: number; hsn: string; batch: string }>();
+
         // Using transaction strictly
         await db.$transaction(async (tx: any) => {
             for (const item of dispensedItems) {
@@ -1336,31 +1347,62 @@ export async function dispenseMedicine(orderId: number, dispensedItems: any[]) {
                     });
                 }
 
-                // Update order item with tax info
+                // Accumulate this batch's contribution to the order item. The actual
+                // order-item row is written once, after the loop, from the totals.
                 if (item.order_item_id) {
-                    await tx.pharmacy_order_items.update({
-                        where: { id: item.order_item_id },
-                        data: {
-                            quantity_dispensed: item.quantity,
-                            unit_price: unitPrice,
-                            total_price: netPrice,
-                            batch_id: item.batch_no,
-                            tax_rate: taxRate,
-                            tax_amount: taxAmount,
-                            hsn_sac_code: batch.medicine.hsn_sac_code || '3004',
-                            status: 'Dispensed',
-                        }
-                    });
+                    const cur = dispByItem.get(item.order_item_id) || { qty: 0, net: 0, tax: 0, unitPrice, rate: taxRate, hsn: batch.medicine.hsn_sac_code || '3004', batch: item.batch_no };
+                    cur.qty += item.quantity;
+                    cur.net += netPrice;
+                    cur.tax += taxAmount;
+                    cur.unitPrice = unitPrice;
+                    cur.rate = taxRate;
+                    cur.hsn = batch.medicine.hsn_sac_code || '3004';
+                    cur.batch = item.batch_no;
+                    dispByItem.set(item.order_item_id, cur);
                 }
             }
 
+            // Write each order item once from the accumulated totals, marking it
+            // 'Partial' when we dispensed less than requested.
+            const allOrderItems = await tx.pharmacy_order_items.findMany({ where: { order_id: orderId } });
+            for (const [itemId, d] of dispByItem) {
+                const oi = allOrderItems.find((x: any) => x.id === itemId);
+                const requested = oi?.quantity_requested ?? d.qty;
+                await tx.pharmacy_order_items.update({
+                    where: { id: itemId },
+                    data: {
+                        quantity_dispensed: d.qty,
+                        unit_price: d.unitPrice,
+                        total_price: d.net,
+                        batch_id: d.batch,
+                        tax_rate: d.rate,
+                        tax_amount: d.tax,
+                        hsn_sac_code: d.hsn,
+                        status: d.qty >= requested ? 'Dispensed' : 'Partial',
+                    }
+                });
+            }
+
+            // Any requested item that ended up short (fewer dispensed than requested,
+            // including items with no stock at all) becomes a shortage line.
+            shortageList = allOrderItems
+                .map((oi: any) => {
+                    const dispensed = dispByItem.get(oi.id)?.qty ?? 0;
+                    const requested = oi.quantity_requested ?? 0;
+                    return { medicine_name: oi.medicine_name, requested, dispensed, short: requested - dispensed };
+                })
+                .filter((s: any) => s.short > 0);
+
+            const fullyComplete = shortageList.length === 0;
             const grandTotal = totalAmount + totalTax;
             await tx.pharmacy_orders.update({
                 where: { id: orderId },
                 data: {
-                    status: 'Completed',
+                    status: fullyComplete ? 'Completed' : 'Partial',
                     total_amount: grandTotal,
-                    items_dispensed: dispensedItems.length,
+                    items_dispensed: dispByItem.size,
+                    items_missing: shortageList.length,
+                    total_items_requested: allOrderItems.length,
                 }
             });
         });
@@ -1511,8 +1553,36 @@ export async function dispenseMedicine(orderId: number, dispensedItems: any[]) {
         }
 
         revalidatePath('/pharmacy/orders');
+        revalidatePath('/pharmacy/ip-orders');
         revalidatePath('/pharmacy/billing');
         invalidatePharmacyTags(['stock', 'orders']);
+
+        // Notify the ward when an inpatient indent went out short, naming the exact
+        // shortfall so nursing staff can chase a restock or re-indent the balance.
+        if (shortageList.length > 0 && (preIsIpdPatient || preOrder.admission_id)) {
+            try {
+                const patient = await db.oPD_REG.findFirst({
+                    where: { patient_id: preOrder.patient_id },
+                    select: { full_name: true },
+                });
+                const ord = await db.pharmacy_orders.findUnique({
+                    where: { id: orderId },
+                    select: { indent_number: true },
+                });
+                const ref = ord?.indent_number || `IND-${orderId}`;
+                const lines = shortageList
+                    .map(s => `${s.medicine_name} ${s.dispensed}/${s.requested} (short ${s.short})`)
+                    .join('; ');
+                await notifyUsersByRole('nurse', {
+                    title: `Pharmacy stock shortage — ${ref}`,
+                    body: `Indent ${ref} for ${patient?.full_name || preOrder.patient_id} was dispensed with shortages: ${lines}. Please arrange a restock or re-indent the balance.`,
+                    type: 'warning',
+                    link: '/pharmacy/ip-orders',
+                });
+            } catch (notifyErr) {
+                console.error('Shortage notification failed:', notifyErr);
+            }
+        }
 
         if (chargeFailures.length > 0) {
             // Stock is already deducted and the order is marked Completed at this point —
@@ -1533,9 +1603,72 @@ export async function dispenseMedicine(orderId: number, dispensedItems: any[]) {
             tax: totalTax,
             invoice_id: invoiceId,
             ipd_posted: isIpdPatient && !!targetAdmissionId,
+            shortages: shortageList,
+            partial: shortageList.length > 0,
         };
     } catch (error: any) {
         return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Dispense an IPD indent, supplying whatever is currently in stock and flagging
+ * any shortfall. Allocates each line across batches using FEFO (first-expiry-
+ * first-out), capped at the quantity available, then hands the built payload to
+ * dispenseMedicine — which records the partial line status, marks the order
+ * 'Partial', and notifies nursing staff of the exact shortage.
+ */
+export async function dispenseIndentWithShortages(orderId: number) {
+    try {
+        const { db } = await requireTenantContext();
+
+        const order = await db.pharmacy_orders.findUnique({
+            where: { id: orderId },
+            include: { items: true },
+        });
+        if (!order) return { success: false, error: 'Order not found' };
+
+        const dispensedItems: any[] = [];
+        let anyRequested = false;
+
+        for (const item of order.items) {
+            // Skip lines already fully dispensed on a previous action.
+            if (item.status === 'Dispensed') continue;
+            const requested = item.quantity_requested ?? 0;
+            if (requested <= 0) continue;
+            anyRequested = true;
+            if (!item.medicine_id) continue; // unresolved medicine -> reported as fully short
+
+            const batches = await db.pharmacy_batch_inventory.findMany({
+                where: { medicine_id: item.medicine_id, current_stock: { gt: 0 }, is_quarantined: false },
+                orderBy: { expiry_date: 'asc' },
+            });
+
+            let need = requested;
+            for (const b of batches) {
+                if (need <= 0) break;
+                const take = Math.min(need, b.current_stock);
+                if (take <= 0) continue;
+                dispensedItems.push({
+                    order_item_id: item.id,
+                    medicine_id: item.medicine_id,
+                    medicine_name: item.medicine_name,
+                    batch_no: b.batch_no,
+                    quantity: take,
+                });
+                need -= take;
+            }
+        }
+
+        if (!anyRequested) return { success: false, error: 'Nothing left to dispense on this indent.' };
+        if (dispensedItems.length === 0) {
+            return { success: false, error: 'No stock available for any item on this indent.' };
+        }
+
+        return await dispenseMedicine(orderId, dispensedItems);
+    } catch (error: any) {
+        console.error('dispenseIndentWithShortages error:', error);
+        return { success: false, error: error?.message || 'Failed to dispense indent' };
     }
 }
 

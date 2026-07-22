@@ -39,6 +39,7 @@ export default function PharmacyOrdersPage() {
     const getStatusStyle = (status: string) => {
         switch (status) {
             case 'Pending': return 'bg-amber-100 text-amber-800';
+            case 'Partial': return 'bg-purple-100 text-purple-800';
             case 'Completed': return 'bg-emerald-100 text-emerald-800';
             default: return 'bg-gray-100 text-gray-800';
         }

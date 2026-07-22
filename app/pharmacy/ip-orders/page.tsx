@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { AppShell } from '@/app/components/layout/AppShell';
-import { getPharmacyQueue, verifyPharmacyOrder, dispenseMedicine } from '@/app/actions/pharmacy-actions';
+import { getPharmacyQueue, verifyPharmacyOrder, dispenseIndentWithShortages } from '@/app/actions/pharmacy-actions';
 import { useToast } from '@/app/components/ui/Toast';
 import { CheckCircle2, ClipboardList, PackageCheck, Pill, BedDouble, User } from 'lucide-react';
 import { fmtIstDateTime } from '@/app/lib/ist';
@@ -42,8 +42,13 @@ const STATUS_COLORS: Record<string, string> = {
   Pending: 'bg-amber-100 text-amber-800',
   Verified: 'bg-blue-100 text-blue-800',
   Dispensing: 'bg-orange-100 text-orange-800',
+  Partial: 'bg-purple-100 text-purple-800',
   Dispensed: 'bg-emerald-100 text-emerald-800',
   Completed: 'bg-emerald-100 text-emerald-800',
+};
+
+const STATUS_LABELS: Record<string, string> = {
+  Partial: 'Partially Dispensed',
 };
 
 const STOCK_COLORS: Record<string, string> = {
@@ -91,18 +96,21 @@ export default function IPMedicationOrdersPage() {
   async function handleDispense(order: PharmacyOrder) {
     setActionLoading(order.id);
     try {
-      const dispenseItems = order.items
-        .filter((i) => i.status !== 'Dispensed')
-        .map((item) => ({
-          order_item_id: item.id,
-          medicine_id: item.medicine_id,
-          batch_no: item.available_batches?.[0]?.batch_no || 'DEFAULT',
-          quantity: item.quantity_requested,
-        }));
-      if (dispenseItems.length === 0) { toast.error('No items to dispense'); return; }
-      const res = await dispenseMedicine(order.id, dispenseItems);
-      if (res.success) { toast.success('Medicines dispensed'); await loadOrders(); }
-      else toast.error(res.error || 'Failed to dispense');
+      // Dispenses whatever is in stock (FEFO). Any shortfall is recorded per line
+      // and the ward is notified server-side with the exact shortage.
+      const res = await dispenseIndentWithShortages(order.id);
+      if (res.success) {
+        const shortages = (res as any).shortages as { medicine_name: string; requested: number; dispensed: number }[] | undefined;
+        if (shortages && shortages.length > 0) {
+          const summary = shortages.map((s) => `${s.medicine_name} ${s.dispensed}/${s.requested}`).join(', ');
+          toast.warning(`Dispensed short on: ${summary}. Nursing staff notified of the shortage.`, 7000);
+        } else {
+          toast.success('Medicines dispensed');
+        }
+        await loadOrders();
+      } else {
+        toast.error(res.error || 'Failed to dispense');
+      }
     } finally {
       setActionLoading(null);
     }
@@ -213,7 +221,7 @@ export default function IPMedicationOrdersPage() {
                           <span>Type: Patient-Wise</span>
                           <span>Raised by: <span className="font-bold text-teal-700">{order.requested_by_name || order.doctor_id || '—'}</span></span>
                           <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wide ${STATUS_COLORS[order.status] || 'bg-gray-100 text-gray-800'}`}>
-                            {order.status}
+                            {STATUS_LABELS[order.status] || order.status}
                           </span>
                         </div>
                         <div className="shrink-0">
@@ -234,7 +242,11 @@ export default function IPMedicationOrdersPage() {
                               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-50 hover:bg-emerald-100 text-emerald-700 transition-colors disabled:opacity-50 whitespace-nowrap"
                             >
                               <PackageCheck className="h-3.5 w-3.5" />
-                              {actionLoading === order.id ? 'Dispensing…' : 'Dispense'}
+                              {actionLoading === order.id
+                                ? 'Dispensing…'
+                                : order.items.some((i) => (i.stock?.totalStock ?? 0) < i.quantity_requested)
+                                  ? 'Dispense available'
+                                  : 'Dispense'}
                             </button>
                           )}
                           {(order.status === 'Completed' || order.status === 'Dispensed') && (
@@ -259,9 +271,16 @@ export default function IPMedicationOrdersPage() {
                                 <td className="px-4 py-2 text-gray-800 font-medium">{item.medicine_name}</td>
                                 <td className="px-4 py-2 text-center text-gray-700 font-semibold">{item.quantity_requested}</td>
                                 <td className="px-4 py-2">
-                                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${STOCK_COLORS[item.stock?.status || 'Out of Stock']}`}>
-                                    {item.stock?.status || 'Out of Stock'}
-                                  </span>
+                                  <div className="flex items-center gap-2">
+                                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${STOCK_COLORS[item.stock?.status || 'Out of Stock']}`}>
+                                      {item.stock?.status || 'Out of Stock'}
+                                    </span>
+                                    {(item.stock?.totalStock ?? 0) < item.quantity_requested && (
+                                      <span className="text-[10px] font-bold text-rose-600 whitespace-nowrap">
+                                        {item.stock?.totalStock ?? 0}/{item.quantity_requested} · short {item.quantity_requested - (item.stock?.totalStock ?? 0)}
+                                      </span>
+                                    )}
+                                  </div>
                                 </td>
                               </tr>
                             ))}
