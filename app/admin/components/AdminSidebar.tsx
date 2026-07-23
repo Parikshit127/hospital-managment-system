@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useBranding } from './ThemeProvider';
@@ -44,14 +44,28 @@ export default function AdminSidebar() {
         });
     };
 
+    // Only the MOST SPECIFIC matching item highlights. Some items nest under
+    // another's path — "TPA & Insurance" (/admin/finance/tpa-insurance) sits under
+    // "Finance" (/admin/finance) — and a plain prefix test lit up both, so the
+    // sidebar showed two current pages at once.
+    const longestMatch = useMemo(() => {
+        let best = '';
+        for (const section of ADMIN_NAV_SECTIONS) {
+            for (const item of section.items) {
+                const href = item.href;
+                if (pathname === href || pathname.startsWith(href + '/')) {
+                    if (href.length > best.length) best = href;
+                }
+            }
+        }
+        return best;
+    }, [pathname]);
+
     const isActive = (href: string) => {
         if (href === '/admin/dashboard') return pathname === href || pathname === '/admin';
         if (href === '/admin/settings') return pathname === href;
-        if (pathname.startsWith(href)) {
-            const rest = pathname.slice(href.length);
-            return rest === '' || rest.startsWith('/');
-        }
-        return false;
+        if (pathname === href) return true;
+        return href === longestMatch;
     };
 
     const sidebarContent = (

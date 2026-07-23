@@ -37,8 +37,26 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
         });
         if (!receipt) return NextResponse.json({ error: 'Receipt not found' }, { status: 404 });
 
+        // A reversed receipt is still printable — it is part of the audit trail —
+        // but it must never read as proof of payment, so pull the reversal's
+        // reason and timestamp to state plainly why it is void.
+        let reversal: { reason: string; at: Date | null } | null = null;
+        if (receipt.status === 'Reversed') {
+            const log = await prisma.system_audit_logs.findFirst({
+                where: {
+                    organizationId, entity_type: 'insurance_receipt',
+                    entity_id: String(receipt.id), action: 'insurance_receipt_reversed',
+                },
+                orderBy: { created_at: 'desc' },
+                select: { details: true, created_at: true },
+            });
+            let reason = '';
+            try { reason = log?.details ? (JSON.parse(log.details).reason || '') : ''; } catch { /* ignore */ }
+            reversal = { reason, at: log?.created_at ?? null };
+        }
+
         const branding = await getBillBranding(organizationId);
-        return new NextResponse(receiptHTML(receipt, branding), {
+        return new NextResponse(receiptHTML(receipt, branding, reversal), {
             headers: { 'Content-Type': 'text/html; charset=utf-8' },
         });
     } catch (error: any) {
@@ -72,9 +90,10 @@ function numberToWords(amount: number): string {
     return `Rupees ${parts.join(' ')}${paise ? ` and ${two(paise)} Paise` : ''} Only`;
 }
 
-function receiptHTML(r: any, b: any): string {
+function receiptHTML(r: any, b: any, reversal?: { reason: string; at: Date | null } | null): string {
     const accent = b.accentColor || '#1e3a6e';
     const payer = r.provider?.provider_name || r.corporate?.company_name || '—';
+    const isReversed = r.status === 'Reversed';
 
     // The receipt's total_amount is the bank credit; TDS is withheld by the payer
     // out of the settled amount, so gross settled = credit + TDS.
@@ -119,10 +138,27 @@ function receiptHTML(r: any, b: any): string {
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:'Segoe UI',Arial,sans-serif;color:#1f2937;background:#fff}
+/* Watermark must survive printing, hence the colour-adjust hints. */
+.void-mark{position:fixed;top:42%;left:50%;transform:translate(-50%,-50%) rotate(-24deg);
+  font-size:104px;font-weight:900;letter-spacing:10px;color:rgba(220,38,38,.13);
+  border:9px solid rgba(220,38,38,.13);padding:10px 46px;border-radius:16px;
+  pointer-events:none;z-index:999;white-space:nowrap;
+  -webkit-print-color-adjust:exact;print-color-adjust:exact}
 @media print{.no-print{display:none!important}@page{size:A4;margin:12mm}}
 </style></head>
 <body>
+${isReversed ? '<div class="void-mark">REVERSED</div>' : ''}
 <div style="max-width:820px;margin:0 auto;padding:28px;">
+${isReversed ? `
+    <div style="border:2px solid #dc2626;background:#fef2f2;border-radius:10px;padding:12px 16px;margin-bottom:18px;-webkit-print-color-adjust:exact;print-color-adjust:exact;">
+        <p style="font-size:16px;font-weight:800;color:#b91c1c;letter-spacing:.5px;">THIS RECEIPT HAS BEEN REVERSED — NOT VALID AS PROOF OF PAYMENT</p>
+        <p style="font-size:11.5px;color:#7f1d1d;margin-top:4px;">
+            The settlement was undone: the bill(s) below were returned to outstanding and the payment entries voided.
+            ${reversal?.at ? `Reversed on ${esc(fmtBillDate(reversal.at))}.` : ''}
+        </p>
+        ${reversal?.reason ? `<p style="font-size:11.5px;color:#7f1d1d;margin-top:3px;"><strong>Reason:</strong> ${esc(reversal.reason)}</p>` : ''}
+        <p style="font-size:11px;color:#7f1d1d;margin-top:4px;">Retained for audit only. The figures below record what was reversed.</p>
+    </div>` : ''}
     <div class="no-print" style="text-align:right;margin-bottom:14px;">
         <button onclick="window.print()" style="padding:10px 24px;background:${accent};color:#fff;border:none;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;">Print / Save PDF</button>
     </div>
@@ -150,7 +186,9 @@ body{font-family:'Segoe UI',Arial,sans-serif;color:#1f2937;background:#fff}
         <table style="border-collapse:collapse;">
             ${kv('Received From', `<span style="font-weight:800;">${esc(payer)}</span>${r.provider?.provider_code ? ` <span style="color:#9ca3af;font-family:monospace;font-size:10px;">(${esc(r.provider.provider_code)})</span>` : ''}`)}
             ${kv('Payer Type', r.payer_type === 'tpa_insurance' ? 'TPA / Insurance' : 'Corporate')}
-            ${kv('Status', esc(String(r.status || '').replace(/([a-z])([A-Z])/g, '$1 $2')))}
+            ${kv('Status', isReversed
+                ? `<span style="color:#b91c1c;font-weight:800;">REVERSED — VOID</span>`
+                : esc(String(r.status || '').replace(/([a-z])([A-Z])/g, '$1 $2')))}
         </table>
         <table style="border-collapse:collapse;">
             ${kv('Instrument', esc(r.instrument || '—'))}
@@ -218,7 +256,9 @@ body{font-family:'Segoe UI',Arial,sans-serif;color:#1f2937;background:#fff}
     <p style="font-size:10px;color:#6b7280;margin-bottom:22px;">Settled = amount the payer allowed against the bill (TDS is withheld from it, so In Bank = Settled − TDS).</p>
 
     <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:30px;">
-        <p style="font-size:10px;color:#9ca3af;">Computer-generated receipt — no signature required unless stamped.</p>
+        <p style="font-size:10px;color:${isReversed ? '#b91c1c' : '#9ca3af'};">${isReversed
+            ? 'REVERSED — retained for audit only, not valid as proof of payment.'
+            : 'Computer-generated receipt — no signature required unless stamped.'}</p>
         <div style="text-align:center;">
             <div style="height:38px;"></div>
             <p style="border-top:1px solid #9ca3af;padding-top:5px;font-size:11px;font-weight:700;min-width:190px;">${esc(b.signatureName || 'Authorised Signatory')}</p>
