@@ -5006,7 +5006,13 @@ model InsuranceReceipt {
   allocations  InsuranceReceiptAllocation[]
 
   @@unique([organizationId, receipt_number])
-  @@unique([organizationId, reference_number])
+  // Uniqueness on reference_number is enforced by a PARTIAL unique index
+  // (WHERE status <> 'Reversed'), created in
+  // 20260723000000_insurance_receipt_reference_partial_unique. Prisma cannot
+  // express a partial index, so this is a plain index here and the constraint
+  // lives in the migration — a reversed receipt must release its UTR so the
+  // corrected receipt can be re-recorded under the real one.
+  @@index([organizationId, reference_number])
   @@index([organizationId])
   @@index([payer_type])
   @@index([status])

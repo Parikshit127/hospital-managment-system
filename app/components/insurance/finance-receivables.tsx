@@ -10,13 +10,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Inbox, Loader2, RefreshCw, IndianRupee, Clock, XCircle, FileWarning,
-  ArrowDownToLine, AlertTriangle, Plus, X, Printer, Download, Undo2,
+  ArrowDownToLine, AlertTriangle, Plus, X, Printer, Download, Undo2, History,
 } from 'lucide-react';
 import { getTpaDeskDashboard, getInsuranceOutstanding, getBillWiseSanction } from '@/app/actions/insurance-aging-actions';
 import { getHospitalBillingInfo } from '@/app/actions/admin-actions';
 import {
   getInsuranceReceiptSummary, listInsuranceReceipts,
   allocateReceipt, getPendingAdvices, recordAndAllocateReceipt, reverseInsuranceReceipt,
+  getInsuranceReceiptHistory,
 } from '@/app/actions/insurance-receipts-actions';
 
 const fmt = (n: number) =>
@@ -369,6 +370,7 @@ export function InsuranceReceipts({ providers }: { providers: any[] }) {
   // undo — the settlement engine has a full reversal routine, but nothing in the
   // UI reached it, so a mistyped figure permanently settled the bill.
   const [reverseFor, setReverseFor] = useState<any>(null);
+  const [historyFor, setHistoryFor] = useState<any>(null);
   const [providerId, setProviderId] = useState('');
   const [payerSearch, setPayerSearch] = useState('');
   const [onlyPending, setOnlyPending] = useState(false);
@@ -546,6 +548,10 @@ export function InsuranceReceipts({ providers }: { providers: any[] }) {
                         className="inline-flex items-center rounded-lg border border-gray-300 p-1.5 text-gray-500 hover:bg-gray-50 hover:text-gray-800">
                         <Printer className="h-3.5 w-3.5" />
                       </a>
+                      <button onClick={() => setHistoryFor(r)} title="History — who recorded, mapped or reversed this, and why"
+                        className="inline-flex items-center rounded-lg border border-gray-300 p-1.5 text-gray-500 hover:bg-gray-50 hover:text-gray-800">
+                        <History className="h-3.5 w-3.5" />
+                      </button>
                       {r.status !== 'Reversed' && (
                         <button onClick={() => setReverseFor(r)} title="Reverse this receipt"
                           className="inline-flex items-center rounded-lg border border-gray-300 p-1.5 text-gray-400 hover:border-rose-300 hover:bg-rose-50 hover:text-rose-600">
@@ -573,6 +579,7 @@ export function InsuranceReceipts({ providers }: { providers: any[] }) {
       )}
       {allocFor && <AllocateModal payer={allocFor} onClose={() => setAllocFor(null)} onSaved={() => { setAllocFor(null); load(); }} />}
       {reverseFor && <ReverseReceiptModal receipt={reverseFor} onClose={() => setReverseFor(null)} onDone={() => { setReverseFor(null); load(); }} />}
+      {historyFor && <ReceiptHistoryModal receipt={historyFor} onClose={() => setHistoryFor(null)} />}
     </div>
   );
 }
@@ -827,6 +834,124 @@ export function NewReceiptModal({ providers, onClose, onSaved, defaultProviderId
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save Receipt'}
           </button>
         )}
+      </div>
+    </Modal>
+  );
+}
+
+// Audit trail for a receipt. A correction spans more than one row — reverse, then
+// re-record the same UTR — so this shows every receipt ever booked under this
+// reference alongside one timeline of who did what, when, and why.
+const ACTION_LABEL: Record<string, string> = {
+  insurance_receipt_created: 'Receipt recorded',
+  insurance_receipt_allocated: 'Mapped to patient bills',
+  insurance_receipt_reversed: 'Reversed',
+};
+const ACTION_TONE: Record<string, string> = {
+  insurance_receipt_created: 'bg-blue-100 text-blue-700',
+  insurance_receipt_allocated: 'bg-emerald-100 text-emerald-700',
+  insurance_receipt_reversed: 'bg-rose-100 text-rose-700',
+};
+
+function ReceiptHistoryModal({ receipt, onClose }: any) {
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    getInsuranceReceiptHistory(receipt.id)
+      .then((r: any) => { if (r?.success) setData(r.data); })
+      .finally(() => setLoading(false));
+  }, [receipt.id]);
+
+  const when = (d: any) => d ? new Date(d).toLocaleString('en-GB') : '—';
+
+  return (
+    <Modal title={`History — reference ${receipt.reference_number}`} onClose={onClose} wide>
+      {loading ? <Spinner /> : !data ? <Empty msg="No history" /> : (
+        <div className="space-y-5">
+          {data.chain.length > 1 && (
+            <p className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
+              This reference has been recorded <strong>{data.chain.length} times</strong> — a reversal releases the
+              reference so the corrected receipt can reuse the real UTR. All of them are listed below.
+            </p>
+          )}
+
+          <div>
+            <h4 className="mb-2 text-[11px] font-black uppercase tracking-wider text-gray-500">Receipts under this reference</h4>
+            <div className="overflow-x-auto rounded-xl border border-gray-200">
+              <table className="min-w-full text-sm">
+                <thead className="bg-slate-50 text-gray-600">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-bold text-[11px]">Receipt #</th>
+                    <th className="px-3 py-2 text-left font-bold text-[11px]">Date</th>
+                    <th className="px-3 py-2 text-left font-bold text-[11px]">Payer</th>
+                    <th className="px-3 py-2 text-right font-bold text-[11px]">Amount</th>
+                    <th className="px-3 py-2 text-right font-bold text-[11px]">Mapped</th>
+                    <th className="px-3 py-2 text-left font-bold text-[11px]">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {data.chain.map((c: any) => (
+                    <tr key={c.id} className={c.id === receipt.id ? 'bg-blue-50/50' : ''}>
+                      <td className="px-3 py-2 font-mono text-xs whitespace-nowrap">
+                        {c.receipt_number}{c.id === receipt.id && <span className="ml-1 text-[10px] font-bold text-blue-600">(this one)</span>}
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap text-xs">{c.receipt_date ? new Date(c.receipt_date).toLocaleDateString('en-GB') : '—'}</td>
+                      <td className="px-3 py-2 text-xs">{c.provider?.provider_name || c.corporate?.company_name || '—'}</td>
+                      <td className="px-3 py-2 text-right">{fmt(c.total_amount)}</td>
+                      <td className="px-3 py-2 text-right text-gray-500">{fmt(c.allocated_amount)}</td>
+                      <td className="px-3 py-2"><StatusPill status={c.status} /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div>
+            <h4 className="mb-2 text-[11px] font-black uppercase tracking-wider text-gray-500">Timeline</h4>
+            {data.events.length === 0 ? <Empty msg="No recorded actions" /> : (
+              <ol className="space-y-2">
+                {data.events.map((e: any) => (
+                  <li key={e.id} className="rounded-xl border border-gray-200 px-3 py-2.5">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${ACTION_TONE[e.action] || 'bg-gray-100 text-gray-600'}`}>
+                        {ACTION_LABEL[e.action] || e.action.replace(/_/g, ' ')}
+                      </span>
+                      <span className="font-mono text-[11px] text-gray-500">{e.receipt_number}</span>
+                      <span className="ml-auto text-[11px] text-gray-400">{when(e.at)}</span>
+                    </div>
+                    <p className="mt-1 text-xs text-gray-600">
+                      by <strong className="text-gray-800">{e.by}</strong>{e.role ? ` (${e.role})` : ''}
+                    </p>
+                    {e.reason && (
+                      <p className="mt-1 rounded-md bg-rose-50 px-2 py-1 text-xs text-rose-800">
+                        <span className="font-bold">Reason:</span> {e.reason}
+                      </p>
+                    )}
+                    {e.action === 'insurance_receipt_reversed' && e.details?.cash_undone != null && (
+                      <p className="mt-1 text-[11px] text-gray-500">
+                        Pulled back {fmt(e.details.cash_undone)} across {e.details.allocations_undone} bill(s)
+                        {Number(e.details.tds_undone) ? `, TDS ${fmt(e.details.tds_undone)}` : ''}
+                      </p>
+                    )}
+                    {e.action === 'insurance_receipt_allocated' && e.details && (
+                      <p className="mt-1 text-[11px] text-gray-500">
+                        {fmt(e.details.cash)} mapped across {e.details.lines} bill(s)
+                        {Number(e.details.tds) ? `, TDS ${fmt(e.details.tds)}` : ''}
+                      </p>
+                    )}
+                    {e.action === 'insurance_receipt_created' && e.details && (
+                      <p className="mt-1 text-[11px] text-gray-500">Amount {fmt(e.details.total)}</p>
+                    )}
+                  </li>
+                ))}
+              </ol>
+            )}
+          </div>
+        </div>
+      )}
+      <div className="mt-4 flex justify-end">
+        <button onClick={onClose} className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-bold">Close</button>
       </div>
     </Modal>
   );

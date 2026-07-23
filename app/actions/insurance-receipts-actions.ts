@@ -78,26 +78,16 @@ export async function createInsuranceReceipt(input: {
     const receiptDate = new Date(input.receipt_date);
     if (isNaN(receiptDate.getTime())) return { success: false, error: 'Invalid receipt_date' };
 
-    // Duplicate reference guard (scoped to org).
-    // NOTE: this intentionally still matches REVERSED receipts. Re-recording a
-    // reversed receipt under its original UTR would be the natural correction
-    // path, but there is a DB unique index on (organizationId, reference_number)
-    // that ignores status — so relaxing the check here only swaps this clear
-    // message for a raw Prisma constraint error. Allowing it needs a migration to
-    // a partial unique index (WHERE status <> 'Reversed'); until then the biller
-    // re-records under a suffixed reference.
+    // Duplicate reference guard (scoped to org): the same UTR must not be banked
+    // twice. Reversed receipts are excluded — they are void, so their reference is
+    // released and the corrected receipt can be re-recorded under the real UTR,
+    // keeping it matched to the bank statement. Mirrors the partial unique index
+    // that backs this in the database.
     const dup = await db.insuranceReceipt.findFirst({
-      where: { organizationId, reference_number: reference },
-      select: { id: true, status: true, receipt_number: true },
+      where: { organizationId, reference_number: reference, status: { not: 'Reversed' } },
+      select: { id: true, receipt_number: true },
     });
-    if (dup) {
-      return {
-        success: false,
-        error: dup.status === 'Reversed'
-          ? `Reference '${reference}' was used by receipt ${dup.receipt_number}, which has been reversed. Re-record it with a suffixed reference (e.g. '${reference}-R2').`
-          : `A receipt with reference '${reference}' already exists`,
-      };
-    }
+    if (dup) return { success: false, error: `A receipt with reference '${reference}' already exists (${dup.receipt_number})` };
 
     await ensureTpaGlAccounts(organizationId);
     const receiptNumber = await generateSequentialNumber(organizationId, 'IRC', db);
@@ -623,6 +613,75 @@ export async function getPendingAdvices(providerId?: number) {
   return { success: true, data: serialize(invoices) };
 }
 
+/**
+ * Full history for a receipt: every recorded action against it, plus the other
+ * receipts that share its reference.
+ *
+ * A correction cycle spans MORE than one receipt — reverse, then re-record the
+ * same UTR — and that chain is what an auditor needs to follow. Reading the
+ * receipt row alone shows only the surviving entry, so the chain is assembled by
+ * reference number and its audit entries returned as one timeline. Repeated
+ * reversals simply extend it.
+ */
+export async function getInsuranceReceiptHistory(receiptId: number) {
+  try {
+    const { db, organizationId } = await requireTenantContext();
+
+    const receipt = await db.insuranceReceipt.findFirst({
+      where: { id: receiptId, organizationId },
+      select: { id: true, reference_number: true },
+    });
+    if (!receipt) return { success: false, error: 'Receipt not found' };
+
+    // Every receipt ever recorded under this reference — the correction chain.
+    const chain = await db.insuranceReceipt.findMany({
+      where: { organizationId, reference_number: receipt.reference_number },
+      select: {
+        id: true, receipt_number: true, status: true, total_amount: true,
+        allocated_amount: true, unmapped_amount: true, tds_total: true,
+        receipt_date: true, created_at: true, created_by: true, remarks: true,
+        provider: { select: { provider_name: true } },
+        corporate: { select: { company_name: true } },
+        allocations: {
+          select: {
+            allocated_amount: true, disallowed_amount: true, tds_amount: true,
+            invoice: { select: { invoice_number: true, patient: { select: { full_name: true } } } },
+          },
+        },
+      },
+      orderBy: { id: 'asc' },
+    });
+
+    const ids = chain.map((r: any) => String(r.id));
+    const logs = await db.system_audit_logs.findMany({
+      where: { organizationId, entity_type: 'insurance_receipt', entity_id: { in: ids } },
+      orderBy: { created_at: 'asc' },
+      select: { id: true, action: true, username: true, role: true, details: true, created_at: true, entity_id: true },
+    });
+
+    const events = logs.map((l: any) => {
+      let details: any = null;
+      try { details = l.details ? JSON.parse(l.details) : null; } catch { details = { raw: l.details }; }
+      return {
+        id: l.id,
+        receipt_id: Number(l.entity_id),
+        receipt_number: chain.find((c: any) => String(c.id) === l.entity_id)?.receipt_number || '',
+        action: l.action,
+        by: l.username || 'system',
+        role: l.role || '',
+        at: l.created_at,
+        reason: details?.reason || null,
+        details,
+      };
+    });
+
+    return { success: true, data: serialize({ reference: receipt.reference_number, chain, events }) };
+  } catch (error: any) {
+    console.error('getInsuranceReceiptHistory error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
 // Reverse a receipt (e.g. bounced). Reverses GL, resets invoice settlement.
 // Guard: only allowed if no allocation has been further reconciled/written-off.
 export async function reverseInsuranceReceipt(receiptId: number, reason: string) {
@@ -696,7 +755,19 @@ export async function reverseInsuranceReceipt(receiptId: number, reason: string)
         data: {
           user_id: session?.id, username: session?.username || session?.name, role: session?.role,
           action: 'insurance_receipt_reversed', module: 'finance', entity_type: 'insurance_receipt',
-          entity_id: String(receipt.id), details: JSON.stringify({ receipt_number: receipt.receipt_number, reason }),
+          entity_id: String(receipt.id),
+          // Record WHAT was undone, not just that it happened — the allocations are
+          // kept but zeroed out, so without this the trail cannot say how much was
+          // pulled back or from which bills.
+          details: JSON.stringify({
+            receipt_number: receipt.receipt_number,
+            reason,
+            reference: receipt.reference_number,
+            total_amount: Number(receipt.total_amount || 0),
+            allocations_undone: receipt.allocations.length,
+            cash_undone: round2(receipt.allocations.reduce((s: number, a: any) => s + Number(a.allocated_amount || 0), 0)),
+            tds_undone: round2(receipt.allocations.reduce((s: number, a: any) => s + Number(a.tds_amount || 0), 0)),
+          }),
           organizationId,
         },
       });
