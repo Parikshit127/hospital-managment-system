@@ -26,12 +26,22 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 const APPLY = process.argv.includes('--apply');
+/** --only=<invoice_number|id> restricts the repair to a single bill. */
+const ONLY = (process.argv.find((a) => a.startsWith('--only=')) || '').split('=')[1] || null;
 const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 const num = (v: unknown) => Number(v ?? 0);
 
 async function main() {
     const invoices = await prisma.invoices.findMany({
-        where: { invoice_type: 'IPD', items: { some: { tax_amount: { gt: 0 } } } },
+        where: {
+            invoice_type: 'IPD',
+            items: { some: { tax_amount: { gt: 0 } } },
+            ...(ONLY
+                ? /^\d+$/.test(ONLY)
+                    ? { id: Number(ONLY) }
+                    : { invoice_number: ONLY }
+                : {}),
+        },
         select: {
             id: true, invoice_number: true, status: true, organizationId: true,
             total_amount: true, total_discount: true, net_amount: true,
