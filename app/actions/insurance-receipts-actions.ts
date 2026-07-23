@@ -342,7 +342,17 @@ export async function allocateReceipt(input: {
       // Update the receipt header (allocated / unmapped / tds / status).
       const newAllocated = round2(priorAllocated + runningCash);
       const newUnmapped = Math.max(0, round2(Number(receipt.total_amount) - newAllocated));
-      const newTdsTotal = round2(Number(receipt.tds_total || 0) + runningTds);
+      // Recompute tds_total from the allocation lines rather than incrementing the
+      // header. Incrementing double-counted whenever the header already carried a
+      // TDS figure — either declared when the receipt was recorded, or (before the
+      // fix in recordAndAllocateReceipt) seeded by the combined record-and-map flow.
+      // Once a receipt is mapped, the per-bill TDS is the record; this is also what
+      // the printed receipt reports, so header and lines can no longer disagree.
+      const tdsAgg = await tx.insuranceReceiptAllocation.aggregate({
+        where: { receipt_id: receipt.id, organizationId },
+        _sum: { tds_amount: true },
+      });
+      const newTdsTotal = round2(Number(tdsAgg._sum?.tds_amount || 0));
       const newStatus = newUnmapped <= TOL ? 'Allocated' : newAllocated > 0 ? 'PartiallyAllocated' : 'Open';
       await tx.insuranceReceipt.update({
         where: { id: receipt.id },
@@ -426,13 +436,11 @@ export async function recordAndAllocateReceipt(input: {
     (l) => l && l.invoice_id && (Number(l.allocated_amount || 0) + Number(l.disallowed_amount || 0) + Number(l.tds_amount || 0)) > 0,
   );
 
-  // allocateReceipt ROLLS UP tds_total from the allocation lines (it increments
-  // the header). Seeding the header with the same TDS here as well double-counted
-  // it — the receipt list then showed 2× the real TDS. When lines carry the TDS,
-  // let the allocation be the single source of truth; only the unallocated path
-  // (no lines to roll up from) records TDS on the header directly.
-  const headerForCreate = validLines.length ? { ...header, tds_amount: 0 } : header;
-  const created: any = await createInsuranceReceipt(headerForCreate);
+  // The header's declared TDS is kept as-is: allocateReceipt recomputes
+  // tds_total from the allocation lines, so this can no longer be double-counted.
+  // Keeping it matters when the mapping fails — the money is still recorded with
+  // the TDS the biller declared, rather than silently zeroed.
+  const created: any = await createInsuranceReceipt(header);
   if (!created?.success) return created;
   const receiptId = created.data?.id;
   if (validLines.length === 0 || !receiptId) {
