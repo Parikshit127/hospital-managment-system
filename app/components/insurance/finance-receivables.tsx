@@ -505,8 +505,20 @@ export function InsuranceReceipts({ providers }: { providers: any[] }) {
                       {r.provider?.provider_name || r.corporate?.company_name || '-'}
                     </span>
                   </td>
-                  <td className="px-3 py-2.5 text-gray-600 text-xs max-w-[180px] truncate" title={(r.patients || []).join(', ')}>
-                    {r.patients?.length ? r.patients.join(', ') : <span className="text-gray-300">Unallocated</span>}
+                  {/* Reversal keeps the allocation rows for audit, so the patient
+                      it *was* mapped to still comes back from the server. Showing
+                      it plainly read as if the receipt were still applied to that
+                      patient, while the same row said "Reversed" and showed the
+                      full amount unmapped. Strike it through so it reads as
+                      history, not a live allocation. */}
+                  <td className="px-3 py-2.5 text-gray-600 text-xs max-w-[180px] truncate"
+                    title={r.status === 'Reversed' && r.patients?.length
+                      ? `Reversed — was mapped to ${r.patients.join(', ')}`
+                      : (r.patients || []).join(', ')}>
+                    {!r.patients?.length ? <span className="text-gray-300">Unallocated</span>
+                      : r.status === 'Reversed'
+                        ? <span className="text-gray-400 line-through">{r.patients.join(', ')}</span>
+                        : r.patients.join(', ')}
                   </td>
                   <td className="px-3 py-2.5 text-gray-600 font-mono text-xs">{r.reference_number}</td>
                   <td className="px-3 py-2.5 text-right font-bold text-gray-900">{fmt(r.total_amount)}</td>
@@ -518,7 +530,10 @@ export function InsuranceReceipts({ providers }: { providers: any[] }) {
                   <td className="px-3 py-2.5"><StatusPill status={r.status} /></td>
                   <td className="px-3 py-2.5">
                     <div className="flex items-center justify-end gap-1.5">
-                      {unmapped > 0 && r.provider_id ? (
+                      {/* A reversed receipt still reports its full amount as
+                          unmapped, but the engine refuses to allocate it — so
+                          offering "Map" here only led to an error. */}
+                      {unmapped > 0 && r.provider_id && r.status !== 'Reversed' ? (
                         <button
                           onClick={() => setAllocFor({ provider_id: r.provider_id, provider_name: r.provider?.provider_name || 'Payer', receipt_id: r.id })}
                           title={`₹${fmt(unmapped)} still unmapped — map it to patient bills`}
@@ -899,7 +914,9 @@ function AllocateModal({ payer, onClose, onSaved }: any) {
     ]).then(([a, r]: any[]) => {
       if (a?.success) setAdvices(a.data);
       if (r?.success) {
-        r = { ...r, data: (r.data || []).filter((x: any) => Number(x.unmapped_amount || 0) > 0) };
+        // Money still to map AND actually allocatable — a reversed receipt keeps
+        // its unmapped balance on paper but can never be allocated again.
+        r = { ...r, data: (r.data || []).filter((x: any) => Number(x.unmapped_amount || 0) > 0 && x.status !== 'Reversed') };
         setReceipts(r.data);
         // Opened from a specific receipt row → pre-select that receipt; otherwise
         // fall back to the most recent open one.
