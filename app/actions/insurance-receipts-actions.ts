@@ -79,8 +79,25 @@ export async function createInsuranceReceipt(input: {
     if (isNaN(receiptDate.getTime())) return { success: false, error: 'Invalid receipt_date' };
 
     // Duplicate reference guard (scoped to org).
-    const dup = await db.insuranceReceipt.findFirst({ where: { organizationId, reference_number: reference }, select: { id: true } });
-    if (dup) return { success: false, error: `A receipt with reference '${reference}' already exists` };
+    // NOTE: this intentionally still matches REVERSED receipts. Re-recording a
+    // reversed receipt under its original UTR would be the natural correction
+    // path, but there is a DB unique index on (organizationId, reference_number)
+    // that ignores status — so relaxing the check here only swaps this clear
+    // message for a raw Prisma constraint error. Allowing it needs a migration to
+    // a partial unique index (WHERE status <> 'Reversed'); until then the biller
+    // re-records under a suffixed reference.
+    const dup = await db.insuranceReceipt.findFirst({
+      where: { organizationId, reference_number: reference },
+      select: { id: true, status: true, receipt_number: true },
+    });
+    if (dup) {
+      return {
+        success: false,
+        error: dup.status === 'Reversed'
+          ? `Reference '${reference}' was used by receipt ${dup.receipt_number}, which has been reversed. Re-record it with a suffixed reference (e.g. '${reference}-R2').`
+          : `A receipt with reference '${reference}' already exists`,
+      };
+    }
 
     await ensureTpaGlAccounts(organizationId);
     const receiptNumber = await generateSequentialNumber(organizationId, 'IRC', db);
