@@ -34,6 +34,49 @@ function parseCancellationReason(details?: string | null): string | null {
   }
 }
 
+/**
+ * Resolve a typed-in doctor name to that doctor's user account.
+ *
+ * admissions stores the doctor twice: doctor_name (free text, printed on the bill)
+ * and attending_doctor_id (the link to the account). Only the text was ever written,
+ * so attending_doctor_id was NULL on every admission — which silently emptied the
+ * Doctor Portal (it filters on the link, not the name) and disabled the IPD fallback
+ * that attributes a bill to its attending doctor when invoices.doctor_id is unset.
+ *
+ * Matching ignores title, case and punctuation ("DR. Yogesh Taneja " -> yogeshtaneja)
+ * and prefers an active, non-merged account when duplicates normalise the same.
+ * Returns null when nothing matches — the name is still stored, so behaviour is never
+ * worse than before.
+ */
+async function resolveAttendingDoctorId(
+    db: any,
+    organizationId: string,
+    doctorName: string | null | undefined,
+): Promise<string | null> {
+    const norm = (s: unknown) =>
+        String(s ?? '')
+            .toLowerCase()
+            .replace(/\[merged\]/g, '')
+            .replace(/\b(dr|doctor|prof|mr|mrs|ms)\b\.?/g, '')
+            .replace(/[^a-z0-9]/g, '');
+
+    const key = norm(doctorName);
+    if (!key) return null;
+
+    const doctors = await db.user.findMany({
+        where: { organizationId, role: 'doctor' },
+        select: { id: true, name: true, username: true, is_active: true },
+    });
+
+    const hits = doctors.filter((d: any) => norm(d.name || d.username) === key);
+    if (!hits.length) return null;
+    const preferred =
+        hits.find((d: any) => d.is_active && !/^\s*\[MERGED\]/i.test(d.name || '')) ??
+        hits.find((d: any) => d.is_active) ??
+        hits[0];
+    return preferred?.id ?? null;
+}
+
 async function getAdmissionCancellationReasons(db: any, admissionIds: string[]) {
   const reasons = new Map<string, string>();
   if (admissionIds.length === 0) return reasons;
@@ -308,6 +351,9 @@ export async function admitPatientIPD(data: {
                 status: "Admitted",
                 diagnosis: data.diagnosis,
                 doctor_name: data.doctor_name,
+                // Link the doctor's ACCOUNT too, not just their name — the Doctor
+                // Portal and the IPD commission fallback both key off this.
+                attending_doctor_id: await resolveAttendingDoctorId(tx, organizationId, data.doctor_name),
                 admission_type: data.admission_type,
                 line_of_treatment: data.line_of_treatment,
                 ...(admissionDate && { admission_date: admissionDate }),
@@ -1621,9 +1667,14 @@ export async function changeAdmissionDoctor(
 
     const oldDoctorName = admission.doctor_name || "N/A";
 
+    // Re-resolve the link as well, so changing the doctor moves the patient in the
+    // Doctor Portal instead of leaving them with the previous doctor (or nobody).
     await db.admissions.update({
       where: { admission_id: admissionId },
-      data: { doctor_name: trimmed },
+      data: {
+        doctor_name: trimmed,
+        attending_doctor_id: await resolveAttendingDoctorId(db, admission.organizationId, trimmed),
+      },
     });
 
     await logAudit({
