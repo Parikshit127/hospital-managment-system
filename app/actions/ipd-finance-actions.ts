@@ -546,7 +546,24 @@ export async function postChargeToIpdBill(data: {
         // Use master values when available, else fall back to client-provided values
         const description = masterService ? masterService.service_name : data.description;
         const unitPrice = masterService ? Number(masterService.default_rate) : data.unit_price;
-        const taxRate = masterService ? Number(masterService.tax_rate || 0) : (data.tax_rate || 0);
+
+        // GST on an IN-PATIENT bill is always nil.
+        //
+        // Treatment of an admitted patient is a COMPOSITE SUPPLY of healthcare
+        // services, exempt under Notification 12/2017-CT(R) entry 74. CBIC circular
+        // 32/06/2018 (Q.5) puts it beyond doubt: room, medicines, consumables,
+        // implants, diet and procedures billed to an in-patient are part of that one
+        // exempt supply and are NOT taxed individually.
+        //
+        // Pharmacy was passing each medicine's own retail GST rate (5%/12%) straight
+        // through, so IPD bills picked up tax that should never have been charged —
+        // it inflated the payable and left the patient with a small phantom balance
+        // after they had paid the full amount. The same applies to any service master
+        // row that carries a rate, so this is zeroed centrally rather than per caller.
+        //
+        // OTC / walk-in pharmacy sales are a separate taxable supply and are billed
+        // through the pharmacy invoice path, which never reaches this function.
+        const taxRate = 0;
         const serviceCategory = masterService ? masterService.service_category : (data.service_category || null);
         const hsnSacCode = masterService ? (masterService.hsn_sac_code || null) : (data.hsn_sac_code || null);
         const refId = data.service_id || data.source_ref_id || null;
