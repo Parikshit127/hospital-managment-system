@@ -97,29 +97,83 @@ export async function addPatientNote(
     }
 }
 
-/** List a patient's notes, newest first. Scoped to the caller's organization. */
+/**
+ * List a patient's notes, newest first. Scoped to the caller's organization.
+ *
+ * This also folds in **nursing notes** entered by nurses against the patient's
+ * admissions. Nurses record notes on a separate table (`nursing_notes`, keyed by
+ * admission), so historically they never appeared on the patient's profile. We
+ * merge them here (read-only) so every "Patient Details" screen shows one unified,
+ * chronological note history — nurse notes included — without any data migration.
+ * Nursing notes are tagged `source: 'nursing'` so the UI can label them.
+ */
 export async function getPatientNotes(patientId: string): Promise<ListResult> {
     try {
         const { db, organizationId } = await requireTenantContext();
 
-        const notes = await db.patientNote.findMany({
-            where: { patient_id: patientId, organizationId },
-            orderBy: { created_at: 'desc' },
-            take: 200,
-        });
+        const [notes, admissions] = await Promise.all([
+            db.patientNote.findMany({
+                where: { patient_id: patientId, organizationId },
+                orderBy: { created_at: 'desc' },
+                take: 200,
+            }),
+            db.admissions.findMany({
+                where: { patient_id: patientId },
+                select: { admission_id: true },
+            }),
+        ]);
 
-        return {
-            success: true,
-            data: notes.map((n: PatientNoteRow) => ({
-                id: n.id,
-                note: n.note,
-                source: n.source,
-                created_by: n.created_by,
-                created_by_name: n.created_by_name,
-                created_by_role: n.created_by_role,
-                created_at: n.created_at.toISOString(),
-            })),
-        };
+        const patientNotes: PatientNoteDTO[] = notes.map((n: PatientNoteRow) => ({
+            id: n.id,
+            note: n.note,
+            source: n.source,
+            created_by: n.created_by,
+            created_by_name: n.created_by_name,
+            created_by_role: n.created_by_role,
+            created_at: n.created_at.toISOString(),
+        }));
+
+        // Fold in nursing notes recorded against this patient's admission(s).
+        let nursingNotes: PatientNoteDTO[] = [];
+        const admissionIds = admissions.map((a: { admission_id: string }) => a.admission_id);
+        if (admissionIds.length > 0) {
+            const nnotes = await db.nursingNote.findMany({
+                where: { admission_id: { in: admissionIds } },
+                orderBy: { created_at: 'desc' },
+                take: 200,
+            });
+            if (nnotes.length > 0) {
+                const nurseIds = [...new Set(nnotes.map((n: any) => n.nurse_id).filter(Boolean))];
+                const nurses = nurseIds.length
+                    ? await db.user.findMany({
+                          where: { id: { in: nurseIds } },
+                          select: { id: true, name: true, username: true },
+                      })
+                    : [];
+                const nurseName: Record<string, string> = Object.fromEntries(
+                    nurses.map((u: any) => [u.id, u.name || u.username]),
+                );
+                nursingNotes = nnotes.map((n: any) => ({
+                    // Negative id keeps React keys unique vs. positive patient-note ids.
+                    id: -n.id,
+                    note:
+                        n.note_type && n.note_type.toLowerCase() !== 'general'
+                            ? `${n.note_type}: ${n.details}`
+                            : n.details,
+                    source: 'nursing',
+                    created_by: n.nurse_id ?? null,
+                    created_by_name: nurseName[n.nurse_id] || 'Nurse',
+                    created_by_role: 'nurse',
+                    created_at: n.created_at.toISOString(),
+                }));
+            }
+        }
+
+        const merged = [...patientNotes, ...nursingNotes].sort(
+            (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+        );
+
+        return { success: true, data: merged };
     } catch (error) {
         const msg = error instanceof Error ? error.message : 'Failed to load notes';
         return { success: false, error: msg };

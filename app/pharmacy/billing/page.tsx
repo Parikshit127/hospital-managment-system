@@ -1660,8 +1660,10 @@ export default function PharmacyPage() {
                                             <p className="text-[10px] text-gray-400">{billDisplayDateStr}</p>
                                         </div>
                                     </div>
-                                    {/* Print-only invoice info with top padding for letterhead */}
-                                    <div className="hidden print:flex justify-end mb-4" style={{ paddingTop: '130px' }}>
+                                    {/* Print-only invoice info with top padding for letterhead.
+                                        Uses the org's configurable header height (Bill Settings) so
+                                        content moves up to match the letterhead; falls back to 130. */}
+                                    <div className="hidden print:flex justify-end mb-4" style={{ paddingTop: `${branding?.headerHeight ?? 130}px` }}>
                                         <div className="text-right">
                                             <p className="text-xs font-black uppercase tracking-widest" style={{ color: branding?.accentColor || '#1e3a6e' }}>Pharmacy Invoice</p>
                                             <p className="text-xs font-mono text-gray-500 mt-0.5">{invoiceResult.invoice_number}</p>

@@ -111,7 +111,14 @@ export function PatientNotes({
                 ) : (
                     notes.map(n => (
                         <div key={n.id} className="border border-gray-100 bg-gray-50 rounded-xl px-3 py-2">
-                            <p className="text-sm text-gray-800 whitespace-pre-wrap">{n.note}</p>
+                            <div className="flex items-start gap-2">
+                                <p className="text-sm text-gray-800 whitespace-pre-wrap flex-1">{n.note}</p>
+                                {n.source === 'nursing' && (
+                                    <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-violet-600 bg-violet-50 border border-violet-200 rounded px-1.5 py-0.5">
+                                        Nursing
+                                    </span>
+                                )}
+                            </div>
                             <div className="flex items-center gap-1.5 mt-1.5 text-[11px] text-gray-400">
                                 <Clock className="h-3 w-3" />
                                 <span>{formatWhen(n.created_at)}</span>

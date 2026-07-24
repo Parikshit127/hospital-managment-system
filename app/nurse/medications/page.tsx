@@ -312,14 +312,31 @@ export default function NurseMedicationsPage() {
                                 })
                             ) : (
                                 <tr>
-                                    <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
-                                        <Pill className="h-8 w-8 mx-auto text-gray-300 mb-2" />
-                                        <p className="font-medium">
-                                            {filterMode === 'due'
-                                                ? 'No medications due at this time.'
-                                                : 'No medication records found.'
-                                            }
-                                        </p>
+                                    <td colSpan={7} className="px-6 py-12 text-center text-gray-500 whitespace-normal">
+                                        <div className="max-w-md mx-auto whitespace-normal">
+                                            <Pill className="h-8 w-8 mx-auto text-gray-300 mb-2" />
+                                            <p className="font-bold text-gray-700">
+                                                {filterMode === 'due'
+                                                    ? 'No medications due right now'
+                                                    : 'No medication records yet'}
+                                            </p>
+                                            <p className="mt-1.5 text-xs text-gray-500 leading-relaxed whitespace-normal">
+                                                This is the <span className="font-semibold text-gray-600">Medication Administration Record (eMAR)</span>.
+                                                Doses appear here automatically once a doctor adds an active
+                                                medication to an admitted patient&apos;s chart — then you can mark each
+                                                dose <span className="font-semibold text-emerald-600">Administered</span>,{' '}
+                                                <span className="font-semibold text-blue-600">Held</span> or{' '}
+                                                <span className="font-semibold text-rose-600">Refused</span> here.
+                                            </p>
+                                            {filterMode === 'due' && (
+                                                <button
+                                                    onClick={() => setFilterMode('all')}
+                                                    className="mt-3 text-xs font-semibold text-orange-600 hover:text-orange-700 underline underline-offset-2"
+                                                >
+                                                    View all medication records
+                                                </button>
+                                            )}
+                                        </div>
                                     </td>
                                 </tr>
                             )}

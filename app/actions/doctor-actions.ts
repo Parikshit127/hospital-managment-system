@@ -300,6 +300,22 @@ export async function saveMedicalNote(data: {
   }
 }
 
+/** List medical notes for an admission, newest first. Org-scoped by the tenant client. */
+export async function getMedicalNotesForAdmission(admissionId: string) {
+  try {
+    const { db } = await requireTenantContext();
+    const notes = await db.medical_notes.findMany({
+      where: { admission_id: admissionId },
+      orderBy: { created_at: "desc" },
+      take: 200,
+    });
+    return { success: true, data: JSON.parse(JSON.stringify(notes)) };
+  } catch (error) {
+    console.error("getMedicalNotesForAdmission error:", error);
+    return { success: false, data: [] as any[] };
+  }
+}
+
 export async function saveClinicalNotes(data: any) {
   try {
     const { db, organizationId } = await requireTenantContext();

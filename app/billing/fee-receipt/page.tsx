@@ -1282,7 +1282,7 @@ function SuccessAndPrintModal({
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={branding?.logoUrl || '/logo.jpeg'} alt="" aria-hidden="true" style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: '280px', opacity: 0.06, zIndex: 0, pointerEvents: 'none' }} />
                 {/* Content */}
-                <div style={{ position: 'relative', zIndex: 1, padding: '130px 60px 80px 60px' }}>
+                <div style={{ position: 'relative', zIndex: 1, padding: `${branding?.headerHeight ?? 130}px 60px ${branding?.footerHeight ?? 80}px 60px` }}>
                 <div className="max-w-3xl mx-auto space-y-6">
                     {/* Invoice number top-right */}
                     <div className="flex justify-end">

@@ -46,6 +46,13 @@ export function PrescriptionPrint({ data, onClose, branding }: PrescriptionPrint
         const win = window.open('', '_blank', 'width=800,height=900');
         if (!win) return;
 
+        // Space reserved at the top/bottom to clear the letterhead graphic. Driven by
+        // the org's Bill Settings → Header/Footer Height so admins can move content up
+        // to match their letterhead in ONE place (was hardcoded to 130/80, which left a
+        // gap when the letterhead band was shorter than 130px).
+        const headerPad = branding?.headerHeight ?? 130;
+        const footerPad = branding?.footerHeight ?? 80;
+
         const doctorRightHtml = `
             <div style="font-family:Arial,sans-serif;">
                 <div style="font-size:15px;font-weight:bold;color:#1e3a6e;">${formatDoctorName(data.doctor.name)}</div>
@@ -61,7 +68,7 @@ export function PrescriptionPrint({ data, onClose, branding }: PrescriptionPrint
                 <title>Prescription — ${data.patient.full_name}</title>
                 <style>
                     * { margin: 0; padding: 0; box-sizing: border-box; }
-                    body { font-family: 'Times New Roman', serif; color: #111; padding: 130px 48px 80px 48px; font-size: 13px; position: relative; }
+                    body { font-family: 'Times New Roman', serif; color: #111; padding: ${headerPad}px 48px ${footerPad}px 48px; font-size: 13px; position: relative; }
                     body::before { content: ''; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-image: url('${branding?.letterheadUrl || '/letter head.png'}'); background-size: cover; background-position: center; z-index: -1; }
                     ${LETTERHEAD_PRINT_CSS}
                     .rx-patient-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; padding: 10px 0; border-bottom: 1px solid #ccc; margin-bottom: 14px; }
@@ -76,7 +83,7 @@ export function PrescriptionPrint({ data, onClose, branding }: PrescriptionPrint
                     .rx-med-num { font-weight: bold; color: #444; min-width: 18px; }
                     .rx-footer { margin-top: 40px; display: flex; justify-content: space-between; align-items: flex-end; border-top: 1px solid #ccc; padding-top: 12px; }
                     .rx-sig { width: 180px; border-top: 1px solid #1e3a6e; margin-top: 40px; text-align: center; font-size: 11px; padding-top: 4px; }
-                    @media print { body { padding: 130px 48px 80px 48px; } }
+                    @media print { body { padding: ${headerPad}px 48px ${footerPad}px 48px; } }
                 </style>
             </head>
             <body>

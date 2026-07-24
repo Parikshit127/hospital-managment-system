@@ -445,7 +445,7 @@ export default function NursePatientsPage() {
                         {/* Tabs */}
                         <div className="px-6 pt-3 pb-0 flex items-center gap-2 border-b border-gray-100 bg-gray-50 shrink-0">
                             <Tab id="vitals" active={activeTab === 'vitals'} icon={<Activity className="h-3.5 w-3.5" />} label={selectedPatient.status === 'Admitted' ? "Record Vitals" : "Vitals History"} onClick={() => setActiveTab('vitals')} />
-                            <Tab id="notes" active={activeTab === 'notes'} icon={<FileText className="h-3.5 w-3.5" />} label={selectedPatient.status === 'Admitted' ? "Medical Notes" : "Notes History"} onClick={() => setActiveTab('notes')} />
+                            <Tab id="notes" active={activeTab === 'notes'} icon={<FileText className="h-3.5 w-3.5" />} label={selectedPatient.status === 'Admitted' ? "Nursing Notes" : "Nursing Notes History"} onClick={() => setActiveTab('notes')} />
                             <Tab id="pharmacy" active={activeTab === 'pharmacy'} icon={<ShoppingCart className="h-3.5 w-3.5" />} label={selectedPatient.status === 'Admitted' ? "Pharmacy Indent" : "Indent History"} onClick={() => setActiveTab('pharmacy')} />
                             <div className="ml-auto pb-2">
                                 <span className="text-[10px] text-gray-400 font-mono">{selectedPatient.admissionId}</span>

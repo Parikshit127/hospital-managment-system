@@ -9,6 +9,7 @@ import {
 import { getAdmissionFullDetails, updateAdmissionDiagnosis } from '@/app/actions/ipd-actions';
 import { fmtIstDateTime } from '@/app/lib/ist';
 import { getIPDVitalsHistory, getNursingAssessments } from '@/app/actions/ipd-nursing-actions';
+import { getNursingNotes } from '@/app/actions/nurse-actions';
 import { VitalsChart } from '@/app/components/ipd/VitalsChart';
 import { DischargeSummaryEditor } from '@/app/components/ipd/DischargeSummaryEditor';
 import { useToast } from '@/app/components/ui/Toast';
@@ -41,6 +42,7 @@ export default function IpdPatientDetailContent({ admissionId }: { admissionId: 
     const [vitalsLoaded, setVitalsLoaded] = useState(false);
 
     const [nursingAssessments, setNursingAssessments] = useState<any[]>([]);
+    const [nursingNotes, setNursingNotes] = useState<any[]>([]);
     const [loadingNursing, setLoadingNursing] = useState(false);
     const [nursingLoaded, setNursingLoaded] = useState(false);
 
@@ -83,9 +85,13 @@ export default function IpdPatientDetailContent({ admissionId }: { admissionId: 
     useEffect(() => {
         if (activeTab !== 'nursing' || nursingLoaded) return;
         setLoadingNursing(true);
-        getNursingAssessments(admissionId).then((res) => {
-            if (res.success) setNursingAssessments(res.data as any[]);
+        Promise.all([
+            getNursingAssessments(admissionId),
+            getNursingNotes(admissionId),
+        ]).then(([assessRes, notesRes]) => {
+            if (assessRes.success) setNursingAssessments(assessRes.data as any[]);
             else toast.error('Failed to load nursing assessments');
+            if (notesRes.success) setNursingNotes(notesRes.data as any[]);
             setLoadingNursing(false);
             setNursingLoaded(true);
         });
@@ -296,9 +302,36 @@ export default function IpdPatientDetailContent({ admissionId }: { admissionId: 
             )}
 
             {activeTab === 'nursing' && (
-                <div className="bg-white border border-gray-200 rounded-2xl p-6">
+                <div className="space-y-6">
+                  {/* Nursing Notes recorded by nurses (Nurse → Nursing Notes / My Patients) */}
+                  <div className="bg-white border border-gray-200 rounded-2xl p-6">
+                    <h3 className="font-black text-gray-700 mb-4 text-sm uppercase tracking-wide">Nursing Notes</h3>
                     {loadingNursing ? (
-                        <div className="flex items-center justify-center py-12 text-gray-400">
+                        <div className="flex items-center justify-center py-8 text-gray-400">
+                            <Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading nursing notes...
+                        </div>
+                    ) : nursingNotes.length === 0 ? (
+                        <p className="text-sm text-gray-400">No nursing notes recorded.</p>
+                    ) : (
+                        <div className="space-y-3">
+                            {nursingNotes.map((note: any) => (
+                                <div key={note.id} className="border border-gray-100 rounded-xl p-4 bg-gray-50/50">
+                                    <div className="flex justify-between items-center mb-1">
+                                        <span className="text-xs font-black text-violet-600 uppercase">{note.note_type || 'General'}</span>
+                                        <span className="text-[10px] text-gray-400 font-semibold">{new Date(note.created_at).toLocaleString('en-GB')}</span>
+                                    </div>
+                                    <p className="text-sm text-gray-700 whitespace-pre-wrap">{note.details}</p>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                  </div>
+
+                  {/* Nursing Assessments (structured) */}
+                  <div className="bg-white border border-gray-200 rounded-2xl p-6">
+                    <h3 className="font-black text-gray-700 mb-4 text-sm uppercase tracking-wide">Nursing Assessments</h3>
+                    {loadingNursing ? (
+                        <div className="flex items-center justify-center py-8 text-gray-400">
                             <Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading nursing assessments...
                         </div>
                     ) : nursingAssessments.length === 0 ? (
@@ -325,6 +358,7 @@ export default function IpdPatientDetailContent({ admissionId }: { admissionId: 
                             ))}
                         </div>
                     )}
+                  </div>
                 </div>
             )}
 
