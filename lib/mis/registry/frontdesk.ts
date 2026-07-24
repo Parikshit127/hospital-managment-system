@@ -550,25 +550,35 @@ export const ipDischargeReport: ReportDefinition = {
     statusOptions: ['Normal', 'LAMA', 'DAMA', 'Absconded', 'Death', 'Transfer'],
   },
   columns: [
-    { key: 'admission_date', label: 'Admission Date', type: 'date' },
-    { key: 'discharge_date', label: 'Discharge Date', type: 'date' },
+    // Date and time are separate columns so each reads cleanly and can be sorted
+    // on its own. All timestamps are shown in IST — the server stores UTC.
+    { key: 'admission_date', label: 'Admission Date', type: 'string' },
+    { key: 'admission_time', label: 'Admission Time', type: 'string' },
+    { key: 'discharge_date', label: 'Discharge Date', type: 'string' },
+    { key: 'discharge_time', label: 'Discharge Time', type: 'string' },
     { key: 'ip_number', label: 'IP Number', type: 'string' },
     { key: 'patient_name', label: 'Patient Name', type: 'string' },
-    { key: 'length_of_stay', label: 'Length of Stay (Days)', type: 'number' },
+    // Readable stay ("1 day 2 hrs", "6 days 21 hrs") plus a precise numeric hours
+    // column so the report can still sort and average on length of stay.
+    { key: 'length_of_stay', label: 'Length of Stay', type: 'string' },
+    { key: 'stay_hours', label: 'Stay (Hours)', type: 'number' },
     { key: 'discharge_type', label: 'Discharge Type', type: 'string' },
   ],
-  defaultSort: { column: 'discharge_date', direction: 'desc' },
+  defaultSort: { column: 'stay_hours', direction: 'desc' },
   rowLimitSync: 5000,
   requiredPermission: 'mis_reports.frontdesk.view',
   queryFn: async (filters: ValidatedFilters, orgId: string) => {
     const { date_start, date_end, discharge_type } = filters;
     const rows = await prisma.$queryRaw<any[]>`
-      SELECT 
-        DATE(adm.admission_date) as "admission_date",
-        DATE(adm.discharge_date) as "discharge_date",
+      SELECT
+        to_char(adm.admission_date AT TIME ZONE 'Asia/Kolkata', 'DD Mon YYYY') as "admission_date",
+        to_char(adm.admission_date AT TIME ZONE 'Asia/Kolkata', 'hh12:mi AM')  as "admission_time",
+        to_char(adm.discharge_date AT TIME ZONE 'Asia/Kolkata', 'DD Mon YYYY') as "discharge_date",
+        to_char(adm.discharge_date AT TIME ZONE 'Asia/Kolkata', 'hh12:mi AM')  as "discharge_time",
         adm.admission_id as "ip_number",
         p.full_name as "patient_name",
-        EXTRACT(DAY FROM (adm.discharge_date - adm.admission_date)) as "length_of_stay",
+        -- Exact stay in hours (one decimal) — days alone hid stays shorter than a day as 0.
+        ROUND((EXTRACT(EPOCH FROM (adm.discharge_date - adm.admission_date)) / 3600)::numeric, 1) as "stay_hours",
         COALESCE(adm.discharge_type, 'Normal') as "discharge_type"
       FROM "admissions" adm
       LEFT JOIN "OPD_REG" p ON adm.patient_id = p.patient_id
@@ -580,11 +590,20 @@ export const ipDischargeReport: ReportDefinition = {
       ORDER BY adm.discharge_date DESC
     `;
 
+    // Turn precise hours into "X day(s) Y hr(s)" — or just hours for a sub-day stay.
+    const readableStay = (hours: number): string => {
+      if (!hours || hours <= 0) return '0 hrs';
+      if (hours < 24) return `${hours} hr${hours === 1 ? '' : 's'}`;
+      const days = Math.floor(hours / 24);
+      const rem = Math.round(hours % 24);
+      return `${days} day${days === 1 ? '' : 's'}${rem ? ` ${rem} hr${rem === 1 ? '' : 's'}` : ''}`;
+    };
+
     return {
-      rows: rows.map(r => ({
-        ...r,
-        length_of_stay: Number(r.length_of_stay || 0),
-      })),
+      rows: rows.map(r => {
+        const hrs = Number(r.stay_hours || 0);
+        return { ...r, stay_hours: hrs, length_of_stay: readableStay(hrs) };
+      }),
       totals: {}
     };
   },

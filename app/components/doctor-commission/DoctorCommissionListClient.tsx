@@ -103,9 +103,9 @@ export default function DoctorCommissionListClient({ basePath }: { basePath: str
             <div className="flex items-center justify-between mb-6">
                 <div>
                     <h1 className="text-2xl font-black text-gray-800 flex items-center gap-2">
-                        <Stethoscope className="h-6 w-6 text-indigo-500" /> Doctor Invoicing & Consultant Charges
+                        <Stethoscope className="h-6 w-6 text-indigo-500" /> Doctor Payouts
                     </h1>
-                    <p className="text-sm text-gray-400">Per-bill consultant charges for the doctor assigned to each invoice.</p>
+                    <p className="text-sm text-gray-400">What each doctor is paid on the bills assigned to them.</p>
                 </div>
                 {/* Shortcut into the MIS "Doctor Wise Revenue Summary" report (admin/finance portal). */}
                 <Link
@@ -116,10 +116,13 @@ export default function DoctorCommissionListClient({ basePath }: { basePath: str
                 </Link>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
-                <SummaryCard label="Business (collected)" value={inr(totals.business)} />
-                <SummaryCard label="Consultant charges accrued" value={inr(totals.accrued)} />
-                <SummaryCard label="Consultant charges paid" value={inr(totals.paid)} />
+            {/* Finance summary — reads left to right as the money's journey:
+                collected from patients → owed to doctors → already paid → still to pay. */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+                <SummaryCard label="Collected from patients" value={inr(totals.business)} />
+                <SummaryCard label="Payable to doctors" value={inr(totals.accrued + totals.paid)} />
+                <SummaryCard label="Already paid" value={inr(totals.paid)} />
+                <SummaryCard label="Still to pay" value={inr(totals.accrued)} highlight />
             </div>
 
             <div className="flex flex-wrap items-center gap-3 mb-4">
@@ -144,12 +147,12 @@ export default function DoctorCommissionListClient({ basePath }: { basePath: str
                     <thead className="bg-gray-50 text-[10px] uppercase tracking-wider text-gray-400 font-black">
                         <tr>
                             <th className="text-left px-4 py-3">Doctor</th>
-                            <th className="text-left px-4 py-3">Consultant charge</th>
+                            <th className="text-left px-4 py-3">Rate</th>
                             <th className="text-right px-4 py-3">Bills</th>
-                            <th className="text-right px-4 py-3">Business</th>
-                            <th className="text-right px-4 py-3">Accrued</th>
+                            <th className="text-right px-4 py-3">Collected</th>
+                            <th className="text-right px-4 py-3">Payable</th>
                             <th className="text-right px-4 py-3">Paid</th>
-                            <th className="text-right px-4 py-3">Outstanding</th>
+                            <th className="text-right px-4 py-3">Still to pay</th>
                             <th className="px-4 py-3"></th>
                         </tr>
                     </thead>
@@ -285,11 +288,11 @@ function DefaultRateControl({ current, onSaved }: { current: number; onSaved: ()
     );
 }
 
-function SummaryCard({ label, value }: { label: string; value: string }) {
+function SummaryCard({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
     return (
-        <div className="bg-white rounded-2xl border border-gray-100 p-4">
-            <div className="text-[10px] uppercase tracking-wider text-gray-400 font-black">{label}</div>
-            <div className="text-lg font-black text-gray-800 mt-1">{value}</div>
+        <div className={`rounded-2xl border p-4 ${highlight ? 'bg-indigo-50 border-indigo-200' : 'bg-white border-gray-100'}`}>
+            <div className={`text-[10px] uppercase tracking-wider font-black ${highlight ? 'text-indigo-500' : 'text-gray-400'}`}>{label}</div>
+            <div className={`text-lg font-black mt-1 ${highlight ? 'text-indigo-700' : 'text-gray-800'}`}>{value}</div>
         </div>
     );
 }
