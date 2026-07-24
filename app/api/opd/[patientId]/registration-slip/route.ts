@@ -457,9 +457,11 @@ function renderOpdSlipHtml(patient: any, appt: any, b: BillBranding, org: any, d
                body is pushed clear of the printed header. The offset belongs on
                whichever block now comes first — that is the document title, not
                the patient card, or the title would land on top of the pre-printed
-               header. */
+               header. Driven by the org's Bill Settings → Header Height (same
+               field used by prescriptions/fee receipts) so each hospital's own
+               letterhead spacing applies instead of one fixed value for everyone. */
             body.hide-letterhead .doc-title-row {
-                margin-top: ${220}px;
+                margin-top: ${b.headerHeight}px;
             }
         }
     </style>
