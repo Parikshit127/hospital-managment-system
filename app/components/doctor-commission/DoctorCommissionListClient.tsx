@@ -53,6 +53,24 @@ function commissionSummary(r: Row): string {
     return '—';
 }
 
+// Month windows finance actually asks for. Value is a resolver so "this/last month"
+// are computed at click time, not when the module loads.
+type PeriodKey = 'all' | 'this_month' | 'last_month';
+function periodRange(key: PeriodKey): { from?: string; to?: string; label: string } {
+    const now = new Date();
+    const iso = (d: Date) => d.toISOString().slice(0, 10);
+    if (key === 'this_month') {
+        const from = new Date(now.getFullYear(), now.getMonth(), 1);
+        return { from: iso(from), to: iso(now), label: 'This month' };
+    }
+    if (key === 'last_month') {
+        const from = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        const to = new Date(now.getFullYear(), now.getMonth(), 0);
+        return { from: iso(from), to: iso(to), label: 'Last month' };
+    }
+    return { label: 'All time' };
+}
+
 export default function DoctorCommissionListClient({ basePath }: { basePath: string }) {
     const [rows, setRows] = useState<Row[]>([]);
     const [loading, setLoading] = useState(true);
@@ -60,10 +78,12 @@ export default function DoctorCommissionListClient({ basePath }: { basePath: str
     const [onlyConfigured, setOnlyConfigured] = useState(false);
     const [editing, setEditing] = useState<Row | null>(null);
     const [defaultPercent, setDefaultPercent] = useState(0);
+    const [period, setPeriod] = useState<PeriodKey>('this_month');
 
     const load = async () => {
         setLoading(true);
-        const res = await getDoctorCommissionOverview();
+        const { from, to } = periodRange(period);
+        const res = await getDoctorCommissionOverview({ from, to });
         if (res.success) {
             setRows(res.data as Row[]);
             setDefaultPercent(Number((res as any).default_percent ?? 0));
@@ -72,7 +92,8 @@ export default function DoctorCommissionListClient({ basePath }: { basePath: str
     };
     useEffect(() => {
         load();
-    }, []);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [period]);
 
     const filtered = useMemo(
         () =>
@@ -114,6 +135,25 @@ export default function DoctorCommissionListClient({ basePath }: { basePath: str
                 >
                     <BarChart3 className="h-4 w-4" /> Doctor Revenue Summary
                 </Link>
+            </div>
+
+            {/* Period toggle — the summary and every doctor's figures below reflect it. */}
+            <div className="flex items-center gap-1 mb-3 bg-gray-100 p-1 rounded-xl w-fit">
+                {([
+                    ['this_month', 'This month'],
+                    ['last_month', 'Last month'],
+                    ['all', 'All time'],
+                ] as [PeriodKey, string][]).map(([key, label]) => (
+                    <button
+                        key={key}
+                        onClick={() => setPeriod(key)}
+                        className={`px-3 py-1.5 rounded-lg text-sm font-bold ${
+                            period === key ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                        }`}
+                    >
+                        {label}
+                    </button>
+                ))}
             </div>
 
             {/* Finance summary — reads left to right as the money's journey:

@@ -16,9 +16,18 @@ function num(v: unknown): number {
 
 // ── List with aggregates ───────────────────────────────────────────────────
 
-export async function getDoctorCommissionOverview(opts?: { includeInactive?: boolean }) {
+export async function getDoctorCommissionOverview(opts?: { includeInactive?: boolean; from?: string; to?: string }) {
     try {
         const { db, organizationId } = await requireRoleAndTenant(MANAGE_ROLES);
+
+        // Optional period window — finance usually wants "this month", not all-time.
+        // Applies to when the bill was raised (invoice.created_at) and when the payout
+        // accrued (doctorCommission.accrued_at). Both null = all-time (previous default).
+        const from = opts?.from ? new Date(opts.from) : null;
+        const to = opts?.to ? new Date(opts.to) : null;
+        if (to) to.setHours(23, 59, 59, 999);
+        const ledgerDateFilter =
+            from || to ? { accrued_at: { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } } : {};
 
         // Fetch every doctor including inactive ones — the decision to hide a row is
         // made below, AFTER bill/commission aggregates are known, so that a
@@ -45,7 +54,7 @@ export async function getDoctorCommissionOverview(opts?: { includeInactive?: boo
         // Commission ledger drives the Accrued / Paid columns only.
         const commissionRows = await (db as any).doctorCommission.groupBy({
             by: ['doctor_id', 'status'],
-            where: { organizationId, status: { not: 'void' } },
+            where: { organizationId, status: { not: 'void' }, ...ledgerDateFilter },
             _count: { _all: true },
             _sum: { commission_amount: true },
         });
@@ -65,6 +74,8 @@ export async function getDoctorCommissionOverview(opts?: { includeInactive?: boo
         // setup still show their real bill volume instead of 0. Cancelled bills are
         // excluded. For IPD invoices where invoice.doctor_id is null, fall back to
         // the admission's attending_doctor_id so those bills are not lost.
+        // Bound the same window on the invoice side (created_at). Passing NULLs makes
+        // each comparison a no-op, so all-time still works with one query shape.
         const invoiceRows = await (db as any).$queryRaw<Array<{
             resolved_doctor_id: string | null;
             bills: bigint;
@@ -79,6 +90,8 @@ export async function getDoctorCommissionOverview(opts?: { includeInactive?: boo
             WHERE i."organizationId" = ${organizationId}
                 AND LOWER(COALESCE(i.status, '')) <> 'cancelled'
                 AND COALESCE(i.doctor_id, adm.attending_doctor_id) IS NOT NULL
+                AND (${from}::timestamp IS NULL OR i.created_at >= ${from}::timestamp)
+                AND (${to}::timestamp IS NULL OR i.created_at <= ${to}::timestamp)
             GROUP BY COALESCE(i.doctor_id, adm.attending_doctor_id)
         `;
         const invoiceAggMap = new Map<string, { bills: number; business: number }>();
@@ -129,7 +142,12 @@ export async function getDoctorCommissionOverview(opts?: { includeInactive?: boo
             };
         });
 
-        return { success: true, data, default_percent: defaultPercent };
+        return {
+            success: true,
+            data,
+            default_percent: defaultPercent,
+            period: { from: opts?.from ?? null, to: opts?.to ?? null },
+        };
     } catch (error) {
         console.error('getDoctorCommissionOverview error:', error);
         return { success: false, data: [], error: 'Failed to load doctor commissions' };
