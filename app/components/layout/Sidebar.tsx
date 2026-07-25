@@ -346,6 +346,8 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
       title: "Patient Care",
       items: [
         { label: "Nursing Station", href: "/ipd/nursing-station", icon: Syringe },
+        { label: "Care Record", href: "/ipd/care-record", icon: ClipboardList },
+        { label: "Incidents", href: "/ipd/incidents", icon: ShieldAlert },
         { label: "Diet Plans", href: "/ipd/diet", icon: UtensilsCrossed },
         { label: "Ward Rounds", href: "/ipd/ward-rounds", icon: ClipboardCheck },
         { label: "Case Sheet", href: "/ipd/case-sheet", icon: ClipboardList },
@@ -417,6 +419,8 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
         { label: "Vitals", href: "/nurse/vitals", icon: Activity },
         { label: "Medications", href: "/nurse/medications", icon: Syringe },
         { label: "Nursing Notes", href: "/nurse/nursing-notes", icon: ScrollText },
+        { label: "Care Record", href: "/ipd/care-record", icon: ClipboardList },
+        { label: "Incidents", href: "/ipd/incidents", icon: ShieldAlert },
         { label: "Indents", href: "/nurse/indents", icon: ClipboardList },
         { label: "Tasks", href: "/nurse/tasks", icon: ClipboardCheck },
         { label: "Handover", href: "/nurse/handover", icon: ArrowLeftRight },
