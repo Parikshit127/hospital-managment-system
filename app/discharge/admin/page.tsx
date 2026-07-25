@@ -69,13 +69,36 @@ export default function DischargePage() {
         setAiLoading(false);
     };
 
-    const handleConfirmDischarge = async () => {
+    // Clinical blockers returned by the server when it refuses the discharge.
+    const [blockers, setBlockers] = useState<Array<{ label: string; detail?: string }>>([]);
+    const [overrideReason, setOverrideReason] = useState('');
+    const [discharging, setDischarging] = useState(false);
+
+    const handleConfirmDischarge = async (override?: string) => {
         if (!selectedPatient) return;
         if (!checklist.billing) return toast.warning('Final Bill must be cleared!');
 
+        setDischarging(true);
         const fullNotes = aiSummary ? `${aiSummary}\n\n--- Additional Notes ---\n${notes}` : notes;
-        await processDischarge(selectedPatient.id, selectedPatient.patient_name, fullNotes);
-        toast.success('Discharge Summary Generated & Sent');
+        const res = await processDischarge(selectedPatient.id, selectedPatient.patient_name, fullNotes, override);
+        setDischarging(false);
+
+        // This used to report success unconditionally, without even looking at the
+        // result — so a refused discharge still told the user it was done and
+        // removed the patient from the list.
+        if (!res.success) {
+            const r = (res as { readiness?: { blockers: Array<{ label: string; detail?: string }> } }).readiness;
+            if (r?.blockers?.length) {
+                setBlockers(r.blockers);
+                setOverrideReason('');
+            } else {
+                toast.error(res.error || 'Discharge failed');
+            }
+            return;
+        }
+
+        setBlockers([]);
+        toast.success('Patient discharged, bed released and bill finalised');
         setSelectedPatient(null);
         setPatients(prev => prev.filter(p => p.id !== selectedPatient.id));
     };
@@ -340,11 +363,39 @@ export default function DischargePage() {
                         </div>
 
                         <div className="p-6 bg-gray-50 border-t border-gray-200 flex flex-col gap-3">
+                            {blockers.length > 0 && (
+                                <div className="rounded-xl border-2 border-red-300 bg-red-50 p-3">
+                                    <p className="text-sm font-black text-red-700">Clinical checks failed</p>
+                                    <ul className="mt-1 space-y-0.5">
+                                        {blockers.map(b => (
+                                            <li key={b.label} className="text-xs text-red-700">
+                                                ✕ <span className="font-semibold">{b.label}</span>
+                                                {b.detail ? ` — ${b.detail}` : ''}
+                                            </li>
+                                        ))}
+                                    </ul>
+                                    <textarea
+                                        value={overrideReason}
+                                        onChange={e => setOverrideReason(e.target.value)}
+                                        rows={2}
+                                        placeholder="Reason for discharging anyway (recorded on the admission)"
+                                        className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-xs"
+                                    />
+                                    <button
+                                        disabled={overrideReason.trim().length < 10 || discharging}
+                                        onClick={() => handleConfirmDischarge(overrideReason.trim())}
+                                        className="mt-2 w-full py-2 bg-red-600 text-white rounded-lg text-xs font-bold disabled:opacity-40"
+                                    >
+                                        Discharge anyway &amp; record reason
+                                    </button>
+                                </div>
+                            )}
                             <button
-                                onClick={handleConfirmDischarge}
-                                className="w-full py-3.5 bg-gradient-to-r from-teal-500 to-emerald-600 hover:from-teal-400 hover:to-emerald-500 text-white rounded-xl font-bold shadow-lg shadow-teal-500/20 flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+                                onClick={() => handleConfirmDischarge()}
+                                disabled={discharging}
+                                className="w-full py-3.5 bg-gradient-to-r from-teal-500 to-emerald-600 hover:from-teal-400 hover:to-emerald-500 text-white rounded-xl font-bold shadow-lg shadow-teal-500/20 flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-60"
                             >
-                                <FileText className="h-5 w-5" /> Confirm Discharge
+                                <FileText className="h-5 w-5" /> {discharging ? 'Discharging…' : 'Confirm Discharge'}
                             </button>
                             <button onClick={() => setSelectedPatient(null)} className="w-full py-2 text-gray-400 font-bold text-sm hover:text-gray-500 transition-colors">
                                 Cancel

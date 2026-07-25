@@ -1,7 +1,7 @@
 'use server';
 
 import { requireTenantContext } from '@/backend/tenant';
-import { stopMedicationsOnDischarge } from '@/app/actions/ipd-emr-actions';
+import { dischargePatientIPD } from '@/app/actions/ipd-actions';
 import { notifyPatient } from '@/app/lib/notify-patient';
 import OpenAI from 'openai';
 import { generateInvoiceNumber as genInvNum } from '@/app/lib/sequence-generator';
@@ -15,49 +15,44 @@ function round2(n: number): number {
     return Object.is(r, -0) ? 0 : r;
 }
 
-export async function dischargePatient(patientId: string) {
+/**
+ * Discharge by patient id, from the doctor's dashboard.
+ *
+ * This used to be its own implementation and did far less than the others: it
+ * flipped the admission status and nothing else. The bed was never freed (so it
+ * stayed Occupied forever), the invoice was never finalised, no discharge
+ * summary was written and no clinical checks ran. Which of the four discharge
+ * functions the UI happened to call decided what actually happened to the
+ * patient's record.
+ *
+ * It now resolves the admission and delegates to dischargePatientIPD, which is
+ * the complete path — readiness gate, medication chart closed, bed released with
+ * its cleaning timestamp, invoice finalised, discharge summary written, audit
+ * entry with the acting user.
+ */
+export async function dischargePatient(patientId: string, overrideReason?: string) {
     try {
-        const { db, organizationId } = await requireTenantContext();
+        const { db } = await requireTenantContext();
 
         const activeAdmission = await db.admissions.findFirst({
-            where: {
-                patient_id: patientId,
-                status: 'Admitted'
-            }
+            where: { patient_id: patientId, status: 'Admitted' },
+            select: { admission_id: true },
         });
 
-        if (activeAdmission) {
-            await db.admissions.update({
-                where: { admission_id: activeAdmission.admission_id },
-                data: {
-                    status: 'Discharged',
-                    discharge_date: new Date()
-                }
-            });
-            // Close the medication chart so future doses stop appearing on the ward.
-            await stopMedicationsOnDischarge(db, activeAdmission.admission_id);
+        if (!activeAdmission) {
+            return { success: false, error: 'This patient has no active admission to discharge.' };
         }
 
-
-        await db.system_audit_logs.create({
-            data: {
-                action: 'DISCHARGE_PATIENT',
-                module: 'discharge',
-                entity_type: 'patient',
-                entity_id: patientId,
-                details: JSON.stringify({ admission_id: activeAdmission?.admission_id }),
-                organizationId,
-            }
-        });
-
-        return {
-            success: true,
-            pdfBase64: null
-        };
-
+        const res = await dischargePatientIPD(
+            activeAdmission.admission_id,
+            undefined,
+            undefined,
+            overrideReason,
+        );
+        return { ...res, pdfBase64: null };
     } catch (error: any) {
         console.error('Discharge Error:', error);
-        return { success: false, error: error.message || 'Failed to generate discharge summary' };
+        return { success: false, error: error.message || 'Failed to discharge patient' };
     }
 }
 
@@ -95,145 +90,48 @@ export async function getAdmittedPatients() {
 }
 
 
-export async function processDischarge(patientId: string, patientName: string, notes: string) {
+/**
+ * Discharge from the /discharge/admin screen.
+ *
+ * Was a third, separate implementation with its own bed handling, its own
+ * invoice creation and its own notion of what discharge means. Now resolves the
+ * admission and delegates to dischargePatientIPD so every entrance produces the
+ * same record: readiness gate, medication chart closed, bed released with its
+ * cleaning timestamp, invoice finalised, discharge summary written.
+ */
+export async function processDischarge(
+    patientId: string,
+    _patientName: string,
+    notes: string,
+    overrideReason?: string,
+) {
     try {
-        const { db, organizationId } = await requireTenantContext();
+        const { db } = await requireTenantContext();
 
-      
         const activeAdmission = await db.admissions.findFirst({
-            where: { patient_id: patientId, status: 'Admitted' }
+            where: { patient_id: patientId, status: 'Admitted' },
+            select: { admission_id: true },
         });
 
-        if (activeAdmission) {
-            await db.admissions.update({
-                where: { admission_id: activeAdmission.admission_id },
-                data: {
-                    status: 'Discharged',
-                    discharge_date: new Date()
-                }
-            });
-
-            // Close the medication chart so future doses stop appearing on the ward.
-            await stopMedicationsOnDischarge(db, activeAdmission.admission_id);
-
-            await db.appointments.updateMany({
-                where: { patient_id: patientId, status: 'Admitted' },
-                data: { status: 'Completed' }
-            });
-
-           
-            if (activeAdmission.bed_id) {
-                await db.beds.update({
-                    where: { bed_id: activeAdmission.bed_id },
-                    // Stamp cleaning_started_at — the stale-bed auto-release keys off it.
-                    data: { status: 'Cleaning', cleaning_started_at: new Date(), cleaning_completed_at: null }
-                });
-            }
-
-            
-            const ward = await db.wards.findUnique({ where: { ward_id: activeAdmission.ward_id ?? 0 } });
-            const daysAdmitted = Math.max(1, Math.ceil(
-                (new Date().getTime() - new Date(activeAdmission.admission_date).getTime()) / (1000 * 60 * 60 * 24)
-            ));
-            const roomRate = Number(ward?.cost_per_day || 0);
-            const roomCharge = roomRate * daysAdmitted;
-
-
-            let invoice = await db.invoices.findFirst({
-                where: { admission_id: activeAdmission.admission_id, status: { not: 'Cancelled' } }
-            });
-
-          
-            let resolvedWard = ward;
-            if (!resolvedWard && activeAdmission.bed_id) {
-                const bed = await db.beds.findUnique({
-                    where: { bed_id: activeAdmission.bed_id },
-                    include: { wards: true }
-                });
-                resolvedWard = bed?.wards ?? null;
-            }
-
-            const resolvedRoomRate = Number(resolvedWard?.cost_per_day || 500); 
-            const resolvedRoomCharge = resolvedRoomRate * daysAdmitted;
-
-            if (!invoice) {
-                // Auto room charges disabled — create empty invoice, charges added manually
-                invoice = await db.invoices.create({
-                    data: {
-                        invoice_number: await genInvNum(organizationId, 'IPD', true, db),
-                        patient_id: patientId,
-                        admission_id: activeAdmission.admission_id,
-                        invoice_type: 'IPD',
-                        status: 'Final',
-                        total_amount: 0,
-                        net_amount: 0,
-                        balance_due: 0,
-                        finalized_at: new Date(),
-                        organizationId,
-                    }
-                });
-            } else {
-                // Auto room charges disabled — no automatic room/nursing charge additions
-
-                // Recalculate totals from all existing items
-                const allItems = await db.invoice_items.findMany({
-                    where: { invoice_id: invoice.id },
-                });
-                const recalcTotal = round2(allItems.reduce(
-                    (sum: number, it: any) => sum + Number(it.net_price || it.total_price || 0),
-                    0,
-                ));
-                const alreadyPaid = await db.payments.aggregate({
-                    where: { invoice_id: invoice.id, status: 'Completed' },
-                    _sum: { amount: true },
-                });
-                const paidAmount = round2(Number(alreadyPaid._sum?.amount || 0));
-
-                await db.invoices.update({
-                    where: { id: invoice.id },
-                    data: {
-                        total_amount: recalcTotal,
-                        net_amount: recalcTotal,
-                        balance_due: Math.max(0, round2(recalcTotal - paidAmount)),
-                        status: 'Final',
-                        finalized_at: new Date(),
-                    }
-                });
-            }
-
-            
-            await db.discharge_summaries.create({
-                data: {
-                    admission_id: activeAdmission.admission_id,
-                    patient_name: patientName,
-                    generated_summary: `<h2>Discharge Summary</h2><p>Patient: ${patientName}</p><p>Notes: ${notes}</p><p>Date: ${new Date().toLocaleString()}</p>`,
-                    organizationId,
-                }
-            });
+        if (!activeAdmission) {
+            return { success: false, error: 'This patient has no active admission to discharge.' };
         }
 
-       
-        await db.system_audit_logs.create({
-            data: {
-                action: 'PROCESS_DISCHARGE',
-                module: 'discharge',
-                entity_type: 'patient',
-                entity_id: patientId,
-                details: JSON.stringify({ patientName, notes }),
-                organizationId,
-            }
+        const res = await dischargePatientIPD(
+            activeAdmission.admission_id,
+            notes,
+            undefined,
+            overrideReason,
+        );
+        if (!res.success) return res;
+
+        // Close out any appointment still parked in the Admitted state.
+        await db.appointments.updateMany({
+            where: { patient_id: patientId, status: 'Admitted' },
+            data: { status: 'Completed' },
         });
 
-
-        const patient = await db.oPD_REG.findFirst({ where: { patient_id: patientId }, select: { phone: true, email: true } });
-        if (patient) {
-            notifyPatient(
-                { email: patient.email, phone: patient.phone },
-                { type: 'discharge', patientName },
-            ).catch(err => console.warn('[Notify] Discharge notification failed:', err));
-        }
-
-        return { success: true };
+        return res;
     } catch (error: any) {
         console.error('processDischarge error:', error);
         return { success: false, error: error.message };
