@@ -68,9 +68,16 @@ export async function checkDepositConsumption(admissionId: string) {
 // Used on IPD dashboard / manager view
 // ─────────────────────────────────────────────────────────────────────────────
 
-export async function getDepositAlerts() {
+/**
+ * Admissions whose advance is close to being consumed.
+ *
+ * @param ctx Supply an explicit tenant when there is no user session. A cron has
+ *            none, so requireTenantContext() throws and the endpoint 500s —
+ *            which is exactly what this one did.
+ */
+export async function getDepositAlerts(ctx?: { db: any; organizationId: string }) {
     try {
-        const { db, organizationId } = await requireTenantContext();
+        const { db, organizationId } = ctx ?? await requireTenantContext();
 
         const admissions = await db.admissions.findMany({
             where: { organizationId, status: 'Admitted' },
@@ -79,34 +86,50 @@ export async function getDepositAlerts() {
                 invoices: { where: { status: { not: 'Cancelled' } }, select: { net_amount: true, total_amount: true } },
             },
         });
+        if (admissions.length === 0) return { success: true, data: [] };
+
+        // Deposits were fetched inside the loop, one query per admission. Fetched
+        // once and grouped instead — a full ward was a query per patient.
+        const patientIds = [...new Set(admissions.map((a: any) => a.patient_id))] as string[];
+        const deposits = await db.patientDeposit.findMany({
+            where: { organizationId, patient_id: { in: patientIds }, status: 'Active' },
+            select: { patient_id: true, amount: true },
+        });
+        const depositByPatient = new Map<string, number>();
+        for (const d of deposits as Array<{ patient_id: string; amount: unknown }>) {
+            depositByPatient.set(d.patient_id, (depositByPatient.get(d.patient_id) ?? 0) + Number(d.amount));
+        }
 
         const alerts = [];
-        for (const a of admissions) {
+        for (const a of admissions as any[]) {
             const totalCharged = a.invoices.reduce((s: number, inv: any) =>
                 s + Number(inv.net_amount ?? inv.total_amount ?? 0), 0);
 
-            const deposits = await db.patientDeposit.findMany({
-                where: { organizationId, patient_id: a.patient_id, status: 'Active' },
-            });
-            const totalDeposit = deposits.reduce((s: number, d: any) => s + Number(d.amount), 0);
-
+            const totalDeposit = depositByPatient.get(a.patient_id) ?? 0;
             if (totalDeposit === 0) continue;
 
             const percentage = Math.round((totalCharged / totalDeposit) * 100);
-            if (percentage >= 70) {
-                alerts.push({
-                    admission_id: a.admission_id,
-                    patient_name: a.patient?.full_name ?? 'Unknown',
-                    patient_id: a.patient_id,
-                    percentage,
-                    total_charged: totalCharged,
-                    total_deposit: totalDeposit,
-                    alert_level: percentage >= 100 ? 'blocked' : percentage >= 90 ? 'critical' : percentage >= 80 ? 'warning' : 'info',
-                });
-            }
+            if (percentage < 70) continue;
+
+            const level = percentage >= 100 ? 'blocked'
+                : percentage >= 90 ? 'critical'
+                : percentage >= 80 ? 'warning'
+                : 'info';
+
+            alerts.push({
+                admission_id: a.admission_id,
+                patient_name: a.patient?.full_name ?? 'Unknown',
+                patient_id: a.patient_id,
+                percentage,
+                total_charged: totalCharged,
+                total_deposit: totalDeposit,
+                // Both spellings: the API route counted on `alertLevel` while this
+                // returned `alert_level`, so every severity count came back zero.
+                alert_level: level,
+                alertLevel: level,
+            });
         }
 
-        alerts.sort((a, b) => b.percentage - a.percentage);
         return { success: true, data: alerts };
     } catch (error: any) {
         console.error('getDepositAlerts error:', error);

@@ -66,16 +66,17 @@ LOG=/home/ubuntu/hospitalos/logs/cron.log
 # only ever ran when a member of staff happened to open an IPD page.
 0 * * * * curl -fsS -m 120 -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/ipd/bed-cleaning-sla" >> $LOG 2>&1
 
+# Deposit alerts. Warns finance and the IPD manager while an inpatient's advance
+# is running out, rather than at discharge when it is too late to ask.
+0 */4 * * * curl -fsS -m 120 -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/ipd/deposit-alerts" >> $LOG 2>&1
+
+# Interim billing. Flags long-staying admissions that are due an interim bill and
+# tells the billing team. It deliberately does not raise the bill itself —
+# generating a financial document needs an accountable user.
+30 6 * * * curl -fsS -m 300 -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/ipd/interim-billing" >> $LOG 2>&1
+
 # ---------------------------------------------------------------------------
 # DELIBERATELY NOT SCHEDULED — each needs a decision, not a default:
-#
-#   /api/ipd/deposit-alerts
-#   /api/ipd/interim-billing
-#       Both call server actions that resolve the tenant from a USER SESSION,
-#       which a cron does not have, so they currently answer 500 when called by
-#       a scheduler. Same defect the pill-reminders note below describes. They
-#       need the same treatment bed-cleaning-sla just had — iterate active
-#       organizations and pass the tenant in explicitly — before scheduling.
 #
 #   /api/ipd/daily-accrual
 #       Returns early by design: "Auto-accrual disabled. Room/nursing charges
