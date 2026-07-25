@@ -114,6 +114,27 @@ const TENANT_SCOPED_MODELS = new Set([
     // all); invoice_snapshots' existing reads already filter manually and weren't
     // exploited, added here as defense-in-depth.
     'PharmacyInventoryMovement', 'invoice_snapshots',
+    // Every remaining model that declares a non-null organizationId. These were
+    // never registered, so a read without a hand-written organizationId filter
+    // returned rows from every hospital on the deployment. Registering them makes
+    // isolation the default instead of something each call site must remember;
+    // call sites that already filter manually are unaffected (same predicate twice).
+    // EmailJob is deliberately excluded — its organizationId is nullable, so a
+    // strict equality would hide unscoped system mail from the dispatcher.
+    'OrganizationConfig', 'OrganizationBranding', 'PatientNote', 'LabPanel',
+    'radiology_imaging', 'ReleaseNote', 'Broadcast', 'NotificationReceipt',
+    'Ticket', 'TicketNote', 'PatientConsent', 'PasswordResetOTP',
+    'IpdPackageTpaRate', 'patient_external_records', 'Writeoff',
+    'AppointmentWaitlist', 'RegistrationFieldConfig', 'DispenseAllocation',
+    'Referrer', 'ReferrerServiceRate', 'ReferralCommission', 'ReferralPayoutStatement',
+    'DoctorCommissionConfig', 'DoctorServiceRate', 'DoctorCommission', 'DoctorPayoutStatement',
+    'ambulance_requests', 'indents', 'inventory_movements', 'item_batches',
+    'item_categories', 'item_master', 'item_vendors',
+    'mis_daily_billing_rollups', 'mis_daily_pharmacy_rollups',
+    'optical_orders', 'optical_prescriptions', 'purchase_requisitions',
+    'report_access_logs', 'report_jobs', 'report_presets', 'report_schedules',
+    'stock_adjustments', 'stock_count_sessions', 'stock_issues', 'stock_transfers',
+    'store_item_settings', 'store_stocks', 'stores',
 ]);
 
 // Models where organizationId is nullable (audit logs, etc.)
@@ -128,13 +149,24 @@ export function getTenantPrisma(organizationId: string): any {
             $allModels: {
                 async $allOperations({ operation, model, args, query }: any) {
                     if (model && (TENANT_SCOPED_MODELS.has(model) || NULLABLE_ORG_MODELS.has(model))) {
-                        if (['findMany', 'findFirst', 'updateMany', 'deleteMany', 'count', 'aggregate', 'groupBy', 'findUnique'].includes(operation)) {
+                        // `update`, `delete` and `upsert` MUST be scoped too. Without them a
+                        // single-record mutation addressed by primary key crossed tenants:
+                        // ids are global autoincrement integers, so administerMedication(7)
+                        // from one hospital updated another hospital's row. Prisma 5+ allows
+                        // non-unique fields alongside a unique one in these where clauses,
+                        // so injecting organizationId here simply makes a foreign row miss.
+                        if (['findMany', 'findFirst', 'updateMany', 'deleteMany', 'count', 'aggregate', 'groupBy', 'findUnique', 'update', 'delete', 'upsert'].includes(operation)) {
                             args.where = { ...args.where, organizationId };
                             // Auto-filter archived records unless explicitly querying for them
                             if (ARCHIVABLE_MODELS.has(model) && args.where?.is_archived === undefined) {
                                 args.where.is_archived = false;
                             }
-                        } else if (operation === 'create') {
+                        }
+                        // upsert also carries a create payload that needs the org stamped
+                        if (operation === 'upsert' && args.create) {
+                            args.create = { ...args.create, organizationId };
+                        }
+                        if (operation === 'create') {
                             args.data = { ...args.data, organizationId };
                         } else if (operation === 'createMany' && args.data) {
                             if (Array.isArray(args.data)) {
