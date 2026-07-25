@@ -28,6 +28,8 @@ type MedRow = {
     administered_by: string | null;
     patientName?: string;
     patientId?: string;
+    wardName?: string;
+    bedId?: string;
 };
 
 export default function NurseMedicationsPage() {
@@ -274,7 +276,13 @@ export default function NurseMedicationsPage() {
                                                     </div>
                                                     <div>
                                                         <p className="font-bold text-sm">{med.patientName}</p>
-                                                        <p className="text-[10px] text-gray-400 font-mono">#{med.patientId?.slice(0, 8)}</p>
+                                                        {/* Was sliced to 8 chars, which rendered every UHID as
+                                                            "#AVS-2026" — identical for every patient, so it
+                                                            identified nobody. Show it in full. */}
+                                                        <p className="text-[10px] text-gray-400 font-mono">
+                                                            {med.patientId || '—'}
+                                                            {med.wardName ? <span className="ml-1 text-gray-300">· {med.wardName}</span> : null}
+                                                        </p>
                                                     </div>
                                                 </div>
                                             </td>

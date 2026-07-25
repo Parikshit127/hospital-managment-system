@@ -209,7 +209,7 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
       items: [
         { label: "Dashboard", href: "/reception/dashboard", icon: LayoutDashboard },
         { label: "Master Billing", href: "/billing", icon: CircleDollarSign },
-        { label: "IPD Settlement", href: "/ipd/discharge-settlement", icon: Wallet },
+        { label: "Discharge Settlement", href: "/ipd/discharge-settlement", icon: Wallet },
         { label: "Patient History", href: "/reception/history", icon: Clock },
       ],
     },
@@ -236,7 +236,7 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
       title: "Laboratory",
       items: [
         { label: "Dashboard", href: "/lab/dashboard", icon: LayoutDashboard },
-        { label: "Worklist", href: "/lab/worklist", icon: ClipboardCheck },
+        { label: "Lab Worklist", href: "/lab/worklist", icon: ClipboardCheck },
         { label: "Lab Orders", href: "/lab/technician", icon: FlaskConical },
         { label: "Inventory", href: "/lab/inventory", icon: Package },
         { label: "Reports", href: "/lab/reports", icon: BarChart3 },
@@ -249,7 +249,7 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
       title: "Pharmacy",
       items: [
         { label: "Dashboard", href: "/pharmacy/dashboard", icon: LayoutDashboard },
-        { label: "Orders", href: "/pharmacy/orders", icon: ScrollText },
+        { label: "Pharmacy Orders", href: "/pharmacy/orders", icon: ScrollText },
         { label: "Dispensing", href: "/pharmacy/billing", icon: Pill },
         { label: "IP Orders", href: "/pharmacy/ip-orders", icon: ClipboardList },
         { label: "Customer Invoices", href: "/pharmacy/invoices", icon: FileText },
@@ -427,7 +427,7 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
       items: [
         { label: "OT Worklist", href: "/nurse/ot-worklist", icon: Scissors },
         { label: "ER Triage", href: "/nurse/er-triage", icon: Siren },
-        { label: "ER Tracking Board", href: "/er/tracking-board", icon: MonitorPlay },
+        { label: "Tracking Board", href: "/er/tracking-board", icon: MonitorPlay },
       ],
     },
   ],
@@ -463,8 +463,8 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
         { label: "Dashboard", href: "/ot/dashboard", icon: LayoutDashboard },
         { label: "OT Calendar", href: "/ot/calendar", icon: CalendarDays },
         { label: "Surgery Requests", href: "/ot/requests", icon: ClipboardList },
-        { label: "Schedule Surgery", href: "/ot/schedule", icon: CalendarClock },
-        { label: "Today's Worklist", href: "/ot/worklist", icon: ClipboardCheck },
+        { label: "OT Schedule", href: "/ot/schedule", icon: CalendarClock },
+        { label: "OT Worklist", href: "/ot/worklist", icon: ClipboardCheck },
       ],
     },
     {
@@ -478,7 +478,7 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
     {
       title: "Setup",
       items: [
-        { label: "OT Master Setup", href: "/admin/ot-setup", icon: Settings },
+        { label: "OT Setup", href: "/admin/ot-setup", icon: Settings },
       ],
     },
   ],
@@ -512,9 +512,9 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
     {
       title: "Hospital",
       items: [
-        { label: "IPD Beds", href: "/ipd/bed-matrix", icon: BedDouble },
-        { label: "Lab", href: "/lab/worklist", icon: ClipboardCheck },
-        { label: "Pharmacy", href: "/pharmacy/orders", icon: Pill },
+        { label: "Bed Matrix", href: "/ipd/bed-matrix", icon: BedDouble },
+        { label: "Lab Worklist", href: "/lab/worklist", icon: ClipboardCheck },
+        { label: "Pharmacy Orders", href: "/pharmacy/orders", icon: Pill },
       ],
     },
   ],

@@ -11,7 +11,13 @@ if (!process.env.JWT_SECRET) {
 
 const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET);
 
-const SESSION_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes (staff)
+// Staff inactivity timeout. Was 15 minutes, which is shorter than a great deal
+// of ordinary ward work: a nurse doing a medication round, a doctor examining a
+// patient, or anyone in theatre returns to a login screen and loses their place.
+// 60 minutes keeps a shared workstation from sitting open all shift while no
+// longer interrupting normal clinical work. Sessions still expire; this is the
+// idle window, not the token lifetime (the JWT is 8h).
+const SESSION_TIMEOUT_MS = 60 * 60 * 1000; // 60 minutes (staff)
 const PATIENT_SESSION_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes (patient)
 
 // Route -> allowed roles. For built-in system roles this list is AUTHORITATIVE:

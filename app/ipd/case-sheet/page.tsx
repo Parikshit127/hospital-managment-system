@@ -17,7 +17,7 @@ import {
     get24HourCaseSheet, getClinicalOrders, getPhysicianOrders, getActiveMedications,
     getReferralOrders, addActiveMedication, createClinicalOrder, createPhysicianOrder,
 } from '@/app/actions/ipd-emr-actions';
-import { createNursingTask } from '@/app/actions/ipd-actions';
+import { createNursingTask, getIPDAdmissions } from '@/app/actions/ipd-actions';
 
 const TABS = [
     { id: 'treatment', label: 'Treatment Sheet', icon: Pill },
@@ -234,15 +234,9 @@ export default function CaseSheetPage() {
 
     useEffect(() => { loadData(); }, [loadData]);
 
-    if (!admissionId) {
-        return (
-            <AppShell>
-                <div className="flex items-center justify-center h-64 text-gray-500">
-                    No admission selected. Please open from the IPD admission list.
-                </div>
-            </AppShell>
-        );
-    }
+    // The sidebar links here without an admission, so this used to be a dead end
+    // that told the user to go somewhere else. Offer the patients instead.
+    if (!admissionId) return <CaseSheetPicker />;
 
     return (
         <AppShell>
@@ -772,6 +766,79 @@ export default function CaseSheetPage() {
                         </>
                     )}
                 </div>
+            </div>
+        </AppShell>
+    );
+}
+
+/**
+ * Landing state for /ipd/case-sheet with no admission in the URL.
+ *
+ * The sidebar links here without a parameter, so every click produced an empty
+ * screen reading "No admission selected. Please open from the IPD admission
+ * list." — a dead end that names another screen instead of just offering the
+ * choice. This lists the admitted patients and lets the user pick one.
+ */
+function CaseSheetPicker() {
+    const [rows, setRows] = useState<Array<Record<string, unknown>>>([]);
+    const [loading, setLoading] = useState(true);
+    const [q, setQ] = useState('');
+
+    useEffect(() => {
+        getIPDAdmissions('Admitted')
+            .then(res => { if (res.success) setRows((res.data as Array<Record<string, unknown>>) ?? []); })
+            .finally(() => setLoading(false));
+    }, []);
+
+    const filtered = rows.filter(r => {
+        if (!q.trim()) return true;
+        const hay = `${(r.patient as Record<string, unknown>)?.full_name ?? ''} ${r.admission_id ?? ''} ${r.bed_id ?? ''}`.toLowerCase();
+        return hay.includes(q.toLowerCase());
+    });
+
+    return (
+        <AppShell>
+            <div className="p-6 space-y-4">
+                <div>
+                    <h1 className="text-lg font-bold text-gray-800">Case Sheet</h1>
+                    <p className="text-sm text-gray-500">Choose an admitted patient to open their case sheet.</p>
+                </div>
+                <input
+                    value={q}
+                    onChange={e => setQ(e.target.value)}
+                    placeholder="Search by patient, admission or bed…"
+                    className="w-full max-w-md border border-gray-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-teal-400"
+                />
+                {loading ? (
+                    <div className="flex items-center gap-2 text-gray-400 text-sm">
+                        <Loader2 className="h-4 w-4 animate-spin" /> Loading admitted patients…
+                    </div>
+                ) : filtered.length === 0 ? (
+                    <p className="text-sm text-gray-500">
+                        {rows.length === 0 ? 'No patients are currently admitted.' : 'No match for that search.'}
+                    </p>
+                ) : (
+                    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                        {filtered.map(r => (
+                            <a
+                                key={String(r.admission_id)}
+                                href={`/ipd/case-sheet?admission_id=${r.admission_id}`}
+                                className="block border border-gray-200 rounded-xl p-3 hover:border-teal-400 hover:bg-teal-50/40 transition-colors"
+                            >
+                                <p className="text-sm font-bold text-gray-800">
+                                    {String((r.patient as Record<string, unknown>)?.full_name ?? 'Unknown')}
+                                </p>
+                                <p className="text-xs text-gray-500 mt-0.5">
+                                    {String(r.admission_id)}
+                                    {r.bed_id ? ` · Bed ${r.bed_id}` : ''}
+                                </p>
+                                {r.diagnosis ? (
+                                    <p className="text-xs text-gray-400 mt-1 truncate">{String(r.diagnosis)}</p>
+                                ) : null}
+                            </a>
+                        ))}
+                    </div>
+                )}
             </div>
         </AppShell>
     );
