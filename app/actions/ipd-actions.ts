@@ -106,12 +106,10 @@ async function getAdmissionCancellationReasons(db: any, admissionIds: string[]) 
 export async function getWardsWithBeds() {
   try {
     const { db } = await requireTenantContext();
-    // Opportunistic cleanup: release any bed stuck in Cleaning ≥24h before the read.
-    // Best-effort — failure here must not block the bed matrix from loading.
-    try {
-      const { autoReleaseStaleCleaningBeds } = await import('./ipd-automation-actions');
-      await autoReleaseStaleCleaningBeds();
-    } catch { /* non-critical */ }
+    // The stale-bed release used to run inline here, on every read, because
+    // nothing else was calling it. It is now scheduled hourly across all
+    // organizations (/api/ipd/bed-cleaning-sla), so paying for a write sweep on
+    // the critical path of every bed-matrix load is no longer justified.
     const wards = await db.wards.findMany({
       include: {
         beds: {
@@ -154,10 +152,7 @@ export async function getWardsWithBeds() {
 export async function getAllBeds() {
   try {
     const { db } = await requireTenantContext();
-    try {
-      const { autoReleaseStaleCleaningBeds } = await import('./ipd-automation-actions');
-      await autoReleaseStaleCleaningBeds();
-    } catch { /* non-critical */ }
+    // Stale-bed release runs on the hourly schedule, not on every read.
     const beds = await db.beds.findMany({
       include: {
         wards: true,
@@ -2473,4 +2468,28 @@ export async function cancelAdmission(admissionId: string, reason: string, cance
     console.error('cancelAdmission error:', error);
     return { success: false, error: error.message };
   }
+}
+
+/**
+ * Everything the IPD dashboard needs, in one round trip.
+ *
+ * Same problem as the admin dashboard: the page wrapped four server actions in
+ * Promise.all, which Next serialises into four sequential POSTs. Bundling lets
+ * the queries run concurrently on the server.
+ *
+ * Parts are settled independently so one failing panel does not blank the page.
+ */
+export async function getIPDDashboardBundle(statusFilter?: string) {
+  const settle = async <T>(p: Promise<T>): Promise<T | null> => {
+    try { return await p; } catch (e) { console.error('IPD bundle part failed:', e); return null; }
+  };
+
+  const [stats, wards, beds, admissions] = await Promise.all([
+    settle(getIPDStats()),
+    settle(getWardsWithBeds()),
+    settle(getAllBeds()),
+    settle(getIPDAdmissions(statusFilter)),
+  ]);
+
+  return { success: true, data: { stats, wards, beds, admissions } };
 }

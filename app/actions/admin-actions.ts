@@ -1290,3 +1290,38 @@ export async function generateAdminReport(
     return { success: false, error: error.message };
   }
 }
+
+/**
+ * Everything the admin dashboard needs, in one round trip.
+ *
+ * The page fetched ten server actions inside Promise.all, which looks parallel
+ * but is not: Next serialises server-action calls from a client, so they ran as
+ * ten sequential POSTs. Measured on the demo data they summed to roughly 15
+ * seconds of round trips for a dashboard that took ~11s to settle.
+ *
+ * Bundling them lets the queries actually run concurrently on the server, so the
+ * page costs one round trip and roughly the slowest single query.
+ *
+ * Each part is settled independently: one failing panel returns null rather than
+ * blanking the whole dashboard.
+ */
+export async function getAdminDashboardBundle() {
+    const settle = async <T>(p: Promise<T>): Promise<T | null> => {
+        try { return await p; } catch (e) { console.error('dashboard bundle part failed:', e); return null; }
+    };
+
+    const [stats, beds, revenue, activity, patientFlow, inventory, staff, doctors, settings] =
+        await Promise.all([
+            settle(getDashboardStats()),
+            settle(getBedOccupancy()),
+            settle(getRevenueBreakdown()),
+            settle(getRecentActivity(15)),
+            settle(getPatientFlow()),
+            settle(getInventoryAlerts()),
+            settle(getStaffStats()),
+            settle(getUsersList({ role: 'doctor', is_active: true, page: 1, limit: 5 })),
+            settle(getOrganizationSettings()),
+        ]);
+
+    return { success: true, data: { stats, beds, revenue, activity, patientFlow, inventory, staff, doctors, settings } };
+}

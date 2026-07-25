@@ -11,9 +11,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import {
-    getDashboardStats, getBedOccupancy, getRevenueBreakdown,
-    getRecentActivity, getPatientFlow, getInventoryAlerts,
-    getStaffStats, getUsersList, getOrganizationSettings,
+    getAdminDashboardBundle,
     updateOrganizationSettings, addUser
 } from '@/app/actions/admin-actions';
 import { getPatientQueue } from '@/app/actions/doctor-actions';
@@ -104,27 +102,28 @@ export default function AdminDashboard() {
     const loadData = async () => {
         setLoading(true);
         try {
-            const [s, b, r, a, pf, inv, staff, doctors, settings, modules] = await Promise.all([
-                getDashboardStats(),
-                getBedOccupancy(),
-                getRevenueBreakdown(),
-                getRecentActivity(15),
-                getPatientFlow(),
-                getInventoryAlerts(),
-                getStaffStats(),
-                getUsersList({ role: 'doctor', is_active: true, page: 1, limit: 5 }),
-                getOrganizationSettings(),
+            // One bundled call instead of ten. Promise.all around ten server
+            // actions reads as parallel but is not — Next serialises server-action
+            // calls from a client, so these ran as ten sequential round trips
+            // (~15s of them on the demo data). The queries now run concurrently on
+            // the server and the page pays for one trip.
+            const [bundle, modules] = await Promise.all([
+                getAdminDashboardBundle(),
                 getAllModuleStatuses(),
             ]);
-            if (s.success) setStats(s.data);
-            if (b.success) setBedData(b.data);
-            if (r.success) setRevenue(r.data);
-            if (a.success) setActivity(a.data || []);
-            if (pf.success) setPatientFlow(pf.data || []);
-            if (inv.success) setInventoryAlerts(inv.data);
-            if (staff.success) setStaffStats(staff.data);
-            if (doctors.success) setDoctorList(doctors.data?.users || []);
-            if (settings.success) setOrgSettings(settings.data);
+
+            if (bundle.success) {
+                const d = bundle.data;
+                if (d.stats?.success) setStats(d.stats.data);
+                if (d.beds?.success) setBedData(d.beds.data);
+                if (d.revenue?.success) setRevenue(d.revenue.data);
+                if (d.activity?.success) setActivity(d.activity.data || []);
+                if (d.patientFlow?.success) setPatientFlow(d.patientFlow.data || []);
+                if (d.inventory?.success) setInventoryAlerts(d.inventory.data);
+                if (d.staff?.success) setStaffStats(d.staff.data);
+                if (d.doctors?.success) setDoctorList(d.doctors.data?.users || []);
+                if (d.settings?.success) setOrgSettings(d.settings.data);
+            }
             if (modules.success) setModuleStatuses(modules.data || {});
         } catch (err) {
             console.error('Dashboard load error:', err);

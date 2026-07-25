@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   Bed,
   Users,
@@ -44,6 +44,7 @@ import {
   getAllBeds,
   getIPDAdmissions,
   getIPDStats,
+  getIPDDashboardBundle,
   admitPatientIPD,
   updateBedStatus,
   dischargePatientIPD,
@@ -202,18 +203,17 @@ export default function IPDDashboard() {
     const myFilter = admissionFilter;
     setLoading(true);
     try {
-      const [s, w, b, a] = await Promise.all([
-        getIPDStats(),
-        getWardsWithBeds(),
-        getAllBeds(),
-        getIPDAdmissions(myFilter === "All" ? undefined : myFilter)
-      ]);
+      // One bundled call. Promise.all around four server actions reads as
+      // parallel but is not — Next serialises server-action calls from a client,
+      // so this was four sequential round trips.
+      const bundle = await getIPDDashboardBundle(myFilter === "All" ? undefined : myFilter);
       // If a newer load has started while we awaited, throw this response away.
       if (mySeq !== loadSeqRef.current) return;
-      if (s.success) setStats(s.data);
-      if (w.success) setWards(w.data || []);
-      if (b.success) setBeds(b.data || []);
-      if (a.success) setAdmissions(a.data || []);
+      const d = bundle.data;
+      if (d.stats?.success) setStats(d.stats.data);
+      if (d.wards?.success) setWards(d.wards.data || []);
+      if (d.beds?.success) setBeds(d.beds.data || []);
+      if (d.admissions?.success) setAdmissions(d.admissions.data || []);
     } catch (err) {
       console.error("IPD load error:", err);
     }
@@ -233,7 +233,14 @@ export default function IPDDashboard() {
     loadData();
   }, [admissionFilter]);
 
-  useEffect(() => {
+  // Packages and the doctor list are only needed by the Admit modal, but were
+  // fetched on page load — two extra sequential server-action round trips on the
+  // critical path of a dashboard that never shows them. Loaded on first open
+  // instead, and only once.
+  const admitRefsLoaded = useRef(false);
+  const loadAdmitReferenceData = useCallback(() => {
+    if (admitRefsLoaded.current) return;
+    admitRefsLoaded.current = true;
     loadIpdPackages();
     getDoctorsForDropdown().then((res) => {
       if (res.success) setDoctors(res.data || []);
@@ -461,7 +468,7 @@ export default function IPDDashboard() {
                 <Siren className="h-3.5 w-3.5" /> Emergency
             </Link>
             <button
-              onClick={() => setAdmitModal(true)}
+              onClick={() => { loadAdmitReferenceData(); setAdmitModal(true); }}
               className="px-4 py-2 bg-gradient-to-r from-violet-500 to-indigo-500 rounded-xl text-xs font-bold text-white shadow-lg shadow-violet-500/20 flex items-center gap-2"
             >
               <UserPlus className="h-3.5 w-3.5" /> Admit Patient
