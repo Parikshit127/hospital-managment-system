@@ -1,6 +1,6 @@
 "use server";
 
-import { requireTenantContext } from "@/backend/tenant";
+import { requireTenantContext, denyUnlessRole, CLINICAL_ROLES } from "@/backend/tenant";
 import { logAudit } from "@/app/lib/audit";
 import { revalidatePath } from "next/cache";
 import { getPatientBalances } from '@/app/actions/balance-actions';
@@ -8,6 +8,7 @@ import { getRoomGSTRate } from '@/app/lib/gst';
 import { generateInvoiceNumber as genInvNum, generateReceiptNumber as genRcpNum, generateDepositNumber as genDepNum } from '@/app/lib/sequence-generator';
 import { isBillClosedForCharges } from '@/app/lib/bill-status';
 import { stopMedicationsOnDischarge } from '@/app/actions/ipd-emr-actions';
+import { evaluateDischargeReadiness, readinessSummary } from '@/app/lib/discharge-readiness';
 
 
 function serialize<T>(data: T): T {
@@ -994,15 +995,35 @@ export async function accrueIPDDailyCharges(admissionId: string) {
 }
 
 // Discharge a patient from IPD
-export async function dischargePatientIPD(admissionId: string, notes?: string, dischargeDate?: string) {
+export async function dischargePatientIPD(
+  admissionId: string,
+  notes?: string,
+  dischargeDate?: string,
+  /** Set when a clinician has reviewed the blockers and accepts the risk. */
+  overrideReason?: string,
+) {
+  const denied = await denyUnlessRole(CLINICAL_ROLES.DISCHARGE, 'discharge a patient');
+  if (denied) return denied;
   try {
-    const { db, organizationId } = await requireTenantContext();
+    const { db, organizationId, session } = await requireTenantContext();
     const admission = await db.admissions.findUnique({
       where: { admission_id: admissionId },
       include: { patient: true, ward: true, bed: { include: { wards: true } } },
     });
 
     if (!admission) return { success: false, error: "Admission not found" };
+
+    // Clinical gate. Nothing checked this before: the audit discharged a patient
+    // with a NEWS of 11, nine queued doses and no assessment, unchallenged.
+    const readiness = await evaluateDischargeReadiness(db, admissionId);
+    if (!readiness.canDischarge && !overrideReason?.trim()) {
+      return {
+        success: false,
+        error: readinessSummary(readiness),
+        readiness,
+        requiresOverride: true,
+      };
+    }
 
     // Resolve discharge date — caller may pass a datetime-local string (IST).
     let resolvedDischarge = new Date();
@@ -1106,6 +1127,9 @@ export async function dischargePatientIPD(admissionId: string, notes?: string, d
         module: "ipd",
         entity_type: "admission",
         entity_id: admissionId,
+        user_id: session.id,
+        username: session.username,
+        role: session.role,
         details: JSON.stringify({
           patient_id: admission.patient_id,
           daysAdmitted,
@@ -1113,6 +1137,11 @@ export async function dischargePatientIPD(admissionId: string, notes?: string, d
           discharge_date: resolvedDischarge.toISOString(),
           doses_cancelled: medsClosed.dosesCancelled,
           medications_stopped: medsClosed.medicationsStopped,
+          // What was outstanding at the moment of discharge, so the decision is
+          // reconstructable later rather than being an undocumented judgement.
+          outstanding: readiness.warnings.map(w => `${w.label}: ${w.detail}`),
+          blockers_overridden: readiness.blockers.map(b => `${b.label}: ${b.detail}`),
+          override_reason: overrideReason?.trim() || null,
         }),
       },
     });

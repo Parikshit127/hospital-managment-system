@@ -105,7 +105,14 @@ export function DischargeSettlementContent({ adminMode = false }: { adminMode?: 
         return acc;
     }, {} as Record<string, { items: any[]; total: number }>) || {};
 
-    async function handleSettleAndDischarge() {
+    // Clinical readiness returned by the server when it refuses the discharge.
+    const [clinicalBlock, setClinicalBlock] = useState<{
+        blockers: Array<{ label: string; detail?: string }>;
+        warnings: Array<{ label: string; detail?: string }>;
+    } | null>(null);
+    const [overrideReason, setOverrideReason] = useState('');
+
+    async function handleSettleAndDischarge(clinicalOverride?: string) {
         // Payment defaults to ₹0 → discharge with the balance outstanding. The only
         // hard block is an overpayment; any amount up to the balance is allowed and
         // the remainder simply stays outstanding on the invoice.
@@ -134,10 +141,21 @@ export function DischargeSettlementContent({ adminMode = false }: { adminMode?: 
                 reference: s.reference || undefined,
             })) : undefined,
             discharge_date: new Date(dischargeDateTime),
+            clinical_override_reason: clinicalOverride,
         });
         setSettling(false);
 
+        // The server refuses a clinically unsafe discharge. Show what is
+        // outstanding rather than a toast that scrolls away.
+        if (!res.success && (res as { requiresOverride?: boolean }).requiresOverride) {
+            const r = (res as { readiness?: { blockers: []; warnings: [] } }).readiness;
+            setClinicalBlock({ blockers: r?.blockers ?? [], warnings: r?.warnings ?? [] });
+            setOverrideReason('');
+            return;
+        }
+
         if (res.success) {
+            setClinicalBlock(null);
             const remainingBalance = (res.data as any)?.remaining_balance || 0;
             if (remainingBalance > 0) {
                 showToast(`Discharged with outstanding balance: ${remainingBalance.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}`);
@@ -444,10 +462,57 @@ export function DischargeSettlementContent({ adminMode = false }: { adminMode?: 
                     </div>
                 </div>
 
+                {/* Clinical readiness. This screen used to concern itself only with
+                    money; a patient could be discharged mid-deterioration. */}
+                {clinicalBlock && (
+                    <div className="bg-white rounded-lg shadow border-2 border-red-300 p-4">
+                        <h2 className="font-bold text-sm text-red-700">Clinical checks failed</h2>
+                        <ul className="mt-2 space-y-1">
+                            {clinicalBlock.blockers.map(b => (
+                                <li key={b.label} className="text-sm text-red-700">
+                                    ✕ <span className="font-semibold">{b.label}</span>
+                                    {b.detail ? <span className="text-red-600"> — {b.detail}</span> : null}
+                                </li>
+                            ))}
+                            {clinicalBlock.warnings.map(w => (
+                                <li key={w.label} className="text-sm text-amber-700">
+                                    ! <span className="font-semibold">{w.label}</span>
+                                    {w.detail ? <span className="text-amber-600"> — {w.detail}</span> : null}
+                                </li>
+                            ))}
+                        </ul>
+                        <label className="mt-3 block text-[11px] font-bold uppercase tracking-wide text-gray-500">
+                            Reason for discharging anyway (recorded on the admission)
+                        </label>
+                        <textarea
+                            value={overrideReason}
+                            onChange={e => setOverrideReason(e.target.value)}
+                            rows={2}
+                            placeholder="e.g. Discharge against medical advice, signed by patient; or reviewed by Dr X and stable for transfer"
+                            className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                        />
+                        <div className="mt-3 flex gap-2">
+                            <button
+                                onClick={() => setClinicalBlock(null)}
+                                className="px-4 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-100 rounded-lg"
+                            >
+                                Go back
+                            </button>
+                            <button
+                                disabled={overrideReason.trim().length < 10 || settling}
+                                onClick={() => handleSettleAndDischarge(overrideReason.trim())}
+                                className="px-4 py-2 text-sm font-bold text-white bg-red-600 rounded-lg disabled:opacity-40"
+                            >
+                                Discharge anyway &amp; record reason
+                            </button>
+                        </div>
+                    </div>
+                )}
+
                 {/* Action Buttons */}
                 <div className="bg-white rounded-lg shadow p-4 flex gap-3">
                     <button
-                        onClick={handleSettleAndDischarge}
+                        onClick={() => handleSettleAndDischarge()}
                         disabled={settling || overpaid}
                         className="flex-1 px-4 py-3 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 disabled:opacity-50 text-sm"
                     >

@@ -5,6 +5,7 @@ import { logAudit } from '@/app/lib/audit';
 import { createJournalEntry } from './gl-actions';
 import { accrueIPDDailyCharges } from '@/app/actions/ipd-actions';
 import { stopMedicationsOnDischarge } from '@/app/actions/ipd-emr-actions';
+import { evaluateDischargeReadiness, readinessSummary } from '@/app/lib/discharge-readiness';
 import { getPackageGSTRate, getRoomGSTRate } from '@/app/lib/gst';
 import { generateInvoiceNumber as genInvNum } from '@/app/lib/sequence-generator';
 import { syncClaimToInvoiceTpa } from '@/app/lib/tpa-claim-sync';
@@ -2035,6 +2036,8 @@ export async function settleAndDischarge(data: {
         reference?: string;
     }>;
     discharge_date?: Date | string;
+    /** Set when a clinician has reviewed the clinical blockers and accepts the risk. */
+    clinical_override_reason?: string;
 }) {
     try {
         const { db, session, organizationId } = await requireTenantContext();
@@ -2045,6 +2048,18 @@ export async function settleAndDischarge(data: {
         });
         if (!admission) return { success: false, error: 'Admission not found' };
         if (admission.status === 'Discharged') return { success: false, error: 'Patient already discharged' };
+
+        // Clinical gate. This screen settled the bill and discharged with no
+        // clinical check at all — its only concern was money.
+        const readiness = await evaluateDischargeReadiness(db, data.admission_id);
+        if (!readiness.canDischarge && !data.clinical_override_reason?.trim()) {
+            return {
+                success: false,
+                error: readinessSummary(readiness),
+                readiness,
+                requiresOverride: true,
+            };
+        }
 
         // Auto room/nursing charges disabled — charges are added manually
         // const ward = admission.ward || admission.bed?.wards;
@@ -2376,6 +2391,9 @@ export async function settleAndDischarge(data: {
                     settled_by: session.username,
                     doses_cancelled: medsClosed.dosesCancelled,
                     medications_stopped: medsClosed.medicationsStopped,
+                    outstanding: readiness.warnings.map(w => `${w.label}: ${w.detail}`),
+                    blockers_overridden: readiness.blockers.map(b => `${b.label}: ${b.detail}`),
+                    clinical_override_reason: data.clinical_override_reason?.trim() || null,
                 }),
                 organizationId,
             },
