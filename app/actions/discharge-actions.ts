@@ -120,7 +120,8 @@ export async function processDischarge(patientId: string, patientName: string, n
             if (activeAdmission.bed_id) {
                 await db.beds.update({
                     where: { bed_id: activeAdmission.bed_id },
-                    data: { status: 'Cleaning' }
+                    // Stamp cleaning_started_at — the stale-bed auto-release keys off it.
+                    data: { status: 'Cleaning', cleaning_started_at: new Date(), cleaning_completed_at: null }
                 });
             }
 

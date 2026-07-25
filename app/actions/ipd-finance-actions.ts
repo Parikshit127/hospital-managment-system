@@ -2347,11 +2347,12 @@ export async function settleAndDischarge(data: {
             data: { status: 'Discharged', discharge_date: dischargeDate },
         });
 
-        // 7. Free the bed
+        // 7. Free the bed. Stamp cleaning_started_at — the stale-bed auto-release
+        // keys off it; without it the bed never returns to the pool.
         if (admission.bed_id) {
             await db.beds.update({
                 where: { bed_id: admission.bed_id },
-                data: { status: 'Cleaning' },
+                data: { status: 'Cleaning', cleaning_started_at: new Date(), cleaning_completed_at: null },
             });
         }
 

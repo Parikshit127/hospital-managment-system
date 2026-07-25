@@ -271,12 +271,25 @@ export async function autoReleaseStaleCleaningBeds() {
         const { db, organizationId } = await requireTenantContext();
         const cutoff = new Date(Date.now() - AUTO_AVAILABLE_HOURS * 60 * 60 * 1000);
 
+        // Two classes of stale bed:
+        //  1. cleaning_started_at older than the cutoff — the normal case.
+        //  2. cleaning_started_at IS NULL — legacy rows written by discharge paths
+        //     that never stamped the timestamp. These could never match the old
+        //     `not: null` filter, so they were stranded out of inventory forever
+        //     (47% of beds at one site). Treat a missing timestamp as stale: any
+        //     bed the fixed code sets to Cleaning always carries one, so a
+        //     genuinely-just-vacated bed is never released early.
+        const staleWhere = {
+            organizationId,
+            status: 'Cleaning',
+            OR: [
+                { cleaning_started_at: { lt: cutoff } },
+                { cleaning_started_at: null },
+            ],
+        };
+
         const stale = await db.beds.findMany({
-            where: {
-                organizationId,
-                status: 'Cleaning',
-                cleaning_started_at: { lt: cutoff, not: null },
-            },
+            where: staleWhere,
             select: { bed_id: true, cleaning_started_at: true, ward_id: true },
         });
 
@@ -286,11 +299,7 @@ export async function autoReleaseStaleCleaningBeds() {
 
         const now = new Date();
         await db.beds.updateMany({
-            where: {
-                organizationId,
-                status: 'Cleaning',
-                cleaning_started_at: { lt: cutoff, not: null },
-            },
+            where: staleWhere,
             data: { status: 'Available', cleaning_completed_at: now },
         });
 
@@ -308,6 +317,9 @@ export async function autoReleaseStaleCleaningBeds() {
                     cleaning_started_at: b.cleaning_started_at,
                     auto_released_at: now.toISOString(),
                     threshold_hours: AUTO_AVAILABLE_HOURS,
+                    reason: b.cleaning_started_at
+                        ? 'cleaning exceeded threshold'
+                        : 'legacy row with no cleaning_started_at',
                 }),
                 ip_address: null,
                 organizationId,

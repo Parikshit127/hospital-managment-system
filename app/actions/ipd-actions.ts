@@ -1038,11 +1038,13 @@ export async function dischargePatientIPD(admissionId: string, notes?: string, d
       },
     });
 
-    // Free the bed (set to Cleaning first)
+    // Free the bed (set to Cleaning first). cleaning_started_at MUST be stamped —
+    // autoReleaseStaleCleaningBeds() keys off it, so a bed left without one never
+    // returns to the pool and is silently lost from inventory.
     if (admission.bed_id) {
       await db.beds.update({
         where: { bed_id: admission.bed_id },
-        data: { status: "Cleaning" },
+        data: { status: "Cleaning", cleaning_started_at: new Date(), cleaning_completed_at: null },
       });
     }
 
@@ -1318,7 +1320,7 @@ export async function transferPatient(data: {
       if (isActiveAdmission && fromBedId) {
         await tx.beds.update({
           where: { bed_id: fromBedId },
-          data: { status: "Cleaning" },
+          data: { status: "Cleaning", cleaning_started_at: new Date(), cleaning_completed_at: null },
         });
       }
 
