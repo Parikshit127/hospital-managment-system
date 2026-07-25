@@ -1,8 +1,9 @@
 'use server';
 
-import { requireTenantContext } from '@/backend/tenant';
+import { requireTenantContext, denyUnlessRole, CLINICAL_ROLES } from '@/backend/tenant';
 import { revalidatePath } from 'next/cache';
 import { generateIndentNumber } from '@/app/lib/sequence-generator';
+import { applyAdministration } from '@/app/lib/medication-safety';
 
 // ========================================
 // NURSE DASHBOARD
@@ -109,10 +110,13 @@ export async function recordVitals(data: {
     respiratoryRate?: number;
     weight?: number;
     height?: number;
-    recordedBy: string;
+    /** @deprecated Ignored. The recorder is taken from the signed-in session. */
+    recordedBy?: string;
 }) {
+    const denied = await denyUnlessRole(CLINICAL_ROLES.CHART, 'record vitals');
+    if (denied) return denied;
     try {
-        const { db } = await requireTenantContext();
+        const { db, session } = await requireTenantContext();
 
         await db.vital_signs.create({
             data: {
@@ -125,7 +129,8 @@ export async function recordVitals(data: {
                 respiratory_rate: data.respiratoryRate,
                 weight: data.weight,
                 height: data.height,
-                recorded_by: data.recordedBy,
+                // Never trust a caller-supplied recorder on a clinical record.
+                recorded_by: session.id,
             },
         });
 
@@ -205,21 +210,34 @@ export async function getMedicationSchedule(admissionId?: string, filter?: 'due'
     }
 }
 
-export async function administerMedication(id: number, nurseId: string, notes?: string) {
+// Both eMAR screens run through applyAdministration() in lib/medication-safety.
+// They previously had separate implementations against the same table, so the
+// allergy check added to one did not apply to the other and an allergic drug
+// could still be given from this screen.
+
+export async function administerMedication(
+    id: number,
+    /** @deprecated Ignored. The administering user is taken from the session. */
+    _nurseId?: string,
+    notes?: string,
+    options?: { witness_id?: string; allergy_override_reason?: string },
+) {
+    const denied = await denyUnlessRole(CLINICAL_ROLES.ADMINISTER, 'administer medication');
+    if (denied) return denied;
     try {
-        const { db } = await requireTenantContext();
-
-        await db.medicationAdministration.update({
-            where: { id },
-            data: {
-                status: 'Administered',
-                administered_at: new Date(),
-                administered_by: nurseId,
-                notes,
-            },
+        const { db, session } = await requireTenantContext();
+        const outcome = await applyAdministration(db, session.id, {
+            med_id: id,
+            status: 'Administered',
+            notes,
+            witness_id: options?.witness_id,
+            allergy_override_reason: options?.allergy_override_reason,
         });
-
+        if (!outcome.ok) {
+            return { success: false, error: outcome.error, allergyConflict: outcome.allergyConflict };
+        }
         revalidatePath('/nurse/medications');
+        revalidatePath('/ipd/medication-admin');
         return { success: true };
     } catch (error) {
         console.error('Administer Medication Error:', error);
@@ -227,16 +245,20 @@ export async function administerMedication(id: number, nurseId: string, notes?: 
     }
 }
 
-export async function updateMedicationStatus(id: number, status: string, notes?: string) {
+export async function updateMedicationStatus(id: number, status: string, reason?: string) {
+    const denied = await denyUnlessRole(CLINICAL_ROLES.ADMINISTER, 'change a medication status');
+    if (denied) return denied;
     try {
-        const { db } = await requireTenantContext();
-
-        await db.medicationAdministration.update({
-            where: { id },
-            data: { status, notes },
+        const { db, session } = await requireTenantContext();
+        const outcome = await applyAdministration(db, session.id, {
+            med_id: id,
+            status: status as 'Administered' | 'Missed' | 'Held' | 'Refused',
+            not_given_reason: reason,
+            notes: reason,
         });
-
+        if (!outcome.ok) return { success: false, error: outcome.error };
         revalidatePath('/nurse/medications');
+        revalidatePath('/ipd/medication-admin');
         return { success: true };
     } catch (error) {
         console.error('Update Medication Status Error:', error);
@@ -250,17 +272,20 @@ export async function updateMedicationStatus(id: number, status: string, notes?:
 
 export async function addNursingNote(data: {
     admissionId: string;
-    nurseId: string;
+    /** @deprecated Ignored. The author is taken from the session. */
+    nurseId?: string;
     noteType: string;
     details: string;
 }) {
+    const denied = await denyUnlessRole(CLINICAL_ROLES.CHART, 'write a nursing note');
+    if (denied) return denied;
     try {
-        const { db } = await requireTenantContext();
+        const { db, session } = await requireTenantContext();
 
         await db.nursingNote.create({
             data: {
                 admission_id: data.admissionId,
-                nurse_id: data.nurseId,
+                nurse_id: session.id,
                 note_type: data.noteType,
                 details: data.details,
             },
@@ -345,6 +370,8 @@ export async function getNursingTasks(options?: {
 }
 
 export async function completeNursingTask(taskId: number) {
+    const denied = await denyUnlessRole(CLINICAL_ROLES.CHART, 'complete a nursing task');
+    if (denied) return denied;
     try {
         const { db } = await requireTenantContext();
 
@@ -367,17 +394,20 @@ export async function completeNursingTask(taskId: number) {
 
 export async function generateHandoverReport(data: {
     wardId?: number;
-    fromNurseId: string;
+    /** @deprecated Ignored. The outgoing nurse is taken from the session. */
+    fromNurseId?: string;
     toNurseId?: string;
     summary: string;
 }) {
+    const denied = await denyUnlessRole(CLINICAL_ROLES.CHART, 'record a shift handover');
+    if (denied) return denied;
     try {
-        const { db } = await requireTenantContext();
+        const { db, session } = await requireTenantContext();
 
         await db.shiftHandover.create({
             data: {
                 ward_id: data.wardId || 0,
-                from_nurse_id: data.fromNurseId,
+                from_nurse_id: session.id,
                 to_nurse_id: data.toNurseId || '',
                 shift_date: new Date(),
                 summary: data.summary,
@@ -501,13 +531,17 @@ export interface PharmacyIndentItem {
 export async function createPharmacyIndent(data: {
     patientId: string;
     admissionId: string;
-    nurseId: string;
-    nurseName?: string;    // display name shown on pharmacy portal
+    /** @deprecated Ignored. The requesting nurse is taken from the session. */
+    nurseId?: string;
+    /** @deprecated Ignored. Resolved from the session. */
+    nurseName?: string;
     doctorName: string;
     items: PharmacyIndentItem[];
 }) {
+    const denied = await denyUnlessRole(CLINICAL_ROLES.CHART, 'raise a pharmacy indent');
+    if (denied) return denied;
     try {
-        const { db, organizationId } = await requireTenantContext();
+        const { db, organizationId, session } = await requireTenantContext();
 
         // Requisition number for the pharmacist's indent sheet (AVS-IND-26-27-001).
         const indentNumber = await generateIndentNumber(organizationId, db);
@@ -517,8 +551,8 @@ export async function createPharmacyIndent(data: {
             data: {
                 indent_number: indentNumber,
                 patient_id: data.patientId,
-                doctor_id: data.nurseId,           // nurse raising the indent
-                requested_by_name: data.nurseName || null,  // shown on pharmacy portal
+                doctor_id: session.id,                       // nurse raising the indent
+                requested_by_name: session.name || session.username, // shown on pharmacy portal
                 admission_id: data.admissionId,
                 is_ipd_linked: true,
                 status: 'Pending',

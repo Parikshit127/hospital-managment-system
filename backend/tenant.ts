@@ -86,3 +86,50 @@ export async function requireRoleAndTenant(allowedRoles: string[]): Promise<{
     }
     return ctx;
 }
+
+/**
+ * Named role groups for clinical authority.
+ *
+ * Route guards in proxy.ts decide who may OPEN a module. They cannot express who
+ * may perform a given act, and a server action is an independently reachable
+ * endpoint — reaching it does not require rendering the page it was written for.
+ * These groups let each action state the authority it needs.
+ *
+ * Split along the line real wards use: who may ORIGINATE an order versus who may
+ * EXECUTE one. A nurse administers but does not prescribe; a doctor prescribes
+ * and may chart; neither enters lab results.
+ */
+export const CLINICAL_ROLES = {
+    /** Bedside documentation: vitals, nursing notes, assessments, tasks, handover. */
+    CHART: ['admin', 'nurse', 'doctor', 'ipd_manager'],
+    /** Give / hold / refuse a dose against an existing order. Nurses execute. */
+    ADMINISTER: ['admin', 'nurse', 'ipd_manager'],
+    /** Originate a medication or clinical order. Prescribing is a doctor's act. */
+    PRESCRIBE: ['admin', 'doctor'],
+    /** Enter or amend a laboratory result. */
+    LAB_RESULT: ['admin', 'lab_technician'],
+    /** Dispense medication from pharmacy stock. */
+    DISPENSE: ['admin', 'pharmacist'],
+    /** Discharge a patient / close an admission. */
+    DISCHARGE: ['admin', 'doctor', 'ipd_manager'],
+} as const;
+
+/**
+ * Same as requireRoleAndTenant but returns a typed failure instead of throwing,
+ * so server actions can surface it in their existing { success, error } shape.
+ * Returns null on success.
+ */
+export async function denyUnlessRole(
+    allowedRoles: readonly string[],
+    action: string,
+): Promise<{ success: false; error: string } | null> {
+    const session = await getSession();
+    if (!session) return { success: false, error: 'Not signed in.' };
+    if (!allowedRoles.includes(session.role)) {
+        return {
+            success: false,
+            error: `Your role (${session.role}) is not permitted to ${action}.`,
+        };
+    }
+    return null;
+}
