@@ -9,7 +9,7 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import {
     User, Bed, Clock, ClipboardEdit, Utensils, MoveRight, Stethoscope,
-    FileText, CheckCircle2, Pencil, Receipt, AlertTriangle,
+    FileText, CheckCircle2, Pencil, Receipt, AlertTriangle, ClipboardList,
     Loader2, Plus, X, DollarSign, Activity, LogOut, HeartPulse,
     ArrowLeftRight, CreditCard, TrendingUp, CalendarDays,
     ShieldAlert, ShieldCheck, Info, ChevronRight, RotateCcw, Printer
@@ -1350,14 +1350,20 @@ export default function AdmissionDetailPage() {
                                     </div>
                                 )}
 
-                                {/* Quick Links */}
+                                {/* Everything for this patient, from this chart.
+                                    The audit found a nurse needed six screens to
+                                    look after one patient and had to re-find them
+                                    each time; every link here carries the
+                                    admission so nothing opens on an empty state. */}
                                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                                     {[
+                                        { label: 'Care Record', href: `/ipd/care-record?admission_id=${data.admission_id}`, icon: ClipboardList },
                                         { label: 'Nursing Station', href: `/ipd/nursing-station/${data.admission_id}`, icon: HeartPulse },
                                         { label: 'Case Sheet (14-Tab)', href: `/ipd/case-sheet?admission_id=${data.admission_id}`, icon: Stethoscope },
                                         { label: 'Ward Rounds', href: `/ipd/ward-rounds?admission_id=${data.admission_id}`, icon: Stethoscope },
                                         { label: 'Vitals', href: `/ipd/vitals/${data.admission_id}`, icon: HeartPulse },
                                         { label: 'Medication Admin', href: `/ipd/medication-admin`, icon: HeartPulse },
+                                        { label: 'Report an Incident', href: `/ipd/incidents`, icon: AlertTriangle },
                                         { label: 'Discharge Settlement', href: `/ipd/discharge-settlement/${data.admission_id}`, icon: LogOut },
                                     ].map(link => {
                                         const Icon = link.icon;
