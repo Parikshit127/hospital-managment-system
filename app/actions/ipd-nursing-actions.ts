@@ -532,7 +532,25 @@ export async function getRecentHandovers(wardId: number) {
             orderBy: { created_at: 'desc' },
             take: 10,
         });
-        return { success: true, data: JSON.parse(JSON.stringify(handovers)) };
+
+        // Resolve the stored user ids to names. The screen rendered raw UUIDs,
+        // which tells a nurse nothing about who handed over to whom.
+        const ids = [...new Set(handovers.flatMap((h: any) =>
+            [h.from_nurse_id, h.to_nurse_id, h.acknowledged_by].filter(Boolean)))] as string[];
+        const users = ids.length
+            ? await db.user.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, username: true } })
+            : [];
+        const nameOf = Object.fromEntries(users.map((u: any) => [u.id, u.name || u.username]));
+
+        return {
+            success: true,
+            data: JSON.parse(JSON.stringify(handovers.map((h: any) => ({
+                ...h,
+                from_nurse_name: nameOf[h.from_nurse_id] ?? null,
+                to_nurse_name: nameOf[h.to_nurse_id] ?? null,
+                acknowledged_by_name: nameOf[h.acknowledged_by] ?? null,
+            })))),
+        };
     } catch (error: any) {
         return { success: false, data: [] };
     }
@@ -581,6 +599,46 @@ export async function saveNursingAssessment(data: {
                 assessed_by: session.id,
             },
         });
+
+        // Close the 2-hour initial-assessment loop: the alert and the ward task
+        // that were raised at admission are only meaningful if doing the work
+        // clears them. Best-effort — never fail the assessment over bookkeeping.
+        if ((data.assessment_type ?? 'initial') === 'initial') {
+            try {
+                const alert = await (db as any).nursingAssessmentAlert.findFirst({
+                    where: { admission_id: data.admission_id, assessment_completed: false },
+                });
+                if (alert) {
+                    const completedAt = new Date();
+                    const onTime = completedAt <= new Date(alert.assessment_due_at);
+                    await (db as any).nursingAssessmentAlert.update({
+                        where: { id: alert.id },
+                        data: { assessment_completed: true, completed_at: completedAt },
+                    });
+                    await db.system_audit_logs.create({
+                        data: {
+                            action: onTime ? 'INITIAL_ASSESSMENT_ON_TIME' : 'INITIAL_ASSESSMENT_OVERDUE',
+                            module: 'ipd',
+                            entity_type: 'admission',
+                            entity_id: data.admission_id,
+                            user_id: session.id,
+                            username: session.username,
+                            details: JSON.stringify({
+                                minutes_taken: Math.round((completedAt.getTime() - new Date(alert.arrival_in_unit_at).getTime()) / 60000),
+                                due_at: alert.assessment_due_at,
+                            }),
+                            organizationId,
+                        },
+                    });
+                }
+                await db.nursingTask.updateMany({
+                    where: { admission_id: data.admission_id, task_type: 'Initial Assessment', status: 'Pending' },
+                    data: { status: 'Completed', completed_at: new Date(), completed_by: session.id },
+                });
+            } catch (e) {
+                console.error('initial assessment loop close failed:', e);
+            }
+        }
 
         // Sync fall risk score to admission
         if (data.fall_risk_score != null) {

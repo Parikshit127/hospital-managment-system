@@ -7,7 +7,7 @@ import {
     AlertTriangle, User, HeartPulse, Clock, ChevronDown
 } from 'lucide-react';
 import {
-    getShiftHandoverData, saveShiftHandover, getRecentHandovers
+    getShiftHandoverData, saveShiftHandover, getRecentHandovers, acknowledgeHandover
 } from '@/app/actions/ipd-nursing-actions';
 import { getWardsWithBeds } from '@/app/actions/ipd-actions';
 
@@ -51,6 +51,15 @@ export default function ShiftHandoverPage() {
     }, [selectedWard]);
 
     useEffect(() => { loadPatients(); }, [loadPatients]);
+
+    const [acknowledging, setAcknowledging] = useState<number | null>(null);
+    const handleAcknowledge = async (handoverId: number) => {
+        setAcknowledging(handoverId);
+        const res = await acknowledgeHandover(handoverId);
+        setAcknowledging(null);
+        if (res.success) loadPatients();
+        else alert(res.error || 'Could not accept the handover');
+    };
 
     const updatePatient = (admissionId: string, field: string, value: string) => {
         setPatients(ps => ps.map(p => p.admission_id === admissionId ? { ...p, [field]: value } : p));
@@ -236,16 +245,33 @@ export default function ShiftHandoverPage() {
                         </div>
                         <div className="divide-y divide-gray-50">
                             {recentHandovers.slice(0, 5).map((h: any) => (
-                                <div key={h.id} className="px-5 py-3 flex items-center justify-between">
+                                <div key={h.id} className="px-5 py-3 flex items-center justify-between gap-3">
                                     <div>
                                         <p className="text-sm font-medium text-gray-900">
-                                            {h.shift_type ?? 'Shift'} Handover — {h.from_nurse_id} → {h.to_nurse_id}
+                                            {h.shift_type ?? 'Shift'} Handover — {h.from_nurse_name || h.from_nurse_id} → {h.to_nurse_name || h.to_nurse_id}
                                         </p>
                                         <p className="text-xs text-gray-400">
                                             {new Date(h.created_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
-                                            {h.acknowledged_by && <span className="ml-2 text-emerald-600 font-semibold">✓ Acknowledged</span>}
+                                            {h.acknowledged_by && (
+                                                <span className="ml-2 text-emerald-600 font-semibold">
+                                                    ✓ Accepted by {h.acknowledged_by_name || h.acknowledged_by}
+                                                    {h.acknowledged_at ? ` · ${new Date(h.acknowledged_at).toLocaleTimeString([], { timeStyle: 'short' })}` : ''}
+                                                </span>
+                                            )}
                                         </p>
                                     </div>
+                                    {/* A handover is a transfer of responsibility, so the incoming
+                                        nurse has to accept it. acknowledgeHandover() existed but had
+                                        no caller, so every handover stayed permanently unaccepted. */}
+                                    {!h.acknowledged_by && (
+                                        <button
+                                            onClick={() => handleAcknowledge(h.id)}
+                                            disabled={acknowledging === h.id}
+                                            className="shrink-0 px-3 py-1.5 text-xs font-bold text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 disabled:opacity-50"
+                                        >
+                                            {acknowledging === h.id ? 'Accepting…' : 'Accept handover'}
+                                        </button>
+                                    )}
                                 </div>
                             ))}
                         </div>

@@ -411,6 +411,39 @@ export async function admitPatientIPD(data: {
             }
         }
 
+        // Start the 2-hour initial nursing assessment clock.
+        //
+        // The alert machinery already existed — NursingAssessmentAlert, the
+        // overdue sweep at /api/cron/assessment-alerts, and the alerts screen —
+        // but the only function that creates an alert had no caller anywhere, so
+        // no alert was ever raised, the table held zero rows, and the screen and
+        // the cron job swept nothing. Admission is when the clock should start.
+        await tx.nursingAssessmentAlert.create({
+            data: {
+                admission_id: newAdmission.admission_id,
+                patient_id: data.patient_id,
+                arrival_in_unit_at: new Date(),
+                assessment_due_at: new Date(Date.now() + 2 * 60 * 60 * 1000),
+                organizationId,
+            },
+        });
+
+        // ...and the task that actually performs it, so it appears as ward work
+        // rather than only as a countdown on a screen nobody has open.
+        await tx.nursingTask.create({
+            data: {
+                admission_id: newAdmission.admission_id,
+                task_type: 'Initial Assessment',
+                description: 'Complete the initial nursing assessment (due within 2 hours of arrival)',
+                scheduled_at: new Date(),
+                status: 'Pending',
+                priority: 'urgent',
+                source_type: 'admission',
+                source_id: newAdmission.admission_id,
+                organizationId,
+            },
+        });
+
         // Create IPD invoice
         const newInvoice = await tx.invoices.create({
             data: {
