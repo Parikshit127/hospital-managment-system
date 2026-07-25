@@ -11,10 +11,29 @@ import {
 } from '@/app/actions/nurse-actions';
 import { useToast } from '@/app/components/ui/Toast';
 
+// Mirrors the MedicationAdministration model. Typed deliberately: this list was
+// previously `any[]`, which let a `med.dosage` typo (the column is `dose`) render
+// every dose on the eMAR as "N/A" without a compile error.
+type MedRow = {
+    id: number;
+    medication_name: string | null;
+    dose: string | null;
+    route: string | null;
+    frequency: string | null;
+    scheduled_time: string | null;
+    status: string | null;
+    is_prn: boolean | null;
+    notes: string | null;
+    administered_at: string | null;
+    administered_by: string | null;
+    patientName?: string;
+    patientId?: string;
+};
+
 export default function NurseMedicationsPage() {
     const toast = useToast();
     const [nurseId, setNurseId] = useState('');
-    const [medications, setMedications] = useState<any[]>([]);
+    const [medications, setMedications] = useState<MedRow[]>([]);
     const [refreshing, setRefreshing] = useState(false);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
@@ -245,7 +264,7 @@ export default function NurseMedicationsPage() {
                                                     <span className="font-bold text-gray-700">{med.medication_name || 'N/A'}</span>
                                                 </div>
                                             </td>
-                                            <td className="px-6 py-4 font-medium text-gray-600">{med.dosage || 'N/A'}</td>
+                                            <td className="px-6 py-4 font-medium text-gray-600">{med.dose || '—'}</td>
                                             <td className="px-6 py-4">
                                                 <span className="text-xs font-bold text-gray-600 bg-gray-100 px-2 py-0.5 rounded-lg border border-gray-200">
                                                     {med.route || 'N/A'}
