@@ -12,6 +12,7 @@
 
 import { requireTenantContext, denyUnlessRole, CLINICAL_ROLES } from '@/backend/tenant';
 import { revalidatePath } from 'next/cache';
+import { checkTransfusionPreconditions } from '@/app/lib/medication-safety';
 
 // ── Care plans (ADPIE) ──────────────────────────────────────────────────────
 
@@ -564,15 +565,12 @@ export async function startTransfusion(data: {
     const denied = await denyUnlessRole(CLINICAL_ROLES.ADMINISTER, 'start a transfusion');
     if (denied) return denied;
 
-    // Both are legal requirements, not form validation for its own sake.
-    if (!data.consent_taken) return { success: false, error: 'Consent must be recorded before a transfusion is started.' };
-    if (!data.witness_id?.trim()) return { success: false, error: 'A second checker is required for the bedside check.' };
-
     try {
         const { db, organizationId, session } = await requireTenantContext();
-        if (data.witness_id === session.id) {
-            return { success: false, error: 'The second checker must be a different person.' };
-        }
+
+        // Consent and a genuine two-person bedside check, both legal requirements.
+        const guard = checkTransfusionPreconditions(data, session.id);
+        if (guard.error) return { success: false, error: guard.error };
 
         const record = await db.transfusionRecord.create({
             data: {

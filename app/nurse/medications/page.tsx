@@ -10,6 +10,7 @@ import {
     getMedicationSchedule, administerMedication, updateMedicationStatus
 } from '@/app/actions/nurse-actions';
 import { useToast } from '@/app/components/ui/Toast';
+import { getNursesForDropdown } from '@/app/actions/admin-actions';
 
 // Mirrors the MedicationAdministration model. Typed deliberately: this list was
 // previously `any[]`, which let a `med.dosage` typo (the column is `dose`) render
@@ -81,17 +82,34 @@ export default function NurseMedicationsPage() {
     // Set when a dose is being marked Held/Refused/Missed, which requires a reason.
     const [reasonPrompt, setReasonPrompt] = useState<{ medId: number; status: string } | null>(null);
     const [reasonText, setReasonText] = useState('');
+    // Set when the drug is controlled and needs a second nurse to co-sign.
+    const [witnessPrompt, setWitnessPrompt] = useState<{ medId: number; message: string } | null>(null);
+    const [witnessId, setWitnessId] = useState('');
+    const [colleagues, setColleagues] = useState<Array<{ id: string; name?: string | null; username: string }>>([]);
 
-    const handleAdminister = async (medId: number, allergyOverrideReason?: string) => {
+    useEffect(() => {
+        if (!witnessPrompt || colleagues.length) return;
+        getNursesForDropdown().then(r => {
+            if (r.success) setColleagues((r.data as Array<{ id: string; name?: string | null; username: string }>) ?? []);
+        });
+    }, [witnessPrompt, colleagues.length]);
+
+    const handleAdminister = async (medId: number, allergyOverrideReason?: string, witnessId?: string) => {
         setActionLoading(medId);
         try {
             const res = await administerMedication(
                 medId, undefined, undefined,
-                allergyOverrideReason ? { allergy_override_reason: allergyOverrideReason } : undefined,
+                (allergyOverrideReason || witnessId)
+                    ? { allergy_override_reason: allergyOverrideReason, witness_id: witnessId }
+                    : undefined,
             );
             if (res.success) {
                 setAllergyPrompt(null);
+                setWitnessPrompt(null);
                 await loadMedications();
+            } else if (res.error && /CONTROLLED DRUG/i.test(res.error)) {
+                // A controlled drug needs a second nurse to co-sign.
+                setWitnessPrompt({ medId, message: res.error });
             } else if (res.error && /ALLERGY ALERT/i.test(res.error)) {
                 // Hard stop, not a toast that scrolls away.
                 setAllergyPrompt({ medId, message: res.error });
@@ -425,6 +443,49 @@ export default function NurseMedicationsPage() {
                                         className="rounded-xl bg-red-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-40 hover:bg-red-700"
                                     >
                                         Give anyway &amp; record reason
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* A controlled drug needs a second nurse to witness the dose. */}
+            {witnessPrompt && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+                    <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl border-2 border-amber-300">
+                        <div className="flex items-start gap-3">
+                            <AlertTriangle className="h-6 w-6 text-amber-600 shrink-0 mt-0.5" />
+                            <div className="flex-1">
+                                <h2 className="text-base font-black text-amber-700">Second check required</h2>
+                                <p className="mt-2 text-sm text-gray-700">{witnessPrompt.message}</p>
+                                <label className="mt-4 block text-[11px] font-bold uppercase tracking-wide text-gray-500">
+                                    Witnessing nurse
+                                </label>
+                                <select
+                                    value={witnessId}
+                                    onChange={e => setWitnessId(e.target.value)}
+                                    className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm outline-none focus:border-amber-400"
+                                >
+                                    <option value="">Select a colleague…</option>
+                                    {colleagues.map(c => (
+                                        <option key={c.id} value={c.id}>{c.name || c.username}</option>
+                                    ))}
+                                </select>
+                                <div className="mt-4 flex justify-end gap-2">
+                                    <button
+                                        onClick={() => { setWitnessPrompt(null); setWitnessId(''); }}
+                                        className="rounded-xl px-4 py-2 text-sm font-bold text-gray-600 hover:bg-gray-100"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        disabled={!witnessId}
+                                        onClick={() => handleAdminister(witnessPrompt.medId, undefined, witnessId)}
+                                        className="rounded-xl bg-amber-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-40 hover:bg-amber-700"
+                                    >
+                                        Co-sign &amp; give
                                     </button>
                                 </div>
                             </div>

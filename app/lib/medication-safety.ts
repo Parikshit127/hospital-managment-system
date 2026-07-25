@@ -34,6 +34,32 @@ export function dosingHours(frequency: string): { hours: number[]; isPrn: boolea
 /** How far ahead the MAR is kept populated for an open-ended medication. */
 export const MAR_HORIZON_DAYS = 14;
 
+/**
+ * The bedside checks that must pass before a transfusion is started.
+ *
+ * Pure so it can be asserted directly. Disabling a button in the UI proves
+ * nothing about the rule — the action is reachable without the page.
+ *
+ * Both are legal requirements rather than form validation: blood must not be
+ * given without documented consent, and the identity check is a two-person
+ * check, so the second checker cannot be the person starting it.
+ */
+export function checkTransfusionPreconditions(
+    input: { consent_taken: boolean; witness_id?: string },
+    actingUserId: string,
+): { error?: string } {
+    if (!input.consent_taken) {
+        return { error: 'Consent must be recorded before a transfusion is started.' };
+    }
+    if (!input.witness_id?.trim()) {
+        return { error: 'A second checker is required for the bedside check.' };
+    }
+    if (input.witness_id === actingUserId) {
+        return { error: 'The second checker must be a different person.' };
+    }
+    return {};
+}
+
 export type AllergyConflict = {
     allergen: string;
     severity: string | null;
@@ -111,6 +137,42 @@ export function allergyBlockMessage(c: AllergyConflict): string {
     return `${parts.join(' ')}. Confirm with the prescriber. To proceed anyway, re-submit with an override reason.`;
 }
 
+/**
+ * Does this drug require a second nurse to witness the dose?
+ *
+ * Controlled drugs are given under a two-person check in every ward that holds
+ * them, and the register has to show both names. The formulary already carries
+ * is_narcotic and drug_schedule; nothing consulted them at administration.
+ *
+ * Matched on the drug name because the eMAR stores a name rather than a
+ * formulary id — the same reason the allergy check matches on text. Falls back
+ * to the schedule letters used on the Indian schedule (H1, X) for drugs that
+ * are controlled without being flagged as narcotics.
+ */
+export async function requiresWitness(db: any, medicationName: string): Promise<boolean> {
+    if (!medicationName) return false;
+    const name = medicationName.trim();
+    if (!name) return false;
+
+    try {
+        const match = await db.pharmacy_medicine_master.findFirst({
+            where: {
+                OR: [
+                    { brand_name: { equals: name, mode: 'insensitive' } },
+                    { brand_name: { contains: name.split(/\s+/)[0], mode: 'insensitive' } },
+                ],
+            },
+            select: { is_narcotic: true, drug_schedule: true },
+        });
+        if (!match) return false;
+        if (match.is_narcotic) return true;
+        return ['H1', 'X'].includes(String(match.drug_schedule || '').toUpperCase());
+    } catch {
+        // Never block a dose because the lookup failed.
+        return false;
+    }
+}
+
 export type AdministerInput = {
     med_id: number;
     status: 'Administered' | 'Missed' | 'Held' | 'Refused';
@@ -124,7 +186,7 @@ export type AdministerInput = {
 };
 
 export type AdministerOutcome =
-    | { ok: false; error: string; allergyConflict?: AllergyConflict }
+    | { ok: false; error: string; allergyConflict?: AllergyConflict; needsWitness?: boolean }
     | { ok: true; data: Record<string, unknown> };
 
 /**
@@ -144,10 +206,28 @@ export async function applyAdministration(
         return { ok: false, error: `A reason is required when a dose is marked ${input.status}.` };
     }
 
-    if (input.status === 'Administered' && !input.allergy_override_reason?.trim()) {
-        const conflict = await findAllergyConflict(db, input.med_id);
-        if (conflict) {
-            return { ok: false, error: allergyBlockMessage(conflict), allergyConflict: conflict };
+    if (input.status === 'Administered') {
+        if (!input.allergy_override_reason?.trim()) {
+            const conflict = await findAllergyConflict(db, input.med_id);
+            if (conflict) {
+                return { ok: false, error: allergyBlockMessage(conflict), allergyConflict: conflict };
+            }
+        }
+
+        // Controlled drugs need a second nurse to witness the dose. The formulary
+        // already flagged them; nothing consulted it at the point of giving.
+        if (!input.witness_id?.trim()) {
+            const med = await db.medicationAdministration.findUnique({
+                where: { id: input.med_id },
+                select: { medication_name: true },
+            });
+            if (med?.medication_name && await requiresWitness(db, med.medication_name)) {
+                return {
+                    ok: false,
+                    error: `CONTROLLED DRUG: ${med.medication_name} must be witnessed by a second nurse. Select a colleague to co-sign, then give the dose.`,
+                    needsWitness: true,
+                };
+            }
         }
     }
 
