@@ -4,134 +4,9 @@ import { requireTenantContext, denyUnlessRole, CLINICAL_ROLES } from '@/backend/
 import { revalidatePath } from 'next/cache';
 // NEWS2 lives in a plain module: a 'use server' file may only export async
 // actions, and keeping the scoring pure makes it unit-testable.
-import { calcNEWS2 } from '@/app/lib/news2';
+import { recordObservation } from '@/app/lib/vitals-recording';
 import { applyAdministration } from '@/app/lib/medication-safety';
 
-
-// ─────────────────────────────────────────────────────────────────────────────
-// NEWS ESCALATION
-//
-// The score was previously calculated, stored, and then nothing happened: the
-// only output was a banner on the vitals page. A nurse who charted and walked
-// away, or a doctor who never opened that screen, was never told. Recording a
-// NEWS of 11 produced zero notifications, zero tasks and zero alerts.
-//
-// RCP response thresholds, and who each one has to reach:
-//   >= 7            emergency response — ward nurses AND the treating doctor
-//   5-6             urgent review      — ward nurses AND the treating doctor
-//   single param 3  urgent review      — ward nurses
-//   0-4             routine            — no escalation
-// ─────────────────────────────────────────────────────────────────────────────
-
-type EscalationResult = { raised: boolean; band: string; notified: number; taskId?: number };
-
-async function escalateOnNEWS(args: {
-    db: any;
-    organizationId: string;
-    admissionId: string;
-    patientId: string;
-    score: number;
-    level: string;
-    maxSingleParam: number;
-    recordedBy: string;
-}): Promise<EscalationResult> {
-    const { db, organizationId, admissionId, patientId, score, maxSingleParam } = args;
-
-    const emergency = score >= 7;
-    const urgent = score >= 5 || maxSingleParam >= 3;
-    if (!emergency && !urgent) return { raised: false, band: 'routine', notified: 0 };
-
-    const band = emergency ? 'emergency' : 'urgent';
-
-    try {
-        const admission = await db.admissions.findUnique({
-            where: { admission_id: admissionId },
-            include: { patient: { select: { full_name: true } }, ward: true },
-        });
-        const who = admission?.patient?.full_name ?? patientId;
-        const where = [admission?.ward?.ward_name, admission?.bed_id].filter(Boolean).join(' · ');
-
-        const title = emergency
-            ? `NEWS ${score} — emergency response`
-            : `NEWS ${score} — urgent review`;
-        const body = emergency
-            ? `${who} (${where}) scored NEWS ${score}. Emergency response required — call the treating doctor now.`
-            : `${who} (${where}) scored NEWS ${score}${maxSingleParam >= 3 && score < 5 ? ' (single parameter at 3)' : ''}. Urgent review required; increase monitoring frequency.`;
-
-        // Reach the people who can act: ward nursing staff plus, above the urgent
-        // threshold, the admitting doctor.
-        const recipients = await db.user.findMany({
-            where: {
-                organizationId,
-                is_active: true,
-                role: { in: emergency ? ['nurse', 'ipd_manager', 'doctor'] : ['nurse', 'ipd_manager'] },
-            },
-            select: { id: true },
-        });
-
-        const ids = new Set<string>(recipients.map((r: { id: string }) => r.id));
-        if (admission?.attending_doctor_id) ids.add(admission.attending_doctor_id);
-
-        if (ids.size > 0) {
-            await db.notification.createMany({
-                data: [...ids].map((uid) => ({
-                    organizationId,
-                    user_id: uid,
-                    title,
-                    body,
-                    type: emergency ? 'error' : 'warning',
-                })),
-            });
-        }
-
-        // A notification can be dismissed; a task has to be closed. Only one open
-        // escalation task per admission, so repeat observations don't spam the ward.
-        const existing = await db.nursingTask.findFirst({
-            where: { admission_id: admissionId, task_type: 'NEWS Escalation', status: { in: ['Pending', 'In Progress'] } },
-        });
-
-        let taskId: number | undefined;
-        if (existing) {
-            await db.nursingTask.update({
-                where: { id: existing.id },
-                data: { description: body, priority: emergency ? 'stat' : 'urgent' },
-            });
-            taskId = existing.id;
-        } else {
-            const task = await db.nursingTask.create({
-                data: {
-                    admission_id: admissionId,
-                    task_type: 'NEWS Escalation',
-                    description: body,
-                    scheduled_at: new Date(),
-                    status: 'Pending',
-                    priority: emergency ? 'stat' : 'urgent',
-                    source_type: 'news_escalation',
-                    organizationId,
-                },
-            });
-            taskId = task.id;
-        }
-
-        await db.system_audit_logs.create({
-            data: {
-                action: 'NEWS_ESCALATION_RAISED',
-                module: 'ipd',
-                entity_type: 'admission',
-                entity_id: admissionId,
-                user_id: args.recordedBy,
-                details: JSON.stringify({ score, band, maxSingleParam, notified: ids.size }),
-                organizationId,
-            },
-        });
-
-        return { raised: true, band, notified: ids.size, taskId };
-    } catch (error) {
-        // Charting must never fail because the alert fan-out did.
-        console.error('escalateOnNEWS error:', error);
-        return { raised: false, band, notified: 0 };
-    }
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // RECORD IPD VITALS
@@ -160,96 +35,37 @@ export async function recordIPDVitals(data: {
     try {
         const { db, organizationId, session } = await requireTenantContext();
 
-        const { score, level, maxSingleParam } = calcNEWS2({
+        // Both vitals entrances (/ipd/vitals and /nurse/vitals) run through
+        // recordObservation, so scoring, mirroring and escalation behave the same
+        // whichever screen the nurse happened to open.
+        const result = await recordObservation(db, organizationId, session.id, {
+            patient_id: data.patient_id,
+            admission_id: data.admission_id,
+            bp_systolic: data.bp_systolic,
+            bp_diastolic: data.bp_diastolic,
+            heart_rate: data.heart_rate,
+            temperature: data.temperature,
             respiratory_rate: data.respiratory_rate,
             spo2: data.spo2,
-            temperature: data.temperature,
-            bp_systolic: data.bp_systolic,
-            heart_rate: data.heart_rate,
+            pain_score: data.pain_score,
             consciousness: data.consciousness,
+            blood_sugar: data.blood_sugar,
+            urine_output_ml: data.urine_output_ml,
             on_supplemental_oxygen: data.on_supplemental_oxygen,
         });
 
-        const vitals = await db.iPDVitals.create({
-            data: {
-                admission_id: data.admission_id,
-                patient_id: data.patient_id,
-                organizationId,
-                bp_systolic: data.bp_systolic,
-                bp_diastolic: data.bp_diastolic,
-                heart_rate: data.heart_rate,
-                temperature: data.temperature,
-                respiratory_rate: data.respiratory_rate,
-                spo2: data.spo2,
-                pain_score: data.pain_score,
-                consciousness: data.consciousness,
-                blood_sugar: data.blood_sugar,
-                urine_output_ml: data.urine_output_ml,
-                news_score: score,
-                news_level: level,
-                news_max_single_param: maxSingleParam,
-                on_supplemental_oxygen: data.on_supplemental_oxygen ?? false,
-                // Identity comes from the session, never from a free-text box.
-                recorded_by: session.id,
-            },
-        });
-
-        // Update latest NEWS score on admission record
-        await db.admissions.update({
-            where: { admission_id: data.admission_id },
-            data: { news_score_latest: score },
-        });
-
-        // Mirror into the shared patient-level vitals history.
-        //
-        // Vitals live in two unrelated tables: IPDVitals (this one, admission-scoped,
-        // carries NEWS) and vital_signs (patient-scoped, no admission_id). The nurse
-        // portal, the doctor's patient view, the discharge summary and the discharge
-        // PDF all read vital_signs ONLY — so anything charted here was invisible to
-        // every one of them, including the discharge document.
-        //
-        // Writing both keeps one observation visible everywhere. IPDVitals stays the
-        // system of record for NEWS and trending; this row is the shared history.
-        try {
-            await db.vital_signs.create({
-                data: {
-                    patient_id: data.patient_id,
-                    blood_pressure: (data.bp_systolic != null && data.bp_diastolic != null)
-                        ? `${data.bp_systolic}/${data.bp_diastolic}`
-                        : null,
-                    heart_rate: data.heart_rate ?? null,
-                    temperature: data.temperature ?? null,
-                    oxygen_sat: data.spo2 ?? null,
-                    respiratory_rate: data.respiratory_rate ?? null,
-                    blood_sugar: data.blood_sugar ?? null,
-                    pain_scale: data.pain_score ?? null,
-                    recorded_by: session.id,
-                },
-            });
-        } catch (mirrorError) {
-            // A mirroring failure must not lose the primary observation.
-            console.error('recordIPDVitals: vital_signs mirror failed:', mirrorError);
-        }
-
-        // A deteriorating patient must reach a person, not just a banner on the
-        // screen of whoever happened to be charting. This raises the escalation.
-        const escalation = await escalateOnNEWS({
-            db,
-            organizationId,
-            admissionId: data.admission_id,
-            patientId: data.patient_id,
-            score,
-            level,
-            maxSingleParam,
-            recordedBy: session.id,
-        });
-
         revalidatePath(`/ipd/vitals/${data.admission_id}`);
+        revalidatePath('/nurse/vitals');
         revalidatePath('/nurse/dashboard');
         return {
             success: true,
-            data: { ...vitals, news_score: score, news_level: level, news_max_single_param: maxSingleParam },
-            escalation,
+            data: {
+                id: result.ipdVitalsId,
+                news_score: result.news?.score,
+                news_level: result.news?.level,
+                news_max_single_param: result.news?.maxSingleParam,
+            },
+            escalation: result.escalation,
         };
     } catch (error: any) {
         console.error('recordIPDVitals error:', error);

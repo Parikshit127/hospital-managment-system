@@ -4,7 +4,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { AppShell } from '@/app/components/layout/AppShell';
 import {
     Activity, Search, Save, Loader2, Heart, Thermometer, Wind,
-    HeartPulse, Scale, Ruler, Clock, User, CheckCircle2, X
+    HeartPulse, Scale, Ruler, Clock, User, CheckCircle2, X, AlertTriangle
 } from 'lucide-react';
 import { recordVitals, getPatientVitals, getWardPatients } from '@/app/actions/nurse-actions';
 import { useToast } from '@/app/components/ui/Toast';
@@ -31,6 +31,7 @@ export default function NurseVitalsPage() {
     const [height, setHeight] = useState('');
     const [saving, setSaving] = useState(false);
     const [successMsg, setSuccessMsg] = useState('');
+    const [lastNews, setLastNews] = useState<{ score: number; level: string } | null>(null);
 
     // Recent vitals
     const [recentVitals, setRecentVitals] = useState<any[]>([]);
@@ -121,10 +122,21 @@ export default function NurseVitalsPage() {
                 recordedBy: nurseId,
             });
             if (res.success) {
-                setSuccessMsg('Vitals recorded successfully.');
+                // Show the score and whether it escalated. This screen used to save
+                // silently with no NEWS at all, so a nurse charting a deteriorating
+                // patient here got no signal back.
+                const news = (res as { news?: { score: number; level: string } | null }).news;
+                const esc = (res as { escalation?: { raised: boolean; notified: number } }).escalation;
+                setSuccessMsg(
+                    news
+                        ? `Vitals recorded · NEWS ${news.score} (${news.level})` +
+                          (esc?.raised ? ` · escalation raised, ${esc.notified} staff notified` : '')
+                        : 'Vitals recorded successfully.',
+                );
+                setLastNews(news ?? null);
                 resetForm();
                 loadRecentVitals(selectedPatient.patientId);
-                setTimeout(() => setSuccessMsg(''), 4000);
+                setTimeout(() => setSuccessMsg(''), 8000);
             } else {
                 toast.error(res.error || 'Failed to record vitals.');
             }
@@ -222,8 +234,16 @@ export default function NurseVitalsPage() {
                         {/* Vital Signs Inputs */}
                         <div className="p-6 space-y-6">
                             {successMsg && (
-                                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex items-center gap-2 text-emerald-700 text-sm font-bold">
-                                    <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                                <div className={`border rounded-xl p-3 flex items-center gap-2 text-sm font-bold ${
+                                    lastNews && lastNews.score >= 7
+                                        ? 'bg-red-50 border-red-300 text-red-700'
+                                        : lastNews && lastNews.score >= 5
+                                            ? 'bg-orange-50 border-orange-300 text-orange-700'
+                                            : 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                                }`}>
+                                    {lastNews && lastNews.score >= 5
+                                        ? <AlertTriangle className="h-4 w-4 shrink-0" />
+                                        : <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />}
                                     {successMsg}
                                 </div>
                             )}

@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { generateIndentNumber } from '@/app/lib/sequence-generator';
 import { applyAdministration } from '@/app/lib/medication-safety';
 import { topUpMedicationSchedules } from '@/app/actions/ipd-emr-actions';
+import { recordObservation, parseBloodPressure } from '@/app/lib/vitals-recording';
 
 // ========================================
 // NURSE DASHBOARD
@@ -115,33 +116,56 @@ export async function recordVitals(data: {
     respiratoryRate?: number;
     weight?: number;
     height?: number;
+    consciousness?: string;
+    painScore?: number;
+    bloodSugar?: number;
+    onSupplementalOxygen?: boolean;
     /** @deprecated Ignored. The recorder is taken from the signed-in session. */
     recordedBy?: string;
 }) {
     const denied = await denyUnlessRole(CLINICAL_ROLES.CHART, 'record vitals');
     if (denied) return denied;
     try {
-        const { db, session } = await requireTenantContext();
+        const { db, organizationId, session } = await requireTenantContext();
 
-        await db.vital_signs.create({
-            data: {
-                patient_id: data.patientId,
-                appointment_id: data.appointmentId,
-                blood_pressure: data.bloodPressure,
-                heart_rate: data.heartRate,
-                temperature: data.temperature,
-                oxygen_sat: data.oxygenSat,
-                respiratory_rate: data.respiratoryRate,
-                weight: data.weight,
-                height: data.height,
-                // Never trust a caller-supplied recorder on a clinical record.
-                recorded_by: session.id,
-            },
+        // Find the patient's live admission. This screen previously wrote only to
+        // vital_signs — no admission link, no NEWS, no escalation — so whether a
+        // deteriorating inpatient was scored at all depended on which of the two
+        // vitals screens the nurse happened to open. One implementation now
+        // serves both entrances; an inpatient is scored either way.
+        const admission = await db.admissions.findFirst({
+            where: { patient_id: data.patientId, status: 'Admitted' },
+            select: { admission_id: true },
+        });
+
+        const { systolic, diastolic } = parseBloodPressure(data.bloodPressure);
+
+        const result = await recordObservation(db, organizationId, session.id, {
+            patient_id: data.patientId,
+            admission_id: admission?.admission_id ?? null,
+            bp_systolic: systolic,
+            bp_diastolic: diastolic,
+            heart_rate: data.heartRate,
+            temperature: data.temperature,
+            spo2: data.oxygenSat,
+            respiratory_rate: data.respiratoryRate,
+            consciousness: data.consciousness,
+            pain_score: data.painScore,
+            blood_sugar: data.bloodSugar,
+            on_supplemental_oxygen: data.onSupplementalOxygen,
+            weight: data.weight,
+            height: data.height,
         });
 
         revalidatePath('/nurse/vitals');
         revalidatePath('/nurse/patients');
-        return { success: true };
+        if (admission) revalidatePath(`/ipd/vitals/${admission.admission_id}`);
+        return {
+            success: true,
+            news: result.news,
+            escalation: result.escalation,
+            inpatient: !!admission,
+        };
     } catch (error) {
         console.error('Record Vitals Error:', error);
         return { success: false, error: 'Failed to record vitals' };
