@@ -4,6 +4,7 @@ import { requireTenantContext } from '@/backend/tenant';
 import { logAudit } from '@/app/lib/audit';
 import { createJournalEntry } from './gl-actions';
 import { accrueIPDDailyCharges } from '@/app/actions/ipd-actions';
+import { stopMedicationsOnDischarge } from '@/app/actions/ipd-emr-actions';
 import { getPackageGSTRate, getRoomGSTRate } from '@/app/lib/gst';
 import { generateInvoiceNumber as genInvNum } from '@/app/lib/sequence-generator';
 import { syncClaimToInvoiceTpa } from '@/app/lib/tpa-claim-sync';
@@ -2347,6 +2348,11 @@ export async function settleAndDischarge(data: {
             data: { status: 'Discharged', discharge_date: dischargeDate },
         });
 
+        // 6b. Close the medication chart. Without this, active medications stay
+        // "active" and every future dose stays "Scheduled" for someone who has
+        // gone home — they reappear on the ward eMAR the next morning.
+        const medsClosed = await stopMedicationsOnDischarge(db, data.admission_id);
+
         // 7. Free the bed. Stamp cleaning_started_at — the stale-bed auto-release
         // keys off it; without it the bed never returns to the pool.
         if (admission.bed_id) {
@@ -2368,6 +2374,8 @@ export async function settleAndDischarge(data: {
                     discount: data.discount_amount || 0,
                     outstanding_balance: finalBalance,
                     settled_by: session.username,
+                    doses_cancelled: medsClosed.dosesCancelled,
+                    medications_stopped: medsClosed.medicationsStopped,
                 }),
                 organizationId,
             },

@@ -9,6 +9,7 @@
 
 import { requireTenantContext } from '@/backend/tenant';
 import { revalidatePath } from 'next/cache';
+import { dosingHours, MAR_HORIZON_DAYS } from '@/app/lib/medication-safety';
 
 // ── GAP 6: Clinical Orders ─────────────────────────────────────────────────
 
@@ -136,6 +137,15 @@ export async function discontinuePhysicianOrder(orderId: string, reason?: string
 
 // ── GAP 6: Active Medications ──────────────────────────────────────────────
 
+/**
+ * Write the scheduled doses for one active medication.
+ *
+ * Previously an order with no end date was scheduled for three days and capped
+ * at seven. Nothing extended it and nothing warned anyone, so on day four the
+ * chart for a still-active drug simply went empty — the doses were not "missed",
+ * they never existed. topUpMedicationSchedules() below keeps the window rolling;
+ * this function is idempotent so it can be called again safely.
+ */
 export async function scheduleMedicationAdministrations(dbOrTx: any, activeMed: any, organizationId: string) {
     const frequency = (activeMed.frequency || 'OD').toUpperCase();
     const dosage = activeMed.dosage || '1';
@@ -144,51 +154,123 @@ export async function scheduleMedicationAdministrations(dbOrTx: any, activeMed: 
     const name = activeMed.medication_name;
 
     const startDate = new Date(activeMed.start_date || new Date());
-    const endDate = activeMed.end_date ? new Date(activeMed.end_date) : new Date(startDate.getTime() + 3 * 24 * 60 * 60 * 1000);
+    const horizon = new Date(Date.now() + MAR_HORIZON_DAYS * 24 * 60 * 60 * 1000);
+    // An explicit end date is honoured exactly; an open-ended order is filled to
+    // the rolling horizon rather than being silently truncated.
+    const finalEndDate = activeMed.end_date ? new Date(activeMed.end_date) : horizon;
 
-    const maxEndDate = new Date(startDate.getTime() + 7 * 24 * 60 * 60 * 1000);
-    const finalEndDate = endDate > maxEndDate ? maxEndDate : endDate;
+    const { hours, isPrn } = dosingHours(frequency);
 
-    let hours: number[] = [9];
-    let isPrn = false;
-    
-    if (frequency === 'BD' || frequency === 'BID' || frequency === '1-0-1') {
-        hours = [9, 21];
-    } else if (frequency === 'TDS' || frequency === 'TID' || frequency === '1-1-1') {
-        hours = [9, 14, 21];
-    } else if (frequency === 'QID' || frequency === '1-1-1-1') {
-        hours = [9, 13, 17, 21];
-    } else if (frequency === 'PRN') {
-        hours = [9];
-        isPrn = true;
-    }
-
+    // A PRN drug is given on demand, not on a clock: one row is enough.
+    const now = new Date();
+    const rows: any[] = [];
     const current = new Date(startDate);
+    current.setHours(0, 0, 0, 0);
+
     while (current <= finalEndDate) {
         for (const hr of hours) {
             const scheduledTime = new Date(current);
-            scheduledTime.setHours(hr, 0, 0, 0);
-
-            if (scheduledTime < new Date()) {
-                continue;
-            }
-
-            await dbOrTx.medicationAdministration.create({
-                data: {
-                    admission_id: admissionId,
-                    medication_name: name,
-                    dose: dosage,
-                    route: route,
-                    scheduled_time: scheduledTime,
-                    status: 'Scheduled',
-                    organizationId,
-                    frequency,
-                    is_prn: isPrn,
-                }
+            scheduledTime.setHours(hr % 24, 0, 0, 0);
+            if (hr >= 24) scheduledTime.setDate(scheduledTime.getDate() + 1);
+            if (scheduledTime < now) continue;
+            rows.push({
+                admission_id: admissionId,
+                medication_name: name,
+                dose: dosage,
+                route,
+                scheduled_time: scheduledTime,
+                status: 'Scheduled',
+                organizationId,
+                frequency,
+                is_prn: isPrn,
             });
         }
+        if (isPrn) break;
         current.setDate(current.getDate() + 1);
     }
+
+    if (!rows.length) return 0;
+
+    // Skip times already on the chart so repeated top-ups never duplicate a dose.
+    const existing = await dbOrTx.medicationAdministration.findMany({
+        where: {
+            admission_id: admissionId,
+            medication_name: name,
+            scheduled_time: { gte: now },
+        },
+        select: { scheduled_time: true },
+    });
+    const taken = new Set(existing.map((e: any) => new Date(e.scheduled_time).getTime()));
+    const fresh = rows.filter(r => !taken.has(r.scheduled_time.getTime()));
+    if (!fresh.length) return 0;
+
+    await dbOrTx.medicationAdministration.createMany({ data: fresh });
+    return fresh.length;
+}
+
+/**
+ * Keep the medication chart populated for every active drug on a currently
+ * admitted patient. Called when an eMAR is opened, so the window rolls forward
+ * on its own instead of relying on a scheduled job that may not be installed.
+ *
+ * Cheap when there is nothing to do: scheduleMedicationAdministrations() skips
+ * times already present, so a repeat call writes nothing.
+ */
+export async function topUpMedicationSchedules(admissionId?: string) {
+    const { db, organizationId } = await requireTenantContext();
+    try {
+        const meds = await (db as any).activeMedication.findMany({
+            where: {
+                organizationId,
+                status: 'active',
+                ...(admissionId ? { admission_id: admissionId } : {}),
+            },
+        });
+        if (!meds.length) return { success: true, added: 0 };
+
+        // Only for patients still in a bed — a discharged chart must not refill.
+        const admissions = await db.admissions.findMany({
+            where: { admission_id: { in: [...new Set(meds.map((m: any) => m.admission_id))] }, status: 'Admitted' },
+            select: { admission_id: true },
+        });
+        const admitted = new Set(admissions.map((a: any) => a.admission_id));
+
+        let added = 0;
+        for (const m of meds) {
+            if (!admitted.has(m.admission_id)) continue;
+            if (m.end_date && new Date(m.end_date) < new Date()) continue;
+            added += await scheduleMedicationAdministrations(db, m, organizationId);
+        }
+        return { success: true, added };
+    } catch (error) {
+        console.error('topUpMedicationSchedules error:', error);
+        return { success: false, added: 0 };
+    }
+}
+
+/**
+ * Close out a patient's medication chart at discharge.
+ *
+ * Discharge previously left the chart untouched: active medications stayed
+ * "active" and every future dose stayed "Scheduled". The audit discharged a
+ * patient with nine doses still queued for the following three days, and the
+ * eMAR's All view continued to list them — from the next morning they would
+ * have reappeared as due for someone who had gone home.
+ */
+export async function stopMedicationsOnDischarge(dbOrTx: any, admissionId: string, reason = 'Discharged') {
+    const now = new Date();
+
+    const cancelled = await dbOrTx.medicationAdministration.updateMany({
+        where: { admission_id: admissionId, status: 'Scheduled', scheduled_time: { gte: now } },
+        data: { status: 'Cancelled', not_given_reason: reason },
+    });
+
+    const stopped = await dbOrTx.activeMedication.updateMany({
+        where: { admission_id: admissionId, status: 'active' },
+        data: { status: 'stopped', end_date: now, discontinuation_reason: reason },
+    });
+
+    return { dosesCancelled: cancelled.count, medicationsStopped: stopped.count };
 }
 
 export async function addActiveMedication(data: {

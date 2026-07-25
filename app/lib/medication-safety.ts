@@ -11,6 +11,29 @@
  * session and the tenant-scoped client.
  */
 
+/**
+ * Administration times of day for each supported frequency.
+ *
+ * Lives here rather than beside the scheduler because that file is 'use server',
+ * where every export must be an async action — a sync helper there fails to
+ * compile and takes the whole module graph down with it.
+ */
+export function dosingHours(frequency: string): { hours: number[]; isPrn: boolean } {
+    const f = (frequency || 'OD').toUpperCase();
+    if (f === 'BD' || f === 'BID' || f === '1-0-1') return { hours: [9, 21], isPrn: false };
+    if (f === 'TDS' || f === 'TID' || f === '1-1-1') return { hours: [9, 14, 21], isPrn: false };
+    if (f === 'QID' || f === '1-1-1-1') return { hours: [9, 13, 17, 21], isPrn: false };
+    if (f === 'Q6H' || f === 'QID6H') return { hours: [6, 12, 18, 24], isPrn: false };
+    if (f === 'Q8H') return { hours: [6, 14, 22], isPrn: false };
+    if (f === 'HS' || f === 'NOCTE') return { hours: [21], isPrn: false };
+    if (f === 'PRN') return { hours: [9], isPrn: true };
+    if (f === 'STAT') return { hours: [new Date().getHours()], isPrn: false };
+    return { hours: [9], isPrn: false }; // OD and anything unrecognised
+}
+
+/** How far ahead the MAR is kept populated for an open-ended medication. */
+export const MAR_HORIZON_DAYS = 14;
+
 export type AllergyConflict = {
     allergen: string;
     severity: string | null;

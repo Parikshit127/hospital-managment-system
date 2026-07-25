@@ -7,6 +7,7 @@ import { getPatientBalances } from '@/app/actions/balance-actions';
 import { getRoomGSTRate } from '@/app/lib/gst';
 import { generateInvoiceNumber as genInvNum, generateReceiptNumber as genRcpNum, generateDepositNumber as genDepNum } from '@/app/lib/sequence-generator';
 import { isBillClosedForCharges } from '@/app/lib/bill-status';
+import { stopMedicationsOnDischarge } from '@/app/actions/ipd-emr-actions';
 
 
 function serialize<T>(data: T): T {
@@ -1038,6 +1039,10 @@ export async function dischargePatientIPD(admissionId: string, notes?: string, d
       },
     });
 
+    // Close the medication chart. Without this, future doses stay "Scheduled"
+    // and reappear on the ward eMAR as due for a patient who has gone home.
+    const medsClosed = await stopMedicationsOnDischarge(db, admissionId);
+
     // Free the bed (set to Cleaning first). cleaning_started_at MUST be stamped —
     // autoReleaseStaleCleaningBeds() keys off it, so a bed left without one never
     // returns to the pool and is silently lost from inventory.
@@ -1106,6 +1111,8 @@ export async function dischargePatientIPD(admissionId: string, notes?: string, d
           daysAdmitted,
           bedFreed: admission.bed_id,
           discharge_date: resolvedDischarge.toISOString(),
+          doses_cancelled: medsClosed.dosesCancelled,
+          medications_stopped: medsClosed.medicationsStopped,
         }),
       },
     });

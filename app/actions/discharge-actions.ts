@@ -1,6 +1,7 @@
 'use server';
 
 import { requireTenantContext } from '@/backend/tenant';
+import { stopMedicationsOnDischarge } from '@/app/actions/ipd-emr-actions';
 import { notifyPatient } from '@/app/lib/notify-patient';
 import OpenAI from 'openai';
 import { generateInvoiceNumber as genInvNum } from '@/app/lib/sequence-generator';
@@ -33,6 +34,8 @@ export async function dischargePatient(patientId: string) {
                     discharge_date: new Date()
                 }
             });
+            // Close the medication chart so future doses stop appearing on the ward.
+            await stopMedicationsOnDischarge(db, activeAdmission.admission_id);
         }
 
 
@@ -110,7 +113,9 @@ export async function processDischarge(patientId: string, patientName: string, n
                 }
             });
 
-            
+            // Close the medication chart so future doses stop appearing on the ward.
+            await stopMedicationsOnDischarge(db, activeAdmission.admission_id);
+
             await db.appointments.updateMany({
                 where: { patient_id: patientId, status: 'Admitted' },
                 data: { status: 'Completed' }

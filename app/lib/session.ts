@@ -21,6 +21,12 @@ export interface SessionData {
     organization_id: string;
     organization_slug: string;
     organization_name: string;
+    /**
+     * Ward this user works on, when the org has assigned one. Nursing screens use
+     * it to show that ward's patients rather than every patient in the hospital.
+     * Null/absent means unscoped, which is what every existing user is today.
+     */
+    assigned_ward_id?: number | null;
 }
 
 export interface SuperAdminSessionData {
@@ -79,6 +85,8 @@ export async function getSession(): Promise<SessionData | null> {
             organization_id: (payload.organization_id as string) || '',
             organization_slug: (payload.organization_slug as string) || '',
             organization_name: (payload.organization_name as string) || '',
+            // Absent in tokens issued before ward scoping existed; treated as unscoped.
+            assigned_ward_id: (payload.assigned_ward_id as number | null) ?? null,
         };
     } catch {
         return null;

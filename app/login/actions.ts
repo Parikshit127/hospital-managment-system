@@ -103,6 +103,9 @@ export async function login(prevState: any, formData: FormData) {
             organization_id: org.id,
             organization_slug: org.slug,
             organization_name: org.name,
+            // Carried so ward screens can scope to the user's own ward. Null for
+            // every user today; unset means unscoped, i.e. current behaviour.
+            assigned_ward_id: user.assigned_ward_id ?? null,
         };
 
         // Check if MFA is required and enabled

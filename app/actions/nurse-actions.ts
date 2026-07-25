@@ -4,6 +4,7 @@ import { requireTenantContext, denyUnlessRole, CLINICAL_ROLES } from '@/backend/
 import { revalidatePath } from 'next/cache';
 import { generateIndentNumber } from '@/app/lib/sequence-generator';
 import { applyAdministration } from '@/app/lib/medication-safety';
+import { topUpMedicationSchedules } from '@/app/actions/ipd-emr-actions';
 
 // ========================================
 // NURSE DASHBOARD
@@ -47,13 +48,17 @@ export async function getNurseDashboard(nurseId: string) {
 
 export async function getWardPatients(wardId?: number, status?: string) {
     try {
-        const { db } = await requireTenantContext();
+        const { db, session } = await requireTenantContext();
 
         const where: any = {};
         // status 'All' → no filter; otherwise filter (default 'Admitted')
         if (status && status !== 'All') where.status = status;
         else if (!status) where.status = 'Admitted';
-        if (wardId) where.ward_id = wardId;
+        // An explicit ward filter wins; otherwise a ward-assigned nurse sees their
+        // own ward instead of every admitted patient in the hospital. Users with no
+        // assignment are unscoped, which is how every account behaves today.
+        const effectiveWard = wardId ?? (session.role === 'nurse' ? session.assigned_ward_id ?? undefined : undefined);
+        if (effectiveWard) where.ward_id = Number(effectiveWard);
 
         const admissions = await db.admissions.findMany({
             where,
@@ -164,36 +169,62 @@ export async function getPatientVitals(patientId: string) {
 // MEDICATION ADMINISTRATION
 // ========================================
 
-export async function getMedicationSchedule(admissionId?: string, filter?: 'due' | 'all') {
+export async function getMedicationSchedule(
+    admissionId?: string,
+    filter?: 'due' | 'all',
+    wardId?: number,
+) {
     try {
-        const { db } = await requireTenantContext();
+        const { db, session } = await requireTenantContext();
+
+        // Keep the chart populated for open-ended orders before reading it.
+        await topUpMedicationSchedules(admissionId).catch(() => { /* never block the read */ });
 
         const todayStart = new Date();
         todayStart.setHours(0, 0, 0, 0);
         const todayEnd = new Date();
         todayEnd.setHours(23, 59, 59, 999);
 
-        const where: any = {};
-        if (admissionId) where.admission_id = admissionId;
+        // Restrict to currently admitted patients. This list previously queried the
+        // eMAR table directly with no join, so a discharged patient's remaining
+        // doses stayed on the ward chart and reappeared as due the next morning.
+        const admissionWhere: any = { status: 'Admitted' };
+        if (admissionId) admissionWhere.admission_id = admissionId;
 
+        // Ward scoping: a nurse assigned to a ward sees that ward. Staff without an
+        // assignment (and admins) still see everything, so nothing breaks for sites
+        // that have not filled the field in.
+        const effectiveWard = wardId ?? (session.role === 'nurse' ? session.assigned_ward_id ?? undefined : undefined);
+        if (effectiveWard) admissionWhere.ward_id = Number(effectiveWard);
+
+        const admissions = await db.admissions.findMany({
+            where: admissionWhere,
+            include: { patient: { select: { full_name: true, patient_id: true } }, ward: { select: { ward_name: true } } },
+        });
+        if (!admissions.length) return { success: true, data: [] };
+
+        const where: any = { admission_id: { in: admissions.map((a: any) => a.admission_id) } };
         if (filter === 'due') {
             where.status = 'Scheduled';
             where.scheduled_time = { gte: todayStart, lte: todayEnd };
+        } else {
+            // Cancelled doses are historical noise on a working chart.
+            where.status = { not: 'Cancelled' };
         }
 
         const medications = await db.medicationAdministration.findMany({
             where,
             orderBy: { scheduled_time: 'asc' },
+            take: 500,
         });
 
-        // Enrich with patient names via admissions
-        const admissionIds = [...new Set(medications.map((m: any) => m.admission_id))];
-        const admissions = await db.admissions.findMany({
-            where: { admission_id: { in: admissionIds } },
-            include: { patient: { select: { full_name: true, patient_id: true } } },
-        });
         const admissionMap = Object.fromEntries(
-            admissions.map((a: any) => [a.admission_id, { patientName: a.patient?.full_name, patientId: a.patient?.patient_id }])
+            admissions.map((a: any) => [a.admission_id, {
+                patientName: a.patient?.full_name,
+                patientId: a.patient?.patient_id,
+                wardName: a.ward?.ward_name,
+                bedId: a.bed_id,
+            }])
         );
 
         return {
@@ -202,6 +233,8 @@ export async function getMedicationSchedule(admissionId?: string, filter?: 'due'
                 ...m,
                 patientName: admissionMap[m.admission_id]?.patientName || 'Unknown',
                 patientId: admissionMap[m.admission_id]?.patientId || '',
+                wardName: admissionMap[m.admission_id]?.wardName || '',
+                bedId: admissionMap[m.admission_id]?.bedId || '',
             })),
         };
     } catch (error) {
