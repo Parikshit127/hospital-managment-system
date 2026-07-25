@@ -71,3 +71,5 @@ docs/help-centre/.superpowers/
 docs/help-centre/
 docs/voice-agents/ai-voice-agent-prd.md
 docs/voice-agents/ai-voice-agent-prd.pdf
+# Local Claude context (contains creds — keep local only)
+CLAUDE.local.md
