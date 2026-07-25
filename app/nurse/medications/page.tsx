@@ -73,13 +73,26 @@ export default function NurseMedicationsPage() {
         loadMedications();
     }, [loadMedications]);
 
-    const handleAdminister = async (medId: number) => {
-        if (!nurseId) return;
+    // Set when the server refuses a dose because of a recorded allergy. The nurse
+    // must then either abandon it or type an explicit override reason.
+    const [allergyPrompt, setAllergyPrompt] = useState<{ medId: number; message: string } | null>(null);
+    // Set when a dose is being marked Held/Refused/Missed, which requires a reason.
+    const [reasonPrompt, setReasonPrompt] = useState<{ medId: number; status: string } | null>(null);
+    const [reasonText, setReasonText] = useState('');
+
+    const handleAdminister = async (medId: number, allergyOverrideReason?: string) => {
         setActionLoading(medId);
         try {
-            const res = await administerMedication(medId, nurseId);
+            const res = await administerMedication(
+                medId, undefined, undefined,
+                allergyOverrideReason ? { allergy_override_reason: allergyOverrideReason } : undefined,
+            );
             if (res.success) {
+                setAllergyPrompt(null);
                 await loadMedications();
+            } else if (res.error && /ALLERGY ALERT/i.test(res.error)) {
+                // Hard stop, not a toast that scrolls away.
+                setAllergyPrompt({ medId, message: res.error });
             } else {
                 toast.error(res.error || 'Failed to administer medication.');
             }
@@ -91,11 +104,18 @@ export default function NurseMedicationsPage() {
         }
     };
 
-    const handleStatusUpdate = async (medId: number, status: string) => {
+    const handleStatusUpdate = async (medId: number, status: string, reason?: string) => {
+        // Held / Refused / Missed are only meaningful with a reason attached.
+        if (!reason?.trim()) {
+            setReasonPrompt({ medId, status });
+            setReasonText('');
+            return;
+        }
         setActionLoading(medId);
         try {
-            const res = await updateMedicationStatus(medId, status);
+            const res = await updateMedicationStatus(medId, status, reason);
             if (res.success) {
+                setReasonPrompt(null);
                 await loadMedications();
             } else {
                 toast.error(res.error || 'Failed to update status.');
@@ -363,6 +383,96 @@ export default function NurseMedicationsPage() {
                     </table>
                 </div>
             </div>
+
+            {/* Allergy hard-stop. The server refuses the dose; proceeding requires a
+                typed justification, which is stored on the administration record. */}
+            {allergyPrompt && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+                    <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl border-2 border-red-300">
+                        <div className="flex items-start gap-3">
+                            <AlertTriangle className="h-6 w-6 text-red-600 shrink-0 mt-0.5" />
+                            <div className="flex-1">
+                                <h2 className="text-base font-black text-red-700">Allergy conflict</h2>
+                                <p className="mt-2 text-sm text-gray-700">{allergyPrompt.message}</p>
+                                <label className="mt-4 block text-[11px] font-bold uppercase tracking-wide text-gray-500">
+                                    Override reason (required to proceed)
+                                </label>
+                                <textarea
+                                    value={reasonText}
+                                    onChange={e => setReasonText(e.target.value)}
+                                    rows={3}
+                                    placeholder="e.g. Discussed with Dr. Rao; previous reaction was mild rash, proceeding under observation"
+                                    className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm outline-none focus:border-red-400"
+                                />
+                                <div className="mt-4 flex justify-end gap-2">
+                                    <button
+                                        onClick={() => { setAllergyPrompt(null); setReasonText(''); }}
+                                        className="rounded-xl px-4 py-2 text-sm font-bold text-gray-600 hover:bg-gray-100"
+                                    >
+                                        Do not give
+                                    </button>
+                                    <button
+                                        disabled={reasonText.trim().length < 10}
+                                        onClick={() => handleAdminister(allergyPrompt.medId, reasonText.trim())}
+                                        className="rounded-xl bg-red-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-40 hover:bg-red-700"
+                                    >
+                                        Give anyway &amp; record reason
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Held / Refused / Missed must carry a reason. */}
+            {reasonPrompt && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+                    <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+                        <h2 className="text-base font-black text-gray-800">
+                            Why was this dose {reasonPrompt.status.toLowerCase()}?
+                        </h2>
+                        <p className="mt-1 text-xs text-gray-500">
+                            Recorded on the medication chart against your name.
+                        </p>
+                        <select
+                            onChange={e => setReasonText(e.target.value)}
+                            defaultValue=""
+                            className="mt-3 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm outline-none focus:border-orange-400"
+                        >
+                            <option value="" disabled>Select a reason…</option>
+                            {(reasonPrompt.status === 'Refused'
+                                ? ['Patient refused', 'Patient unable to swallow', 'Family declined']
+                                : reasonPrompt.status === 'Held'
+                                    ? ['Held on doctor’s instruction', 'Vitals out of range', 'Nil by mouth', 'Awaiting review']
+                                    : ['Patient off ward', 'Drug unavailable', 'Missed — staffing', 'Patient asleep']
+                            ).map(r => <option key={r} value={r}>{r}</option>)}
+                        </select>
+                        <textarea
+                            value={reasonText}
+                            onChange={e => setReasonText(e.target.value)}
+                            rows={2}
+                            placeholder="Add detail (optional)"
+                            className="mt-2 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm outline-none focus:border-orange-400"
+                        />
+                        <div className="mt-4 flex justify-end gap-2">
+                            <button
+                                onClick={() => { setReasonPrompt(null); setReasonText(''); }}
+                                className="rounded-xl px-4 py-2 text-sm font-bold text-gray-600 hover:bg-gray-100"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                disabled={!reasonText.trim()}
+                                onClick={() => handleStatusUpdate(reasonPrompt.medId, reasonPrompt.status, reasonText.trim())}
+                                className="rounded-xl bg-orange-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-40 hover:bg-orange-700"
+                            >
+                                Save
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </AppShell>
     );
 }
