@@ -1067,6 +1067,11 @@ model admissions {
   inventory_movements       inventory_movements[]
   invoices                  invoices[]
   ipd_admission_packages    IpdAdmissionPackage[]
+  clinical_orders           ClinicalOrder[]
+  physician_orders          PhysicianOrder[]
+  active_medications        ActiveMedication[]
+  nursing_notes_rel         NursingNote[]
+  medication_administrations MedicationAdministration[]
   ipd_vitals                IPDVitals[]
   medical_notes             medical_notes[]
   nursing_assessments       NursingAssessment[]
@@ -2145,6 +2150,7 @@ model NursingNote {
   details        String
   organizationId String
   created_at     DateTime     @default(now())
+  admission      admissions   @relation(fields: [admission_id], references: [admission_id])
   organization   Organization @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId])
@@ -2179,6 +2185,7 @@ model MedicationAdministration {
   // Set when the dose was given despite a recorded allergy match, with the
   // clinician's justification. Null means no allergy conflict was detected.
   allergy_override_reason String?
+  admission         admissions   @relation(fields: [admission_id], references: [admission_id])
   organization      Organization @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId])
@@ -3123,6 +3130,7 @@ model ClinicalOrder {
   completed_at   DateTime?
   organizationId String
   created_at     DateTime     @default(now())
+  admission      admissions   @relation(fields: [admission_id], references: [admission_id])
   organization   Organization @relation(fields: [organizationId], references: [id])
 
   @@index([admission_id])
@@ -3145,6 +3153,7 @@ model PhysicianOrder {
   discontinued_at DateTime?
   organizationId  String
   created_at      DateTime     @default(now())
+  admission       admissions   @relation(fields: [admission_id], references: [admission_id])
   organization    Organization @relation(fields: [organizationId], references: [id])
 
   @@index([admission_id])
@@ -3168,6 +3177,7 @@ model ActiveMedication {
   discontinuation_reason String?
   organizationId         String
   created_at             DateTime     @default(now())
+  admission              admissions   @relation(fields: [admission_id], references: [admission_id])
   organization           Organization @relation(fields: [organizationId], references: [id])
 
   @@index([admission_id])
