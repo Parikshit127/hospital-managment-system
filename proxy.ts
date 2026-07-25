@@ -14,17 +14,29 @@ const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET);
 const SESSION_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes (staff)
 const PATIENT_SESSION_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes (patient)
 
-// Route -> allowed roles (backward-compatible flat role check)
+// Route -> allowed roles. For built-in system roles this list is AUTHORITATIVE:
+// it is the complete statement of who may open the module. (It used to be only a
+// first pass, with a permission fallback underneath that silently widened it —
+// see the note on PERMISSION_ROUTES below.)
+//
+// Route access here means "may open and read this module". It is not authority to
+// act: who may originate vs. execute a given operation is enforced per server
+// action via requireRoleAndTenant(), because a route guard cannot express it.
 const ROLE_ROUTES: Record<string, string[]> = {
   "/admin": ["admin"],
   "/doctor": ["admin", "doctor"],
-  "/reception": ["admin", "receptionist"],
-  "/lab": ["admin", "lab_technician"],
-  "/pharmacy": ["admin", "pharmacist"],
+  "/reception": ["admin", "receptionist", "opd_manager"],
+  // Nurses read lab results and pharmacy/indent status as part of ward work;
+  // the write operations in those modules are role-guarded in the actions.
+  "/lab": ["admin", "lab_technician", "doctor", "nurse"],
+  "/pharmacy": ["admin", "pharmacist", "doctor", "nurse"],
   "/finance": ["admin", "finance"],
-  "/ipd": ["admin", "ipd_manager"],
+  // The inpatient nursing station, eMAR, vitals and assessments all live under
+  // /ipd, so nurses must be listed explicitly — they previously only reached it
+  // through the permission fallback.
+  "/ipd": ["admin", "ipd_manager", "doctor", "nurse", "er_staff", "ot_manager"],
   "/discharge": ["admin", "ipd_manager", "doctor"],
-  "/opd": ["admin", "receptionist", "doctor", "opd_manager"],
+  "/opd": ["admin", "receptionist", "doctor", "opd_manager", "nurse"],
   "/insurance": ["admin", "finance", "ipd_manager"],
   // Phase 3 roles
   "/nurse": ["admin", "nurse"],
@@ -38,8 +50,15 @@ const ROLE_ROUTES: Record<string, string[]> = {
   "/billing": ["admin", "finance", "ipd_manager", "receptionist", "opd_manager"],
 };
 
-// Route -> required module permission (granular permission check)
-// When a custom role system is used, this takes precedence over ROLE_ROUTES
+// Route -> required module permission, used ONLY for org-defined custom roles
+// (roles that are not in ROLE_PERMISSIONS below), whose grants travel in the JWT.
+//
+// This must never be consulted for a built-in role. It previously ran as a
+// fallback for every role, and because several modules map to the same coarse
+// "<module>.view" grant, it quietly overrode the explicit lists above: a nurse
+// holds opd.view and ipd.view, so despite being excluded from /doctor and
+// /discharge they could open the doctor workspace and the discharge screen —
+// verified by logging in as one.
 const PERMISSION_ROUTES: Record<string, string> = {
   "/admin": "admin.view",
   "/doctor": "opd.view",
@@ -284,19 +303,34 @@ export async function proxy(request: NextRequest) {
 
     // 6. Role + permission-based route protection
     const userRole = payload.role as string;
-    for (const [routePrefix, allowedRoles] of Object.entries(ROLE_ROUTES)) {
-      if (pathname.startsWith(routePrefix)) {
-        // First check flat role list (backward compatible)
-        if (allowedRoles.includes(userRole)) break;
+    const isSystemRole = Object.prototype.hasOwnProperty.call(ROLE_PERMISSIONS, userRole);
 
-        // Then check granular permissions for the route
-        const requiredPermission = PERMISSION_ROUTES[routePrefix];
-        if (requiredPermission) {
-          const userPerms = ROLE_PERMISSIONS[userRole] || [];
-          if (userPerms.includes(requiredPermission)) break;
-        }
+    // Match the MOST SPECIFIC prefix, not merely the first one that matches.
+    // Object key order previously decided this, so "/opd-manager/..." was judged
+    // against the "/opd" rules purely because "/opd" is declared earlier.
+    const matched = Object.keys(ROLE_ROUTES)
+      .filter((prefix) => pathname === prefix || pathname.startsWith(prefix + "/"))
+      .sort((a, b) => b.length - a.length)[0];
 
-        // Neither role nor permission matched — unauthorized
+    if (matched) {
+      let allowed: boolean;
+
+      if (isSystemRole) {
+        // Built-in role: the explicit list is the whole answer.
+        allowed = ROLE_ROUTES[matched].includes(userRole);
+      } else {
+        // Org-defined custom role: authorise from the grants carried in the JWT.
+        // Falling back to ROLE_PERMISSIONS here would be meaningless (a custom
+        // role has no entry) and reading a built-in role's grants is exactly the
+        // widening this branch exists to avoid.
+        const required = PERMISSION_ROUTES[matched];
+        const granted = Array.isArray(payload.permissions)
+          ? (payload.permissions as string[])
+          : [];
+        allowed = !!required && granted.includes(required);
+      }
+
+      if (!allowed) {
         return NextResponse.redirect(
           new URL("/login?reason=unauthorized", request.url),
         );
