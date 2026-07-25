@@ -47,7 +47,10 @@ export default function InvoicesPage() {
     const filtered = invoices.filter(inv => {
         const walkinName = inv.patient_id === 'WALKIN' ? parseWalkinNote(inv.notes).name : '';
         const walkinContact = inv.patient_id === 'WALKIN' ? parseWalkinNote(inv.notes).contact : '';
-        const matchesSearch = inv.invoice_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        // invoice_number is null by design until an invoice is finalized ("drafts are
+        // numberless"), so this must be optional — an unguarded .toLowerCase() threw
+        // and blanked the whole invoice list as soon as one draft existed.
+        const matchesSearch = inv.invoice_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
             inv.patient?.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
             walkinName.toLowerCase().includes(searchTerm.toLowerCase()) ||
             inv.patient?.phone?.includes(searchTerm) ||
