@@ -28,7 +28,7 @@ function NEWSBadge({ score, level }: { score: number; level: string }) {
 const INIT_FORM = {
     bp_systolic: '', bp_diastolic: '', heart_rate: '', temperature: '',
     respiratory_rate: '', spo2: '', pain_score: '', consciousness: 'Alert',
-    blood_sugar: '', urine_output_ml: '', recorded_by: '',
+    blood_sugar: '', urine_output_ml: '', on_supplemental_oxygen: false,
 };
 
 export default function IPDVitalsPage() {
@@ -56,8 +56,11 @@ export default function IPDVitalsPage() {
 
     useEffect(() => { loadData(); }, [loadData]);
 
+    const [escalation, setEscalation] = useState<{ raised: boolean; band: string; notified: number } | null>(null);
+
     const handleSave = async () => {
         setSaving(true);
+        setEscalation(null);
         const res = await recordIPDVitals({
             admission_id: admissionId,
             patient_id: admission?.patient?.patient_id ?? '',
@@ -71,13 +74,16 @@ export default function IPDVitalsPage() {
             consciousness: form.consciousness,
             blood_sugar: form.blood_sugar ? Number(form.blood_sugar) : undefined,
             urine_output_ml: form.urine_output_ml ? Number(form.urine_output_ml) : undefined,
-            recorded_by: form.recorded_by,
+            on_supplemental_oxygen: form.on_supplemental_oxygen,
         });
         if (res.success) {
             setLastSaved(res.data);
+            setEscalation((res as { escalation?: { raised: boolean; band: string; notified: number } }).escalation ?? null);
             setForm(INIT_FORM);
             setShowForm(false);
             loadData();
+        } else {
+            alert(res.error || 'Failed to save vitals');
         }
         setSaving(false);
     };
@@ -107,20 +113,32 @@ export default function IPDVitalsPage() {
                     )}
                 </div>
 
-                {/* NEWS alert banner */}
-                {latestVitals?.news_score >= 5 && (
-                    <div className={`flex items-center gap-3 px-4 py-3 rounded-xl border ${
+                {/* NEWS alert banner. Also fires on a single parameter scoring 3,
+                    which NEWS2 escalates even when the total is below 5. */}
+                {(latestVitals?.news_score >= 5 || latestVitals?.news_max_single_param >= 3) && (
+                    <div className={`flex items-start gap-3 px-4 py-3 rounded-xl border ${
                         latestVitals.news_score >= 7
                             ? 'bg-red-50 border-red-300'
                             : 'bg-orange-50 border-orange-300'
                     }`}>
-                        <AlertTriangle className={`h-5 w-5 ${latestVitals.news_score >= 7 ? 'text-red-600' : 'text-orange-500'}`} />
+                        <AlertTriangle className={`h-5 w-5 mt-0.5 shrink-0 ${latestVitals.news_score >= 7 ? 'text-red-600' : 'text-orange-500'}`} />
                         <div>
                             <p className={`text-sm font-bold ${latestVitals.news_score >= 7 ? 'text-red-700' : 'text-orange-700'}`}>
                                 {latestVitals.news_score >= 7
                                     ? '🚨 NEWS ≥7 — Emergency response required. Page doctor immediately.'
-                                    : '⚠️ NEWS 5-6 — Increase monitoring frequency. Alert nurse-in-charge.'}
+                                    : latestVitals.news_score >= 5
+                                        ? '⚠️ NEWS 5-6 — Increase monitoring frequency. Alert nurse-in-charge.'
+                                        : '⚠️ Single parameter scoring 3 — urgent review required (NEWS2 trigger).'}
                             </p>
+                            {/* Confirm the alert actually reached people. The banner used
+                                to be the only output; nothing was ever sent. */}
+                            {escalation?.raised && (
+                                <p className="text-xs text-gray-600 mt-1">
+                                    Escalation raised · {escalation.notified} staff notified · a
+                                    &nbsp;<span className="font-semibold">NEWS Escalation</span>&nbsp;task is open on this patient
+                                    until someone closes it.
+                                </p>
+                            )}
                         </div>
                     </div>
                 )}
@@ -186,15 +204,22 @@ export default function IPDVitalsPage() {
                                     {['Alert', 'Voice', 'Pain', 'Unresponsive'].map(c => <option key={c}>{c}</option>)}
                                 </select>
                             </div>
+                            {/* NEWS2 scores +2 for any supplemental oxygen. The old
+                                "Recorded By" free-text box is gone: the recorder is
+                                the signed-in user, so a typed name proved nothing. */}
                             <div>
-                                <label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">Recorded By</label>
-                                <input
-                                    type="text"
-                                    value={form.recorded_by}
-                                    onChange={e => setForm(f => ({ ...f, recorded_by: e.target.value }))}
-                                    placeholder="Nurse name"
-                                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-teal-400"
-                                />
+                                <label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">Air / Oxygen</label>
+                                <label className="flex items-center gap-2 border border-gray-200 rounded-xl px-3 py-2 text-sm cursor-pointer hover:border-teal-400">
+                                    <input
+                                        type="checkbox"
+                                        checked={form.on_supplemental_oxygen}
+                                        onChange={e => setForm(f => ({ ...f, on_supplemental_oxygen: e.target.checked }))}
+                                        className="h-4 w-4 accent-teal-600"
+                                    />
+                                    <span className={form.on_supplemental_oxygen ? 'font-semibold text-teal-700' : 'text-gray-500'}>
+                                        On supplemental O₂ <span className="text-[10px] text-gray-400">(NEWS +2)</span>
+                                    </span>
+                                </label>
                             </div>
                         </div>
                         <div className="flex gap-3 pt-1">

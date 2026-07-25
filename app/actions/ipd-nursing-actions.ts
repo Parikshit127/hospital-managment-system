@@ -1,79 +1,136 @@
 'use server';
 
-import { requireTenantContext } from '@/backend/tenant';
+import { requireTenantContext, denyUnlessRole, CLINICAL_ROLES } from '@/backend/tenant';
 import { revalidatePath } from 'next/cache';
+// NEWS2 lives in a plain module: a 'use server' file may only export async
+// actions, and keeping the scoring pure makes it unit-testable.
+import { calcNEWS2 } from '@/app/lib/news2';
+import { applyAdministration } from '@/app/lib/medication-safety';
+
 
 // ─────────────────────────────────────────────────────────────────────────────
-// NEWS SCORE CALCULATOR
-// National Early Warning Score — auto-calculated from vitals
+// NEWS ESCALATION
+//
+// The score was previously calculated, stored, and then nothing happened: the
+// only output was a banner on the vitals page. A nurse who charted and walked
+// away, or a doctor who never opened that screen, was never told. Recording a
+// NEWS of 11 produced zero notifications, zero tasks and zero alerts.
+//
+// RCP response thresholds, and who each one has to reach:
+//   >= 7            emergency response — ward nurses AND the treating doctor
+//   5-6             urgent review      — ward nurses AND the treating doctor
+//   single param 3  urgent review      — ward nurses
+//   0-4             routine            — no escalation
 // ─────────────────────────────────────────────────────────────────────────────
 
-function calcNEWS({
-    respiratory_rate, spo2, temperature, bp_systolic, heart_rate, consciousness
-}: {
-    respiratory_rate?: number | null;
-    spo2?: number | null;
-    temperature?: number | null;
-    bp_systolic?: number | null;
-    heart_rate?: number | null;
-    consciousness?: string | null;
-}): { score: number; level: string } {
-    let score = 0;
+type EscalationResult = { raised: boolean; band: string; notified: number; taskId?: number };
 
-    // Respiratory rate
-    if (respiratory_rate != null) {
-        if (respiratory_rate <= 8) score += 3;
-        else if (respiratory_rate <= 11) score += 1;
-        else if (respiratory_rate <= 20) score += 0;
-        else if (respiratory_rate <= 24) score += 2;
-        else score += 3;
+async function escalateOnNEWS(args: {
+    db: any;
+    organizationId: string;
+    admissionId: string;
+    patientId: string;
+    score: number;
+    level: string;
+    maxSingleParam: number;
+    recordedBy: string;
+}): Promise<EscalationResult> {
+    const { db, organizationId, admissionId, patientId, score, maxSingleParam } = args;
+
+    const emergency = score >= 7;
+    const urgent = score >= 5 || maxSingleParam >= 3;
+    if (!emergency && !urgent) return { raised: false, band: 'routine', notified: 0 };
+
+    const band = emergency ? 'emergency' : 'urgent';
+
+    try {
+        const admission = await db.admissions.findUnique({
+            where: { admission_id: admissionId },
+            include: { patient: { select: { full_name: true } }, ward: true },
+        });
+        const who = admission?.patient?.full_name ?? patientId;
+        const where = [admission?.ward?.ward_name, admission?.bed_id].filter(Boolean).join(' · ');
+
+        const title = emergency
+            ? `NEWS ${score} — emergency response`
+            : `NEWS ${score} — urgent review`;
+        const body = emergency
+            ? `${who} (${where}) scored NEWS ${score}. Emergency response required — call the treating doctor now.`
+            : `${who} (${where}) scored NEWS ${score}${maxSingleParam >= 3 && score < 5 ? ' (single parameter at 3)' : ''}. Urgent review required; increase monitoring frequency.`;
+
+        // Reach the people who can act: ward nursing staff plus, above the urgent
+        // threshold, the admitting doctor.
+        const recipients = await db.user.findMany({
+            where: {
+                organizationId,
+                is_active: true,
+                role: { in: emergency ? ['nurse', 'ipd_manager', 'doctor'] : ['nurse', 'ipd_manager'] },
+            },
+            select: { id: true },
+        });
+
+        const ids = new Set<string>(recipients.map((r: { id: string }) => r.id));
+        if (admission?.attending_doctor_id) ids.add(admission.attending_doctor_id);
+
+        if (ids.size > 0) {
+            await db.notification.createMany({
+                data: [...ids].map((uid) => ({
+                    organizationId,
+                    user_id: uid,
+                    title,
+                    body,
+                    type: emergency ? 'error' : 'warning',
+                })),
+            });
+        }
+
+        // A notification can be dismissed; a task has to be closed. Only one open
+        // escalation task per admission, so repeat observations don't spam the ward.
+        const existing = await db.nursingTask.findFirst({
+            where: { admission_id: admissionId, task_type: 'NEWS Escalation', status: { in: ['Pending', 'In Progress'] } },
+        });
+
+        let taskId: number | undefined;
+        if (existing) {
+            await db.nursingTask.update({
+                where: { id: existing.id },
+                data: { description: body, priority: emergency ? 'stat' : 'urgent' },
+            });
+            taskId = existing.id;
+        } else {
+            const task = await db.nursingTask.create({
+                data: {
+                    admission_id: admissionId,
+                    task_type: 'NEWS Escalation',
+                    description: body,
+                    scheduled_at: new Date(),
+                    status: 'Pending',
+                    priority: emergency ? 'stat' : 'urgent',
+                    source_type: 'news_escalation',
+                    organizationId,
+                },
+            });
+            taskId = task.id;
+        }
+
+        await db.system_audit_logs.create({
+            data: {
+                action: 'NEWS_ESCALATION_RAISED',
+                module: 'ipd',
+                entity_type: 'admission',
+                entity_id: admissionId,
+                user_id: args.recordedBy,
+                details: JSON.stringify({ score, band, maxSingleParam, notified: ids.size }),
+                organizationId,
+            },
+        });
+
+        return { raised: true, band, notified: ids.size, taskId };
+    } catch (error) {
+        // Charting must never fail because the alert fan-out did.
+        console.error('escalateOnNEWS error:', error);
+        return { raised: false, band, notified: 0 };
     }
-
-    // SpO2
-    if (spo2 != null) {
-        if (spo2 <= 91) score += 3;
-        else if (spo2 <= 93) score += 2;
-        else if (spo2 <= 95) score += 1;
-    }
-
-    // Temperature °C
-    if (temperature != null) {
-        if (temperature <= 35.0) score += 3;
-        else if (temperature <= 36.0) score += 1;
-        else if (temperature <= 38.0) score += 0;
-        else if (temperature <= 39.0) score += 1;
-        else score += 2;
-    }
-
-    // Systolic BP
-    if (bp_systolic != null) {
-        if (bp_systolic <= 90) score += 3;
-        else if (bp_systolic <= 100) score += 2;
-        else if (bp_systolic <= 110) score += 1;
-        else if (bp_systolic <= 219) score += 0;
-        else score += 3;
-    }
-
-    // Heart rate
-    if (heart_rate != null) {
-        if (heart_rate <= 40) score += 3;
-        else if (heart_rate <= 50) score += 1;
-        else if (heart_rate <= 90) score += 0;
-        else if (heart_rate <= 110) score += 1;
-        else if (heart_rate <= 130) score += 2;
-        else score += 3;
-    }
-
-    // Consciousness (AVPU)
-    if (consciousness && consciousness !== 'Alert') score += 3;
-
-    const level =
-        score === 0 ? 'Low' :
-        score <= 4 ? 'Low' :
-        score <= 6 ? 'Medium' :
-        score <= 8 ? 'High' : 'Critical';
-
-    return { score, level };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -93,18 +150,24 @@ export async function recordIPDVitals(data: {
     consciousness?: string;
     blood_sugar?: number;
     urine_output_ml?: number;
+    /** @deprecated Ignored. The recorder is taken from the signed-in session. */
     recorded_by?: string;
+    /** True when the patient is receiving supplemental oxygen (NEWS2 scores +2). */
+    on_supplemental_oxygen?: boolean;
 }) {
+    const denied = await denyUnlessRole(CLINICAL_ROLES.CHART, 'record vitals');
+    if (denied) return denied;
     try {
-        const { db, organizationId } = await requireTenantContext();
+        const { db, organizationId, session } = await requireTenantContext();
 
-        const { score, level } = calcNEWS({
+        const { score, level, maxSingleParam } = calcNEWS2({
             respiratory_rate: data.respiratory_rate,
             spo2: data.spo2,
             temperature: data.temperature,
             bp_systolic: data.bp_systolic,
             heart_rate: data.heart_rate,
             consciousness: data.consciousness,
+            on_supplemental_oxygen: data.on_supplemental_oxygen,
         });
 
         const vitals = await db.iPDVitals.create({
@@ -124,7 +187,10 @@ export async function recordIPDVitals(data: {
                 urine_output_ml: data.urine_output_ml,
                 news_score: score,
                 news_level: level,
-                recorded_by: data.recorded_by,
+                news_max_single_param: maxSingleParam,
+                on_supplemental_oxygen: data.on_supplemental_oxygen ?? false,
+                // Identity comes from the session, never from a free-text box.
+                recorded_by: session.id,
             },
         });
 
@@ -134,8 +200,57 @@ export async function recordIPDVitals(data: {
             data: { news_score_latest: score },
         });
 
+        // Mirror into the shared patient-level vitals history.
+        //
+        // Vitals live in two unrelated tables: IPDVitals (this one, admission-scoped,
+        // carries NEWS) and vital_signs (patient-scoped, no admission_id). The nurse
+        // portal, the doctor's patient view, the discharge summary and the discharge
+        // PDF all read vital_signs ONLY — so anything charted here was invisible to
+        // every one of them, including the discharge document.
+        //
+        // Writing both keeps one observation visible everywhere. IPDVitals stays the
+        // system of record for NEWS and trending; this row is the shared history.
+        try {
+            await db.vital_signs.create({
+                data: {
+                    patient_id: data.patient_id,
+                    blood_pressure: (data.bp_systolic != null && data.bp_diastolic != null)
+                        ? `${data.bp_systolic}/${data.bp_diastolic}`
+                        : null,
+                    heart_rate: data.heart_rate ?? null,
+                    temperature: data.temperature ?? null,
+                    oxygen_sat: data.spo2 ?? null,
+                    respiratory_rate: data.respiratory_rate ?? null,
+                    blood_sugar: data.blood_sugar ?? null,
+                    pain_scale: data.pain_score ?? null,
+                    recorded_by: session.id,
+                },
+            });
+        } catch (mirrorError) {
+            // A mirroring failure must not lose the primary observation.
+            console.error('recordIPDVitals: vital_signs mirror failed:', mirrorError);
+        }
+
+        // A deteriorating patient must reach a person, not just a banner on the
+        // screen of whoever happened to be charting. This raises the escalation.
+        const escalation = await escalateOnNEWS({
+            db,
+            organizationId,
+            admissionId: data.admission_id,
+            patientId: data.patient_id,
+            score,
+            level,
+            maxSingleParam,
+            recordedBy: session.id,
+        });
+
         revalidatePath(`/ipd/vitals/${data.admission_id}`);
-        return { success: true, data: { ...vitals, news_score: score, news_level: level } };
+        revalidatePath('/nurse/dashboard');
+        return {
+            success: true,
+            data: { ...vitals, news_score: score, news_level: level, news_max_single_param: maxSingleParam },
+            escalation,
+        };
     } catch (error: any) {
         console.error('recordIPDVitals error:', error);
         return { success: false, error: error.message };
@@ -188,6 +303,9 @@ export async function scheduleMedication(data: {
     is_prn?: boolean;
     notes?: string;
 }) {
+    // Adding a dose to the MAR is originating an order, not executing one.
+    const denied = await denyUnlessRole(CLINICAL_ROLES.PRESCRIBE, 'schedule a medication');
+    if (denied) return denied;
     try {
         const { db, organizationId } = await requireTenantContext();
         const med = await db.medicationAdministration.create({
@@ -215,28 +333,31 @@ export async function scheduleMedication(data: {
 export async function administerMedication(data: {
     med_id: number;
     status: 'Administered' | 'Missed' | 'Held' | 'Refused';
-    administered_by: string;
+    /** @deprecated Ignored. The administering user is taken from the session. */
+    administered_by?: string;
     notes?: string;
     pain_score_before?: number;
     pain_score_after?: number;
     prn_reason?: string;
+    /** Required when the dose was not given. */
+    not_given_reason?: string;
+    /** Second-nurse check for high-alert / controlled drugs. */
+    witness_id?: string;
+    /** Justification when giving despite a recorded allergy match. */
+    allergy_override_reason?: string;
 }) {
+    const denied = await denyUnlessRole(CLINICAL_ROLES.ADMINISTER, 'administer medication');
+    if (denied) return denied;
+
     try {
-        const { db } = await requireTenantContext();
-        const updated = await db.medicationAdministration.update({
-            where: { id: data.med_id },
-            data: {
-                status: data.status,
-                administered_at: data.status === 'Administered' ? new Date() : null,
-                administered_by: data.administered_by,
-                notes: data.notes,
-                pain_score_before: data.pain_score_before,
-                pain_score_after: data.pain_score_after,
-                prn_reason: data.prn_reason,
-            },
-        });
+        const { db, session } = await requireTenantContext();
+        const outcome = await applyAdministration(db, session.id, data);
+        if (!outcome.ok) {
+            return { success: false, error: outcome.error, allergyConflict: outcome.allergyConflict };
+        }
         revalidatePath('/ipd/medication-admin');
-        return { success: true, data: JSON.parse(JSON.stringify(updated)) };
+        revalidatePath('/nurse/medications');
+        return { success: true, data: JSON.parse(JSON.stringify(outcome.data)) };
     } catch (error: any) {
         console.error('administerMedication error:', error);
         return { success: false, error: error.message };
@@ -348,14 +469,17 @@ export async function getShiftHandoverData(wardId: number) {
 
 export async function saveShiftHandover(data: {
     ward_id: number;
-    from_nurse_id: string;
+    /** @deprecated Ignored. The outgoing nurse is taken from the session. */
+    from_nurse_id?: string;
     to_nurse_id: string;
     shift_type: string;
     patients: any[];
     critical_alerts?: any[];
 }) {
+    const denied = await denyUnlessRole(CLINICAL_ROLES.CHART, 'record a shift handover');
+    if (denied) return denied;
     try {
-        const { db, organizationId } = await requireTenantContext();
+        const { db, organizationId, session } = await requireTenantContext();
 
         // Backward-compat: legacy summary field as JSON string
         const summary = JSON.stringify({ patients: data.patients, critical_alerts: data.critical_alerts ?? [] });
@@ -363,7 +487,7 @@ export async function saveShiftHandover(data: {
         const handover = await db.shiftHandover.create({
             data: {
                 ward_id: data.ward_id,
-                from_nurse_id: data.from_nurse_id,
+                from_nurse_id: session.id,
                 to_nurse_id: data.to_nurse_id,
                 shift_date: new Date(),
                 shift_type: data.shift_type,
@@ -382,13 +506,18 @@ export async function saveShiftHandover(data: {
     }
 }
 
-export async function acknowledgeHandover(handoverId: number, nurseId: string) {
+export async function acknowledgeHandover(handoverId: number, _nurseId?: string) {
+    const denied = await denyUnlessRole(CLINICAL_ROLES.CHART, 'acknowledge a handover');
+    if (denied) return denied;
     try {
-        const { db } = await requireTenantContext();
+        const { db, session } = await requireTenantContext();
         await db.shiftHandover.update({
             where: { id: handoverId },
-            data: { acknowledged_by: nurseId, acknowledged_at: new Date() },
+            // The incoming nurse accepting the shift is whoever is signed in.
+            data: { acknowledged_by: session.id, acknowledged_at: new Date() },
         });
+        revalidatePath('/ipd/handover');
+        revalidatePath('/nurse/handover');
         return { success: true };
     } catch (error: any) {
         return { success: false, error: error.message };
@@ -426,10 +555,13 @@ export async function saveNursingAssessment(data: {
     skin_assessment?: any;
     safety_measures?: any;
     care_plan?: any;
+    /** @deprecated Ignored. The assessor is taken from the session. */
     assessed_by?: string;
 }) {
+    const denied = await denyUnlessRole(CLINICAL_ROLES.CHART, 'record a nursing assessment');
+    if (denied) return denied;
     try {
-        const { db, organizationId } = await requireTenantContext();
+        const { db, organizationId, session } = await requireTenantContext();
 
         const assessment = await db.nursingAssessment.create({
             data: {
@@ -446,7 +578,7 @@ export async function saveNursingAssessment(data: {
                 skin_assessment: data.skin_assessment,
                 safety_measures: data.safety_measures,
                 care_plan: data.care_plan,
-                assessed_by: data.assessed_by,
+                assessed_by: session.id,
             },
         });
 
