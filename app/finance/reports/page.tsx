@@ -7,11 +7,12 @@ import {
     getPnLIncomeBreakdown, getPnLExpenseBreakdown, getInvoiceItemsBrief,
     getDailyActivityReport,
 } from '@/app/actions/report-actions';
+import { getBalanceSheet, getScheduleIIIBalanceSheet } from '@/app/actions/gl-actions';
 import { DateRangePicker } from '@/app/components/finance/DateRangePicker';
 import { ReportChart } from '@/app/components/finance/ReportChart';
 import { ExportButton } from '@/app/components/finance/ExportButton';
 import {
-    BarChart3, Clock, TrendingUp, IndianRupee, ShieldCheck, Building2,
+    BarChart3, Clock, TrendingUp, IndianRupee, ShieldCheck, Building2, Scale,
     Loader2, FileText, BookOpenCheck, FileSpreadsheet, CalendarDays, ChevronDown, ChevronRight,
 } from 'lucide-react';
 import { AppShell } from '@/app/components/layout/AppShell';
@@ -20,7 +21,7 @@ import { VoucherModal } from '@/app/components/finance/VoucherModal';
 import { canonicalTender, isDepositSettlement } from '@/app/lib/payment-tender';
 import Link from 'next/link';
 
-type ReportType = 'collections' | 'daily' | 'aging' | 'cashflow' | 'pnl' | 'insurance' | 'department';
+type ReportType = 'collections' | 'daily' | 'aging' | 'cashflow' | 'pnl' | 'balance-sheet' | 'insurance' | 'department';
 
 const REPORT_TABS: { key: ReportType; label: string; icon: React.ReactNode }[] = [
     { key: 'collections', label: 'Collections', icon: <IndianRupee className="h-4 w-4" /> },
@@ -28,6 +29,7 @@ const REPORT_TABS: { key: ReportType; label: string; icon: React.ReactNode }[] =
     { key: 'aging', label: 'A/R Aging', icon: <Clock className="h-4 w-4" /> },
     { key: 'cashflow', label: 'Cash Flow', icon: <TrendingUp className="h-4 w-4" /> },
     { key: 'pnl', label: 'Profit & Loss', icon: <BarChart3 className="h-4 w-4" /> },
+    { key: 'balance-sheet', label: 'Balance Sheet', icon: <Scale className="h-4 w-4" /> },
     { key: 'insurance', label: 'Insurance', icon: <ShieldCheck className="h-4 w-4" /> },
     { key: 'department', label: 'Department', icon: <Building2 className="h-4 w-4" /> },
 ];
@@ -49,8 +51,17 @@ export function FinancialReportsContent({ shell = 'app' }: { shell?: 'app' | 'ad
     const [quickFilter, setQuickFilter] = useState<'all' | 'cash' | 'upi' | 'others'>('all');
     const [methodFilter, setMethodFilter] = useState<string>('all');
     const [billType, setBillType] = useState<string>('all'); // all | OPD | IPD | Pharmacy | Lab
+    const [bsFormat, setBsFormat] = useState<'normal' | 'schedule3'>('normal');
+    const [orgId, setOrgId] = useState('');
 
-    useEffect(() => { loadReport(); }, [activeReport, from, to, quickFilter, methodFilter, billType]);
+    // Balance Sheet needs the tenant's org id explicitly (its GL actions take
+    // organizationId as a param rather than resolving it server-side) — same
+    // pattern /finance/gl-reports uses.
+    useEffect(() => {
+        fetch('/api/session').then((r) => r.json()).then((s) => { if (s?.organization_id) setOrgId(s.organization_id); }).catch(() => {});
+    }, []);
+
+    useEffect(() => { loadReport(); }, [activeReport, from, to, quickFilter, methodFilter, billType, bsFormat, orgId]);
 
     async function loadReport() {
         setLoading(true);
@@ -71,6 +82,18 @@ export function FinancialReportsContent({ shell = 'app' }: { shell?: 'app' | 'ad
             case 'aging': res = await getARAgingReport({ invoiceType: it, admissionStatus: adm }); break;
             case 'cashflow': res = await getCashFlowReport({ from, to, invoiceType: it, admissionStatus: adm }); break;
             case 'pnl': res = await getProfitLossReport({ from, to, invoiceType: it, admissionStatus: adm }); break;
+            case 'balance-sheet': {
+                    if (!orgId) { setLoading(false); return; }
+                    const asOf = new Date(`${to}T23:59:59`);
+                    const bsRes: any = bsFormat === 'schedule3'
+                        ? await getScheduleIIIBalanceSheet(orgId, { as_of_date: asOf })
+                        : await getBalanceSheet(orgId, { as_of_date: asOf });
+                    // Both actions shape their payload differently from the rest of
+                    // this page's `res.data` convention — normalise here so the
+                    // generic `if (res?.success) setData(res.data)` below still works.
+                    res = bsRes?.success ? { success: true, data: bsRes } : bsRes;
+                    break;
+                }
             case 'insurance': res = await getInsuranceCollectionReport({ from, to, invoiceType: it, admissionStatus: adm }); break;
             case 'department': res = await getRevenueByDepartment({ from, to, invoiceType: it, admissionStatus: adm }); break;
         }
@@ -105,25 +128,41 @@ export function FinancialReportsContent({ shell = 'app' }: { shell?: 'app' | 'ad
 
             {/* Date Range + Export */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
-                {activeReport !== 'aging' && (
-                    <DateRangePicker from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); }} />
-                )}
-                {activeReport === 'aging' && <div />}
-                <div className="flex items-center gap-2">
-                    {/* IPD / OPD report separation */}
+                {activeReport === 'balance-sheet' ? (
                     <div className="flex items-center gap-1.5 bg-white border border-gray-200 rounded-lg px-3 py-2">
-                        <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Bill Type</span>
-                        <select value={billType} onChange={e => setBillType(e.target.value)}
-                            className="text-sm font-bold text-gray-700 border-none focus:ring-0 p-0 bg-transparent outline-none">
-                            <option value="all">All</option>
-                            <option value="OPD">OPD only</option>
-                            <option value="IPD">IPD only</option>
-                            <option value="Pharmacy">Pharmacy only</option>
-                            <option value="Lab">Lab only</option>
-                            <option value="Admit">Admitted (IPD in-house)</option>
-                            <option value="Discharge">Discharged (IPD)</option>
-                        </select>
+                        <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider">As of</span>
+                        <input type="date" value={to} onChange={(e) => setTo(e.target.value)}
+                            className="text-sm font-bold text-gray-700 border-none focus:ring-0 p-0 bg-transparent outline-none" />
                     </div>
+                ) : activeReport !== 'aging' ? (
+                    <DateRangePicker from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); }} />
+                ) : <div />}
+                <div className="flex items-center gap-2">
+                    {activeReport === 'balance-sheet' ? (
+                        <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-1">
+                            {([['normal', 'Normal Statement'], ['schedule3', 'Schedule III (Companies Act 2013)']] as const).map(([key, label]) => (
+                                <button key={key} onClick={() => setBsFormat(key)}
+                                    className={`px-3 py-1.5 text-xs font-bold rounded-md transition ${bsFormat === key ? 'bg-emerald-600 text-white' : 'text-gray-500 hover:bg-gray-50'}`}>
+                                    {label}
+                                </button>
+                            ))}
+                        </div>
+                    ) : (
+                        /* IPD / OPD report separation */
+                        <div className="flex items-center gap-1.5 bg-white border border-gray-200 rounded-lg px-3 py-2">
+                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Bill Type</span>
+                            <select value={billType} onChange={e => setBillType(e.target.value)}
+                                className="text-sm font-bold text-gray-700 border-none focus:ring-0 p-0 bg-transparent outline-none">
+                                <option value="all">All</option>
+                                <option value="OPD">OPD only</option>
+                                <option value="IPD">IPD only</option>
+                                <option value="Pharmacy">Pharmacy only</option>
+                                <option value="Lab">Lab only</option>
+                                <option value="Admit">Admitted (IPD in-house)</option>
+                                <option value="Discharge">Discharged (IPD)</option>
+                            </select>
+                        </div>
+                    )}
                     <button onClick={loadReport} className="px-4 py-2 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700">
                         Generate Report
                     </button>
@@ -150,6 +189,7 @@ export function FinancialReportsContent({ shell = 'app' }: { shell?: 'app' | 'ad
                     {activeReport === 'aging' && <AgingReport data={data} fmt={fmt} />}
                     {activeReport === 'cashflow' && <CashFlowReport data={data} fmt={fmt} from={from} to={to} />}
                     {activeReport === 'pnl' && <ProfitLossReport data={data} fmt={fmt} from={from} to={to} />}
+                    {activeReport === 'balance-sheet' && <BalanceSheetReport data={data} fmt={fmt} asOf={to} format={bsFormat} />}
                     {activeReport === 'insurance' && <InsuranceReport data={data} fmt={fmt} from={from} to={to} />}
                     {activeReport === 'department' && <DepartmentReport data={data} fmt={fmt} from={from} to={to} />}
                 </div>
@@ -1159,6 +1199,176 @@ function ProfitLossReport({ data, fmt, from, to }: { data: any; fmt: (n: number)
                 <VoucherModal invoiceId={voucherInvoiceId} onClose={() => setVoucherInvoiceId(null)} />
             )}
         </>
+    );
+}
+
+// ─── Balance Sheet (two presentation formats over the same GL data) ─────────
+function BalanceSheetReport({ data, fmt, asOf, format }: { data: any; fmt: (n: number) => string; asOf: string; format: 'normal' | 'schedule3' }) {
+    if (format === 'schedule3') return <ScheduleIIIBalanceSheet data={data} fmt={fmt} asOf={asOf} />;
+    return <NormalBalanceSheet data={data} fmt={fmt} asOf={asOf} />;
+}
+
+function BalanceRow({ label, value, fmt, bold, indent = 0 }: { label: string; value: number; fmt: (n: number) => string; bold?: boolean; indent?: number }) {
+    return (
+        <div className={`flex justify-between py-1.5 text-sm ${bold ? 'font-bold' : 'text-gray-700'}`} style={{ paddingLeft: indent * 16 }}>
+            <span>{label}</span><span className={bold ? '' : 'font-medium text-gray-900'}>{fmt(value)}</span>
+        </div>
+    );
+}
+
+function NormalBalanceSheet({ data, fmt, asOf }: { data: any; fmt: (n: number) => string; asOf: string }) {
+    const bs = data?.balance_sheet;
+    if (!bs) return <div className="text-center py-24 text-gray-400">No balance sheet data</div>;
+    return (
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-100">
+                <h3 className="font-semibold text-gray-900">Balance Sheet <span className="text-xs font-normal text-gray-400 ml-2">as at {new Date(asOf).toLocaleDateString('en-GB')}</span></h3>
+            </div>
+            <div className="p-6 grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div>
+                    <h4 className="text-xs font-bold text-emerald-600 uppercase mb-2">Assets</h4>
+                    {bs.assets.map((a: any) => <BalanceRow key={a.id} label={a.account_name} value={a.balance} fmt={fmt} />)}
+                    <div className="flex justify-between py-2 text-sm font-bold border-t-2 border-gray-900 mt-2">
+                        <span>Total Assets</span><span>{fmt(bs.total_assets)}</span>
+                    </div>
+                </div>
+                <div>
+                    <h4 className="text-xs font-bold text-red-600 uppercase mb-2">Liabilities</h4>
+                    {bs.liabilities.map((a: any) => <BalanceRow key={a.id} label={a.account_name} value={Math.abs(a.balance)} fmt={fmt} />)}
+                    <div className="flex justify-between py-2 text-sm font-bold border-t border-gray-200 mt-2">
+                        <span>Total Liabilities</span><span>{fmt(bs.total_liabilities)}</span>
+                    </div>
+                    <h4 className="text-xs font-bold text-blue-600 uppercase mb-2 mt-5">Equity</h4>
+                    {bs.equity.map((a: any) => <BalanceRow key={a.id} label={a.account_name} value={a.balance} fmt={fmt} />)}
+                    <div className="flex justify-between py-2 text-sm font-bold border-t border-gray-200 mt-2">
+                        <span>Total Equity</span><span>{fmt(bs.total_equity)}</span>
+                    </div>
+                    <div className="flex justify-between py-2 text-sm font-bold border-t-2 border-gray-900 mt-2">
+                        <span>Total Liabilities + Equity</span><span>{fmt(bs.total_liabilities + bs.total_equity)}</span>
+                    </div>
+                </div>
+            </div>
+            {!bs.equation_balanced && (
+                <div className="mx-6 mb-6 px-4 py-2 rounded-lg bg-amber-50 text-amber-700 text-xs font-bold">
+                    Assets does not equal Liabilities + Equity — check for unposted journal entries.
+                </div>
+            )}
+        </div>
+    );
+}
+
+// Schedule III (Division I) layout — Roman-numeral sections, lettered line
+// items, matching the format of a signed Companies Act 2013 financial
+// statement. Each lettered total is an aggregation of many GL accounts
+// (per app/actions/gl-actions.ts::getScheduleIIIBalanceSheet) — click to see
+// which accounts make it up.
+function Sch3Line({ label, letter, bucket, fmt }: { label: string; letter: string; bucket: { total: number; items: any[] }; fmt: (n: number) => string }) {
+    const [open, setOpen] = useState(false);
+    if (!bucket || bucket.items.length === 0) return null;
+    return (
+        <div>
+            <button type="button" onClick={() => setOpen((o) => !o)}
+                className="w-full flex justify-between py-1 text-sm hover:bg-gray-50 px-2 -mx-2 rounded transition">
+                <span className="text-gray-700 flex gap-1.5">
+                    <span className="text-gray-400 text-xs mt-0.5">{open ? '▼' : '▶'}</span>
+                    <span className="text-gray-400">({letter})</span> {label}
+                </span>
+                <span className="font-medium text-gray-900">{fmt(bucket.total)}</span>
+            </button>
+            {open && (
+                <div className="ml-8 mb-1 border-l-2 border-gray-100 pl-3">
+                    {bucket.items.map((it: any) => (
+                        <div key={it.id} className="flex justify-between py-0.5 text-xs text-gray-500">
+                            <span>{it.name}</span><span>{fmt(it.balance)}</span>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
+function Sch3Section({ number, title, children, total, fmt }: { number: string; title: string; children: React.ReactNode; total: number; fmt: (n: number) => string }) {
+    return (
+        <div className="mb-3">
+            <div className="text-xs font-bold text-gray-500 mb-1">{number} {title}</div>
+            {children}
+            <div className="flex justify-between py-1 text-sm font-bold border-t border-gray-200 mt-1">
+                <span></span><span>{fmt(total)}</span>
+            </div>
+        </div>
+    );
+}
+
+function ScheduleIIIBalanceSheet({ data, fmt, asOf }: { data: any; fmt: (n: number) => string; asOf: string }) {
+    const el = data?.equity_and_liabilities;
+    const as = data?.assets;
+    if (!el || !as) return <div className="text-center py-24 text-gray-400">No balance sheet data</div>;
+    const sf = el.shareholders_funds, ncl = el.non_current_liabilities, cl = el.current_liabilities;
+    const nca = as.non_current_assets, ca = as.current_assets;
+    const anyUnclassified = (sf.unclassified?.items.length || 0) + (cl.unclassified?.items.length || 0) + (as.non_current_assets ? 0 : 0)
+        + (as.current_assets?.unclassified?.items.length || 0);
+
+    return (
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-100 text-center">
+                <h3 className="font-semibold text-gray-900">Balance Sheet — Schedule III to the Companies Act, 2013</h3>
+                <p className="text-xs text-gray-400 mt-0.5">As at {new Date(asOf).toLocaleDateString('en-GB')}</p>
+            </div>
+            <div className="p-6 grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div>
+                    <h4 className="text-xs font-bold text-gray-700 uppercase mb-2">I. Equity and Liabilities</h4>
+                    <Sch3Section number="1" title="Shareholders' Funds" total={sf.total} fmt={fmt}>
+                        <Sch3Line letter="a" label="Share Capital" bucket={sf.share_capital} fmt={fmt} />
+                        <Sch3Line letter="b" label="Reserves and Surplus" bucket={sf.reserves_and_surplus} fmt={fmt} />
+                        <Sch3Line letter="?" label="Unclassified equity — needs review" bucket={sf.unclassified} fmt={fmt} />
+                    </Sch3Section>
+                    <Sch3Section number="2" title="Non-Current Liabilities" total={ncl.total} fmt={fmt}>
+                        <Sch3Line letter="a" label="Long-term borrowings" bucket={ncl.long_term_borrowings} fmt={fmt} />
+                        <Sch3Line letter="b" label="Other long-term liabilities" bucket={ncl.other} fmt={fmt} />
+                    </Sch3Section>
+                    <Sch3Section number="3" title="Current Liabilities" total={cl.total} fmt={fmt}>
+                        <Sch3Line letter="a" label="Trade payables" bucket={cl.trade_payables} fmt={fmt} />
+                        <Sch3Line letter="b" label="Other current liabilities" bucket={cl.other} fmt={fmt} />
+                        <Sch3Line letter="c" label="Short-term provisions" bucket={cl.short_term_provisions} fmt={fmt} />
+                        <Sch3Line letter="?" label="Unclassified — needs review" bucket={cl.unclassified} fmt={fmt} />
+                    </Sch3Section>
+                    <div className="flex justify-between py-2 text-sm font-bold border-t-2 border-gray-900 mt-2">
+                        <span>TOTAL</span><span>{fmt(el.total)}</span>
+                    </div>
+                </div>
+                <div>
+                    <h4 className="text-xs font-bold text-gray-700 uppercase mb-2">II. Assets</h4>
+                    <Sch3Section number="1" title="Non-Current Assets" total={nca.total} fmt={fmt}>
+                        <Sch3Line letter="a" label="Property, Plant and Equipment" bucket={nca.ppe} fmt={fmt} />
+                        <Sch3Line letter="b" label="Non-current investments" bucket={nca.investments} fmt={fmt} />
+                        <Sch3Line letter="c" label="Other non-current assets" bucket={nca.other} fmt={fmt} />
+                    </Sch3Section>
+                    <Sch3Section number="2" title="Current Assets" total={ca.total} fmt={fmt}>
+                        <Sch3Line letter="a" label="Inventories" bucket={ca.inventories} fmt={fmt} />
+                        <Sch3Line letter="b" label="Trade receivables" bucket={ca.trade_receivables} fmt={fmt} />
+                        <Sch3Line letter="c" label="Cash and cash equivalents" bucket={ca.cash_and_bank} fmt={fmt} />
+                        <Sch3Line letter="d" label="Short-term loans and advances" bucket={ca.loans_and_advances} fmt={fmt} />
+                        <Sch3Line letter="e" label="Other current assets" bucket={ca.other} fmt={fmt} />
+                        <Sch3Line letter="?" label="Unclassified — needs review" bucket={ca.unclassified} fmt={fmt} />
+                    </Sch3Section>
+                    <div className="flex justify-between py-2 text-sm font-bold border-t-2 border-gray-900 mt-2">
+                        <span>TOTAL</span><span>{fmt(as.total)}</span>
+                    </div>
+                </div>
+            </div>
+            {!data.equation_balanced && (
+                <div className="mx-6 mb-4 px-4 py-2 rounded-lg bg-amber-50 text-amber-700 text-xs font-bold">
+                    Total Equity &amp; Liabilities does not equal Total Assets — check for unposted journal entries.
+                </div>
+            )}
+            {anyUnclassified > 0 && (
+                <div className="mx-6 mb-6 px-4 py-2 rounded-lg bg-blue-50 text-blue-700 text-xs">
+                    Some accounts couldn't be classified from their chart-of-accounts group and are listed under
+                    &quot;Unclassified — needs review&quot; above. Fix their <code>account_group</code> in Chart of Accounts to place them correctly.
+                </div>
+            )}
+        </div>
     );
 }
 

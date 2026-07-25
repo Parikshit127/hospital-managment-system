@@ -65,6 +65,8 @@ export async function getInsuranceOutstanding(opts?: {
   asOnDate?: string;
   agingBasis?: 'approval' | 'bill';
   provider_id?: number;           // scope to a single TPA/insurance provider
+  from?: string;                  // custom bill-date range — overrides the aging bucket view
+  to?: string;
 }) {
   const { db, organizationId } = await requireTenantContext();
   const payerType = opts?.payer_type || 'tpa_insurance';
@@ -86,6 +88,14 @@ export async function getInsuranceOutstanding(opts?: {
         : { billing_patient_type: payerType }),
       tpa_payable: payerType === 'tpa_insurance' ? { gt: 0 } : undefined,
       ...(opts?.provider_id ? { tpa_provider_id: opts.provider_id } : {}),
+      // Custom date range — scoped to the bill date (created_at), same basis
+      // used elsewhere in this file for a "from/to" filter.
+      ...(opts?.from || opts?.to ? {
+        created_at: {
+          ...(opts?.from ? { gte: new Date(opts.from) } : {}),
+          ...(opts?.to ? { lte: new Date(opts.to) } : {}),
+        },
+      } : {}),
     },
     select: {
       id: true, invoice_number: true, created_at: true,
@@ -231,6 +241,101 @@ export async function getBillWiseSanction(filters?: {
     short_pay: round2(t.short_pay + r.short_pay),
     outstanding: round2(t.outstanding + r.outstanding),
   }), { claim_amount: 0, sanctioned: 0, received: 0, tds: 0, short_pay: 0, outstanding: 0 });
+
+  return { success: true, data: serialize({ rows, totals }) };
+}
+
+type PatientWiseOutstandingTotals = {
+  bill_amount: number;
+  discount: number;
+  net_bill_amount: number;
+  received: number;
+  outstanding: number;
+};
+
+type PatientWiseOutstandingRow = PatientWiseOutstandingTotals & {
+  invoice_id: number;
+  invoice_number: string | null;
+  patient_name: string;
+  patient_id: string;
+  provider_name: string;
+  bill_date: Date;
+  admission_date: Date | null;
+  discharge_date: Date | null;
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PATIENT-WISE OUTSTANDING  (same bills as Ins. Outstanding, one row per bill
+// instead of rolled up per payer — carries the TPA/insurance name on each row
+// so a biller can see who owes what for which patient, not just the payer total)
+// ─────────────────────────────────────────────────────────────────────────────
+export async function getPatientWiseOutstanding(opts?: {
+  provider_id?: number; from?: string; to?: string;
+}) {
+  const { db, organizationId } = await requireTenantContext();
+
+  // Same drift-tolerant "is this a TPA bill" check as getInsuranceOutstanding/
+  // getBillWiseSanction. Filters on balance_due (the bill's TOTAL remaining
+  // balance) rather than tpa_payable (the TPA's remaining share) on purpose —
+  // this view answers "what's still open on this patient's bill", regardless
+  // of whether the open amount is owed by the TPA or the patient. That means
+  // its population differs from the payer-wise Ins. Outstanding view (e.g. a
+  // bill with tpa_payable > 0 but balance_due = 0 — patient portion already
+  // settled — won't appear here).
+  const where: any = {
+    organizationId,
+    OR: [{ billing_patient_type: 'tpa_insurance' }, { tpa_claim_status: { not: 'not_submitted' } }],
+    balance_due: { gt: 0 },
+  };
+  if (opts?.provider_id) where.tpa_provider_id = opts.provider_id;
+  if (opts?.from || opts?.to) {
+    where.created_at = {};
+    if (opts.from) where.created_at.gte = new Date(opts.from);
+    if (opts.to) where.created_at.lte = new Date(opts.to);
+  }
+
+  const invoices = await db.invoices.findMany({
+    where,
+    select: {
+      id: true, invoice_number: true, created_at: true,
+      total_amount: true, total_discount: true, bill_discount: true, concession_amount: true,
+      net_amount: true, paid_amount: true, balance_due: true,
+      tpa_provider_id: true, patient_id: true,
+      patient: { select: { full_name: true, patient_id: true } },
+      admission: { select: { admission_date: true, discharge_date: true } },
+    },
+    orderBy: { created_at: 'desc' },
+    take: 2000,
+  });
+
+  const providers = await db.insurance_providers.findMany({ where: { organizationId }, select: { id: true, provider_name: true } });
+  const provMap = new Map<number, string>(providers.map((p: any) => [p.id, p.provider_name]));
+
+  const rows: PatientWiseOutstandingRow[] = invoices.map((inv: any) => ({
+    invoice_id: inv.id,
+    invoice_number: inv.invoice_number,
+    patient_name: inv.patient?.full_name || '',
+    patient_id: inv.patient?.patient_id || inv.patient_id,
+    provider_name: provMap.get(inv.tpa_provider_id) || '',
+    bill_date: inv.created_at,
+    admission_date: inv.admission?.admission_date || null,
+    discharge_date: inv.admission?.discharge_date || null,
+    bill_amount: round2(Number(inv.total_amount || 0)),
+    // total_discount already folds in bill_discount (see finance-actions.ts:
+    // total_discount = lineDiscount + billDiscount) — don't add it again here.
+    discount: round2(Number(inv.total_discount || 0) + Number(inv.concession_amount || 0)),
+    net_bill_amount: round2(Number(inv.net_amount || 0)),
+    received: round2(Number(inv.paid_amount || 0)),
+    outstanding: round2(Number(inv.balance_due || 0)),
+  }));
+
+  const totals = rows.reduce((t: PatientWiseOutstandingTotals, r) => ({
+    bill_amount: round2(t.bill_amount + r.bill_amount),
+    discount: round2(t.discount + r.discount),
+    net_bill_amount: round2(t.net_bill_amount + r.net_bill_amount),
+    received: round2(t.received + r.received),
+    outstanding: round2(t.outstanding + r.outstanding),
+  }), { bill_amount: 0, discount: 0, net_bill_amount: 0, received: 0, outstanding: 0 });
 
   return { success: true, data: serialize({ rows, totals }) };
 }

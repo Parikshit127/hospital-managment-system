@@ -1085,6 +1085,159 @@ export async function getBalanceSheet(organizationId: string, filters?: {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// SCHEDULE III (COMPANIES ACT, 2013) BALANCE SHEET
+// ─────────────────────────────────────────────────────────────────────────────
+// Reclassifies the same account balances getBalanceSheet computes into the
+// Current / Non-Current buckets Schedule III (Division I) requires. The chart
+// of accounts here is Tally-synced, so most rows already carry a recognised
+// Tally/Schedule-III group name on account_group (Sundry Debtors, Current
+// Liabilities, Fixed Assets, ...). Some rows instead carry a custom sub-group
+// (e.g. "OUTSIDE DOCTOR", "AVISE STAFF" — per-payee ledgers) that only becomes
+// classifiable by walking up parent_id to the nearest ancestor whose group IS
+// recognised. Anything still unclassified after that is surfaced as its own
+// line rather than guessed into a bucket silently — a mis-bucketed account on
+// a signed financial statement is worse than an honest "needs review" row.
+const SCH3_ASSET_MAP: Record<string, { bucket: string; label: string }> = {
+  'Fixed Assets': { bucket: 'nca_ppe', label: 'Property, Plant and Equipment' },
+  'Investments': { bucket: 'nca_investments', label: 'Non-current investments' },
+  'Misc. Expenses (ASSET)': { bucket: 'nca_other', label: 'Other non-current assets' },
+  'Sundry Debtors': { bucket: 'ca_receivables', label: 'Trade receivables' },
+  'Cash-in-Hand': { bucket: 'ca_cash', label: 'Cash and cash equivalents' },
+  'Bank Accounts': { bucket: 'ca_cash', label: 'Cash and cash equivalents' },
+  'Fixed Deposits': { bucket: 'ca_cash', label: 'Cash and cash equivalents' },
+  'Stock-in-Hand': { bucket: 'ca_inventory', label: 'Inventories' },
+  'Loans & Advances (Asset)': { bucket: 'ca_loans', label: 'Short-term loans and advances' },
+  'Deposits (Asset)': { bucket: 'ca_other', label: 'Other current assets' },
+  'Current Assets': { bucket: 'ca_other', label: 'Other current assets' },
+};
+const SCH3_LIAB_MAP: Record<string, { bucket: string; label: string }> = {
+  'Loans (Liability)': { bucket: 'ncl_borrowings', label: 'Long-term borrowings' },
+  'Secured Loans': { bucket: 'ncl_borrowings', label: 'Long-term borrowings' },
+  'Unsecured Loans': { bucket: 'ncl_borrowings', label: 'Long-term borrowings' },
+  'Bank OD A/c': { bucket: 'ncl_borrowings', label: 'Long-term borrowings' },
+  'Sundry Creditors': { bucket: 'cl_payables', label: 'Trade payables' },
+  'Provisions': { bucket: 'cl_provisions', label: 'Short-term provisions' },
+  'Duties & Taxes': { bucket: 'cl_other', label: 'Other current liabilities' },
+  'Current Liabilities': { bucket: 'cl_other', label: 'Other current liabilities' },
+  'EMPLOYEE': { bucket: 'cl_other', label: 'Other current liabilities' },
+};
+const SCH3_EQUITY_MAP: Record<string, { bucket: string; label: string }> = {
+  'Capital Account': { bucket: 'capital', label: 'Share Capital' },
+  'Reserves & Surplus': { bucket: 'reserves', label: 'Reserves and Surplus' },
+};
+
+// Walk self, then parent_id up to 6 hops, returning the first group-name match
+// found in `map`. `byId` must contain the full org chart of accounts (not just
+// one account_type) since a Liability leaf's recognisable ancestor is still a
+// Liability-typed account, but fetching only the requested type would still
+// miss nothing here — kept generic so the same helper serves all three types.
+function classifySchedule3(
+  account: any,
+  byId: Map<string, any>,
+  map: Record<string, { bucket: string; label: string }>,
+): { bucket: string; label: string } | null {
+  let cur = account;
+  let hops = 0;
+  while (cur) {
+    const hit = map[cur.account_group || ''];
+    if (hit) return hit;
+    if (!cur.parent_id || hops >= 6) break;
+    cur = byId.get(cur.parent_id);
+    hops++;
+  }
+  return null;
+}
+
+export async function getScheduleIIIBalanceSheet(organizationId: string, filters?: {
+  as_of_date?: Date;
+}) {
+  try {
+    const asOfDate = filters?.as_of_date || new Date();
+    const base = await getBalanceSheet(organizationId, { as_of_date: asOfDate });
+    if (!base.success || !base.balance_sheet) return base;
+    const { assets, liabilities, equity } = base.balance_sheet;
+
+    // Parent lookup needs the WHOLE chart (any account_type) — an ancestor a
+    // few hops up can be a different type in principle, and this is cheap
+    // (one query) compared to the per-account round-trips getBalanceSheet
+    // already does for balances.
+    const allAccounts = await prisma.gL_Account.findMany({
+      where: { organizationId },
+      select: { id: true, account_group: true, parent_id: true },
+    });
+    const byId = new Map(allAccounts.map((a) => [a.id, a]));
+
+    const bucket = (code: string) => ({ code, total: 0, items: [] as any[] });
+    const A = {
+      nca_ppe: bucket('nca_ppe'), nca_investments: bucket('nca_investments'), nca_other: bucket('nca_other'),
+      ca_inventory: bucket('ca_inventory'), ca_receivables: bucket('ca_receivables'), ca_cash: bucket('ca_cash'),
+      ca_loans: bucket('ca_loans'), ca_other: bucket('ca_other'), unclassified: bucket('unclassified'),
+    };
+    const L = {
+      ncl_borrowings: bucket('ncl_borrowings'), ncl_other: bucket('ncl_other'),
+      cl_payables: bucket('cl_payables'), cl_provisions: bucket('cl_provisions'), cl_other: bucket('cl_other'),
+      unclassified: bucket('unclassified'),
+    };
+    const E = { capital: bucket('capital'), reserves: bucket('reserves'), unclassified: bucket('unclassified') };
+
+    for (const acc of assets) {
+      const hit = acc.id === 'virtual-pnl' ? null : classifySchedule3(acc, byId, SCH3_ASSET_MAP);
+      const target = hit ? (A as any)[hit.bucket] : A.unclassified;
+      target.total = round2(target.total + acc.balance);
+      target.items.push({ id: acc.id, name: acc.account_name, code: acc.account_code, balance: acc.balance, label: hit?.label });
+    }
+    for (const acc of liabilities) {
+      const hit = classifySchedule3(acc, byId, SCH3_LIAB_MAP);
+      const target = hit ? (L as any)[hit.bucket] : L.unclassified;
+      const bal = Math.abs(acc.balance);
+      target.total = round2(target.total + bal);
+      target.items.push({ id: acc.id, name: acc.account_name, code: acc.account_code, balance: bal, label: hit?.label });
+    }
+    // Current-year P&L (the virtual '5300' entry, or the real account it maps
+    // to) always rolls into Reserves and Surplus — standard Schedule III
+    // treatment, not a separate classification question.
+    for (const acc of equity) {
+      const isNetIncomeRow = acc.account_code === '5300' || acc.id === 'virtual-pnl';
+      const hit = isNetIncomeRow ? SCH3_EQUITY_MAP['Reserves & Surplus'] : classifySchedule3(acc, byId, SCH3_EQUITY_MAP);
+      const target = hit ? (E as any)[hit.bucket] : E.unclassified;
+      target.total = round2(target.total + acc.balance);
+      target.items.push({ id: acc.id, name: acc.account_name, code: acc.account_code, balance: acc.balance, label: hit?.label });
+    }
+
+    const shareholdersFundsTotal = round2(E.capital.total + E.reserves.total + E.unclassified.total);
+    const nonCurrentLiabTotal = round2(L.ncl_borrowings.total + L.ncl_other.total);
+    const currentLiabTotal = round2(L.cl_payables.total + L.cl_provisions.total + L.cl_other.total + L.unclassified.total);
+    const totalEquityAndLiabilities = round2(shareholdersFundsTotal + nonCurrentLiabTotal + currentLiabTotal);
+
+    const nonCurrentAssetsTotal = round2(A.nca_ppe.total + A.nca_investments.total + A.nca_other.total);
+    const currentAssetsTotal = round2(
+      A.ca_inventory.total + A.ca_receivables.total + A.ca_cash.total + A.ca_loans.total + A.ca_other.total + A.unclassified.total
+    );
+    const totalAssets = round2(nonCurrentAssetsTotal + currentAssetsTotal);
+
+    return {
+      success: true,
+      as_of_date: asOfDate,
+      equity_and_liabilities: {
+        shareholders_funds: { share_capital: E.capital, reserves_and_surplus: E.reserves, unclassified: E.unclassified, total: shareholdersFundsTotal },
+        non_current_liabilities: { long_term_borrowings: L.ncl_borrowings, other: L.ncl_other, total: nonCurrentLiabTotal },
+        current_liabilities: { trade_payables: L.cl_payables, short_term_provisions: L.cl_provisions, other: L.cl_other, unclassified: L.unclassified, total: currentLiabTotal },
+        total: totalEquityAndLiabilities,
+      },
+      assets: {
+        non_current_assets: { ppe: A.nca_ppe, investments: A.nca_investments, other: A.nca_other, total: nonCurrentAssetsTotal },
+        current_assets: { inventories: A.ca_inventory, trade_receivables: A.ca_receivables, cash_and_bank: A.ca_cash, loans_and_advances: A.ca_loans, other: A.ca_other, unclassified: A.unclassified, total: currentAssetsTotal },
+        total: totalAssets,
+      },
+      equation_balanced: Math.abs(totalAssets - totalEquityAndLiabilities) < 1,
+    };
+  } catch (error) {
+    console.error('Error generating Schedule III balance sheet:', error);
+    return { success: false, error: 'Failed to generate Schedule III balance sheet' };
+  }
+}
+
 export async function getProfitLossStatement(organizationId: string, filters?: {
   start_date?: Date;
   end_date?: Date;

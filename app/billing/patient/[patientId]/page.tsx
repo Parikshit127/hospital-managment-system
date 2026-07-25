@@ -46,7 +46,7 @@ import {
   getPatientTimeline,
 } from "@/app/actions/master-billing-actions";
 import { recordPayment, getMyRole, updatePayment, reversePayment, getInvoiceHistory, finalizeAndLockInvoice, revertInvoiceToDraft, reconcilePatientOverpayments } from "@/app/actions/finance-actions";
-import { collectDeposit } from "@/app/actions/deposit-actions";
+import { collectDeposit, updateDeposit } from "@/app/actions/deposit-actions";
 import { isDepositSettlement } from "@/app/lib/payment-tender";
 import { getCashComplianceConfig } from "@/app/actions/cash-compliance-actions";
 import { CASH_COMPLIANCE_DEFAULTS, isValidPan, normalizePan, resolveRegisteredPan } from "@/app/lib/cash-compliance";
@@ -382,7 +382,7 @@ export function PatientFinancialProfileContent({ shell = "app" }: { shell?: "app
                 </>
               )}
               {tab === "payments" && <PaymentsTab invoices={profile.invoices} setEditingPayment={setEditingPayment} setReversingPayment={setReversingPayment} />}
-              {tab === "deposits" && <DepositsTab adminMode={adminMode} billingRoot={billingRoot} deposits={profile.deposits} patient={profile.patient} onSaved={load} />}
+              {tab === "deposits" && <DepositsTab adminMode={adminMode} billingRoot={billingRoot} deposits={profile.deposits} patient={profile.patient} onSaved={load} canEdit={canEditPaid} />}
               {tab === "insurance" && <InsuranceTab adminMode={adminMode} claims={profile.claims} preauths={profile.preauths} policies={profile.patient.insurance_policies} />}
               {tab === "refunds" && <RefundsTab adminMode={adminMode} billingRoot={billingRoot} refunds={profile.refunds} />}
               {tab === "credit_notes" && <CreditNotesTab adminMode={adminMode} billingRoot={billingRoot} invoices={profile.invoices} />}
@@ -1870,16 +1870,19 @@ function DepositsTab({
   deposits,
   patient,
   onSaved,
+  canEdit,
 }: {
   adminMode: boolean;
   billingRoot: string;
   deposits: any[];
   patient: any;
   onSaved: () => void;
+  canEdit: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ amount: "", payment_method: "Cash", payment_ref: "", notes: "" });
   const [saving, setSaving] = useState(false);
+  const [editingDeposit, setEditingDeposit] = useState<any>(null);
   // Cash compliance — same rules as a bill payment apply to a cash deposit.
   const [thresholds, setThresholds] = useState<{ pan_threshold: number; cash_limit: number }>(CASH_COMPLIANCE_DEFAULTS);
   const [panNumber, setPanNumber] = useState("");
@@ -2017,6 +2020,17 @@ function DepositsTab({
     </div>
   );
 
+  const editModal = editingDeposit && (
+    <EditDepositModal
+      deposit={editingDeposit}
+      onClose={() => setEditingDeposit(null)}
+      onSaved={() => {
+        setEditingDeposit(null);
+        onSaved();
+      }}
+    />
+  );
+
   if (!deposits.length)
     return (
       <div className="space-y-3">
@@ -2039,11 +2053,16 @@ function DepositsTab({
             <th className="text-right py-2">Applied</th>
             <th className="text-right py-2">Refunded</th>
             <th className="text-right py-2">Balance</th>
+            {canEdit && <th className="text-right py-2">Actions</th>}
           </tr>
         </thead>
         <tbody>
           {deposits.map((d: any) => {
             const balance = Number(d.amount) - Number(d.applied_amount) - Number(d.refunded_amount);
+            const editable =
+              canEdit &&
+              Number(d.refunded_amount) === 0 &&
+              (d.status === "Active" || (d.status === "Applied" && Number(d.applied_amount) === Number(d.amount)));
             return (
               <tr key={d.id} className="border-b border-gray-50">
                 <td className="py-2 font-mono">{d.deposit_number}</td>
@@ -2070,6 +2089,21 @@ function DepositsTab({
                 >
                   ₹{fmtMoney(balance)}
                 </td>
+                {canEdit && (
+                  <td className="py-2 text-right">
+                    {editable ? (
+                      <button
+                        onClick={() => setEditingDeposit(d)}
+                        className="text-[10px] font-bold text-gray-500 hover:text-gray-900 border border-gray-200 px-2 py-0.5 rounded bg-white"
+                        title="Edit deposit (Admin/Finance only)"
+                      >
+                        Edit
+                      </button>
+                    ) : (
+                      <span className="text-[10px] text-gray-300">—</span>
+                    )}
+                  </td>
+                )}
               </tr>
             );
           })}
@@ -2081,6 +2115,103 @@ function DepositsTab({
         <ActionLink href={adminMode ? billingRoot : "/finance/deposits"}>Refund Deposit</ActionLink>
       </div>
       {modal}
+      {editModal}
+    </div>
+  );
+}
+
+// Correct a deposit's amount/method/reference/notes. Admin/Finance only (server
+// re-checks the role regardless). Editing an already-Applied deposit cascades
+// the new amount onto the invoice payment it created, so the bill and the
+// deposit receipt stay in sync — see updateDeposit() for the cascade logic.
+function EditDepositModal({ deposit, onClose, onSaved }: { deposit: any; onClose: () => void; onSaved: () => void }) {
+  const [amount, setAmount] = useState(String(Number(deposit.amount)));
+  const [method, setMethod] = useState(deposit.payment_method || "Cash");
+  const [ref, setRef] = useState(deposit.payment_ref || "");
+  const [notes, setNotes] = useState(deposit.notes || "");
+  const [date, setDate] = useState(() => new Date(deposit.created_at).toISOString().slice(0, 10));
+  const [reason, setReason] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const isApplied = deposit.status === "Applied";
+  const today = new Date().toISOString().slice(0, 10);
+
+  async function submit() {
+    const amt = Number(amount);
+    if (!amount || amt <= 0) { toast.error("Enter a valid amount."); return; }
+    if (!date) { toast.error("Enter a valid date."); return; }
+    if (!reason.trim()) { toast.error("A reason for the correction is required."); return; }
+    setSaving(true);
+    const res = await updateDeposit(
+      deposit.id,
+      { amount: amt, payment_method: method, payment_ref: ref || null, notes: notes || null, created_at: date },
+      reason.trim(),
+    );
+    setSaving(false);
+    if (res.success) {
+      toast.success("Deposit updated.");
+      onSaved();
+    } else {
+      toast.error(res.error || "Failed to update deposit.");
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => !saving && onClose()}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="px-5 py-3 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
+          <h3 className="font-bold text-gray-900 text-sm">Edit Deposit — {deposit.deposit_number}</h3>
+          <button onClick={() => !saving && onClose()} className="text-gray-400 hover:text-gray-700 text-lg leading-none">&times;</button>
+        </div>
+        <div className="p-5 space-y-3">
+          {isApplied && (
+            <div className="flex items-start gap-2 px-3 py-2 bg-amber-50 border border-amber-200 text-amber-700 text-[11px] font-medium rounded-lg">
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+              <span>This deposit is already applied to a bill. Changing the amount will automatically update the applied payment and the bill's balance.</span>
+            </div>
+          )}
+          <div>
+            <label className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Amount (₹)</label>
+            <input type="number" autoFocus min={0} step="any" value={amount}
+              onChange={e => setAmount(e.target.value)}
+              className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="0.00" />
+          </div>
+          <div>
+            <label className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Date</label>
+            <input type="date" value={date} max={today}
+              onChange={e => setDate(e.target.value)}
+              className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+          </div>
+          <div>
+            <label className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Payment Method</label>
+            <select value={method} onChange={e => setMethod(e.target.value)}
+              className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-lg text-sm">
+              <option>Cash</option><option>Card</option><option>UPI</option><option>Bank</option><option>Cheque</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Reference (optional)</label>
+            <input value={ref} onChange={e => setRef(e.target.value)}
+              className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="UTR / Txn / Cheque no." />
+          </div>
+          <div>
+            <label className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Notes (optional)</label>
+            <input value={notes} onChange={e => setNotes(e.target.value)}
+              className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+          </div>
+          <div>
+            <label className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Reason for correction *</label>
+            <input value={reason} onChange={e => setReason(e.target.value)}
+              className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="Why is this being corrected?" />
+          </div>
+        </div>
+        <div className="px-5 py-3 border-t border-gray-100 bg-gray-50 flex justify-end gap-2">
+          <button onClick={onClose} disabled={saving} className="px-4 py-2 text-sm font-bold text-gray-600 hover:bg-gray-100 rounded-lg">Cancel</button>
+          <button onClick={submit} disabled={saving} className="px-5 py-2 text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg disabled:opacity-50">
+            {saving ? "Saving…" : "Save Changes"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

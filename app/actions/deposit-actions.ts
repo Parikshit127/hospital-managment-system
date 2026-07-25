@@ -19,6 +19,10 @@ function serialize<T>(data: T): T {
     ));
 }
 
+function round2(n: number): number {
+    return Math.round((Number(n) + Number.EPSILON) * 100) / 100;
+}
+
 function generateCreditNoteNumber() {
     const now = new Date();
     const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '');
@@ -195,6 +199,63 @@ export async function getActiveDeposits() {
     }
 }
 
+// Patient's currently available (unapplied) deposit balance, oldest deposit
+// first — used by the insurance-receipt screen to show what's held and, if
+// the biller chooses to use it, to consume it FIFO via
+// applyAvailableDepositToInvoice below. A deposit stays 'Active' until fully
+// consumed (see applyDepositToInvoice), so partially-used deposits are
+// already correctly included here.
+export async function getPatientDepositBalance(patientId: string) {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+        const id = (patientId || '').trim();
+        if (!id) return { success: true, data: { available: 0, deposits: [] } };
+        const deposits = await db.patientDeposit.findMany({
+            where: { organizationId, patient_id: id, status: 'Active' },
+            orderBy: { created_at: 'asc' },
+            select: { id: true, deposit_number: true, amount: true, applied_amount: true, refunded_amount: true },
+        });
+        const rows = deposits
+            .map((d: any) => ({
+                id: d.id,
+                deposit_number: d.deposit_number,
+                available: round2(Number(d.amount) - Number(d.applied_amount) - Number(d.refunded_amount)),
+            }))
+            .filter((d: any) => d.available > 0.01);
+        const available = round2(rows.reduce((s: number, d: any) => s + d.available, 0));
+        return { success: true, data: { available, deposits: rows } };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
+// Consume up to `amount` from a patient's available deposits, oldest first,
+// applying each to the invoice via applyDepositToInvoice until the amount is
+// covered or the patient's deposits run out. Used at insurance-receipt time
+// to actually settle the portion of a bill's disallowed gap the biller chose
+// to cover from a held deposit, so the invoice's real balance drops
+// immediately instead of leaving the deposit sitting unused.
+export async function applyAvailableDepositToInvoice(patientId: string, invoiceId: number, amount: number) {
+    try {
+        const requested = round2(Number(amount) || 0);
+        if (requested <= 0) return { success: true, applied: 0 };
+        const balance: any = await getPatientDepositBalance(patientId);
+        if (!balance?.success) return { success: false, error: balance?.error || 'Failed to load deposit balance', applied: 0 };
+        let remaining = requested;
+        let applied = 0;
+        for (const d of balance.data.deposits) {
+            if (remaining <= 0.01) break;
+            const r: any = await applyDepositToInvoice(d.id, invoiceId, remaining);
+            if (!r?.success) return { success: false, error: r?.error || 'Failed to apply deposit', applied };
+            applied = round2(applied + Number(r.applied || 0));
+            remaining = round2(remaining - Number(r.applied || 0));
+        }
+        return { success: true, applied };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
 export async function applyDepositToInvoice(depositId: number, invoiceId: number, amount: number) {
     try {
         const { db, organizationId } = await requireTenantContext();
@@ -347,14 +408,19 @@ export async function cancelDeposit(depositId: number, reason?: string) {
 }
 
 /**
- * Correct a deposit that was entered wrongly (wrong amount, mode, reference or
- * note). Only untouched Active deposits can be edited — once money has been
- * applied to a bill or refunded, changing the amount would silently desync the
- * invoice, so those must be reversed through Apply/Refund instead.
+ * Correct a deposit that was entered wrongly (wrong amount, mode, reference,
+ * note, or date). Active deposits can always be edited. A deposit that's
+ * already fully Applied to one invoice can also be edited (Admin/Finance
+ * only) — in that case an amount or date change is cascaded to the linked
+ * "Applied from deposit" payment row(s) (and the invoice's paid_amount/
+ * balance_due recalculated for amount changes), so the bill and the deposit
+ * receipt never go out of sync. Partially-applied or partly-refunded
+ * deposits are not supported here — those must be reversed through
+ * Apply/Refund first, since the split across ledgers is ambiguous.
  */
 export async function updateDeposit(
     depositId: number,
-    updates: { amount?: number; payment_method?: string; payment_ref?: string | null; notes?: string | null },
+    updates: { amount?: number; payment_method?: string; payment_ref?: string | null; notes?: string | null; created_at?: string },
     reason: string,
 ) {
     try {
@@ -366,20 +432,23 @@ export async function updateDeposit(
 
         const deposit = await db.patientDeposit.findFirst({ where: { id: depositId, organizationId } });
         if (!deposit) return { success: false, error: 'Deposit not found' };
-        if (deposit.status !== 'Active') {
-            return { success: false, error: `Only Active deposits can be edited — this one is ${deposit.status}.` };
-        }
-        if (Number(deposit.applied_amount) > 0) {
-            return { success: false, error: 'Cannot edit — deposit has already been applied to an invoice. Reverse the application first.' };
+        if (!['Active', 'Applied'].includes(deposit.status)) {
+            return { success: false, error: `Only Active or Applied deposits can be edited — this one is ${deposit.status}.` };
         }
         if (Number(deposit.refunded_amount) > 0) {
             return { success: false, error: 'Cannot edit — deposit has already been partly refunded.' };
         }
+        const isFullyApplied = deposit.status === 'Applied';
+        if (isFullyApplied && Number(deposit.applied_amount) !== Number(deposit.amount)) {
+            return { success: false, error: 'Cannot edit — this deposit is only partially applied. Reverse the application first.' };
+        }
 
         const data: any = {};
+        let newAmount: number | undefined;
         if (typeof updates.amount !== 'undefined') {
             const amt = Number(updates.amount);
             if (!Number.isFinite(amt) || amt <= 0) return { success: false, error: 'Amount must be greater than zero.' };
+            newAmount = amt;
             data.amount = amt;
         }
         if (typeof updates.payment_method !== 'undefined' && updates.payment_method) {
@@ -388,7 +457,70 @@ export async function updateDeposit(
         if (typeof updates.payment_ref !== 'undefined') data.payment_ref = updates.payment_ref || null;
         if (typeof updates.notes !== 'undefined') data.notes = updates.notes || null;
 
+        let newDate: Date | undefined;
+        if (typeof updates.created_at !== 'undefined' && updates.created_at) {
+            const d = new Date(updates.created_at);
+            if (Number.isNaN(d.getTime())) return { success: false, error: 'Invalid deposit date.' };
+            if (d.getTime() > Date.now()) return { success: false, error: 'Deposit date cannot be in the future.' };
+            newDate = d;
+            data.created_at = d;
+        }
+
         if (Object.keys(data).length === 0) return { success: false, error: 'Nothing to update.' };
+
+        const amountChanged = typeof newAmount !== 'undefined' && newAmount !== Number(deposit.amount);
+        const dateChanged = typeof newDate !== 'undefined' && newDate.getTime() !== new Date(deposit.created_at).getTime();
+        const invoiceId = deposit.applied_to_invoice;
+
+        // Cascade the amount/date change onto the payment row(s) this application
+        // created, and re-derive the invoice's paid/balance — otherwise the bill
+        // and the "applied deposit" receipt would silently disagree. (The payment's
+        // created_at is deliberately kept in step with the deposit's — see the
+        // comment in applyDepositToInvoice: money was received on the deposit date,
+        // not the later date it was applied to the bill.)
+        if (isFullyApplied && (amountChanged || dateChanged) && invoiceId) {
+            if (amountChanged) data.applied_amount = newAmount;
+
+            const linkedPayments = await db.payments.findMany({
+                where: {
+                    invoice_id: invoiceId,
+                    payment_method: 'Deposit',
+                    notes: { contains: `Applied from deposit ${deposit.deposit_number}` },
+                },
+            });
+
+            if (linkedPayments.length > 0) {
+                const oldSum = linkedPayments.reduce((s: number, p: any) => s + Number(p.amount), 0);
+                let allocated = 0;
+                for (let i = 0; i < linkedPayments.length; i++) {
+                    const p = linkedPayments[i];
+                    const isLast = i === linkedPayments.length - 1;
+                    const share = amountChanged
+                        ? (isLast
+                            ? Math.round((newAmount! - allocated) * 100) / 100
+                            : Math.round((newAmount! * (Number(p.amount) / oldSum)) * 100) / 100)
+                        : Number(p.amount);
+                    if (amountChanged) allocated += share;
+                    await db.payments.update({
+                        where: { id: p.id },
+                        data: {
+                            ...(amountChanged ? { amount: share } : {}),
+                            ...(dateChanged ? { created_at: newDate } : {}),
+                        },
+                    });
+                }
+            }
+
+            const allPayments = await db.payments.findMany({ where: { invoice_id: invoiceId, status: 'Completed' } });
+            const totalPaid = allPayments.reduce((s: number, p: any) => s + Number(p.amount), 0);
+            const invoice = await db.invoices.findUnique({ where: { id: invoiceId } });
+            const netAmount = Number(invoice?.net_amount || 0);
+            const balance = netAmount - totalPaid;
+            await db.invoices.update({
+                where: { id: invoiceId },
+                data: { paid_amount: totalPaid, balance_due: balance > 0 ? balance : 0 },
+            });
+        }
 
         const updated = await db.patientDeposit.update({ where: { id: depositId }, data });
 
@@ -406,12 +538,15 @@ export async function updateDeposit(
                         amount: Number(deposit.amount),
                         payment_method: deposit.payment_method,
                         payment_ref: deposit.payment_ref,
+                        created_at: deposit.created_at,
                     },
                     after: {
                         amount: Number(updated.amount),
                         payment_method: updated.payment_method,
                         payment_ref: updated.payment_ref,
+                        created_at: updated.created_at,
                     },
+                    cascaded_to_invoice: isFullyApplied && (amountChanged || dateChanged) ? invoiceId : undefined,
                 }),
                 user_id: session?.id,
                 username: session?.username,

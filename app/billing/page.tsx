@@ -321,16 +321,10 @@ export function MasterBillingContent({ shell = "app" }: { shell?: "app" | "admin
 
       {/* Master Grid — column filters live in the header row itself */}
       <div className="mt-5 bg-white border border-gray-200 rounded-2xl overflow-hidden">
-        {loading ? (
-          <div className="py-20 flex justify-center">
-            <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
-          </div>
-        ) : grid.length === 0 ? (
-          <div className="py-16 text-center text-sm text-gray-400">
-            No invoices match the current filters.
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
+        {/* Table (and its header search input) always stays mounted — swapping
+            it out on every keystroke's reload used to unmount the search
+            <input>, which dropped focus mid-type. */}
+        <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead className="bg-gray-50 text-[10px] uppercase tracking-wider text-gray-500 font-bold sticky top-0 z-10">
                 <tr>
@@ -371,7 +365,20 @@ export function MasterBillingContent({ shell = "app" }: { shell?: "app" | "admin
                 </tr>
               </thead>
               <tbody>
-                {grid.map((r) => {
+                {loading ? (
+                  <tr>
+                    <td colSpan={13} className="py-20 text-center">
+                      <Loader2 className="h-6 w-6 animate-spin text-gray-400 mx-auto" />
+                    </td>
+                  </tr>
+                ) : grid.length === 0 ? (
+                  <tr>
+                    <td colSpan={13} className="py-16 text-center text-sm text-gray-400">
+                      No invoices match the current filters.
+                    </td>
+                  </tr>
+                ) : (
+                grid.map((r) => {
                   const payer = payerLabel(r);
                   return (
                     <tr key={r.invoice_id} className="group border-t border-gray-100 hover:bg-blue-50/30">
@@ -469,11 +476,11 @@ export function MasterBillingContent({ shell = "app" }: { shell?: "app" | "admin
                       </Td>
                     </tr>
                   );
-                })}
+                })
+                )}
               </tbody>
             </table>
-          </div>
-        )}
+        </div>
 
         {/* Pagination */}
         {meta && (

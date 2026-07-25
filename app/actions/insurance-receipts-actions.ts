@@ -33,6 +33,32 @@ function round2(n: number): number {
 
 const TOL = 0.01;
 
+// Attach, per invoice, how much the patient already paid directly on this
+// bill (outside the TPA settlement) and how much of their deposit is still
+// available/unapplied. Lets the receipt screen show the real remaining gap
+// instead of Bill − Received alone. One extra query across all involved
+// patients rather than one per row.
+async function attachPatientMoney(db: any, organizationId: string, invoices: any[]) {
+  const patientIds = [...new Set(invoices.map((i: any) => i.patient_id).filter(Boolean))];
+  const deposits = patientIds.length
+    ? await db.patientDeposit.findMany({
+        where: { organizationId, patient_id: { in: patientIds }, status: 'Active' },
+        select: { patient_id: true, amount: true, applied_amount: true, refunded_amount: true },
+      })
+    : [];
+  const availableByPatient = new Map<string, number>();
+  for (const d of deposits) {
+    const available = Number(d.amount) - Number(d.applied_amount) - Number(d.refunded_amount);
+    if (available <= 0) continue;
+    availableByPatient.set(d.patient_id, round2((availableByPatient.get(d.patient_id) || 0) + available));
+  }
+  return invoices.map((i: any) => ({
+    ...i,
+    patient_paid: round2(Math.max(0, Number(i.paid_amount || 0) - Number(i.tpa_settled_amount || 0))),
+    deposit_available: availableByPatient.get(i.patient_id) || 0,
+  }));
+}
+
 // Map a receipt instrument to the payments.payment_method vocabulary.
 function instrumentToMethod(instrument?: string): string {
   const i = (instrument || 'NEFT').toLowerCase();
@@ -606,11 +632,47 @@ export async function getPendingAdvices(providerId?: number) {
       id: true, invoice_number: true, patient_id: true, net_amount: true,
       tpa_approved_amount: true, tpa_settled_amount: true, tpa_payable: true,
       tpa_claim_number: true, tpa_approved_at: true, version: true,
+      paid_amount: true,
       patient: { select: { full_name: true } },
     },
     orderBy: { tpa_approved_at: 'asc' }, take: 300,
   });
-  return { success: true, data: serialize(invoices) };
+  return { success: true, data: serialize(await attachPatientMoney(db, organizationId, invoices)) };
+}
+
+// Search TPA bills for this payer, by patient name/phone or bill number, so a
+// biller can pull a bill into the mapping table even when it hasn't cleared
+// getPendingAdvices's strict 'approved/partially_settled + payable > 0' filter
+// (e.g. the payer already paid but the claim wasn't marked approved in-system).
+// Deliberately looser than getPendingAdvices — this is a manual add, so the
+// biller is presumed to already know this is the right bill.
+export async function searchInvoicesForInsuranceReceipt(providerId: number, query: string) {
+  const { db, organizationId } = await requireTenantContext();
+  const q = (query || '').trim();
+  if (!providerId || q.length < 2) return { success: true, data: [] };
+  const invoices = await db.invoices.findMany({
+    where: {
+      organizationId,
+      billing_patient_type: 'tpa_insurance',
+      tpa_provider_id: providerId,
+      status: { not: 'Cancelled' },
+      OR: [
+        { invoice_number: { contains: q, mode: 'insensitive' } },
+        { patient_id: { contains: q, mode: 'insensitive' } },
+        { patient: { full_name: { contains: q, mode: 'insensitive' } } },
+        { patient: { phone: { contains: q, mode: 'insensitive' } } },
+      ],
+    },
+    select: {
+      id: true, invoice_number: true, patient_id: true, net_amount: true,
+      tpa_approved_amount: true, tpa_settled_amount: true, tpa_payable: true,
+      tpa_claim_number: true, tpa_approved_at: true, tpa_claim_status: true, version: true,
+      paid_amount: true,
+      patient: { select: { full_name: true } },
+    },
+    orderBy: { created_at: 'desc' }, take: 20,
+  });
+  return { success: true, data: serialize(await attachPatientMoney(db, organizationId, invoices)) };
 }
 
 /**

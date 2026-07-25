@@ -12,13 +12,14 @@ import {
   Inbox, Loader2, RefreshCw, IndianRupee, Clock, XCircle, FileWarning,
   ArrowDownToLine, AlertTriangle, Plus, X, Printer, Download, Undo2, History,
 } from 'lucide-react';
-import { getTpaDeskDashboard, getInsuranceOutstanding, getBillWiseSanction } from '@/app/actions/insurance-aging-actions';
+import { getTpaDeskDashboard, getInsuranceOutstanding, getBillWiseSanction, getPatientWiseOutstanding } from '@/app/actions/insurance-aging-actions';
 import { getHospitalBillingInfo } from '@/app/actions/admin-actions';
 import {
   getInsuranceReceiptSummary, listInsuranceReceipts,
   allocateReceipt, getPendingAdvices, recordAndAllocateReceipt, reverseInsuranceReceipt,
-  getInsuranceReceiptHistory,
+  getInsuranceReceiptHistory, searchInvoicesForInsuranceReceipt,
 } from '@/app/actions/insurance-receipts-actions';
+import { applyAvailableDepositToInvoice } from '@/app/actions/deposit-actions';
 
 const fmt = (n: number) =>
   new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(n || 0));
@@ -238,15 +239,26 @@ export function ReceivablesDashboard({ providers = [] }: { providers?: any[] }) 
 // ─────────────────────────────────────────────────────────────────────────────
 export function OutstandingAging({ providers = [] }: { providers?: any[] }) {
   const hospital = useHospital();
+  const [view, setView] = useState<'payer' | 'patient'>('payer');
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [agingDays, setAgingDays] = useState(60);
   const [providerId, setProviderId] = useState('');
+  const [patientData, setPatientData] = useState<any>(null);
+  const [patientLoading, setPatientLoading] = useState(true);
+  // Custom bill-date range — an alternative to the aging-bucket view, shared
+  // by both TPA-wise and Patient-wise (same underlying bills either way).
+  const [useCustomRange, setUseCustomRange] = useState(false);
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
+  const rangeOpts = useCustomRange ? { from: fromDate || undefined, to: toDate || undefined } : {};
 
   const load = useCallback(() => {
     setLoading(true);
-    getInsuranceOutstanding({ payer_type: 'tpa_insurance', agingDays, provider_id: providerId ? Number(providerId) : undefined }).then((r: any) => { if (r?.success) setData(r.data); }).finally(() => setLoading(false));
-  }, [agingDays, providerId]);
+    getInsuranceOutstanding({ payer_type: 'tpa_insurance', agingDays, provider_id: providerId ? Number(providerId) : undefined, ...rangeOpts }).then((r: any) => { if (r?.success) setData(r.data); }).finally(() => setLoading(false));
+    setPatientLoading(true);
+    getPatientWiseOutstanding({ provider_id: providerId ? Number(providerId) : undefined, ...rangeOpts }).then((r: any) => { if (r?.success) setPatientData(r.data); }).finally(() => setPatientLoading(false));
+  }, [agingDays, providerId, useCustomRange, fromDate, toDate]);
   useEffect(() => { load(); }, [load]);
 
   const payerLabel = providerId ? (providers.find((p: any) => String(p.id) === providerId)?.provider_name || 'Payer') : 'All payers';
@@ -259,9 +271,12 @@ export function OutstandingAging({ providers = [] }: { providers?: any[] }) {
     { header: 'Balance', val: (r) => Number(r.balance || 0), num: true, width: 16 },
   ];
   const ALIGN = COLS.map((c) => (c.num ? 'right' : 'left')) as ('left' | 'right')[];
+  const rangeLabel = useCustomRange && (fromDate || toDate)
+    ? `Range: ${fromDate ? new Date(fromDate).toLocaleDateString('en-GB') : 'start'} – ${toDate ? new Date(toDate).toLocaleDateString('en-GB') : 'today'}`
+    : '';
   const metaLines = [
     `Payer: ${payerLabel}`,
-    `Aging threshold: ${agingDays} days`,
+    rangeLabel || `Aging threshold: ${agingDays} days`,
     `${data?.rows?.length || 0} payer(s)`,
   ];
   const printRows = () => (data?.rows || []).map((r: any) => COLS.map((c) => (c.num ? fmt(c.val(r) as number) : c.val(r))));
@@ -288,64 +303,198 @@ export function OutstandingAging({ providers = [] }: { providers?: any[] }) {
     cols: COLS, rows: data?.rows || [], totals: totalsRow(),
   });
 
+  // ── Patient-wise view — same underlying bills, one row per bill (not rolled
+  // up per payer), with the TPA/insurance name carried on each row.
+  const dateStr = (d: any) => d ? new Date(d).toLocaleDateString('en-GB') : '—';
+  const PATIENT_COLS: ExportCol[] = [
+    { header: 'Patient', val: (r) => r.patient_name || '', width: 26 },
+    { header: 'TPA / Insurance', val: (r) => r.provider_name || '', width: 22 },
+    { header: 'Bill #', val: (r) => r.invoice_number || '', width: 20 },
+    { header: 'Bill Date', val: (r) => dateStr(r.bill_date), width: 14, nowrap: true },
+    { header: 'Admission Date', val: (r) => dateStr(r.admission_date), width: 16, nowrap: true },
+    { header: 'Discharge Date', val: (r) => dateStr(r.discharge_date), width: 16, nowrap: true },
+    { header: 'Bill Amount', val: (r) => Number(r.bill_amount || 0), num: true, width: 15 },
+    { header: 'Discount', val: (r) => Number(r.discount || 0), num: true, width: 13 },
+    { header: 'Net Bill Amount', val: (r) => Number(r.net_bill_amount || 0), num: true, width: 16 },
+    { header: 'Received', val: (r) => Number(r.received || 0), num: true, width: 14 },
+    { header: 'Outstanding', val: (r) => Number(r.outstanding || 0), num: true, width: 15 },
+  ];
+  const PATIENT_ALIGN = PATIENT_COLS.map((c) => (c.num ? 'right' : 'left')) as ('left' | 'right')[];
+  const patientMetaLines = [
+    `Payer: ${payerLabel}`,
+    ...(rangeLabel ? [rangeLabel] : []),
+    `${patientData?.rows?.length || 0} bill(s)`,
+  ];
+  const patientPrintRows = () => (patientData?.rows || []).map((r: any) => PATIENT_COLS.map((c) => (c.num ? fmt(c.val(r) as number) : c.val(r))));
+  const patientTotalsRow = () => patientData ? [
+    'TOTAL', '', '', '', '', '',
+    Number(patientData.totals.bill_amount || 0), Number(patientData.totals.discount || 0),
+    Number(patientData.totals.net_bill_amount || 0), Number(patientData.totals.received || 0),
+    Number(patientData.totals.outstanding || 0),
+  ] : undefined;
+  const patientPrintTotals = () => { const t = patientTotalsRow(); return t && t.map((v, i) => (PATIENT_COLS[i]?.num ? fmt(v as number) : v)); };
+
+  const handlePatientPrint = () => printTable({
+    title: 'Patient-Wise Outstanding',
+    subtitle: payerLabel,
+    meta: patientMetaLines.slice(1),
+    headers: PATIENT_COLS.map((c) => c.header), align: PATIENT_ALIGN,
+    nowrap: PATIENT_COLS.map((c) => !!c.nowrap),
+    rows: patientPrintRows(), footer: patientPrintTotals(), hospital,
+  });
+  const handlePatientExcel = () => downloadXlsx({
+    filename: `Patient-Wise-Outstanding-${new Date().toISOString().slice(0, 10)}.xlsx`,
+    sheetName: 'Patient-Wise Outstanding',
+    title: 'Patient-Wise Outstanding',
+    hospital: hospital?.name,
+    meta: patientMetaLines,
+    cols: PATIENT_COLS, rows: patientData?.rows || [], totals: patientTotalsRow(),
+  });
+
   return (
     <div>
       <div className="flex flex-wrap items-center gap-3 mb-3">
-        <span className="text-sm font-bold text-gray-600">Insurance Outstanding — aging threshold</span>
-        <input type="number" value={agingDays} onChange={(e) => setAgingDays(Number(e.target.value) || 60)} className="w-20 rounded-md border border-gray-300 px-2 py-1 text-sm" />
-        <span className="text-sm text-gray-600">days</span>
+        <div className="flex rounded-lg border border-gray-300 p-0.5 bg-gray-50">
+          <button onClick={() => setView('payer')}
+            className={`rounded-md px-3 py-1 text-xs font-bold transition-colors ${view === 'payer' ? 'bg-white shadow-sm text-blue-700' : 'text-gray-500 hover:text-gray-700'}`}>
+            TPA-wise
+          </button>
+          <button onClick={() => setView('patient')}
+            className={`rounded-md px-3 py-1 text-xs font-bold transition-colors ${view === 'patient' ? 'bg-white shadow-sm text-blue-700' : 'text-gray-500 hover:text-gray-700'}`}>
+            Patient-wise
+          </button>
+        </div>
+        {view === 'payer' && !useCustomRange && (<>
+          <input type="number" value={agingDays} onChange={(e) => setAgingDays(Number(e.target.value) || 60)} className="w-20 rounded-md border border-gray-300 px-2 py-1 text-sm" />
+          <span className="text-sm text-gray-600">days aging</span>
+        </>)}
+        <label className="flex items-center gap-1.5 text-xs font-bold text-gray-600 cursor-pointer select-none">
+          <input type="checkbox" checked={useCustomRange} onChange={(e) => setUseCustomRange(e.target.checked)} className="h-3.5 w-3.5 rounded border-gray-300" />
+          Custom Range
+        </label>
+        {useCustomRange && (<>
+          <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="rounded-md border border-gray-300 px-2 py-1.5 text-sm" />
+          <span className="text-xs text-gray-400">to</span>
+          <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="rounded-md border border-gray-300 px-2 py-1.5 text-sm" />
+        </>)}
         <select value={providerId} onChange={(e) => setProviderId(e.target.value)} className="rounded-md border border-gray-300 px-2 py-1.5 text-sm">
           <option value="">All payers</option>
           {providers.map((p: any) => <option key={p.id} value={p.id}>{p.provider_name}</option>)}
         </select>
         <div className="ml-auto flex items-center gap-3">
-          <button onClick={handleExcel} disabled={!data || data.rows.length === 0} className="flex items-center gap-1.5 rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-bold text-gray-600 hover:bg-gray-50 disabled:opacity-40">
-            <Download className="h-3.5 w-3.5" /> Excel
-          </button>
-          <button onClick={handlePrint} disabled={!data || data.rows.length === 0} className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-blue-700 disabled:opacity-40">
-            <Printer className="h-3.5 w-3.5" /> Print
-          </button>
+          {view === 'payer' ? (
+            <>
+              <button onClick={handleExcel} disabled={!data || data.rows.length === 0} className="flex items-center gap-1.5 rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-bold text-gray-600 hover:bg-gray-50 disabled:opacity-40">
+                <Download className="h-3.5 w-3.5" /> Excel
+              </button>
+              <button onClick={handlePrint} disabled={!data || data.rows.length === 0} className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-blue-700 disabled:opacity-40">
+                <Printer className="h-3.5 w-3.5" /> Print
+              </button>
+            </>
+          ) : (
+            <>
+              <button onClick={handlePatientExcel} disabled={!patientData || patientData.rows.length === 0} className="flex items-center gap-1.5 rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-bold text-gray-600 hover:bg-gray-50 disabled:opacity-40">
+                <Download className="h-3.5 w-3.5" /> Excel
+              </button>
+              <button onClick={handlePatientPrint} disabled={!patientData || patientData.rows.length === 0} className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-blue-700 disabled:opacity-40">
+                <Printer className="h-3.5 w-3.5" /> Print
+              </button>
+            </>
+          )}
           <button onClick={load} className="flex items-center gap-1.5 text-xs font-bold text-gray-500 hover:text-gray-700"><RefreshCw className="h-3.5 w-3.5" /> Refresh</button>
         </div>
       </div>
-      {loading ? <Spinner /> : !data ? <Empty msg="No data" /> : (
-        <div className="overflow-x-auto rounded-2xl border border-gray-200 bg-white shadow-sm">
-          <table className="min-w-full text-sm">
-            <thead className="bg-slate-50 text-gray-600">
-              <tr>
-                <th className="px-4 py-2.5 text-left font-black text-[11px] uppercase tracking-wider">Company Name</th>
-                <th className="px-4 py-2.5 text-right font-black text-[11px] uppercase tracking-wider">Opening</th>
-                <th className="px-4 py-2.5 text-right font-black text-[11px] uppercase tracking-wider">Below {data.agingDays} Days</th>
-                <th className="px-4 py-2.5 text-right font-black text-[11px] uppercase tracking-wider">Above {data.agingDays} Days</th>
-                <th className="px-4 py-2.5 text-right font-black text-[11px] uppercase tracking-wider">Unmapped Receipt</th>
-                <th className="px-4 py-2.5 text-right font-black text-[11px] uppercase tracking-wider">Balance</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {data.rows.map((r: any) => (
-                <tr key={r.key} className="hover:bg-slate-50">
-                  <td className="px-4 py-2.5 text-gray-800 font-medium">{r.payer_name}</td>
-                  <td className="px-4 py-2.5 text-right text-gray-400">{r.opening ? fmt(r.opening) : '-'}</td>
-                  <td className="px-4 py-2.5 text-right">{fmt(r.below)}</td>
-                  <td className="px-4 py-2.5 text-right">{fmt(r.above)}</td>
-                  <td className="px-4 py-2.5 text-right">{fmt(r.unmapped_receipt)}</td>
-                  <td className="px-4 py-2.5 text-right font-bold text-gray-900">{fmt(r.balance)}</td>
+
+      {view === 'payer' ? (
+        loading ? <Spinner /> : !data ? <Empty msg="No data" /> : (
+          <div className="overflow-x-auto rounded-2xl border border-gray-200 bg-white shadow-sm">
+            <table className="min-w-full text-sm">
+              <thead className="bg-slate-50 text-gray-600">
+                <tr>
+                  <th className="px-4 py-2.5 text-left font-black text-[11px] uppercase tracking-wider">Company Name</th>
+                  <th className="px-4 py-2.5 text-right font-black text-[11px] uppercase tracking-wider">Opening</th>
+                  <th className="px-4 py-2.5 text-right font-black text-[11px] uppercase tracking-wider">Below {data.agingDays} Days</th>
+                  <th className="px-4 py-2.5 text-right font-black text-[11px] uppercase tracking-wider">Above {data.agingDays} Days</th>
+                  <th className="px-4 py-2.5 text-right font-black text-[11px] uppercase tracking-wider">Unmapped Receipt</th>
+                  <th className="px-4 py-2.5 text-right font-black text-[11px] uppercase tracking-wider">Balance</th>
                 </tr>
-              ))}
-              {data.rows.length === 0 && <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">No outstanding</td></tr>}
-            </tbody>
-            <tfoot className="bg-slate-100 font-black text-gray-800">
-              <tr>
-                <td className="px-4 py-2.5 text-right">TOTAL</td>
-                <td className="px-4 py-2.5 text-right">{data.totals.opening ? fmt(data.totals.opening) : '-'}</td>
-                <td className="px-4 py-2.5 text-right">{fmt(data.totals.below)}</td>
-                <td className="px-4 py-2.5 text-right">{fmt(data.totals.above)}</td>
-                <td className="px-4 py-2.5 text-right">{fmt(data.totals.unmapped_receipt)}</td>
-                <td className="px-4 py-2.5 text-right">{fmt(data.totals.balance)}</td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {data.rows.map((r: any) => (
+                  <tr key={r.key} className="hover:bg-slate-50">
+                    <td className="px-4 py-2.5 text-gray-800 font-medium">{r.payer_name}</td>
+                    <td className="px-4 py-2.5 text-right text-gray-400">{r.opening ? fmt(r.opening) : '-'}</td>
+                    <td className="px-4 py-2.5 text-right">{fmt(r.below)}</td>
+                    <td className="px-4 py-2.5 text-right">{fmt(r.above)}</td>
+                    <td className="px-4 py-2.5 text-right">{fmt(r.unmapped_receipt)}</td>
+                    <td className="px-4 py-2.5 text-right font-bold text-gray-900">{fmt(r.balance)}</td>
+                  </tr>
+                ))}
+                {data.rows.length === 0 && <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">No outstanding</td></tr>}
+              </tbody>
+              <tfoot className="bg-slate-100 font-black text-gray-800">
+                <tr>
+                  <td className="px-4 py-2.5 text-right">TOTAL</td>
+                  <td className="px-4 py-2.5 text-right">{data.totals.opening ? fmt(data.totals.opening) : '-'}</td>
+                  <td className="px-4 py-2.5 text-right">{fmt(data.totals.below)}</td>
+                  <td className="px-4 py-2.5 text-right">{fmt(data.totals.above)}</td>
+                  <td className="px-4 py-2.5 text-right">{fmt(data.totals.unmapped_receipt)}</td>
+                  <td className="px-4 py-2.5 text-right">{fmt(data.totals.balance)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        )
+      ) : (
+        patientLoading ? <Spinner /> : !patientData ? <Empty msg="No data" /> : (
+          <div className="overflow-x-auto rounded-2xl border border-gray-200 bg-white shadow-sm">
+            <table className="min-w-full text-sm">
+              <thead className="bg-slate-50 text-gray-600">
+                <tr>
+                  <th className="px-3 py-2.5 text-left font-black text-[11px] uppercase tracking-wider">Patient</th>
+                  <th className="px-3 py-2.5 text-left font-black text-[11px] uppercase tracking-wider">TPA / Insurance</th>
+                  <th className="px-3 py-2.5 text-left font-black text-[11px] uppercase tracking-wider">Bill #</th>
+                  <th className="px-3 py-2.5 text-left font-black text-[11px] uppercase tracking-wider">Bill Date</th>
+                  <th className="px-3 py-2.5 text-left font-black text-[11px] uppercase tracking-wider">Admission</th>
+                  <th className="px-3 py-2.5 text-left font-black text-[11px] uppercase tracking-wider">Discharge</th>
+                  <th className="px-3 py-2.5 text-right font-black text-[11px] uppercase tracking-wider">Bill Amount</th>
+                  <th className="px-3 py-2.5 text-right font-black text-[11px] uppercase tracking-wider">Discount</th>
+                  <th className="px-3 py-2.5 text-right font-black text-[11px] uppercase tracking-wider">Net Bill</th>
+                  <th className="px-3 py-2.5 text-right font-black text-[11px] uppercase tracking-wider">Received</th>
+                  <th className="px-3 py-2.5 text-right font-black text-[11px] uppercase tracking-wider">Outstanding</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {(patientData.rows || []).map((r: any) => (
+                  <tr key={r.invoice_id} className="hover:bg-slate-50">
+                    <td className="px-3 py-2.5 text-gray-800 font-medium whitespace-nowrap">{r.patient_name}</td>
+                    <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{r.provider_name || '—'}</td>
+                    <td className="px-3 py-2.5 font-mono text-xs text-gray-600 whitespace-nowrap">{r.invoice_number || '—'}</td>
+                    <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{dateStr(r.bill_date)}</td>
+                    <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{dateStr(r.admission_date)}</td>
+                    <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{dateStr(r.discharge_date)}</td>
+                    <td className="px-3 py-2.5 text-right">{fmt(r.bill_amount)}</td>
+                    <td className="px-3 py-2.5 text-right text-amber-600">{r.discount ? fmt(r.discount) : '—'}</td>
+                    <td className="px-3 py-2.5 text-right">{fmt(r.net_bill_amount)}</td>
+                    <td className="px-3 py-2.5 text-right text-emerald-700">{r.received ? fmt(r.received) : '—'}</td>
+                    <td className="px-3 py-2.5 text-right font-bold text-rose-600">{fmt(r.outstanding)}</td>
+                  </tr>
+                ))}
+                {(patientData.rows || []).length === 0 && <tr><td colSpan={11} className="px-4 py-8 text-center text-gray-400">No outstanding</td></tr>}
+              </tbody>
+              <tfoot className="bg-slate-100 font-black text-gray-800">
+                <tr>
+                  <td className="px-3 py-2.5 text-right" colSpan={6}>TOTAL</td>
+                  <td className="px-3 py-2.5 text-right">{fmt(patientData.totals.bill_amount)}</td>
+                  <td className="px-3 py-2.5 text-right">{fmt(patientData.totals.discount)}</td>
+                  <td className="px-3 py-2.5 text-right">{fmt(patientData.totals.net_bill_amount)}</td>
+                  <td className="px-3 py-2.5 text-right">{fmt(patientData.totals.received)}</td>
+                  <td className="px-3 py-2.5 text-right">{fmt(patientData.totals.outstanding)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        )
       )}
     </div>
   );
@@ -595,6 +744,9 @@ export function NewReceiptModal({ providers, onClose, onSaved, defaultProviderId
   // Saved receipt, kept so the biller can print it immediately instead of
   // hunting for the row afterwards.
   const [saved, setSaved] = useState<{ id: number; number: string } | null>(null);
+  // Non-blocking notices from the post-save deposit consumption step — the
+  // receipt and bill mapping are already safely recorded by the time these run.
+  const [depositNotes, setDepositNotes] = useState<string[]>([]);
 
   // ── Patient-bill mapping (merged in from the old separate "Allocate" step) ──
   const [advices, setAdvices] = useState<any[]>([]);
@@ -608,15 +760,55 @@ export function NewReceiptModal({ providers, onClose, onSaved, defaultProviderId
   // disallowed gap — write it off, or recover it from the patient.
   const [received, setReceived] = useState<Record<number, string>>({});
   const [dispo, setDispo] = useState<Record<number, 'WriteOff' | 'ToRecover'>>({});
+  // TDS defaults to 10% of Received but the biller can override it per bill —
+  // payers don't always withhold exactly 10% (slab varies by section/payer).
+  // Empty/undefined means "use the computed default".
+  const [tdsOverride, setTdsOverride] = useState<Record<number, string>>({});
+  // How much of the patient's held deposit to use against this bill's gap.
+  // Defaults to whatever's needed to close the gap (never more), but the
+  // biller can reduce it — e.g. the deposit is earmarked for something else.
+  // Empty/undefined means "use the computed default".
+  const [depositUse, setDepositUse] = useState<Record<number, string>>({});
+
+  // Manually-added bills (via the search box below) — merged with the
+  // payer's auto-fetched pending advices so the biller isn't limited to only
+  // what getPendingAdvices surfaces (it's deliberately strict — see its
+  // comment — so a genuine bill can be missing from that list).
+  const [addQuery, setAddQuery] = useState('');
+  const [addResults, setAddResults] = useState<any[]>([]);
+  const [addSearching, setAddSearching] = useState(false);
 
   // Load this payer's approved bills awaiting receipt whenever the payer changes.
   useEffect(() => {
-    if (!form.provider_id) { setAdvices([]); setReceived({}); setDispo({}); return; }
-    setAdvLoading(true); setReceived({}); setDispo({});
+    if (!form.provider_id) { setAdvices([]); setReceived({}); setDispo({}); setTdsOverride({}); setDepositUse({}); return; }
+    setAdvLoading(true); setReceived({}); setDispo({}); setTdsOverride({}); setDepositUse({});
+    setAddQuery(''); setAddResults([]);
     getPendingAdvices(Number(form.provider_id))
       .then((r: any) => { if (r?.success) setAdvices(r.data || []); })
       .finally(() => setAdvLoading(false));
   }, [form.provider_id]);
+
+  // Debounced search for bills to add to the mapping table.
+  useEffect(() => {
+    const q = addQuery.trim();
+    if (!form.provider_id || q.length < 2) { setAddResults([]); return; }
+    setAddSearching(true);
+    const t = setTimeout(() => {
+      searchInvoicesForInsuranceReceipt(Number(form.provider_id), q)
+        .then((r: any) => {
+          if (!r?.success) return;
+          const existingIds = new Set(advices.map((a: any) => a.id));
+          setAddResults((r.data || []).filter((inv: any) => !existingIds.has(inv.id)));
+        })
+        .finally(() => setAddSearching(false));
+    }, 300);
+    return () => clearTimeout(t);
+  }, [addQuery, form.provider_id, advices]);
+
+  const addBill = (invoice: any) => {
+    setAdvices((prev) => (prev.some((a) => a.id === invoice.id) ? prev : [...prev, invoice]));
+    setAddQuery(''); setAddResults([]);
+  };
 
   const num = (v: string) => Number(v) || 0;
   const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
@@ -626,12 +818,35 @@ export function NewReceiptModal({ providers, onClose, onSaved, defaultProviderId
   const rowCalc = (a: any) => {
     const bill = Number(a.net_amount || 0);
     const rcv = num(received[a.id]);           // gross settled by the payer
-    const tds = round2(rcv * TDS_RATE);        // withheld out of `rcv`
+    const tdsRaw = tdsOverride[a.id];
+    const tdsIsOverridden = tdsRaw !== undefined && tdsRaw !== '';
+    const tds = tdsIsOverridden ? round2(num(tdsRaw)) : round2(rcv * TDS_RATE); // withheld out of `rcv`
     const cash = round2(rcv - tds);            // what actually hits the bank
+    // Disallowed is the TPA-side gap (Bill − Received). This is what's
+    // recorded against the claim (allocateReceipt's settled+disallowed+tds
+    // must sum to Bill) — kept as the raw figure regardless of what the
+    // patient has separately covered, so the claim can still reach a clean
+    // "settled" status. What the patient already covered is netted out only
+    // for what's SHOWN and for how much of it still needs a write-off vs
+    // recover decision.
     const disallowed = round2(Math.max(0, bill - rcv));
-    const disposition: 'WriteOff' | 'ToRecover' = dispo[a.id] || 'WriteOff';
-    const invalid = rcv > 0 && rcv - bill > 0.01; // can't settle more than the bill
-    return { bill, rcv, tds, cash, disallowed, disposition, invalid };
+    const patientPaid = round2(Math.max(0, Number(a.patient_paid || 0)));
+    const depositAvailable = round2(Math.max(0, Number(a.deposit_available || 0)));
+    // Never defaults to more deposit than is actually needed to close what's
+    // left of the gap after the patient's direct payment is accounted for.
+    const depositNeeded = round2(Math.max(0, disallowed - patientPaid));
+    const depositDefault = round2(Math.min(depositAvailable, depositNeeded));
+    const depositRaw = depositUse[a.id];
+    const depositChosen = depositRaw !== undefined && depositRaw !== '' ? num(depositRaw) : depositDefault;
+    const depositUsed = round2(Math.max(0, Math.min(depositChosen, depositDefault)));
+    const disallowedNet = round2(Math.max(0, disallowed - patientPaid - depositUsed));
+    // Money the patient already put in (deposit + direct payment) is
+    // recovered, not written off — default the disposition accordingly, but
+    // still let the biller override it for whatever's genuinely left.
+    const disposition: 'WriteOff' | 'ToRecover' = dispo[a.id] || ((patientPaid > 0 || depositUsed > 0) ? 'ToRecover' : 'WriteOff');
+    const invalid = (rcv > 0 && rcv - bill > 0.01) // can't settle more than the bill
+      || (rcv > 0 && (tds < 0 || tds - rcv > 0.01)); // TDS can't exceed what was received
+    return { bill, rcv, tds, cash, disallowed, disallowedNet, patientPaid, depositAvailable, depositDefault, depositUsed, disposition, invalid, tdsIsOverridden };
   };
 
   const rows = advices.map((a: any) => ({ a, ...rowCalc(a) }));
@@ -643,6 +858,9 @@ export function NewReceiptModal({ providers, onClose, onSaved, defaultProviderId
   const totalDisallowed = round2(active.reduce((s, r) => s + r.disallowed, 0));
   const totalRecover = round2(active.reduce((s, r) => s + (r.disposition === 'ToRecover' ? r.disallowed : 0), 0));
   const totalWriteOff = round2(totalDisallowed - totalRecover);
+  const totalPatientPaid = round2(active.reduce((s, r) => s + r.patientPaid, 0));
+  const totalDepositUsed = round2(active.reduce((s, r) => s + r.depositUsed, 0));
+  const totalNetDisallowed = round2(active.reduce((s, r) => s + r.disallowedNet, 0));
   const anyInvalid = rows.some((r) => r.invalid);
 
   const manualReceived = num(form.manual_received); // fallback when the payer has no mapped bills yet
@@ -690,6 +908,24 @@ export function NewReceiptModal({ providers, onClose, onSaved, defaultProviderId
       setPartialMsg(`Receipt ${res.receipt_number} saved, but mapping to bills failed: ${res.allocationError}. The money is recorded (unallocated) — map it via the RECEIPT button.`);
       return;
     }
+
+    // Bills are now settled with the TPA. For any bill where the biller chose
+    // to close the remaining gap from a held deposit, consume it now — the
+    // receipt itself is unaffected either way, so a deposit hiccup here is
+    // reported but never blocks the save.
+    const withDeposit = active.filter((r) => r.depositUsed > 0.01);
+    if (withDeposit.length) {
+      const notes: string[] = [];
+      for (const r of withDeposit) {
+        const dep: any = await applyAvailableDepositToInvoice(r.a.patient_id, r.a.id, r.depositUsed);
+        if (!dep?.success) {
+          notes.push(`${r.a.invoice_number}: deposit not applied — ${dep?.error || 'unknown error'}.`);
+        } else if (round2(Number(dep.applied || 0)) + 0.01 < r.depositUsed) {
+          notes.push(`${r.a.invoice_number}: only ${fmt(dep.applied)} of ${fmt(r.depositUsed)} deposit could be applied (balance changed).`);
+        }
+      }
+      if (notes.length) setDepositNotes(notes);
+    }
     // Fully saved: hold the modal open on a short confirmation so the receipt can
     // be printed straight away. If we somehow have no id to print, just close.
     if (!res.data?.id) onSaved();
@@ -705,8 +941,15 @@ export function NewReceiptModal({ providers, onClose, onSaved, defaultProviderId
             <p className="mt-0.5 text-xs text-emerald-700">
               {fmt(receiptTotal)} credited{hasAdvices ? ` · ${active.length} bill(s) settled` : ' · unallocated'}
               {totalTds > 0 ? ` · TDS ${fmt(totalTds)} withheld by the payer` : ''}
+              {totalDepositUsed > 0 ? ` · ${fmt(totalDepositUsed)} settled from deposit` : ''}
             </p>
           </div>
+          {depositNotes.length > 0 && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 space-y-1">
+              <p className="text-xs font-bold text-amber-800">Deposit application needs a look:</p>
+              {depositNotes.map((n, i) => <p key={i} className="text-xs text-amber-700">{n}</p>)}
+            </div>
+          )}
           <div className="flex justify-end gap-2">
             <button onClick={onSaved} className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-bold">Done</button>
             <a href={`/api/insurance/receipt/${saved.id}/print`} target="_blank" rel="noopener noreferrer"
@@ -745,72 +988,130 @@ export function NewReceiptModal({ providers, onClose, onSaved, defaultProviderId
         <div className="rounded-xl border border-blue-200 bg-blue-50/40 p-3 space-y-2">
           <div className="flex items-center justify-between">
             <p className="text-[11px] font-black uppercase tracking-wider text-blue-700">Map to Patient Bills</p>
-            <p className="text-[10px] text-gray-500">Bill = Received + Disallowed &nbsp;·&nbsp; TDS (10%) is deducted <em>from</em> Received</p>
+            <p className="text-[10px] text-gray-500">Bill = Received + Disallowed &nbsp;·&nbsp; TDS (10%) is deducted <em>from</em> Received &nbsp;·&nbsp; Disallowed is net of Patient Paid &amp; Deposit</p>
           </div>
           {!form.provider_id ? (
             <p className="text-xs text-gray-400">Select a payer to see its approved bills awaiting receipt.</p>
-          ) : advLoading ? (
-            <div className="py-3"><Loader2 className="mx-auto h-4 w-4 animate-spin text-gray-400" /></div>
-          ) : !hasAdvices ? (
-            <div className="space-y-2">
-              <p className="text-xs text-amber-600">No approved bills for this payer yet — record the money as unallocated and map it later via the RECEIPT button.</p>
-              <Field label="Amount Received *"><input type="number" className={INPUT} value={form.manual_received} onChange={(e) => setForm({ ...form, manual_received: e.target.value })} /></Field>
-            </div>
           ) : (
             <>
-              <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white max-h-[30vh]">
-                <table className="min-w-full text-sm">
-                  <thead className="bg-slate-50 text-gray-600 sticky top-0">
-                    <tr>
-                      <th className="px-2 py-1.5 text-left font-bold text-[11px]">Bill #</th>
-                      <th className="px-2 py-1.5 text-left font-bold text-[11px]">Patient</th>
-                      <th className="px-2 py-1.5 text-right font-bold text-[11px]">Bill Amount</th>
-                      <th className="px-2 py-1.5 text-right font-bold text-[11px]">Received</th>
-                      <th className="px-2 py-1.5 text-right font-bold text-[11px]">TDS (10%)</th>
-                      <th className="px-2 py-1.5 text-right font-bold text-[11px]">In Bank</th>
-                      <th className="px-2 py-1.5 text-right font-bold text-[11px]">Disallowed</th>
-                      <th className="px-2 py-1.5 text-left font-bold text-[11px]">Disallowed gap →</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {rows.map(({ a, bill, rcv, tds, cash, disallowed, disposition, invalid }) => (
-                      <tr key={a.id} className={invalid ? 'bg-red-50' : ''}>
-                        <td className="px-2 py-1 font-mono text-[11px] whitespace-nowrap">{a.invoice_number}</td>
-                        <td className="px-2 py-1 text-xs whitespace-nowrap">{a.patient?.full_name || a.patient_id}</td>
-                        <td className="px-2 py-1 text-right text-xs font-semibold">{fmt(bill)}</td>
-                        <td className="px-2 py-1">
-                          <input type="number" className={`w-24 rounded border px-1.5 py-0.5 text-right text-xs ${invalid ? 'border-red-400' : 'border-gray-300'}`}
-                            value={received[a.id] || ''} onChange={(e) => setReceived((p) => ({ ...p, [a.id]: e.target.value }))} />
-                        </td>
-                        <td className="px-2 py-1 text-right text-xs text-gray-500">{rcv > 0 ? fmt(tds) : '—'}</td>
-                        <td className="px-2 py-1 text-right text-xs font-semibold text-gray-700">{rcv > 0 ? fmt(cash) : '—'}</td>
-                        <td className="px-2 py-1 text-right text-xs text-rose-600">{rcv > 0 ? fmt(disallowed) : '—'}</td>
-                        <td className="px-2 py-1">
-                          {rcv > 0 && disallowed > 0 ? (
-                            <select className="rounded border border-gray-300 px-1 py-0.5 text-[11px]"
-                              value={disposition} onChange={(e) => setDispo((p) => ({ ...p, [a.id]: e.target.value as 'WriteOff' | 'ToRecover' }))}>
-                              <option value="WriteOff">Write off</option>
-                              <option value="ToRecover">Recover from patient</option>
-                            </select>
-                          ) : <span className="text-gray-300 text-[11px]">—</span>}
-                        </td>
-                      </tr>
+              {/* Add any bill for this payer — getPendingAdvices only surfaces
+                  approved/partially_settled claims with a payable balance, so a
+                  legitimate bill can be missing from the auto list below. */}
+              <div className="relative">
+                <input
+                  placeholder="Search patient name, UHID or bill # to add…"
+                  value={addQuery}
+                  onChange={(e) => setAddQuery(e.target.value)}
+                  className={INPUT}
+                />
+                {addSearching && <Loader2 className="absolute right-2.5 top-2.5 h-4 w-4 animate-spin text-gray-400" />}
+                {addResults.length > 0 && (
+                  <div className="absolute z-20 mt-1 w-full rounded-lg border border-gray-200 bg-white shadow-lg max-h-48 overflow-auto">
+                    {addResults.map((inv: any) => (
+                      <button key={inv.id} type="button" onClick={() => addBill(inv)}
+                        className="flex w-full items-center justify-between gap-2 border-b border-gray-100 px-3 py-2 text-left text-xs last:border-0 hover:bg-blue-50">
+                        <span className="font-mono">{inv.invoice_number}</span>
+                        <span className="flex-1 truncate px-2">{inv.patient?.full_name || inv.patient_id}</span>
+                        <span className="font-semibold">₹{fmt(inv.net_amount)}</span>
+                      </button>
                     ))}
-                  </tbody>
-                </table>
+                  </div>
+                )}
+                {addQuery.trim().length >= 2 && !addSearching && addResults.length === 0 && (
+                  <p className="mt-1 text-[11px] text-gray-400">No matching bill found for this payer.</p>
+                )}
               </div>
-              {anyInvalid && <p className="text-[11px] text-red-600">Received cannot exceed the bill amount — reduce the received value.</p>}
-              {totalReceived > 0 && (
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-gray-600">
-                  <span>Bill <strong>{fmt(totalBill)}</strong></span>
-                  <span>Received <strong className="text-gray-900">{fmt(totalReceived)}</strong></span>
-                  <span>TDS <strong>{fmt(totalTds)}</strong></span>
-                  <span>In bank <strong className="text-gray-900">{fmt(totalCash)}</strong></span>
-                  <span>Disallowed <strong className="text-rose-600">{fmt(totalDisallowed)}</strong></span>
-                  {totalWriteOff > 0 && <span>· written off <strong>{fmt(totalWriteOff)}</strong></span>}
-                  {totalRecover > 0 && <span>· from patient <strong className="text-amber-700">{fmt(totalRecover)}</strong></span>}
-                  <span className="text-green-600 font-bold">· bill settled</span>
+
+              {advLoading ? (
+                <div className="py-3"><Loader2 className="mx-auto h-4 w-4 animate-spin text-gray-400" /></div>
+              ) : !hasAdvices ? (
+                <div className="space-y-2">
+                  <p className="text-xs text-amber-600">No approved bills for this payer yet — search above to add one, or record the money as unallocated and map it later via the RECEIPT button.</p>
+                  <Field label="Amount Received *"><input type="number" className={INPUT} value={form.manual_received} onChange={(e) => setForm({ ...form, manual_received: e.target.value })} /></Field>
                 </div>
+              ) : (
+                <>
+                  <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white max-h-[30vh]">
+                    <table className="min-w-full text-sm">
+                      <thead className="bg-slate-50 text-gray-600 sticky top-0">
+                        <tr>
+                          <th className="px-2 py-1.5 text-left font-bold text-[11px]">Bill #</th>
+                          <th className="px-2 py-1.5 text-left font-bold text-[11px]">Patient</th>
+                          <th className="px-2 py-1.5 text-right font-bold text-[11px]">Bill Amount</th>
+                          <th className="px-2 py-1.5 text-right font-bold text-[11px]">Received</th>
+                          <th className="px-2 py-1.5 text-right font-bold text-[11px]">TDS</th>
+                          <th className="px-2 py-1.5 text-right font-bold text-[11px]">In Bank</th>
+                          <th className="px-2 py-1.5 text-right font-bold text-[11px]">Patient Paid</th>
+                          <th className="px-2 py-1.5 text-right font-bold text-[11px]">Deposit</th>
+                          <th className="px-2 py-1.5 text-right font-bold text-[11px]">Disallowed</th>
+                          <th className="px-2 py-1.5 text-left font-bold text-[11px]">Disallowed gap →</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {rows.map(({ a, bill, rcv, tds, cash, disallowed, disallowedNet, patientPaid, depositAvailable, depositUsed, disposition, invalid, tdsIsOverridden }) => (
+                          <tr key={a.id} className={invalid ? 'bg-red-50' : ''}>
+                            <td className="px-2 py-1 font-mono text-[11px] whitespace-nowrap">{a.invoice_number}</td>
+                            <td className="px-2 py-1 text-xs whitespace-nowrap">{a.patient?.full_name || a.patient_id}</td>
+                            <td className="px-2 py-1 text-right text-xs font-semibold">{fmt(bill)}</td>
+                            <td className="px-2 py-1">
+                              <input type="number" className={`w-24 rounded border px-1.5 py-0.5 text-right text-xs ${invalid ? 'border-red-400' : 'border-gray-300'}`}
+                                value={received[a.id] || ''} onChange={(e) => setReceived((p) => ({ ...p, [a.id]: e.target.value }))} />
+                            </td>
+                            <td className="px-2 py-1">
+                              <input type="number" disabled={rcv <= 0}
+                                title={tdsIsOverridden ? 'Overridden — clear to go back to the 10% default' : 'Defaults to 10% of Received — edit to override'}
+                                className={`w-20 rounded border px-1.5 py-0.5 text-right text-xs disabled:bg-gray-50 disabled:text-gray-300 ${invalid ? 'border-red-400' : tdsIsOverridden ? 'border-blue-400 bg-blue-50/60' : 'border-gray-300'}`}
+                                placeholder={rcv > 0 ? fmt(round2(rcv * TDS_RATE)) : '0.00'}
+                                value={tdsOverride[a.id] ?? ''}
+                                onChange={(e) => setTdsOverride((p) => ({ ...p, [a.id]: e.target.value }))} />
+                            </td>
+                            <td className="px-2 py-1 text-right text-xs font-semibold text-gray-700">{rcv > 0 ? fmt(cash) : '—'}</td>
+                            <td className="px-2 py-1 text-right text-xs text-gray-500" title="Already paid directly on this bill (cash/card/deposit already applied)">
+                              {patientPaid > 0 ? fmt(patientPaid) : '—'}
+                            </td>
+                            <td className="px-2 py-1">
+                              {depositAvailable > 0 ? (
+                                <input type="number" title={`₹${fmt(depositAvailable)} held — pre-filled to close the gap, edit to use less`}
+                                  className="w-20 rounded border border-blue-300 bg-blue-50/60 px-1.5 py-0.5 text-right text-xs"
+                                  placeholder={fmt(depositUsed)}
+                                  value={depositUse[a.id] ?? ''}
+                                  onChange={(e) => setDepositUse((p) => ({ ...p, [a.id]: e.target.value }))} />
+                              ) : <span className="text-gray-300 text-[11px]">—</span>}
+                            </td>
+                            <td className="px-2 py-1 text-right text-xs text-rose-600"
+                              title={rcv > 0 && (patientPaid > 0 || depositUsed > 0) ? `Raw gap ${fmt(disallowed)} − Patient Paid ${fmt(patientPaid)} − Deposit ${fmt(depositUsed)}` : undefined}>
+                              {rcv > 0 ? fmt(disallowedNet) : '—'}
+                            </td>
+                            <td className="px-2 py-1">
+                              {rcv > 0 && disallowed > 0 ? (
+                                <select className="rounded border border-gray-300 px-1 py-0.5 text-[11px]"
+                                  value={disposition} onChange={(e) => setDispo((p) => ({ ...p, [a.id]: e.target.value as 'WriteOff' | 'ToRecover' }))}>
+                                  <option value="WriteOff">Write off</option>
+                                  <option value="ToRecover">Recover from patient</option>
+                                </select>
+                              ) : <span className="text-gray-300 text-[11px]">—</span>}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {anyInvalid && <p className="text-[11px] text-red-600">Received cannot exceed the bill amount — reduce the received value.</p>}
+                  {totalReceived > 0 && (
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-gray-600">
+                      <span>Bill <strong>{fmt(totalBill)}</strong></span>
+                      <span>Received <strong className="text-gray-900">{fmt(totalReceived)}</strong></span>
+                      <span>TDS <strong>{fmt(totalTds)}</strong></span>
+                      <span>In bank <strong className="text-gray-900">{fmt(totalCash)}</strong></span>
+                      {totalPatientPaid > 0 && <span>Patient paid <strong>{fmt(totalPatientPaid)}</strong></span>}
+                      {totalDepositUsed > 0 && <span>Deposit used <strong className="text-blue-700">{fmt(totalDepositUsed)}</strong></span>}
+                      <span>Disallowed <strong className="text-rose-600">{fmt(totalNetDisallowed)}</strong></span>
+                      {totalWriteOff > 0 && <span>· written off <strong>{fmt(totalWriteOff)}</strong></span>}
+                      {totalRecover > 0 && <span>· from patient <strong className="text-amber-700">{fmt(totalRecover)}</strong></span>}
+                      <span className="text-green-600 font-bold">· bill settled</span>
+                    </div>
+                  )}
+                </>
               )}
             </>
           )}
