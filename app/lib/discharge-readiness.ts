@@ -52,7 +52,7 @@ export async function evaluateDischargeReadiness(
 
     const now = new Date();
 
-    const [pendingDoses, openTasks, assessmentCount, latestVitals, pendingLabs, pendingIndents] =
+    const [pendingDoses, openTasks, assessmentCount, latestVitals, pendingLabs, pendingIndents, invoice] =
         await Promise.all([
             db.medicationAdministration.count({
                 where: { admission_id: admissionId, status: 'Scheduled', scheduled_time: { lt: now } },
@@ -72,7 +72,24 @@ export async function evaluateDischargeReadiness(
             db.pharmacy_orders.count({
                 where: { patient_id: admission.patient_id, status: 'Pending' },
             }),
+            db.invoices.findFirst({
+                where: { admission_id: admissionId, status: { not: 'Cancelled' } },
+                select: { id: true, net_amount: true },
+            }),
         ]);
+
+    // Room and nursing charges are posted manually by design (auto-accrual is
+    // deliberately disabled), but nothing ever checked they had been posted. A
+    // stay could be finalised at zero — three such bills exist on the demo data,
+    // and the audit produced a fourth by discharging a bed-day for nothing.
+    const stayDays = Math.max(
+        1,
+        Math.ceil((now.getTime() - new Date(admission.admission_date).getTime()) / 86400000),
+    );
+    const itemCount = invoice
+        ? await db.invoice_items.count({ where: { invoice_id: invoice.id } })
+        : 0;
+    const billedNothing = !invoice || (Number(invoice.net_amount) === 0 && itemCount === 0);
 
     const news = latestVitals?.news_score ?? admission.news_score_latest ?? null;
 
@@ -116,6 +133,14 @@ export async function evaluateDischargeReadiness(
             label: 'Pharmacy indents fulfilled',
             ok: pendingIndents === 0,
             detail: pendingIndents ? `${pendingIndents} indent(s) still pending` : 'None pending',
+        },
+        {
+            key: 'charges_posted',
+            label: 'Charges posted for the stay',
+            ok: !billedNothing,
+            detail: billedNothing
+                ? `${stayDays} day(s) admitted but the bill has no charges — room and nursing charges are posted manually and appear to have been missed`
+                : `${itemCount} line item(s)`,
         },
     ];
 

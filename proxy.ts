@@ -104,6 +104,15 @@ export async function proxy(request: NextRequest) {
     // itself — bypassing the session-cookie gate here is safe and necessary so
     // the scheduler (Vercel cron / external) is not redirected to /login.
     pathname.startsWith("/api/cron/") ||
+    // Three scheduled inpatient jobs live under /api/ipd/ rather than
+    // /api/cron/. They check CRON_SECRET the same way, but without this they
+    // answered 307 to the scheduler and silently never ran. Listed
+    // individually — /api/ipd/ as a prefix would expose the session-guarded
+    // endpoints beside them (audit-logs, facesheet, wristband).
+    pathname === "/api/ipd/bed-cleaning-sla" ||
+    pathname === "/api/ipd/deposit-alerts" ||
+    pathname === "/api/ipd/interim-billing" ||
+    pathname === "/api/ipd/daily-accrual" ||
     pathname.startsWith("/api/reports/") ||
     pathname.startsWith("/api/invoice/") ||
     pathname.startsWith("/api/discharge/") ||

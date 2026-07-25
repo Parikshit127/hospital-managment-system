@@ -266,9 +266,16 @@ const AUTO_AVAILABLE_HOURS = 24;
 // Auto-release beds that have been in "Cleaning" for ≥24h. Hard upper bound to
 // prevent forgotten beds from getting stranded out of inventory. Each released
 // bed gets a BED_CLEANING_AUTO_RELEASE audit entry for traceability.
-export async function autoReleaseStaleCleaningBeds() {
+/**
+ * @param ctx Supply an explicit tenant when there is no user session — a cron
+ *            has no session, and requireTenantContext() throws for it. Without
+ *            this the scheduled sweep answered 200 while quietly releasing
+ *            nothing, because the action swallowed the AuthError and returned
+ *            an empty result.
+ */
+export async function autoReleaseStaleCleaningBeds(ctx?: { db: any; organizationId: string }) {
     try {
-        const { db, organizationId } = await requireTenantContext();
+        const { db, organizationId } = ctx ?? await requireTenantContext();
         const cutoff = new Date(Date.now() - AUTO_AVAILABLE_HOURS * 60 * 60 * 1000);
 
         // Two classes of stale bed:

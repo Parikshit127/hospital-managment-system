@@ -43,15 +43,19 @@ render() {
 if [[ "$MODE" == "--verify" ]]; then
   echo "Checking endpoints on ${APP_URL} ..."
   fail=0
-  for path in email-dispatch broadcast-dispatch sla-check assessment-alerts \
-              mis-scheduled-delivery appointment-reminders budget-alerts \
-              mis-rollup mis-cleanup asset-maintenance-reminders; do
+  # Scheduled endpoints, with their route prefix — the inpatient jobs live under
+  # /api/ipd/, which is why an earlier sweep of "the cron routes" missed them.
+  for entry in cron/email-dispatch cron/broadcast-dispatch cron/sla-check \
+               cron/assessment-alerts cron/mis-scheduled-delivery \
+               cron/appointment-reminders cron/budget-alerts \
+               cron/mis-rollup cron/mis-cleanup cron/asset-maintenance-reminders \
+               ipd/bed-cleaning-sla; do
     code="$(curl -s -o /dev/null -w '%{http_code}' -m 60 \
-            -H "Authorization: Bearer ${CRON_SECRET}" "${APP_URL}/api/cron/${path}" || echo 000)"
+            -H "Authorization: Bearer ${CRON_SECRET}" "${APP_URL}/api/${entry}" || echo 000)"
     if [[ "$code" == "200" ]]; then
-      printf '  OK   %-32s %s\n' "$path" "$code"
+      printf '  OK   %-32s %s\n' "$entry" "$code"
     else
-      printf '  FAIL %-32s %s\n' "$path" "$code"; fail=1
+      printf '  FAIL %-32s %s\n' "$entry" "$code"; fail=1
     fi
   done
   [[ $fail -eq 0 ]] && echo "All endpoints healthy." || echo "Some endpoints failed — fix before scheduling." >&2

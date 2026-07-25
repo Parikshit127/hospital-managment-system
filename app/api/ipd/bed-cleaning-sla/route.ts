@@ -1,6 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { escalateBedCleaningSLA, getBedCleaningSLAStatus, autoReleaseStaleCleaningBeds } from '@/app/actions/ipd-automation-actions';
+import { autoReleaseStaleCleaningBeds } from '@/app/actions/ipd-automation-actions';
+import { prisma, getTenantPrisma } from '@/backend/db';
 
+/**
+ * Scheduled bed-cleaning sweep, across every active organization.
+ *
+ * This used to call actions that resolve the tenant from a user session. A cron
+ * has no session, so requireTenantContext() threw, the action swallowed the
+ * AuthError and returned an empty result, and the endpoint answered 200 while
+ * releasing nothing — a schedule that looks healthy and does no work is worse
+ * than no schedule at all. The tenant is now passed in explicitly, one
+ * organization at a time.
+ *
+ * The status/escalation snapshot is deliberately not included: those actions are
+ * still session-scoped, and reporting zeroes from them would be the same lie.
+ */
 export async function GET(req: NextRequest) {
     const authHeader = req.headers.get('authorization');
     const expected = `Bearer ${process.env.CRON_SECRET}`;
@@ -10,26 +24,41 @@ export async function GET(req: NextRequest) {
     }
 
     try {
-        // Auto-release must run before the status snapshot so released beds are not
-        // double-counted as "in cleaning" or "breached" in the response.
-        const autoReleaseRes = await autoReleaseStaleCleaningBeds();
+        const orgs = await prisma.organization.findMany({
+            where: { is_active: true },
+            select: { id: true, name: true },
+        });
 
-        const [statusRes, escalationRes] = await Promise.all([
-            getBedCleaningSLAStatus(),
-            escalateBedCleaningSLA(),
-        ]);
+        const results: Array<{ organization: string; released: number; error?: string }> = [];
+        let totalReleased = 0;
+
+        for (const org of orgs) {
+            try {
+                const db = getTenantPrisma(org.id);
+                const res = await autoReleaseStaleCleaningBeds({ db, organizationId: org.id });
+                const released = (res as { released?: number }).released ?? 0;
+                totalReleased += released;
+                results.push({ organization: org.name, released });
+            } catch (e) {
+                // One tenant failing must not stop the sweep for the rest.
+                results.push({
+                    organization: org.name,
+                    released: 0,
+                    error: e instanceof Error ? e.message : 'unknown',
+                });
+            }
+        }
 
         return NextResponse.json({
             ok: true,
             timestamp: new Date().toISOString(),
-            beds_in_cleaning: statusRes.data?.length ?? 0,
-            breached: statusRes.data?.filter((b: any) => b.breached).length ?? 0,
-            escalated: escalationRes.success ? (escalationRes as any).escalated : 0,
-            auto_released: (autoReleaseRes as any).released ?? 0,
-            details: statusRes.data,
+            organizations: orgs.length,
+            beds_released: totalReleased,
+            results,
         });
-    } catch (error: any) {
-        console.error('[CRON] Bed cleaning SLA error:', error);
-        return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+    } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : 'Bed cleaning sweep failed';
+        console.error('[CRON] bed-cleaning-sla error:', error);
+        return NextResponse.json({ ok: false, error: message }, { status: 500 });
     }
 }

@@ -56,8 +56,31 @@ LOG=/home/ubuntu/hospitalos/logs/cron.log
 # Asset maintenance / warranty reminders — in-app notification to admins.
 0 3 * * * curl -fsS -m 300 -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/cron/asset-maintenance-reminders" >> $LOG 2>&1
 
+# --- Inpatient operations ----------------------------------------------------
+# These three live under /api/ipd/ rather than /api/cron/, which is why the
+# original sweep of "the 13 cron routes" missed them. They are real, implemented
+# endpoints that nothing was calling.
+
+# Bed cleaning sweep. Returns beds left in "Cleaning" past the 24h backstop to
+# the available pool, across every active organization. Without this the sweep
+# only ever ran when a member of staff happened to open an IPD page.
+0 * * * * curl -fsS -m 120 -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/ipd/bed-cleaning-sla" >> $LOG 2>&1
+
 # ---------------------------------------------------------------------------
 # DELIBERATELY NOT SCHEDULED — each needs a decision, not a default:
+#
+#   /api/ipd/deposit-alerts
+#   /api/ipd/interim-billing
+#       Both call server actions that resolve the tenant from a USER SESSION,
+#       which a cron does not have, so they currently answer 500 when called by
+#       a scheduler. Same defect the pill-reminders note below describes. They
+#       need the same treatment bed-cleaning-sla just had — iterate active
+#       organizations and pass the tenant in explicitly — before scheduling.
+#
+#   /api/ipd/daily-accrual
+#       Returns early by design: "Auto-accrual disabled. Room/nursing charges
+#       are added manually." Scheduling it would do nothing. If a site ever
+#       wants automatic room/nursing accrual, re-enable the route first.
 #
 #   /api/cron/depreciation
 #       Posts monthly depreciation JOURNAL ENTRIES to the general ledger.
