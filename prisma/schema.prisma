@@ -253,6 +253,14 @@ model Organization {
   claim_short_pays              ClaimShortPay[]
   payer_sla_configs             PayerSlaConfig[]
 
+  nursing_care_plans        NursingCarePlan[]
+  fluid_balance_entries     FluidBalanceEntry[]
+  wound_care_records        WoundCareRecord[]
+  patient_devices           PatientDevice[]
+  transfusion_records       TransfusionRecord[]
+  clinical_incidents        ClinicalIncident[]
+  patient_education_records PatientEducationRecord[]
+  nurse_shift_assignments   NurseShiftAssignment[]
   @@map("organizations")
 }
 
@@ -1072,6 +1080,13 @@ model admissions {
   active_medications        ActiveMedication[]
   nursing_notes_rel         NursingNote[]
   medication_administrations MedicationAdministration[]
+  care_plans                NursingCarePlan[]
+  fluid_balance             FluidBalanceEntry[]
+  wound_care                WoundCareRecord[]
+  devices                   PatientDevice[]
+  transfusions              TransfusionRecord[]
+  incidents                 ClinicalIncident[]
+  education_records         PatientEducationRecord[]
   ipd_vitals                IPDVitals[]
   medical_notes             medical_notes[]
   nursing_assessments       NursingAssessment[]
@@ -5882,4 +5897,264 @@ model EmailJob {
 
   @@index([status, created_at]) // drives the cron drain query (status=PENDING, oldest first)
   @@map("email_jobs")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// NURSING CARE RECORDS
+//
+// Capabilities a ward needs that the system had no place to record at all.
+// Each is admission-scoped with a real relation, indexed on the access path the
+// ward actually uses, and carries the acting user rather than a typed name.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// ADPIE care plan: a nursing problem, its goal, the interventions and the
+/// evaluation — the structure nursing practice is taught and audited against.
+/// There was previously nowhere to record a plan of care, only free-text notes.
+model NursingCarePlan {
+  id             String       @id @default(uuid())
+  admission_id   String
+  organizationId String
+
+  /// Assessment — the cue or finding the problem was identified from.
+  assessment     String
+  /// Diagnosis — the nursing problem, e.g. "Risk of falls related to sedation".
+  diagnosis      String
+  /// Planning — the measurable goal and its target date.
+  goal           String
+  target_date    DateTime?
+  /// Implementation — planned interventions.
+  interventions  Json?
+  /// Evaluation — progress against the goal, appended over time.
+  evaluations    Json?
+
+  priority       String       @default("routine")
+  status         String       @default("active")
+  opened_by      String
+  opened_at      DateTime     @default(now())
+  closed_by      String?
+  closed_at      DateTime?
+  closure_note   String?
+
+  admission      admissions   @relation(fields: [admission_id], references: [admission_id])
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+  @@index([admission_id])
+  @@index([status])
+  @@map("nursing_care_plans")
+}
+
+/// Fluid balance — the most-used chart on any ward, and the one with no home
+/// here. Intake and output entries roll up into a running balance per shift.
+model FluidBalanceEntry {
+  id             String       @id @default(uuid())
+  admission_id   String
+  organizationId String
+
+  /// intake | output
+  direction      String
+  /// Oral, IV, NG, Urine, Drain, Vomitus, Stool, Blood loss, Other.
+  route          String
+  volume_ml      Int
+  description    String?
+  recorded_at    DateTime     @default(now())
+  /// morning | evening | night — so a balance can be struck per shift.
+  shift          String?
+  recorded_by    String
+
+  admission      admissions   @relation(fields: [admission_id], references: [admission_id])
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+  @@index([admission_id, recorded_at])
+  @@map("fluid_balance_entries")
+}
+
+/// Wound and pressure-area care. The Braden score was already captured on the
+/// nursing assessment, but nothing followed it — there was no wound chart.
+model WoundCareRecord {
+  id             String       @id @default(uuid())
+  admission_id   String
+  organizationId String
+
+  wound_type     String
+  location       String
+  /// I-IV or unstageable, for pressure ulcers.
+  stage          String?
+  /// Length/width/depth in cm.
+  measurements   Json?
+  appearance     String?
+  exudate        String?
+  dressing_used  String?
+  pain_score     Int?
+  intervention   String?
+  next_review_at DateTime?
+  status         String       @default("open")
+  assessed_by    String
+  assessed_at    DateTime     @default(now())
+
+  admission      admissions   @relation(fields: [admission_id], references: [admission_id])
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+  @@index([admission_id])
+  @@index([status])
+  @@map("wound_care_records")
+}
+
+/// Invasive devices — cannulae, catheters, drains, central and arterial lines.
+/// Insertion and removal dates drive device-days and infection surveillance, and
+/// the review date is what stops a line being left in beyond its window.
+model PatientDevice {
+  id              String       @id @default(uuid())
+  admission_id    String
+  organizationId  String
+
+  device_type     String
+  site            String
+  size            String?
+  inserted_at     DateTime
+  inserted_by     String
+  /// When the device is due to be re-sited or reviewed.
+  due_at          DateTime?
+  removed_at      DateTime?
+  removed_by      String?
+  removal_reason  String?
+  /// Site appearance at the last check.
+  last_site_check String?
+  last_checked_at DateTime?
+  status          String       @default("in_situ")
+
+  admission       admissions   @relation(fields: [admission_id], references: [admission_id])
+  organization    Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+  @@index([admission_id])
+  @@index([status])
+  @@map("patient_devices")
+}
+
+/// Blood transfusion. Consent, cross-match, the bedside two-person check and the
+/// observation trail are all required and had nowhere to live.
+model TransfusionRecord {
+  id                 String       @id @default(uuid())
+  admission_id       String
+  organizationId     String
+
+  component          String
+  unit_number        String
+  blood_group        String
+  crossmatch_ref     String?
+  consent_taken      Boolean      @default(false)
+  consent_by         String?
+
+  /// The bedside check requires two people; both are recorded.
+  checked_by         String?
+  witness_id         String?
+
+  started_at         DateTime?
+  completed_at       DateTime?
+  volume_ml          Int?
+  /// Observations at 0/15/30 minutes and hourly.
+  observations       Json?
+  reaction_occurred  Boolean      @default(false)
+  reaction_details   String?
+  status             String       @default("prepared")
+
+  admission          admissions   @relation(fields: [admission_id], references: [admission_id])
+  organization       Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+  @@index([admission_id])
+  @@index([status])
+  @@map("transfusion_records")
+}
+
+/// Clinical incidents — falls, medication errors, pressure injuries, restraint
+/// use, needlestick. There was no mechanism to report or follow one up.
+model ClinicalIncident {
+  id                String       @id @default(uuid())
+  organizationId    String
+  /// Optional: an incident can involve staff rather than a specific admission.
+  admission_id      String?
+  patient_id        String?
+
+  incident_type     String
+  severity          String
+  occurred_at       DateTime
+  location          String?
+  description       String
+  immediate_action  String?
+  /// Whether the patient or family were informed, which is itself auditable.
+  patient_informed  Boolean      @default(false)
+
+  reported_by       String
+  reported_at       DateTime     @default(now())
+
+  status            String       @default("open")
+  review_notes      String?
+  root_cause        String?
+  preventive_action String?
+  closed_by         String?
+  closed_at         DateTime?
+
+  admission         admissions?  @relation(fields: [admission_id], references: [admission_id])
+  organization      Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+  @@index([admission_id])
+  @@index([status])
+  @@index([incident_type])
+  @@map("clinical_incidents")
+}
+
+/// Patient and family education, including discharge teaching — evidence that
+/// teaching was given and understood.
+model PatientEducationRecord {
+  id                    String       @id @default(uuid())
+  admission_id          String
+  organizationId        String
+
+  topic                 String
+  content               String
+  method                String?
+  audience              String       @default("patient")
+  language              String?
+  /// Teach-back: did they demonstrate understanding?
+  understanding         String?
+  repeat_required       Boolean      @default(false)
+  taught_by             String
+  taught_at             DateTime     @default(now())
+  is_discharge_teaching Boolean      @default(false)
+
+  admission             admissions   @relation(fields: [admission_id], references: [admission_id])
+  organization          Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+  @@index([admission_id])
+  @@map("patient_education_records")
+}
+
+/// Nurse-to-patient assignment for a shift. Without it there is no record of who
+/// was responsible for a patient at a given time, and no workload view.
+model NurseShiftAssignment {
+  id             String       @id @default(uuid())
+  organizationId String
+  nurse_id       String
+  ward_id        Int
+  shift_date     DateTime
+  shift_type     String
+  /// Admissions this nurse is responsible for during the shift.
+  admission_ids  Json?
+  /// Simple acuity total, for balancing workload across the team.
+  acuity_total   Int?
+  assigned_by    String
+  created_at     DateTime     @default(now())
+
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+  @@index([ward_id, shift_date])
+  @@index([nurse_id])
+  @@map("nurse_shift_assignments")
 }
