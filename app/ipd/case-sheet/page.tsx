@@ -18,6 +18,7 @@ import {
     getReferralOrders, addActiveMedication, createClinicalOrder, createPhysicianOrder,
 } from '@/app/actions/ipd-emr-actions';
 import { createNursingTask, getIPDAdmissions } from '@/app/actions/ipd-actions';
+import { searchMedicines, checkMedicineStock } from '@/app/actions/nurse-actions';
 
 const TABS = [
     { id: 'treatment', label: 'Treatment Sheet', icon: Pill },
@@ -100,6 +101,42 @@ export default function CaseSheetPage() {
     const [taskDesc, setTaskDesc] = useState('');
     const [taskTime, setTaskTime] = useState('');
     const [savingTask, setSavingTask] = useState(false);
+
+    // ── Formulary lookup ─────────────────────────────────────────────────────
+    // The drug name was a bare text box, so every prescription was free text.
+    // That makes stock checks, interaction checks and allergy matching guesswork,
+    // and it is why the same drug appears under several spellings in reports.
+    // Typing now searches the pharmacy medicine master; a name that genuinely
+    // isn't on the formulary can still be entered, but it is flagged as such.
+    const [medMatches, setMedMatches] = useState<Array<Record<string, unknown>>>([]);
+    const [medSearching, setMedSearching] = useState(false);
+    const [medFromFormulary, setMedFromFormulary] = useState(false);
+    const [medStock, setMedStock] = useState<{ totalStock: number; isAvailable: boolean } | null>(null);
+
+    useEffect(() => {
+        const q = medName.trim();
+        if (medFromFormulary || q.length < 2) { setMedMatches([]); return; }
+        let cancelled = false;
+        setMedSearching(true);
+        const t = setTimeout(async () => {
+            const res = await searchMedicines(q);
+            if (!cancelled) {
+                setMedMatches(res.success ? (res.data as Array<Record<string, unknown>>).slice(0, 8) : []);
+                setMedSearching(false);
+            }
+        }, 250);
+        return () => { cancelled = true; clearTimeout(t); setMedSearching(false); };
+    }, [medName, medFromFormulary]);
+
+    const pickMedicine = async (m: Record<string, unknown>) => {
+        const label = [m.brand_name, m.strength].filter(Boolean).join(' ');
+        setMedName(label || String(m.brand_name ?? ''));
+        setMedFromFormulary(true);
+        setMedMatches([]);
+        // Show the ward whether the pharmacy can actually supply it.
+        const stock = await checkMedicineStock(Number(m.id));
+        setMedStock(stock.success ? { totalStock: stock.data.totalStock, isAvailable: stock.data.isAvailable } : null);
+    };
 
     const handlePrescribeMed = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -502,16 +539,60 @@ export default function CaseSheetPage() {
                                         <form onSubmit={handlePrescribeMed} className="bg-gray-50 border border-gray-200 rounded-xl p-4 space-y-3 shadow-sm max-w-xl">
                                             <h3 className="text-xs font-bold uppercase tracking-wider text-gray-600">Prescribe New Medication</h3>
                                             <div className="grid grid-cols-2 gap-3">
-                                                <div>
+                                                <div className="relative">
                                                     <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Medication Name</label>
                                                     <input
                                                         required
                                                         type="text"
                                                         value={medName}
-                                                        onChange={e => setMedName(e.target.value)}
-                                                        placeholder="e.g. Paracetamol"
+                                                        onChange={e => { setMedName(e.target.value); setMedFromFormulary(false); setMedStock(null); }}
+                                                        placeholder="Search the formulary — e.g. Paracetamol"
+                                                        autoComplete="off"
                                                         className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 bg-white"
                                                     />
+
+                                                    {/* Formulary matches */}
+                                                    {medMatches.length > 0 && (
+                                                        <div className="absolute z-20 mt-1 w-full max-h-56 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg">
+                                                            {medMatches.map((m, i) => (
+                                                                <button
+                                                                    type="button"
+                                                                    key={i}
+                                                                    onClick={() => pickMedicine(m)}
+                                                                    className="w-full text-left px-3 py-2 text-xs hover:bg-blue-50 border-b border-gray-50 last:border-0"
+                                                                >
+                                                                    <span className="font-semibold text-gray-800">{String(m.brand_name ?? '')}</span>
+                                                                    {m.strength ? <span className="text-gray-500"> · {String(m.strength)}</span> : null}
+                                                                    {m.form ? <span className="text-gray-400"> · {String(m.form)}</span> : null}
+                                                                    {m.generic_name ? <div className="text-[10px] text-gray-400">{String(m.generic_name)}</div> : null}
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    )}
+
+                                                    {medSearching && medName.trim().length >= 2 && !medFromFormulary && (
+                                                        <p className="text-[10px] text-gray-400 mt-1">Searching the formulary…</p>
+                                                    )}
+
+                                                    {medFromFormulary && (
+                                                        <p className="text-[10px] mt-1 font-semibold text-emerald-600">
+                                                            ✓ On formulary
+                                                            {medStock && (
+                                                                <span className={medStock.isAvailable ? 'text-gray-500 font-normal' : 'text-red-600'}>
+                                                                    {' · '}
+                                                                    {medStock.isAvailable
+                                                                        ? `${medStock.totalStock} in pharmacy stock`
+                                                                        : 'NOT IN STOCK — pharmacy will need to indent'}
+                                                                </span>
+                                                            )}
+                                                        </p>
+                                                    )}
+
+                                                    {!medFromFormulary && medName.trim().length >= 2 && !medSearching && medMatches.length === 0 && (
+                                                        <p className="text-[10px] mt-1 text-amber-600">
+                                                            Not found on the formulary — it will be recorded as free text.
+                                                        </p>
+                                                    )}
                                                 </div>
                                                 <div>
                                                     <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Dosage</label>
