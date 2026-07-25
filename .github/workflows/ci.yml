@@ -24,6 +24,11 @@ jobs:
 
       - run: npm ci
 
+      # Fails fast (no prisma/build needed). A sync export from a 'use server'
+      # module 500s every page that imports it — including /api/session, which
+      # takes out login app-wide. TypeScript does not catch it.
+      - run: npm run check:server-actions
+
       - run: npx prisma generate
 
       - run: npm run check:prisma

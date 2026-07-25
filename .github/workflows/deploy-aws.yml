@@ -42,6 +42,8 @@ jobs:
           cache: npm
 
       - run: npm ci --no-audit --no-fund
+      # See ci.yml — a sync export from a 'use server' module breaks login app-wide.
+      - run: npm run check:server-actions
       - run: npx prisma generate
       - run: npm run typecheck
       - run: npm run lint:ci
