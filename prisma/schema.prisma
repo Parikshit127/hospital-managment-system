@@ -2064,8 +2064,13 @@ model NursingTask {
   description    String
   scheduled_at   DateTime
   completed_at   DateTime?
+  completed_by   String?
   assigned_to    String?
   status         String       @default("Pending")
+  // Where the task came from: 'manual', or the clinical order that generated it.
+  source_type    String?
+  source_id      String?
+  priority       String       @default("routine")
   organizationId String
   created_at     DateTime     @default(now())
   admission      admissions   @relation(fields: [admission_id], references: [admission_id])
@@ -2074,6 +2079,8 @@ model NursingTask {
   @@index([organizationId])
   @@index([status])
   @@index([scheduled_at])
+  // Nursing tasks are almost always fetched per admission; this was a scan.
+  @@index([admission_id])
   @@map("nursing_tasks")
 }
 
@@ -2164,6 +2171,14 @@ model MedicationAdministration {
   prn_reason        String?
   pain_score_before Int?
   pain_score_after  Int?
+  // A dose that was not given must record why, as a code plus optional free text.
+  // Previously Held/Refused/Missed were stored with no reason at all.
+  not_given_reason  String?
+  // Second-nurse check. Required for high-alert and controlled drugs.
+  witness_id        String?
+  // Set when the dose was given despite a recorded allergy match, with the
+  // clinician's justification. Null means no allergy conflict was detected.
+  allergy_override_reason String?
   organization      Organization @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId])
@@ -3271,6 +3286,12 @@ model IPDVitals {
   urine_output_ml  Int?
   news_score       Int?
   news_level       String?
+  // NEWS2 scores +2 for any supplemental oxygen; without it an oxygen-dependent
+  // patient scores two points below the RCP chart.
+  on_supplemental_oxygen Boolean @default(false)
+  // Highest score contributed by any single parameter. NEWS2 escalates on a
+  // single parameter of 3 even when the total is low.
+  news_max_single_param  Int?
   recorded_by      String?
   created_at       DateTime     @default(now())
   admission        admissions   @relation(fields: [admission_id], references: [admission_id])
