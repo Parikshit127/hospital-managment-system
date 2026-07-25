@@ -7,41 +7,157 @@
  * GAP 16 — Referral Order as a Generating Entity
  */
 
-import { requireTenantContext } from '@/backend/tenant';
+import { requireTenantContext, denyUnlessRole, CLINICAL_ROLES } from '@/backend/tenant';
 import { revalidatePath } from 'next/cache';
 import { dosingHours, MAR_HORIZON_DAYS } from '@/app/lib/medication-safety';
 
 // ── GAP 6: Clinical Orders ─────────────────────────────────────────────────
 
+/**
+ * Place a clinical order (lab / radiology / procedure / consultation).
+ *
+ * An order is only useful if it reaches whoever has to carry it out. Previously
+ * this wrote a ClinicalOrder row and stopped: no UI called it, nothing read the
+ * table, and no work was created anywhere — the "Clinical Order" tab was a
+ * permanently empty list. The table held zero rows in the entire database.
+ *
+ * Placing an order now also:
+ *   - creates the nursing task for the part a nurse performs (drawing the sample,
+ *     escorting to imaging, preparing for the procedure), and
+ *   - for a lab order, creates the lab_orders row the laboratory module reads,
+ *     so the test appears on the lab worklist rather than nowhere.
+ * The generated records are linked back via source_type/source_id so the order
+ * can be followed end to end.
+ */
 export async function createClinicalOrder(data: {
     admission_id: string;
-    patient_id: string;
-    doctor_id: string;
+    /** Optional. Authoritatively resolved from the admission. */
+    patient_id?: string;
+    /** @deprecated Ignored. The ordering doctor is taken from the session. */
+    doctor_id?: string;
     order_type: 'lab' | 'radiology' | 'procedure' | 'consultation';
     order_details: Record<string, unknown>;
     priority?: 'stat' | 'urgent' | 'routine';
 }) {
-    const { db, organizationId } = await requireTenantContext();
+    const denied = await denyUnlessRole(CLINICAL_ROLES.PRESCRIBE, 'place a clinical order');
+    if (denied) return denied;
+
+    const { db, organizationId, session } = await requireTenantContext();
+    const priority = data.priority || 'routine';
+    const label = String(data.order_details?.name || data.order_details?.test || data.order_type);
 
     try {
+        // Resolve the patient from the admission rather than trusting the caller.
+        // A client-supplied value arrived empty in testing, which produced a lab
+        // order that appeared on the worklist attached to nobody.
+        const adm = await db.admissions.findUnique({
+            where: { admission_id: data.admission_id },
+            select: { patient_id: true },
+        });
+        const patientId = adm?.patient_id || data.patient_id;
+        if (!patientId) return { success: false, error: 'Could not resolve the patient for this admission.' };
+
         const order = await (db as any).clinicalOrder.create({
             data: {
                 admission_id: data.admission_id,
-                patient_id: data.patient_id,
-                doctor_id: data.doctor_id,
+                patient_id: patientId,
+                doctor_id: session.id,
                 order_type: data.order_type,
-                order_details: data.order_details,
-                priority: data.priority || 'routine',
+                order_details: { ...data.order_details, ordered_by_name: session.name || session.username },
+                priority,
                 status: 'pending',
                 organizationId,
             },
         });
 
-        revalidatePath(`/ipd/ward-rounds`);
-        return { success: true, data: JSON.parse(JSON.stringify(order)) };
+        // The nursing half of the order.
+        const taskVerb: Record<string, string> = {
+            lab: 'Collect sample for',
+            radiology: 'Escort / prepare patient for',
+            procedure: 'Prepare patient for',
+            consultation: 'Arrange consultation:',
+        };
+        const task = await db.nursingTask.create({
+            data: {
+                admission_id: data.admission_id,
+                task_type: `Order · ${data.order_type}`,
+                description: `${taskVerb[data.order_type] ?? 'Action'} ${label}` +
+                    (priority !== 'routine' ? ` [${priority.toUpperCase()}]` : ''),
+                scheduled_at: new Date(),
+                status: 'Pending',
+                priority,
+                source_type: 'clinical_order',
+                source_id: String(order.id),
+                organizationId,
+            },
+        });
+
+        // A lab order must also exist in the laboratory's own worklist.
+        let labBarcode: string | null = null;
+        if (data.order_type === 'lab') {
+            const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+            const count = await db.lab_orders.count();
+            labBarcode = `LAB-${dateStr}-${String(count + 1).padStart(4, '0')}`;
+            await db.lab_orders.create({
+                data: {
+                    barcode: labBarcode,
+                    patient_id: patientId,
+                    doctor_id: session.id,
+                    test_type: label,
+                    status: 'Pending',
+                    organizationId,
+                },
+            });
+        }
+
+        await notifyOrderRecipients(db, organizationId, {
+            admissionId: data.admission_id,
+            title: `New ${data.order_type} order${priority !== 'routine' ? ` (${priority})` : ''}`,
+            body: `${label} ordered by ${session.name || session.username}.`,
+            urgent: priority !== 'routine',
+        });
+
+        revalidatePath('/ipd/ward-rounds');
+        revalidatePath('/ipd/nursing-station');
+        revalidatePath('/nurse/tasks');
+        if (labBarcode) revalidatePath('/lab/worklist');
+
+        return {
+            success: true,
+            data: JSON.parse(JSON.stringify(order)),
+            taskId: task.id,
+            labBarcode,
+        };
     } catch (error) {
         const msg = error instanceof Error ? error.message : 'Failed to create clinical order';
         return { success: false, error: msg };
+    }
+}
+
+/** Tell the ward an order has been placed. Best-effort; never blocks the order. */
+async function notifyOrderRecipients(
+    db: any,
+    organizationId: string,
+    args: { admissionId: string; title: string; body: string; urgent: boolean },
+) {
+    try {
+        const roles = args.urgent ? ['nurse', 'ipd_manager'] : ['nurse'];
+        const staff = await db.user.findMany({
+            where: { organizationId, is_active: true, role: { in: roles } },
+            select: { id: true },
+        });
+        if (!staff.length) return;
+        await db.notification.createMany({
+            data: staff.map((s: { id: string }) => ({
+                organizationId,
+                user_id: s.id,
+                title: args.title,
+                body: args.body,
+                type: args.urgent ? 'warning' : 'info',
+            })),
+        });
+    } catch (e) {
+        console.error('notifyOrderRecipients failed:', e);
     }
 }
 
@@ -76,23 +192,34 @@ export async function updateClinicalOrderStatus(orderId: string, status: string)
 
 // ── GAP 6: Physician Orders ────────────────────────────────────────────────
 
+/**
+ * Place a physician order — the standing instructions a nurse carries out
+ * (diet, activity, monitoring, positioning). Same problem as clinical orders:
+ * the row was written and nothing downstream ever saw it.
+ *
+ * A monitoring order also raises the recurring nursing task that performs it.
+ */
 export async function createPhysicianOrder(data: {
     admission_id: string;
     patient_id: string;
-    doctor_id: string;
+    /** @deprecated Ignored. The ordering doctor is taken from the session. */
+    doctor_id?: string;
     order_category: 'medication' | 'diet' | 'activity' | 'monitoring' | 'other';
     order_text: string;
     frequency?: string;
     duration?: string;
 }) {
-    const { db, organizationId } = await requireTenantContext();
+    const denied = await denyUnlessRole(CLINICAL_ROLES.PRESCRIBE, 'place a physician order');
+    if (denied) return denied;
+
+    const { db, organizationId, session } = await requireTenantContext();
 
     try {
         const order = await (db as any).physicianOrder.create({
             data: {
                 admission_id: data.admission_id,
                 patient_id: data.patient_id,
-                doctor_id: data.doctor_id,
+                doctor_id: session.id,
                 order_category: data.order_category,
                 order_text: data.order_text,
                 frequency: data.frequency || null,
@@ -102,9 +229,71 @@ export async function createPhysicianOrder(data: {
             },
         });
 
-        return { success: true, data: JSON.parse(JSON.stringify(order)) };
+        // Diet, activity and monitoring orders are executed by nursing staff, so
+        // each one becomes a task they can see and close.
+        const needsTask = ['diet', 'activity', 'monitoring', 'other'].includes(data.order_category);
+        let taskId: number | undefined;
+        if (needsTask) {
+            const task = await db.nursingTask.create({
+                data: {
+                    admission_id: data.admission_id,
+                    task_type: `Order · ${data.order_category}`,
+                    description: data.order_text + (data.frequency ? ` (${data.frequency})` : ''),
+                    scheduled_at: new Date(),
+                    status: 'Pending',
+                    priority: 'routine',
+                    source_type: 'physician_order',
+                    source_id: String(order.id),
+                    organizationId,
+                },
+            });
+            taskId = task.id;
+        }
+
+        await notifyOrderRecipients(db, organizationId, {
+            admissionId: data.admission_id,
+            title: `New ${data.order_category} order`,
+            body: `${data.order_text} — ${session.name || session.username}`,
+            urgent: false,
+        });
+
+        revalidatePath('/ipd/nursing-station');
+        revalidatePath('/nurse/tasks');
+        return { success: true, data: JSON.parse(JSON.stringify(order)), taskId };
     } catch (error) {
         const msg = error instanceof Error ? error.message : 'Failed to create physician order';
+        return { success: false, error: msg };
+    }
+}
+
+/**
+ * Acknowledge an order — the nurse has seen it and accepted the work.
+ * Closes the "ordered -> acknowledged -> executed" loop that had no middle step.
+ */
+export async function acknowledgeClinicalOrder(orderId: string) {
+    const denied = await denyUnlessRole(CLINICAL_ROLES.CHART, 'acknowledge an order');
+    if (denied) return denied;
+    const { db, organizationId, session } = await requireTenantContext();
+    try {
+        await (db as any).clinicalOrder.update({
+            where: { id: orderId, organizationId },
+            data: { status: 'acknowledged' },
+        });
+        await db.system_audit_logs.create({
+            data: {
+                action: 'CLINICAL_ORDER_ACKNOWLEDGED',
+                module: 'ipd',
+                entity_type: 'clinical_order',
+                entity_id: orderId,
+                user_id: session.id,
+                username: session.username,
+                organizationId,
+            },
+        });
+        revalidatePath('/ipd/nursing-station');
+        return { success: true };
+    } catch (error) {
+        const msg = error instanceof Error ? error.message : 'Failed to acknowledge order';
         return { success: false, error: msg };
     }
 }

@@ -13,7 +13,10 @@ import {
     Calendar, Clock, Loader2, Plus, AlertTriangle
 } from 'lucide-react';
 import { AppShell } from '@/app/components/layout/AppShell';
-import { get24HourCaseSheet, getClinicalOrders, getPhysicianOrders, getActiveMedications, getReferralOrders, addActiveMedication } from '@/app/actions/ipd-emr-actions';
+import {
+    get24HourCaseSheet, getClinicalOrders, getPhysicianOrders, getActiveMedications,
+    getReferralOrders, addActiveMedication, createClinicalOrder, createPhysicianOrder,
+} from '@/app/actions/ipd-emr-actions';
 import { createNursingTask } from '@/app/actions/ipd-actions';
 
 const TABS = [
@@ -123,6 +126,65 @@ export default function CaseSheetPage() {
             loadData();
         } else {
             alert(res.error || 'Failed to prescribe medication');
+        }
+    };
+
+    // ── Clinical order (lab / radiology / procedure / consultation) ──────────
+    const [showOrderForm, setShowOrderForm] = useState(false);
+    const [orderType, setOrderType] = useState<'lab' | 'radiology' | 'procedure' | 'consultation'>('lab');
+    const [orderName, setOrderName] = useState('');
+    const [orderPriority, setOrderPriority] = useState<'routine' | 'urgent' | 'stat'>('routine');
+    const [orderNote, setOrderNote] = useState('');
+    const [savingOrder, setSavingOrder] = useState(false);
+
+    const handleCreateOrder = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!orderName.trim()) return;
+        setSavingOrder(true);
+        const res = await createClinicalOrder({
+            admission_id: admissionId,
+            patient_id: caseSheet?.admission.patient.patient_id || '',
+            order_type: orderType,
+            order_details: { name: orderName.trim(), note: orderNote.trim() || undefined },
+            priority: orderPriority,
+        });
+        setSavingOrder(false);
+        if (res.success) {
+            setOrderName(''); setOrderNote(''); setOrderPriority('routine');
+            setShowOrderForm(false);
+            loadData();
+            const extra = (res as { labBarcode?: string | null }).labBarcode;
+            alert(`Order placed. A nursing task has been raised${extra ? `, and the test is on the lab worklist (${extra})` : ''}.`);
+        } else {
+            alert(res.error || 'Failed to place order');
+        }
+    };
+
+    // ── Physician order (diet / activity / monitoring) ───────────────────────
+    const [showPhysForm, setShowPhysForm] = useState(false);
+    const [physCategory, setPhysCategory] = useState<'diet' | 'activity' | 'monitoring' | 'other'>('monitoring');
+    const [physText, setPhysText] = useState('');
+    const [physFreq, setPhysFreq] = useState('');
+    const [savingPhys, setSavingPhys] = useState(false);
+
+    const handleCreatePhysOrder = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!physText.trim()) return;
+        setSavingPhys(true);
+        const res = await createPhysicianOrder({
+            admission_id: admissionId,
+            patient_id: caseSheet?.admission.patient.patient_id || '',
+            order_category: physCategory,
+            order_text: physText.trim(),
+            frequency: physFreq.trim() || undefined,
+        });
+        setSavingPhys(false);
+        if (res.success) {
+            setPhysText(''); setPhysFreq('');
+            setShowPhysForm(false);
+            loadData();
+        } else {
+            alert(res.error || 'Failed to place order');
         }
     };
 
@@ -280,8 +342,66 @@ export default function CaseSheetPage() {
                                 <div className="space-y-4">
                                     <div className="flex items-center justify-between">
                                         <h2 className="font-semibold text-gray-800">Clinical Orders</h2>
-                                        <span className="text-xs text-gray-500">{clinicalOrders.length} orders</span>
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-xs text-gray-500">{clinicalOrders.length} orders</span>
+                                            <button
+                                                onClick={() => setShowOrderForm(!showOrderForm)}
+                                                className="px-3 py-1.5 text-xs font-bold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+                                            >
+                                                {showOrderForm ? 'Cancel' : 'Place Order'}
+                                            </button>
+                                        </div>
                                     </div>
+
+                                    {showOrderForm && (
+                                        <form onSubmit={handleCreateOrder} className="bg-gray-50 border border-gray-200 rounded-xl p-4 space-y-3 shadow-sm max-w-2xl">
+                                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                                <div>
+                                                    <label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">Type</label>
+                                                    <select value={orderType} onChange={e => setOrderType(e.target.value as typeof orderType)}
+                                                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
+                                                        <option value="lab">Lab test</option>
+                                                        <option value="radiology">Radiology / imaging</option>
+                                                        <option value="procedure">Procedure</option>
+                                                        <option value="consultation">Consultation</option>
+                                                    </select>
+                                                </div>
+                                                <div className="sm:col-span-2">
+                                                    <label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">
+                                                        {orderType === 'consultation' ? 'Specialty / doctor' : 'Test or procedure'}
+                                                    </label>
+                                                    <input value={orderName} onChange={e => setOrderName(e.target.value)}
+                                                        placeholder={orderType === 'lab' ? 'e.g. CBC, Serum Creatinine' : 'e.g. Chest X-ray PA view'}
+                                                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+                                                </div>
+                                            </div>
+                                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                                <div>
+                                                    <label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">Priority</label>
+                                                    <select value={orderPriority} onChange={e => setOrderPriority(e.target.value as typeof orderPriority)}
+                                                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
+                                                        <option value="routine">Routine</option>
+                                                        <option value="urgent">Urgent</option>
+                                                        <option value="stat">STAT</option>
+                                                    </select>
+                                                </div>
+                                                <div className="sm:col-span-2">
+                                                    <label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">Clinical note (optional)</label>
+                                                    <input value={orderNote} onChange={e => setOrderNote(e.target.value)}
+                                                        placeholder="Indication / instructions for the ward"
+                                                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+                                                </div>
+                                            </div>
+                                            <p className="text-[11px] text-gray-500">
+                                                Placing this raises a nursing task on the ward{orderType === 'lab' ? ', and puts the test on the laboratory worklist' : ''}.
+                                            </p>
+                                            <button type="submit" disabled={savingOrder || !orderName.trim()}
+                                                className="px-4 py-2 text-xs font-bold text-white bg-blue-600 rounded-lg disabled:opacity-50">
+                                                {savingOrder ? 'Placing…' : 'Place order'}
+                                            </button>
+                                        </form>
+                                    )}
+
                                     {clinicalOrders.length === 0 ? (
                                         <p className="text-gray-500 text-sm">No clinical orders placed</p>
                                     ) : (
@@ -309,7 +429,50 @@ export default function CaseSheetPage() {
 
                             {activeTab === 'physician_order' && (
                                 <div className="space-y-4">
-                                    <h2 className="font-semibold text-gray-800">Physician Orders</h2>
+                                    <div className="flex items-center justify-between">
+                                        <h2 className="font-semibold text-gray-800">Physician Orders</h2>
+                                        <button
+                                            onClick={() => setShowPhysForm(!showPhysForm)}
+                                            className="px-3 py-1.5 text-xs font-bold text-white bg-purple-600 rounded-lg hover:bg-purple-700 transition-colors"
+                                        >
+                                            {showPhysForm ? 'Cancel' : 'Add Order'}
+                                        </button>
+                                    </div>
+
+                                    {showPhysForm && (
+                                        <form onSubmit={handleCreatePhysOrder} className="bg-gray-50 border border-gray-200 rounded-xl p-4 space-y-3 shadow-sm max-w-2xl">
+                                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                                <div>
+                                                    <label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">Category</label>
+                                                    <select value={physCategory} onChange={e => setPhysCategory(e.target.value as typeof physCategory)}
+                                                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
+                                                        <option value="monitoring">Monitoring</option>
+                                                        <option value="diet">Diet</option>
+                                                        <option value="activity">Activity / mobility</option>
+                                                        <option value="other">Other</option>
+                                                    </select>
+                                                </div>
+                                                <div className="sm:col-span-2">
+                                                    <label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">Instruction</label>
+                                                    <input value={physText} onChange={e => setPhysText(e.target.value)}
+                                                        placeholder="e.g. Strict input–output charting; hourly urine output"
+                                                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <label className="text-[10px] font-bold text-gray-400 uppercase block mb-1">Frequency (optional)</label>
+                                                <input value={physFreq} onChange={e => setPhysFreq(e.target.value)}
+                                                    placeholder="e.g. 4 hourly"
+                                                    className="w-full max-w-xs border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+                                            </div>
+                                            <p className="text-[11px] text-gray-500">Raises a nursing task the ward can see and close.</p>
+                                            <button type="submit" disabled={savingPhys || !physText.trim()}
+                                                className="px-4 py-2 text-xs font-bold text-white bg-purple-600 rounded-lg disabled:opacity-50">
+                                                {savingPhys ? 'Saving…' : 'Add order'}
+                                            </button>
+                                        </form>
+                                    )}
+
                                     {physicianOrders.length === 0 ? (
                                         <p className="text-gray-500 text-sm">No physician orders</p>
                                     ) : (

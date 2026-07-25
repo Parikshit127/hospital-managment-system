@@ -356,13 +356,20 @@ export async function getNursingTasks(options?: {
     nurseId?: string;
     status?: string;
     dateFilter?: 'today' | 'all';
+    wardId?: number;
 }) {
     try {
-        const { db } = await requireTenantContext();
+        const { db, session } = await requireTenantContext();
 
         const where: any = {};
         if (options?.nurseId) where.assigned_to = options.nurseId;
-        if (options?.status) where.status = options.status;
+        // Statuses are stored capitalised ("Pending"), but the task screen passes
+        // its lowercase filter key straight through, so the list came back empty
+        // for every filter. Normalise instead of relying on the caller's casing.
+        if (options?.status) {
+            const s = options.status.trim();
+            where.status = s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+        }
 
         if (options?.dateFilter === 'today') {
             const todayStart = new Date();
@@ -372,30 +379,48 @@ export async function getNursingTasks(options?: {
             where.scheduled_at = { gte: todayStart, lte: todayEnd };
         }
 
+        // Only tasks for patients still on the ward, scoped to the nurse's ward
+        // when they have one. A task for a discharged patient is not work.
+        const admissionWhere: any = { status: 'Admitted' };
+        const effectiveWard = options?.wardId
+            ?? (session.role === 'nurse' ? session.assigned_ward_id ?? undefined : undefined);
+        if (effectiveWard) admissionWhere.ward_id = Number(effectiveWard);
+
+        const admissions = await db.admissions.findMany({
+            where: admissionWhere,
+            include: { patient: { select: { full_name: true, patient_id: true } }, ward: { select: { ward_name: true } } },
+        });
+        if (!admissions.length) return { success: true, data: [] };
+        where.admission_id = { in: admissions.map((a: any) => a.admission_id) };
+
         const tasks = await db.nursingTask.findMany({
             where,
-            orderBy: { scheduled_at: 'asc' },
+            // Urgency first, then time — a STAT order should not sit below a
+            // routine task simply because it was scheduled a minute later.
+            orderBy: [{ scheduled_at: 'asc' }],
+            take: 500,
         });
 
-        // Enrich with patient names
-        const admissionIds = [...new Set(tasks.map((t: any) => t.admission_id))];
-        const admissions = await db.admissions.findMany({
-            where: { admission_id: { in: admissionIds } },
-            include: { patient: { select: { full_name: true, patient_id: true } } },
-        });
         const admissionMap = Object.fromEntries(
-            admissions.map((a: any) => [a.admission_id, { patientName: a.patient?.full_name, patientId: a.patient?.patient_id, bedId: a.bed_id }])
+            admissions.map((a: any) => [a.admission_id, {
+                patientName: a.patient?.full_name, patientId: a.patient?.patient_id,
+                bedId: a.bed_id, wardName: a.ward?.ward_name,
+            }])
         );
 
-        return {
-            success: true,
-            data: tasks.map((t: any) => ({
-                ...t,
-                patientName: admissionMap[t.admission_id]?.patientName || 'Unknown',
-                patientId: admissionMap[t.admission_id]?.patientId || '',
-                bedId: admissionMap[t.admission_id]?.bedId || '',
-            })),
-        };
+        const rank: Record<string, number> = { stat: 0, urgent: 1, routine: 2 };
+        const enriched = tasks.map((t: any) => ({
+            ...t,
+            patientName: admissionMap[t.admission_id]?.patientName || 'Unknown',
+            patientId: admissionMap[t.admission_id]?.patientId || '',
+            bedId: admissionMap[t.admission_id]?.bedId || '',
+            wardName: admissionMap[t.admission_id]?.wardName || '',
+        })).sort((a: any, b: any) => {
+            const pr = (rank[a.priority] ?? 2) - (rank[b.priority] ?? 2);
+            return pr !== 0 ? pr : new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime();
+        });
+
+        return { success: true, data: enriched };
     } catch (error) {
         console.error('Get Nursing Tasks Error:', error);
         return { success: false, data: [] };
