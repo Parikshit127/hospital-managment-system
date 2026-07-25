@@ -142,8 +142,34 @@ const NULLABLE_ORG_MODELS = new Set([
     'system_audit_logs', 'lab_audit_logs', 'pharmacy_sales_audit',
 ]);
 
+// Extended clients, one per organization.
+//
+// $extends builds a new client instance on every call, and getTenantPrisma() is
+// called on every requireTenantContext() — several times per request once
+// actions call other actions. The extension only closes over organizationId, so
+// one instance per org is safe to reuse. Cached on globalThis for the same
+// reason the base client is: Next can re-evaluate this module more than once
+// per server process.
+//
+// Measured honestly: construction is cheap (1000 calls complete in under a
+// millisecond), so this is tidiness and allocation pressure rather than a fix
+// for anything slow. The IPD dashboard's latency was investigated here and does
+// NOT come from this path — see the note on getIPDDashboardBundle.
+const globalForTenants = globalThis as unknown as { tenantClients?: Map<string, any> };
+const tenantClients: Map<string, any> = globalForTenants.tenantClients ?? new Map();
+if (isServer) globalForTenants.tenantClients = tenantClients;
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function getTenantPrisma(organizationId: string): any {
+    const cached = tenantClients.get(organizationId);
+    if (cached) return cached;
+    const client = buildTenantPrisma(organizationId);
+    tenantClients.set(organizationId, client);
+    return client;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function buildTenantPrisma(organizationId: string): any {
     return prisma.$extends({
         query: {
             $allModels: {

@@ -15,44 +15,42 @@ export async function getPatientBalances(patientIds: string[]): Promise<Record<s
     try {
         const { db } = await requireTenantContext();
 
-        // 1. Standard Invoices balances (from `invoices` table)
-        const invoices = await db.invoices.findMany({
-            where: {
-                patient_id: { in: patientIds },
-                status: { not: 'Cancelled' }, // Not cancelled
-            },
-            select: { patient_id: true, balance_due: true, invoice_type: true }
-        });
+        // These four reads are independent, and were issued one after another —
+        // four sequential round trips to a pooled remote database on a path that
+        // every IPD list load goes through. Issued together instead.
+        //
+        // 1. Standard invoice balances.
+        // 2. Lab orders that are neither cancelled nor completed still owe their price.
+        // 3. Pharmacy orders, same rule.
+        // 4. The lab price list, used to value (2).
+        const [invoices, labOrders, pharmacyOrders, tests] = await Promise.all([
+            db.invoices.findMany({
+                where: {
+                    patient_id: { in: patientIds },
+                    status: { not: 'Cancelled' },
+                },
+                select: { patient_id: true, balance_due: true, invoice_type: true },
+            }),
+            db.lab_orders.findMany({
+                where: {
+                    patient_id: { in: patientIds },
+                    status: { notIn: ['Cancelled', 'Completed'] },
+                },
+                select: { patient_id: true, test_type: true, status: true },
+            }),
+            db.pharmacy_orders.findMany({
+                where: {
+                    patient_id: { in: patientIds },
+                    status: { notIn: ['Cancelled', 'Completed'] },
+                },
+                select: { patient_id: true, total_amount: true, status: true },
+            }),
+            db.lab_test_inventory.findMany({ select: { test_name: true, price: true } }),
+        ]);
 
-        // 2. Lab Orders balances
-        // If a lab order is not completed/cancelled, it still owes its price.
-        // Once paid, its invoice balance should be handled by standard if it was billed there,
-        // but `finance-actions.ts` implies lab status='Completed' means Paid implicitly without invoice.
-        const labOrders = await db.lab_orders.findMany({
-            where: {
-                patient_id: { in: patientIds },
-                status: { notIn: ['Cancelled', 'Completed'] }
-            },
-            select: { patient_id: true, test_type: true, status: true }
-        });
-        
-        let priceMap = new Map<string, number>();
-        if (labOrders.length > 0) {
-            const tests = await db.lab_test_inventory.findMany({
-                select: { test_name: true, price: true }
-            });
-            priceMap = new Map(tests.map((t: any) => [t.test_name.toLowerCase(), Number(t.price)]));
-        }
-
-        // 3. Pharmacy Orders balances
-        // Same implicit paid status mapping as Lab
-        const pharmacyOrders = await db.pharmacy_orders.findMany({
-            where: {
-                patient_id: { in: patientIds },
-                status: { notIn: ['Cancelled', 'Completed'] }
-            },
-            select: { patient_id: true, total_amount: true, status: true }
-        });
+        const priceMap = new Map<string, number>(
+            tests.map((t: any) => [String(t.test_name).toLowerCase(), Number(t.price)]),
+        );
 
         // Aggregate
         const balances: Record<string, PatientBalances> = {};

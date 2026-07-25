@@ -503,6 +503,11 @@ export async function getIPDAdmissions(statusFilter?: string) {
     const where: any = {};
     if (statusFilter) where.status = statusFilter;
 
+    // `include` costs a round trip per relation in Prisma, and this had four
+    // (one of them nested). Wards are a handful of rows shared across every
+    // admission, so they are fetched once and joined here rather than being
+    // re-fetched per row. Patient and notes stay as includes: they are per-row
+    // data with no reuse, so pulling them separately would not save anything.
     const admissions = await db.admissions.findMany({
       where,
       include: {
@@ -519,8 +524,6 @@ export async function getIPDAdmissions(statusFilter?: string) {
             govt_id_number: true,
           },
         },
-        bed: { include: { wards: true } },
-        ward: true,
         medical_notes: { orderBy: { created_at: "desc" }, take: 3 },
       },
       orderBy: { admission_date: "desc" },
@@ -529,6 +532,20 @@ export async function getIPDAdmissions(statusFilter?: string) {
       // never load the entire history into memory (a cause of slow loads / restarts).
       take: 1000,
     });
+
+    // Ward and bed lookups, fetched once and joined in memory.
+    const [allWards, allBeds] = await Promise.all([
+      db.wards.findMany(),
+      db.beds.findMany({ select: { bed_id: true, ward_id: true, bed_name: true, bed_category: true, status: true } }),
+    ]);
+    const wardById = new Map(allWards.map((w: any) => [w.ward_id, w]));
+    const bedById = new Map(allBeds.map((b: any) => [b.bed_id, b]));
+    for (const a of admissions as any[]) {
+      a.ward = a.ward_id != null ? wardById.get(a.ward_id) ?? null : null;
+      const bed = a.bed_id ? bedById.get(a.bed_id) ?? null : null;
+      const bedRow = bed as { ward_id?: number | null } | null;
+      a.bed = bedRow ? { ...bedRow, wards: bedRow.ward_id != null ? wardById.get(bedRow.ward_id) ?? null : null } : null;
+    }
 
     const patientIds = Array.from(new Set(admissions.map((a: any) => a.patient_id).filter(Boolean))) as string[];
     const cancelledAdmissionIds = admissions
@@ -539,12 +556,21 @@ export async function getIPDAdmissions(statusFilter?: string) {
       getAdmissionCancellationReasons(db, cancelledAdmissionIds),
     ]);
 
-    // Find all admissions that have postings, lab orders, or pharmacy orders
-    const activeAdmissions = admissions.filter((a: any) => a.status === 'Admitted');
+    // "Has anything been charged yet" is only ever used to decide canCancel, and
+    // an admission can only be cancelled within 8 hours of admission. Outside that
+    // window the answer cannot change the outcome, so the four lookups below are
+    // skipped entirely — which on a normal ward is every single load.
+    const CANCEL_WINDOW_MS = 8 * 60 * 60 * 1000;
+    const cancellableCutoff = Date.now() - CANCEL_WINDOW_MS;
+    const activeAdmissions = admissions.filter((a: any) =>
+      a.status === 'Admitted' && new Date(a.admission_date).getTime() >= cancellableCutoff,
+    );
     const activeAdmittedIds = activeAdmissions.map((a: any) => a.admission_id);
     const activePatientIds = Array.from(new Set(activeAdmissions.map((a: any) => a.patient_id))) as string[];
-    
-    const [chargePostings, labOrders, pharmacyOrders, invoiceItems] = await Promise.all([
+
+    const [chargePostings, labOrders, pharmacyOrders, invoiceItems] = activeAdmittedIds.length === 0
+      ? [[], [], [], []]
+      : await Promise.all([
         db.ipdChargePosting.findMany({
             where: { admission_id: { in: activeAdmittedIds } },
             select: { admission_id: true }
@@ -2480,16 +2506,106 @@ export async function cancelAdmission(admissionId: string, reason: string, cance
  * Parts are settled independently so one failing panel does not blank the page.
  */
 export async function getIPDDashboardBundle(statusFilter?: string) {
-  const settle = async <T>(p: Promise<T>): Promise<T | null> => {
-    try { return await p; } catch (e) { console.error('IPD bundle part failed:', e); return null; }
-  };
+  try {
+    const { db, session } = await requireTenantContext();
 
-  const [stats, wards, beds, admissions] = await Promise.all([
-    settle(getIPDStats()),
-    settle(getWardsWithBeds()),
-    settle(getAllBeds()),
-    settle(getIPDAdmissions(statusFilter)),
-  ]);
+    // Fetched flat and stitched in memory, deliberately.
+    //
+    // Prisma turns each `include` into its own query rather than a join, so the
+    // previous shape — beds including wards, including admissions, including
+    // patient — issued 20 round trips for what reads as three calls. Against
+    // this database a round trip is ~126ms, so the includes, not the data, were
+    // the cost.
+    //
+    // Four flat reads cover the same ground: beds, wards, the active admissions
+    // with their patients, and the admissions list itself. Wards and patients
+    // are small sets that repeat across rows, so joining them here is cheaper
+    // than asking the database to repeat them.
+    const [beds, wards, activeAdmissions, admissions] = await Promise.all([
+      db.beds.findMany({ orderBy: { bed_id: 'asc' } }),
+      db.wards.findMany({ orderBy: { ward_name: 'asc' } }),
+      db.admissions.findMany({
+        where: { status: 'Admitted' },
+        select: { admission_id: true, bed_id: true, patient_id: true, ward_id: true, status: true },
+      }),
+      getIPDAdmissions(statusFilter).catch((e: unknown) => {
+        console.error('IPD bundle: admissions failed:', e);
+        return null;
+      }),
+    ]);
 
-  return { success: true, data: { stats, wards, beds, admissions } };
+    const patientIds = [...new Set(activeAdmissions.map((a: { patient_id: string }) => a.patient_id))];
+    const patients = patientIds.length
+      ? await db.oPD_REG.findMany({
+          where: { patient_id: { in: patientIds as string[] } },
+          select: { patient_id: true, full_name: true, phone: true },
+        })
+      : [];
+
+    const patientById = new Map(patients.map((p: { patient_id: string }) => [p.patient_id, p]));
+    const wardById = new Map(wards.map((w: { ward_id: number }) => [w.ward_id, w]));
+    const admissionsByBed = new Map<string, unknown[]>();
+    for (const a of activeAdmissions as Array<Record<string, any>>) {
+      if (!a.bed_id) continue;
+      const list = admissionsByBed.get(a.bed_id) ?? [];
+      list.push({ ...a, patient: patientById.get(a.patient_id) ?? null });
+      admissionsByBed.set(a.bed_id, list);
+    }
+
+    // Beds in the shape the bed map expects (wards + any active admission).
+    const bedsWithRelations = (beds as Array<Record<string, any>>).map(b => ({
+      ...b,
+      wards: wardById.get(b.ward_id) ?? null,
+      admissions: admissionsByBed.get(b.bed_id) ?? [],
+    }));
+
+    // Ward view, grouped from those same beds.
+    const wardData = (wards as Array<Record<string, any>>).map(w => {
+      const wardBeds = (beds as Array<Record<string, any>>).filter(b => b.ward_id === w.ward_id);
+      const countOfStatus = (st: string) => wardBeds.filter(b => b.status === st).length;
+      return {
+        id: w.ward_id, ward_id: w.ward_id, ward_name: w.ward_name, ward_type: w.ward_type,
+        cost_per_day: Number(w.cost_per_day || 0), nursing_charge: Number(w.nursing_charge || 0),
+        beds: wardBeds.map(b => ({ bed_id: b.bed_id, bed_name: b.bed_name, bed_category: b.bed_category, status: b.status, ward_id: b.ward_id })),
+        totalBeds: wardBeds.length,
+        available: countOfStatus('Available'),
+        occupied: countOfStatus('Occupied'),
+        maintenance: countOfStatus('Maintenance'),
+        reserved: countOfStatus('Reserved'),
+        cleaning: countOfStatus('Cleaning'),
+        isolation: countOfStatus('Isolation'),
+        blocked: countOfStatus('Blocked'),
+      };
+    });
+
+    const bedStatus = (st: string) => (beds as Array<Record<string, any>>).filter(b => b.status === st).length;
+    const totalBeds = beds.length;
+    const occupiedBeds = bedStatus('Occupied');
+
+    // Discharged count is the one number not derivable from what is already here.
+    const totalDischarged = await db.admissions.count({ where: { status: 'Discharged' } });
+
+    const stats = {
+      totalAdmitted: activeAdmissions.length,
+      totalDischarged,
+      totalBeds,
+      availableBeds: bedStatus('Available'),
+      occupiedBeds,
+      occupancyRate: totalBeds > 0 ? Math.round((occupiedBeds / totalBeds) * 100) : 0,
+      role: session.role,
+    };
+
+    return {
+      success: true,
+      data: {
+        stats: { success: true, data: stats },
+        wards: { success: true, data: wardData },
+        beds: { success: true, data: JSON.parse(JSON.stringify(bedsWithRelations)) },
+        admissions,
+      },
+    };
+  } catch (error: unknown) {
+    console.error('getIPDDashboardBundle error:', error);
+    return { success: false, data: { stats: null, wards: null, beds: null, admissions: null } };
+  }
 }
