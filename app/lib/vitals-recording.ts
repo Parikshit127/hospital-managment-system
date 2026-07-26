@@ -176,17 +176,53 @@ export async function escalateOnNEWS(
             ? `${who} (${where}) scored NEWS ${score}. Emergency response required — call the treating doctor now.`
             : `${who} (${where}) scored NEWS ${score}${maxSingleParam >= 3 && score < 5 ? ' (single parameter at 3)' : ''}. Urgent review required; increase monitoring frequency.`;
 
-        const recipients = await db.user.findMany({
+        // Who actually needs to know.
+        //
+        // This used to notify every doctor in the organisation on an emergency
+        // band — 41 of them on the demo data, 51 people in total for one
+        // observation. Alarm fatigue is itself a patient-safety hazard: an alert
+        // that reaches everyone is an alert nobody owns. Target the people
+        // responsible for this patient instead.
+        const ids = new Set<string>();
+
+        // Nursing staff on the ward the patient is actually in. Nurses with no
+        // ward set are included as a fallback, so a site that does not use ward
+        // assignment still gets its nurses alerted rather than nobody.
+        const wardId = admission?.ward_id ?? null;
+        const nurses = await db.user.findMany({
             where: {
                 organizationId,
                 is_active: true,
-                role: { in: emergency ? ['nurse', 'ipd_manager', 'doctor'] : ['nurse', 'ipd_manager'] },
+                role: 'nurse',
+                ...(wardId ? { OR: [{ assigned_ward_id: wardId }, { assigned_ward_id: null }] } : {}),
             },
             select: { id: true },
         });
+        nurses.forEach((n: { id: string }) => ids.add(n.id));
 
-        const ids = new Set<string>(recipients.map((r: { id: string }) => r.id));
-        if (admission?.attending_doctor_id) ids.add(admission.attending_doctor_id);
+        // IPD managers coordinate the response and are the fallback when no
+        // attending doctor is recorded.
+        const managers = await db.user.findMany({
+            where: { organizationId, is_active: true, role: 'ipd_manager' },
+            select: { id: true },
+        });
+        managers.forEach((m: { id: string }) => ids.add(m.id));
+
+        // The emergency band is the only one that pulls in a doctor, and only
+        // the one treating this patient.
+        if (emergency) {
+            if (admission?.attending_doctor_id) {
+                ids.add(admission.attending_doctor_id);
+            } else {
+                // No attending doctor on the admission. Do not fall back to
+                // "every doctor" — tell the admins, who can name one.
+                const admins = await db.user.findMany({
+                    where: { organizationId, is_active: true, role: 'admin' },
+                    select: { id: true },
+                });
+                admins.forEach((a: { id: string }) => ids.add(a.id));
+            }
+        }
 
         if (ids.size > 0) {
             await db.notification.createMany({

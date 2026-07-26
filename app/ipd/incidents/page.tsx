@@ -41,6 +41,12 @@ export default function IncidentsPage() {
     const [msg, setMsg] = useState<{ text: string; bad?: boolean } | null>(null);
     const [showForm, setShowForm] = useState(false);
     const [review, setReview] = useState<Record<string, { notes: string; cause: string; action: string }>>({});
+    // Reporting is open to every clinical role, but reviewing and closing is
+    // not — that is the IPD manager's or an administrator's job. Without this
+    // the review boxes were shown to everyone and only rejected on submit,
+    // so a nurse could type a full root-cause analysis and then lose it.
+    const [role, setRole] = useState<string | null>(null);
+    const canReview = role === 'admin' || role === 'ipd_manager';
 
     const [f, setF] = useState({
         incident_type: 'Fall', severity: 'no harm', occurred_at: localNow(),
@@ -56,6 +62,7 @@ export default function IncidentsPage() {
     useEffect(() => { load(); }, [load]);
     useEffect(() => {
         getIPDAdmissions('Admitted').then(r => { if (r.success) setAdmissions((r.data as Row[]) ?? []); });
+        fetch('/api/session').then(r => r.json()).then(s => setRole(s?.role ?? null)).catch(() => setRole(null));
     }, []);
 
     const run = async (fn: () => Promise<{ success: boolean; error?: string }>, ok: string) => {
@@ -197,7 +204,14 @@ export default function IncidentsPage() {
                                     {r.root_cause ? <p className="text-[11px] text-gray-500">Root cause: {String(r.root_cause)}</p> : null}
                                     {r.preventive_action ? <p className="text-[11px] text-gray-500">Preventive action: {String(r.preventive_action)}</p> : null}
 
-                                    {r.status !== 'closed' && (
+                                    {r.status !== 'closed' && !canReview && (
+                                        <p className="rounded-lg bg-gray-50 px-3 py-2 text-[11px] text-gray-500">
+                                            Reported and logged. Review and closure are done by the IPD manager
+                                            or an administrator — you do not need to do anything further.
+                                        </p>
+                                    )}
+
+                                    {r.status !== 'closed' && canReview && (
                                         <div className="grid gap-2 sm:grid-cols-3 pt-1">
                                             <input className={`${input} text-xs`} placeholder="Review notes" value={rv.notes}
                                                 onChange={e => setReview({ ...review, [id]: { ...rv, notes: e.target.value } })} />

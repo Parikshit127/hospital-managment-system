@@ -173,7 +173,22 @@ export function DischargeSettlementContent({ adminMode = false }: { adminMode?: 
     }
 
     if (!billData) {
-        return <div className="min-h-screen bg-gray-50 flex items-center justify-center text-red-500">No bill data found for this admission</div>;
+        // The tenant-scoped client returns nothing for an admission belonging to
+        // another hospital, which is indistinguishable here from one that does
+        // not exist. "No bill data found" sent people hunting for a billing bug
+        // when they were simply signed in to the wrong organisation, so say so.
+        return (
+            <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
+                <div className="max-w-md text-center space-y-2">
+                    <p className="text-red-500 font-semibold">This admission is not available</p>
+                    <p className="text-sm text-gray-500">
+                        No admission <span className="font-mono">{admissionId}</span> exists in the hospital
+                        you are signed in to. Either the reference is wrong, or it belongs to another
+                        hospital — check which account you are logged in with.
+                    </p>
+                </div>
+            </div>
+        );
     }
 
     return (
