@@ -300,3 +300,59 @@ Everything below was run against the demo database and all test data reverted.
 `'use server'` module 500s every page that imports it, including `/api/session`,
 which breaks login app-wide. It caught that mistake twice during development.
 Worth adding to CI.
+
+---
+
+# Addendum — 2026-07-26 follow-up
+
+Work done after the ward walkthrough. Same deploy order applies: **migrate,
+then code, then cron.**
+
+## Extra migration
+
+`20260726000000_news_escalations` — one new table, no changes to existing ones.
+Additive, so it is safe to apply ahead of the code.
+
+## Two extra cron endpoints
+
+Both need the `proxy.ts` bypass, so **reinstall the crontab after the app**, as
+before.
+
+| Endpoint | Schedule | Why |
+|---|---|---|
+| `/api/ipd/mar-topup` | `15 2 * * *` | MAR horizon is now 3 days, not 14. Opening an eMAR already rolls it forward; this is the guarantee for a ward nobody has opened over a long weekend. |
+| `/api/ipd/escalation-timeout` | `* * * * *` | Chases a NEWS escalation nobody has acknowledged. Every minute — the emergency band allows ten minutes, so a coarser tick spends most of the budget waiting. Cheap when idle: one indexed lookup per org. |
+
+Verify list is now 15 endpoints.
+
+## Brief the wards — what changes for staff
+
+- **Doctors get a new Escalations screen** and are expected to answer. An
+  acknowledgement with no instruction is refused. Unanswered escalations chase
+  the doctor after the deadline, then the IPD managers.
+- **Prescribing now checks allergies**, including drug class — prescribing
+  amoxicillin to a penicillin-allergic patient is refused unless a reason is
+  typed. Overrides notify the attending doctor and IPD managers.
+- **Withholding the same drug twice in a row** notifies the prescriber.
+- **Nurses can no longer prescribe.** `addActiveMedication` had no role guard.
+- **Unassigned nursing tasks now alert the whole ward** and carry an
+  "I'll take it" button.
+
+## Do this before the release is worth anything
+
+**Flag the controlled drugs.** Pharmacy → Controlled Drugs. Nothing in either
+formulary is flagged, so the narcotic register, the pharmacy dispensing
+controls and the second-nurse check are all inert today. The screen proposes
+matches; a pharmacist must review and apply them.
+
+Be aware the scan finds only **6 molecules in 6,571 lines**, because the
+formulary is keyed on brand names. It is a starting point, not a complete
+answer.
+
+## Known limitations
+
+- **No on-call or duty roster exists** for doctors anywhere in the system.
+  Escalation level 2 is therefore IPD managers, not the on-call doctor. A real
+  chain needs that roster built.
+- Escalation timings (10 min emergency / 30 min urgent) are in
+  `app/lib/escalation-policy.ts`. Change them there if hospital policy differs.
