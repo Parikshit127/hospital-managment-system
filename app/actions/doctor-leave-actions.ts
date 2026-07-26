@@ -1,5 +1,7 @@
 'use server';
 
+import { guardAction } from '@/app/lib/action-guard';
+
 import { requireTenantContext } from '@/backend/tenant';
 import { revalidatePath } from 'next/cache';
 
@@ -24,6 +26,8 @@ export async function createDoctorLeave(data: {
   toDate: string;
   reason?: string;
 }) {
+    const __denied = await guardAction('doctor-leave-actions', 'createDoctorLeave');
+    if (__denied) return __denied;
   const { db, organizationId } = await requireTenantContext();
   const leave = await (db as any).doctorLeave.create({
     data: {
@@ -41,6 +45,8 @@ export async function createDoctorLeave(data: {
 }
 
 export async function deleteDoctorLeave(id: string) {
+    const __denied = await guardAction('doctor-leave-actions', 'deleteDoctorLeave');
+    if (__denied) return __denied;
   const { db, organizationId } = await requireTenantContext();
   await (db as any).doctorLeave.delete({ where: { id } });
   revalidatePath('/admin/doctor-leave');

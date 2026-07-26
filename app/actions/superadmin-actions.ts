@@ -1,5 +1,7 @@
 'use server';
 
+import { guardAction } from '@/app/lib/action-guard';
+
 import { prisma } from '@/backend/db';
 import * as bcrypt from 'bcryptjs';
 import { cookies } from 'next/headers';
@@ -156,6 +158,8 @@ export async function getOrganizationDetail(id: string) {
 }
 
 export async function createOrganization(prevState: any, formData: FormData) {
+    const __denied = await guardAction('superadmin-actions', 'createOrganization');
+    if (__denied) return __denied;
     const session = await requireSuperAdmin();
 
     const raw = Object.fromEntries(formData.entries());
@@ -285,6 +289,8 @@ export async function createOrganization(prevState: any, formData: FormData) {
 }
 
 export async function toggleOrganization(id: string) {
+    const __denied = await guardAction('superadmin-actions', 'toggleOrganization');
+    if (__denied) return __denied;
     const session = await requireSuperAdmin();
 
     try {
@@ -322,6 +328,8 @@ export async function toggleOrganization(id: string) {
 }
 
 export async function updateOrganizationPlan(id: string, plan: string) {
+    const __denied = await guardAction('superadmin-actions', 'updateOrganizationPlan');
+    if (__denied) return __denied;
     const session = await requireSuperAdmin();
 
     const ALLOWED_PLANS = ['free', 'starter', 'pro', 'enterprise'];
@@ -437,6 +445,8 @@ export async function getOrganizationUsers(orgId?: string, search?: string) {
 // ========================================
 
 export async function updateOrganizationProfile(orgId: string, data: any) {
+    const __denied = await guardAction('superadmin-actions', 'updateOrganizationProfile');
+    if (__denied) return __denied;
     const session = await requireSuperAdmin();
 
     const parsed = organizationProfileSchema.safeParse(data);
@@ -527,6 +537,8 @@ export async function getOrganizationBranches(orgId: string) {
 }
 
 export async function createBranch(orgId: string, data: any) {
+    const __denied = await guardAction('superadmin-actions', 'createBranch');
+    if (__denied) return __denied;
     const session = await requireSuperAdmin();
 
     const parsed = branchSchema.safeParse(data);
@@ -592,6 +604,8 @@ export async function createBranch(orgId: string, data: any) {
 }
 
 export async function updateBranch(branchId: string, data: any) {
+    const __denied = await guardAction('superadmin-actions', 'updateBranch');
+    if (__denied) return __denied;
     const session = await requireSuperAdmin();
 
     const parsed = branchSchema.safeParse(data);
@@ -658,6 +672,8 @@ export async function updateBranch(branchId: string, data: any) {
 }
 
 export async function toggleBranch(branchId: string) {
+    const __denied = await guardAction('superadmin-actions', 'toggleBranch');
+    if (__denied) return __denied;
     const session = await requireSuperAdmin();
 
     try {
@@ -695,6 +711,8 @@ export async function toggleBranch(branchId: string) {
 }
 
 export async function deleteBranch(branchId: string) {
+    const __denied = await guardAction('superadmin-actions', 'deleteBranch');
+    if (__denied) return __denied;
     const session = await requireSuperAdmin();
 
     try {
@@ -745,6 +763,8 @@ export async function getOrganizationConfig(orgId: string) {
 }
 
 export async function updateOrganizationConfig(orgId: string, configData: any) {
+    const __denied = await guardAction('superadmin-actions', 'updateOrganizationConfig');
+    if (__denied) return __denied;
     const session = await requireSuperAdmin();
     try {
         const config = await prisma.organizationConfig.upsert({
@@ -793,6 +813,8 @@ export async function updateOrganizationConfig(orgId: string, configData: any) {
 }
 
 export async function updateOrganizationBranding(orgId: string, brandingData: any) {
+    const __denied = await guardAction('superadmin-actions', 'updateOrganizationBranding');
+    if (__denied) return __denied;
     const session = await requireSuperAdmin();
     try {
         const branding = await prisma.organizationBranding.upsert({
@@ -1086,6 +1108,8 @@ export async function getSubscriptionPlans() {
 }
 
 export async function createSubscriptionPlan(data: any) {
+    const __denied = await guardAction('superadmin-actions', 'createSubscriptionPlan');
+    if (__denied) return __denied;
     const session = await requireSuperAdmin();
     try {
         const existing = await prisma.subscriptionPlan.findUnique({ where: { plan_code: data.plan_code } });
@@ -1126,6 +1150,8 @@ export async function createSubscriptionPlan(data: any) {
 }
 
 export async function updateSubscriptionPlan(planId: string, data: any) {
+    const __denied = await guardAction('superadmin-actions', 'updateSubscriptionPlan');
+    if (__denied) return __denied;
     const session = await requireSuperAdmin();
     try {
         const plan = await prisma.subscriptionPlan.update({

@@ -1,5 +1,7 @@
 'use server';
 
+import { guardAction } from '@/app/lib/action-guard';
+
 import { requireTenantContext } from '@/backend/tenant';
 import { revalidatePath } from 'next/cache';
 import { generateReceiptNumber as genRcpNum } from '@/app/lib/sequence-generator';
@@ -168,6 +170,8 @@ export async function getTpaClaimsFullTracker() {
 
 // Submit a TPA claim
 export async function submitTpaClaimAction(invoiceId: number) {
+    const __denied = await guardAction('insurance-corporate-actions', 'submitTpaClaimAction');
+    if (__denied) return __denied;
     const { db, organizationId } = await requireTenantContext();
     try {
         const claimNumber = `CLM-${Date.now()}`;
@@ -207,6 +211,8 @@ export async function updateTpaClaimAction(data: {
     settled_amount?: number;
     split_id?: number;
 }) {
+    const __denied = await guardAction('insurance-corporate-actions', 'updateTpaClaimAction');
+    if (__denied) return __denied;
     // Block silent settlement overwrites — settlements must go through
     // recordTpaPaymentReceived which accumulates correctly and creates a
     // payments row + audit trail.
@@ -264,6 +270,8 @@ export async function recordTpaPaymentReceived(input: {
     remarks?: string;
     is_partial?: boolean;
 }): Promise<{ success: boolean; payment_id?: number; error?: string }> {
+    const __denied = await guardAction('insurance-corporate-actions', 'recordTpaPaymentReceived');
+    if (__denied) return __denied;
     try {
         const { db, session, organizationId } = await requireTenantContext();
 
@@ -439,6 +447,8 @@ export async function rejectTpaClaim(input: {
     expected_version: number;
     reason: string;
 }): Promise<{ success: boolean; error?: string }> {
+    const __denied = await guardAction('insurance-corporate-actions', 'rejectTpaClaim');
+    if (__denied) return __denied;
     try {
         const { db, session, organizationId } = await requireTenantContext();
 
@@ -570,6 +580,8 @@ export async function createPreAuthAction(data: {
     valid_until?: string;
     remarks?: string;
 }) {
+    const __denied = await guardAction('insurance-corporate-actions', 'createPreAuthAction');
+    if (__denied) return __denied;
     const { db, organizationId } = await requireTenantContext();
     try {
         const preAuth = await db.insurancePreAuth.create({
@@ -605,6 +617,8 @@ export async function updatePreAuthAction(data: {
     tpa_remarks?: string;
     query_due_at?: string;
 }) {
+    const __denied = await guardAction('insurance-corporate-actions', 'updatePreAuthAction');
+    if (__denied) return __denied;
     const { db, organizationId } = await requireTenantContext();
     try {
         await db.insurancePreAuth.update({

@@ -1,5 +1,7 @@
 'use server';
 
+import { guardAction } from '@/app/lib/action-guard';
+
 import { requireTenantContext } from '@/backend/tenant';
 import { isSemiDischarged } from '@/app/lib/admission-status';
 
@@ -135,6 +137,8 @@ export async function addInsuranceProvider(data: {
     contact_phone?: string;
     address?: string;
 }) {
+    const __denied = await guardAction('insurance-actions', 'addInsuranceProvider');
+    if (__denied) return __denied;
     try {
         const { db } = await requireTenantContext();
         const provider = await db.insurance_providers.create({
@@ -165,6 +169,8 @@ export async function updateInsuranceProvider(id: number, data: {
     default_discount_percentage?: number;
     is_active?: boolean;
 }) {
+    const __denied = await guardAction('insurance-actions', 'updateInsuranceProvider');
+    if (__denied) return __denied;
     try {
         const { db, session } = await requireTenantContext();
         if (session.role !== 'admin') return { success: false, error: 'Admin only' };
@@ -315,6 +321,8 @@ export async function addPatientPolicy(data: {
     valid_from?: string;
     valid_until?: string;
 }) {
+    const __denied = await guardAction('insurance-actions', 'addPatientPolicy');
+    if (__denied) return __denied;
     try {
         const { db, organizationId } = await requireTenantContext();
         const coverage = data.coverage_limit != null && data.coverage_limit !== ('' as any)
@@ -397,6 +405,8 @@ export async function updatePatientPolicy(id: number, data: {
     valid_until?: string;
     status?: string;
 }) {
+    const __denied = await guardAction('insurance-actions', 'updatePatientPolicy');
+    if (__denied) return __denied;
     try {
         const { db, organizationId } = await requireTenantContext();
         // Verify policy belongs to this tenant
@@ -450,6 +460,8 @@ export async function updatePatientPolicy(id: number, data: {
 }
 
 export async function deletePatientPolicy(id: number) {
+    const __denied = await guardAction('insurance-actions', 'deletePatientPolicy');
+    if (__denied) return __denied;
     try {
         const { db, organizationId } = await requireTenantContext();
         const existing = await db.insurance_policies.findFirst({
@@ -502,6 +514,8 @@ export async function submitInsuranceClaim(data: {
     admission_id?: string;
     claimed_amount: number;
 }) {
+    const __denied = await guardAction('insurance-actions', 'submitInsuranceClaim');
+    if (__denied) return __denied;
     try {
         const { db } = await requireTenantContext();
         
@@ -589,6 +603,8 @@ export async function updateClaimStatus(claimId: number, data: {
     rejected_amount?: number;
     rejection_reason?: string;
 }) {
+    const __denied = await guardAction('insurance-actions', 'updateClaimStatus');
+    if (__denied) return __denied;
     try {
         const { db } = await requireTenantContext();
         

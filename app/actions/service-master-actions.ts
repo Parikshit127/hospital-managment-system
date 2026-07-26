@@ -1,4 +1,6 @@
 'use server';
+
+import { guardAction } from '@/app/lib/action-guard';
 import { requireTenantContext } from '@/backend/tenant';
 import { z } from 'zod';
 
@@ -59,6 +61,8 @@ export async function listServices(opts?: { search?: string; category?: string; 
 }
 
 export async function createService(input: unknown) {
+    const __denied = await guardAction('service-master-actions', 'createService');
+    if (__denied) return __denied;
   try {
     const { db, organizationId, session } = await requireTenantContext();
     if (session.role !== 'admin') return { success: false, error: 'Admin only' };
@@ -74,6 +78,8 @@ export async function createService(input: unknown) {
 }
 
 export async function updateService(id: number, input: unknown) {
+    const __denied = await guardAction('service-master-actions', 'updateService');
+    if (__denied) return __denied;
   try {
     const { db, organizationId, session } = await requireTenantContext();
     if (session.role !== 'admin') return { success: false, error: 'Admin only' };
@@ -89,6 +95,8 @@ export async function updateService(id: number, input: unknown) {
 }
 
 export async function deactivateService(id: number) {
+    const __denied = await guardAction('service-master-actions', 'deactivateService');
+    if (__denied) return __denied;
   try {
     const { db, organizationId, session } = await requireTenantContext();
     if (session.role !== 'admin') return { success: false, error: 'Admin only' };
@@ -132,6 +140,8 @@ export async function listLabTests(opts?: { search?: string; page?: number; limi
 }
 
 export async function createLabTest(input: unknown) {
+    const __denied = await guardAction('service-master-actions', 'createLabTest');
+    if (__denied) return __denied;
   try {
     const { db, organizationId, session } = await requireTenantContext();
     if (session.role !== 'admin') return { success: false, error: 'Admin only' };
@@ -147,6 +157,8 @@ export async function createLabTest(input: unknown) {
 }
 
 export async function updateLabTest(id: number, input: unknown) {
+    const __denied = await guardAction('service-master-actions', 'updateLabTest');
+    if (__denied) return __denied;
   try {
     const { db, organizationId, session } = await requireTenantContext();
     if (session.role !== 'admin') return { success: false, error: 'Admin only' };
@@ -192,6 +204,8 @@ export async function listPackages(opts?: { search?: string; page?: number; limi
 }
 
 export async function createPackage(input: unknown) {
+    const __denied = await guardAction('service-master-actions', 'createPackage');
+    if (__denied) return __denied;
   try {
     const { db, organizationId, session } = await requireTenantContext();
     if (session.role !== 'admin') return { success: false, error: 'Admin only' };
@@ -207,6 +221,8 @@ export async function createPackage(input: unknown) {
 }
 
 export async function updatePackage(id: number, input: unknown) {
+    const __denied = await guardAction('service-master-actions', 'updatePackage');
+    if (__denied) return __denied;
   try {
     const { db, organizationId, session } = await requireTenantContext();
     if (session.role !== 'admin') return { success: false, error: 'Admin only' };
@@ -222,6 +238,8 @@ export async function updatePackage(id: number, input: unknown) {
 }
 
 export async function deleteService(id: number) {
+    const __denied = await guardAction('service-master-actions', 'deleteService');
+    if (__denied) return __denied;
   try {
     const { db, organizationId, session } = await requireTenantContext();
     if (session.role !== 'admin') return { success: false, error: 'Admin only' };
@@ -236,6 +254,8 @@ export async function deleteService(id: number) {
 }
 
 export async function deleteLabTest(id: number) {
+    const __denied = await guardAction('service-master-actions', 'deleteLabTest');
+    if (__denied) return __denied;
   try {
     const { db, organizationId, session } = await requireTenantContext();
     if (session.role !== 'admin') return { success: false, error: 'Admin only' };
@@ -250,6 +270,8 @@ export async function deleteLabTest(id: number) {
 }
 
 export async function deletePackage(id: number) {
+    const __denied = await guardAction('service-master-actions', 'deletePackage');
+    if (__denied) return __denied;
   try {
     const { db, organizationId, session } = await requireTenantContext();
     if (session.role !== 'admin') return { success: false, error: 'Admin only' };
@@ -307,6 +329,8 @@ export async function bulkUpsertPackageTpaRates(
   providerId: number,
   rates: { package_id: number; tpa_amount: number | null; tpa_package_name?: string | null }[],
 ) {
+    const __denied = await guardAction('service-master-actions', 'bulkUpsertPackageTpaRates');
+    if (__denied) return __denied;
   try {
     const { db, organizationId, session } = await requireTenantContext();
     if (session.role !== 'admin') return { success: false, error: 'Admin only' };
@@ -363,6 +387,8 @@ const exclusivePackageSchema = z.object({
 });
 
 export async function createExclusivePackage(providerId: number, input: unknown) {
+    const __denied = await guardAction('service-master-actions', 'createExclusivePackage');
+    if (__denied) return __denied;
   try {
     const { db, organizationId, session } = await requireTenantContext();
     if (session.role !== 'admin') return { success: false, error: 'Admin only' };
@@ -392,6 +418,8 @@ export async function createExclusivePackage(providerId: number, input: unknown)
 }
 
 export async function updateExclusivePackage(packageId: number, input: unknown) {
+    const __denied = await guardAction('service-master-actions', 'updateExclusivePackage');
+    if (__denied) return __denied;
   try {
     const { db, organizationId, session } = await requireTenantContext();
     if (session.role !== 'admin') return { success: false, error: 'Admin only' };
@@ -423,6 +451,8 @@ export async function updateExclusivePackage(packageId: number, input: unknown) 
 }
 
 export async function deleteExclusivePackage(packageId: number) {
+    const __denied = await guardAction('service-master-actions', 'deleteExclusivePackage');
+    if (__denied) return __denied;
   try {
     const { db, organizationId, session } = await requireTenantContext();
     if (session.role !== 'admin') return { success: false, error: 'Admin only' };
@@ -475,6 +505,8 @@ export async function listRadiologyImaging(opts?: { search?: string; page?: numb
 }
 
 export async function createRadiologyImaging(input: unknown) {
+    const __denied = await guardAction('service-master-actions', 'createRadiologyImaging');
+    if (__denied) return __denied;
   try {
     const { db, organizationId, session } = await requireTenantContext();
     if (session.role !== 'admin') return { success: false, error: 'Admin only' };
@@ -490,6 +522,8 @@ export async function createRadiologyImaging(input: unknown) {
 }
 
 export async function updateRadiologyImaging(id: number, input: unknown) {
+    const __denied = await guardAction('service-master-actions', 'updateRadiologyImaging');
+    if (__denied) return __denied;
   try {
     const { db, organizationId, session } = await requireTenantContext();
     if (session.role !== 'admin') return { success: false, error: 'Admin only' };
@@ -505,6 +539,8 @@ export async function updateRadiologyImaging(id: number, input: unknown) {
 }
 
 export async function deleteRadiologyImaging(id: number) {
+    const __denied = await guardAction('service-master-actions', 'deleteRadiologyImaging');
+    if (__denied) return __denied;
   try {
     const { db, organizationId, session } = await requireTenantContext();
     if (session.role !== 'admin') return { success: false, error: 'Admin only' };

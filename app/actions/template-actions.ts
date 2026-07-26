@@ -1,5 +1,7 @@
 'use server';
 
+import { guardAction } from '@/app/lib/action-guard';
+
 import { requireTenantContext } from '@/backend/tenant';
 import { revalidatePath } from 'next/cache';
 
@@ -120,6 +122,8 @@ export async function createTemplate(data: {
     content_json?: any;
     is_default?: boolean;
 }) {
+    const __denied = await guardAction('template-actions', 'createTemplate');
+    if (__denied) return __denied;
     try {
         const { db, organizationId, session } = await requireTenantContext();
 
@@ -171,6 +175,8 @@ export async function updateTemplate(templateId: string, data: {
     is_default?: boolean;
     is_active?: boolean;
 }) {
+    const __denied = await guardAction('template-actions', 'updateTemplate');
+    if (__denied) return __denied;
     try {
         const { db, organizationId, session } = await requireTenantContext();
 
@@ -212,6 +218,8 @@ export async function updateTemplate(templateId: string, data: {
 }
 
 export async function deleteTemplate(templateId: string) {
+    const __denied = await guardAction('template-actions', 'deleteTemplate');
+    if (__denied) return __denied;
     try {
         const { db, organizationId, session } = await requireTenantContext();
 
@@ -244,6 +252,8 @@ export async function deleteTemplate(templateId: string) {
 }
 
 export async function cloneTemplate(templateId: string, newName: string) {
+    const __denied = await guardAction('template-actions', 'cloneTemplate');
+    if (__denied) return __denied;
     try {
         const { db, organizationId, session } = await requireTenantContext();
 

@@ -1,5 +1,7 @@
 "use server";
 
+import { guardAction } from '@/app/lib/action-guard';
+
 import { requireTenantContext } from "@/backend/tenant";
 import { prisma } from "@/backend/db";
 import { logAudit } from "@/app/lib/audit";
@@ -161,6 +163,8 @@ export async function bulkRegisterER(
     brought_by?: string | null;
   }>,
 ) {
+    const __denied = await guardAction('er-actions', 'bulkRegisterER');
+    if (__denied) return __denied;
   try {
     const { db, organizationId } = await requireTenantContext();
     const created: string[] = [];
@@ -347,6 +351,8 @@ export async function createMLCRecord(input: {
   injury_time?: string | null;
   alcohol_involved?: boolean;
 }) {
+    const __denied = await guardAction('er-actions', 'createMLCRecord');
+    if (__denied) return __denied;
   try {
     const { db, organizationId } = await requireTenantContext();
     const mlc_number = await nextMLCNumber(db, organizationId);
@@ -412,6 +418,8 @@ export async function createMLCRecord(input: {
  * Converts an ER registration summary (Visit Fee + Orders) into a Finance Invoice.
  */
 export async function generateERInvoice(erRegistrationId: string) {
+    const __denied = await guardAction('er-actions', 'generateERInvoice');
+    if (__denied) return __denied;
   try {
     const { db, organizationId } = await requireTenantContext();
 
@@ -561,6 +569,8 @@ export async function generateERInvoice(erRegistrationId: string) {
 }
 
 export async function markPoliceInformed(mlcId: string) {
+    const __denied = await guardAction('er-actions', 'markPoliceInformed');
+    if (__denied) return __denied;
   try {
     const { db } = await requireTenantContext();
     const updated = await db.mLCRecord.update({
@@ -592,6 +602,8 @@ export async function recordERVitals(input: {
   pain_scale?: number | null;
   blood_sugar?: number | null;
 }) {
+    const __denied = await guardAction('er-actions', 'recordERVitals');
+    if (__denied) return __denied;
   try {
     const { db } = await requireTenantContext();
     const e = input.gcs_eye ?? 0;
@@ -635,6 +647,8 @@ export async function createEROrder(input: {
   priority?: "Stat" | "Urgent" | "Routine";
   ordered_by: string;
 }) {
+    const __denied = await guardAction('er-actions', 'createEROrder');
+    if (__denied) return __denied;
   try {
     const { db } = await requireTenantContext();
     const order = await db.eROrder.create({
@@ -658,6 +672,8 @@ export async function updateEROrderStatus(
   orderId: string,
   status: "InProgress" | "Completed" | "Cancelled",
 ) {
+    const __denied = await guardAction('er-actions', 'updateEROrderStatus');
+    if (__denied) return __denied;
   try {
     const { db } = await requireTenantContext();
     const order = await db.eROrder.update({
@@ -683,6 +699,8 @@ export async function saveERNote(input: {
   content: string;
   created_by: string;
 }) {
+    const __denied = await guardAction('er-actions', 'saveERNote');
+    if (__denied) return __denied;
   try {
     const { db } = await requireTenantContext();
     const note = await db.eRNote.create({
@@ -708,6 +726,8 @@ export async function transferERtoIP(input: {
   er_registration_id: string;
   admission_id: string;
 }) {
+    const __denied = await guardAction('er-actions', 'transferERtoIP');
+    if (__denied) return __denied;
   try {
     const { db } = await requireTenantContext();
     const reg = await db.eRRegistration.update({
@@ -738,6 +758,8 @@ export async function dischargeERPatient(input: {
   er_registration_id: string;
   disposition: "Discharged" | "LAMA" | "Death" | "Transferred" | "Referred";
 }) {
+    const __denied = await guardAction('er-actions', 'dischargeERPatient');
+    if (__denied) return __denied;
   try {
     const { db } = await requireTenantContext();
     const statusMap: Record<string, string> = {

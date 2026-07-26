@@ -1,5 +1,7 @@
 'use server';
 
+import { guardAction } from '@/app/lib/action-guard';
+
 import { requireTenantContext } from '@/backend/tenant';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
@@ -17,6 +19,8 @@ const pillReminderSchema = z.object({
 });
 
 export async function schedulePillReminder(formData: any) {
+    const __denied = await guardAction('pill-actions', 'schedulePillReminder');
+    if (__denied) return __denied;
   try {
     const { db, organizationId, session } = await requireTenantContext();
 
@@ -110,6 +114,8 @@ export async function getActivePillReminders(patientId?: string) {
 }
 
 export async function deactivatePillReminder(id: string) {
+    const __denied = await guardAction('pill-actions', 'deactivatePillReminder');
+    if (__denied) return __denied;
   try {
     const { db } = await requireTenantContext();
 

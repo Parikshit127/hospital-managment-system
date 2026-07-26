@@ -1,5 +1,7 @@
 'use server';
 
+import { guardAction } from '@/app/lib/action-guard';
+
 import { requireTenantContext, requireRoleAndTenant } from '@/backend/tenant';
 import { getModuleConfig, updateModuleConfig } from '@/app/actions/module-config-actions';
 import { logAudit } from '@/app/lib/audit';
@@ -36,6 +38,8 @@ export async function getCashComplianceConfig() {
  * writes an explicit audit entry capturing old -> new values.
  */
 export async function saveCashComplianceConfig(input: { pan_threshold: number; cash_limit: number }) {
+    const __denied = await guardAction('cash-compliance-actions', 'saveCashComplianceConfig');
+    if (__denied) return __denied;
     try {
         const { session } = await requireRoleAndTenant(['admin', 'finance']);
 

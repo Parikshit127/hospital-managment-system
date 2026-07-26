@@ -1,5 +1,7 @@
 'use server';
 
+import { guardAction } from '@/app/lib/action-guard';
+
 import { requireTenantContext } from '@/backend/tenant';
 import { revalidatePath } from 'next/cache';
 
@@ -58,6 +60,8 @@ export async function createLead(data: {
   name: string; phone: string; email?: string; source: string;
   sourceDetail?: string; departmentInterest?: string; notes?: string;
 }) {
+    const __denied = await guardAction('crm-actions', 'createLead');
+    if (__denied) return __denied;
   try {
     const { db, organizationId } = await requireTenantContext();
     const lead = await (db.cRMLead as any).create({
@@ -81,6 +85,8 @@ export async function createLead(data: {
 }
 
 export async function updateLeadStatus(leadId: string, status: string, lostReason?: string) {
+    const __denied = await guardAction('crm-actions', 'updateLeadStatus');
+    if (__denied) return __denied;
   try {
     const { db, organizationId } = await requireTenantContext();
     const data: any = { status, updated_at: new Date() };
@@ -98,6 +104,8 @@ export async function addLeadActivity(data: {
   leadId: string; activityType: string; direction?: string;
   content: string; outcome?: string; performedBy: string;
 }) {
+    const __denied = await guardAction('crm-actions', 'addLeadActivity');
+    if (__denied) return __denied;
   try {
     const { db, organizationId } = await requireTenantContext();
     const activity = await (db.cRMActivity as any).create({
@@ -151,6 +159,8 @@ export async function createCampaign(data: {
   name: string; campaignType: string; targetAudience?: string;
   messageTemplate: string; scheduledAt?: string;
 }) {
+    const __denied = await guardAction('crm-actions', 'createCampaign');
+    if (__denied) return __denied;
   try {
     const { db, organizationId } = await requireTenantContext();
     const campaign = await (db.cRMCampaign as any).create({
@@ -188,6 +198,8 @@ export async function addReferralDoctor(data: {
   doctorName: string; specialty?: string; hospital?: string;
   phone?: string; email?: string; payoutPercentage?: number;
 }) {
+    const __denied = await guardAction('crm-actions', 'addReferralDoctor');
+    if (__denied) return __denied;
   try {
     const { db, organizationId } = await requireTenantContext();
     const doc = await (db.doctorReferralNetwork as any).create({

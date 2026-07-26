@@ -28,6 +28,9 @@ jobs:
       # module 500s every page that imports it — including /api/session, which
       # takes out login app-wide. TypeScript does not catch it.
       - run: npm run check:server-actions
+      # Every mutating server action must say who may run it. A nurse
+      # discharged a patient because nothing checked.
+      - run: npm run check:action-guards
 
       - run: npx prisma generate
 

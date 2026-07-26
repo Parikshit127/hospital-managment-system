@@ -1,5 +1,7 @@
 'use server';
 
+import { guardAction } from '@/app/lib/action-guard';
+
 import { requireTenantContext } from '@/backend/tenant';
 
 function serialize<T>(data: T): T {
@@ -19,6 +21,8 @@ export async function importBankStatement(rows: {
     balance: number;
     bank_account: string;
 }[]) {
+    const __denied = await guardAction('bank-actions', 'importBankStatement');
+    if (__denied) return __denied;
     try {
         const { db } = await requireTenantContext();
 

@@ -1,5 +1,7 @@
 'use server';
 
+import { guardAction } from '@/app/lib/action-guard';
+
 /**
  * Insurance / TPA receivables aging, bill-wise sanction, desk dashboard and a
  * GL reconciliation check. Implements the benchmark "Ins. Outstanding" and
@@ -395,6 +397,8 @@ export async function getTpaDeskDashboard(filters?: { provider_id?: number }) {
 // GL RECONCILIATION — subledger (sum of tpa_payable) vs GL receivable 1150.
 // ─────────────────────────────────────────────────────────────────────────────
 export async function reconcileReceivablesToGL() {
+    const __denied = await guardAction('insurance-aging-actions', 'reconcileReceivablesToGL');
+    if (__denied) return __denied;
   const { db, organizationId } = await requireTenantContext();
 
   const tpa = await db.invoices.aggregate({

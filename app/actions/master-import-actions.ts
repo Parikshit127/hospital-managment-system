@@ -1,5 +1,7 @@
 'use server';
 
+import { guardAction } from '@/app/lib/action-guard';
+
 import { requireTenantContext } from '@/backend/tenant';
 import {
   createDoctor, updateDoctor,
@@ -78,6 +80,8 @@ export async function importMasterData(
   type: MasterImportType,
   rows: Record<string, unknown>[],
 ): Promise<{ success: boolean; data?: ImportMasterResult; error?: string }> {
+    const __denied = await guardAction('master-import-actions', 'importMasterData');
+    if (__denied) return __denied;
   try {
     const { db, session, organizationId } = await requireTenantContext();
     if (session.role !== 'admin') return { success: false, error: 'Admin only' };

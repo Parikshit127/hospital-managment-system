@@ -1,5 +1,7 @@
 "use server";
 
+import { guardAction } from '@/app/lib/action-guard';
+
 import { requireTenantContext } from "@/backend/tenant";
 import { getTenantPrisma } from "@/backend/db";
 import { revalidatePath } from "next/cache";
@@ -155,6 +157,8 @@ export async function admitPatient(
   doctorName: string,
   diagnosis: string,
 ) {
+    const __denied = await guardAction('doctor-actions', 'admitPatient');
+    if (__denied) return __denied;
   try {
     const { db, organizationId } = await requireTenantContext();
 
@@ -257,6 +261,8 @@ export async function saveMedicalNote(data: {
   note_type: string;
   details: string;
 }) {
+    const __denied = await guardAction('doctor-actions', 'saveMedicalNote');
+    if (__denied) return __denied;
   try {
     const { db, organizationId } = await requireTenantContext();
 
@@ -317,6 +323,8 @@ export async function getMedicalNotesForAdmission(admissionId: string) {
 }
 
 export async function saveClinicalNotes(data: any) {
+    const __denied = await guardAction('doctor-actions', 'saveClinicalNotes');
+    if (__denied) return __denied;
   try {
     const { db, organizationId } = await requireTenantContext();
 
@@ -439,6 +447,8 @@ export async function updateAppointmentStatus(
   appointmentId: string,
   status: string,
 ) {
+    const __denied = await guardAction('doctor-actions', 'updateAppointmentStatus');
+    if (__denied) return __denied;
   try {
     const { db } = await requireTenantContext();
 
@@ -478,6 +488,8 @@ export async function createPharmacyOrder(
   doctorId: string,
   items: { name: string; qty: number }[],
 ) {
+    const __denied = await guardAction('doctor-actions', 'createPharmacyOrder');
+    if (__denied) return __denied;
   try {
     const { db, organizationId } = await requireTenantContext();
 
@@ -530,6 +542,8 @@ export async function lookupICD10(query: string) {
 // ========================================
 
 export async function generateAISOAPNote(rawText: string, patientId: string) {
+    const __denied = await guardAction('doctor-actions', 'generateAISOAPNote');
+    if (__denied) return __denied;
   try {
     const { db } = await requireTenantContext();
     const { generateSOAPNote } = await import("@/app/lib/ai-service");
@@ -771,6 +785,8 @@ export async function updateDoctorAvailability(data: {
   slotDuration: number;
   isAvailable: boolean;
 }) {
+    const __denied = await guardAction('doctor-actions', 'updateDoctorAvailability');
+    if (__denied) return __denied;
   try {
     const { db } = await requireTenantContext();
 
@@ -850,6 +866,8 @@ export async function toggleSlotAvailability(
   slotId: string,
   isAvailable: boolean,
 ) {
+    const __denied = await guardAction('doctor-actions', 'toggleSlotAvailability');
+    if (__denied) return __denied;
   try {
     const { db } = await requireTenantContext();
     await db.appointmentSlot.update({
@@ -1062,6 +1080,8 @@ export async function saveTemplate(data: {
   type: string;
   content: string;
 }) {
+    const __denied = await guardAction('doctor-actions', 'saveTemplate');
+    if (__denied) return __denied;
   try {
     const { db } = await requireTenantContext();
 
@@ -1090,6 +1110,8 @@ export async function saveTemplate(data: {
 }
 
 export async function deleteTemplate(id: string) {
+    const __denied = await guardAction('doctor-actions', 'deleteTemplate');
+    if (__denied) return __denied;
   try {
     const { db } = await requireTenantContext();
     await db.prescriptionTemplate.delete({ where: { id } });
@@ -1111,6 +1133,8 @@ export async function scheduleFollowUp(data: {
   scheduledDate: string;
   notes?: string;
 }) {
+    const __denied = await guardAction('doctor-actions', 'scheduleFollowUp');
+    if (__denied) return __denied;
   try {
     const { db } = await requireTenantContext();
 
@@ -1191,6 +1215,8 @@ export async function getFollowUpsDue(
 }
 
 export async function updateFollowUpStatus(id: string, status: string) {
+    const __denied = await guardAction('doctor-actions', 'updateFollowUpStatus');
+    if (__denied) return __denied;
   try {
     const { db } = await requireTenantContext();
     await db.followUp.update({ where: { id }, data: { status } });

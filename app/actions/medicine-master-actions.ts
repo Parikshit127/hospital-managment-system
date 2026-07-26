@@ -1,4 +1,6 @@
 'use server';
+
+import { guardAction } from '@/app/lib/action-guard';
 import { requireTenantContext } from '@/backend/tenant';
 import { updateTag } from 'next/cache';
 import { z } from 'zod';
@@ -89,6 +91,8 @@ export async function listMedicines(opts?: { search?: string; page?: number; lim
 
 // ---- Create medicine ----
 export async function createMedicine(input: unknown) {
+    const __denied = await guardAction('medicine-master-actions', 'createMedicine');
+    if (__denied) return __denied;
   try {
     const { db, organizationId, session } = await requireTenantContext();
     if (session.role !== 'admin') return { success: false, error: 'Admin only' };
@@ -120,6 +124,8 @@ export async function createMedicine(input: unknown) {
 
 // ---- Update medicine ----
 export async function updateMedicine(id: number, input: unknown) {
+    const __denied = await guardAction('medicine-master-actions', 'updateMedicine');
+    if (__denied) return __denied;
   try {
     const { db, organizationId, session } = await requireTenantContext();
     if (session.role !== 'admin') return { success: false, error: 'Admin only' };
@@ -148,6 +154,8 @@ export async function updateMedicine(id: number, input: unknown) {
 
 // ---- Deactivate medicine ----
 export async function deactivateMedicine(id: number) {
+    const __denied = await guardAction('medicine-master-actions', 'deactivateMedicine');
+    if (__denied) return __denied;
   try {
     const { db, organizationId, session } = await requireTenantContext();
     if (session.role !== 'admin') return { success: false, error: 'Admin only' };
@@ -186,6 +194,8 @@ export async function listBatches(medicineId: number) {
 
 // ---- Add batch ----
 export async function addBatch(input: unknown) {
+    const __denied = await guardAction('medicine-master-actions', 'addBatch');
+    if (__denied) return __denied;
   try {
     const { db, organizationId, session } = await requireTenantContext();
     if (session.role !== 'admin') return { success: false, error: 'Admin only' };
@@ -216,6 +226,8 @@ export async function addBatch(input: unknown) {
 
 // ---- Update batch ----
 export async function updateBatch(id: number, input: unknown) {
+    const __denied = await guardAction('medicine-master-actions', 'updateBatch');
+    if (__denied) return __denied;
   try {
     const { db, organizationId, session } = await requireTenantContext();
     if (session.role !== 'admin') return { success: false, error: 'Admin only' };

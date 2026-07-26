@@ -1,5 +1,7 @@
 'use server';
 
+import { guardAction } from '@/app/lib/action-guard';
+
 import { requireTenantContext } from '@/backend/tenant';
 
 function serialize<T>(data: T): T {
@@ -29,6 +31,8 @@ export async function createFinancialPeriod(data: {
     start_date: string;
     end_date: string;
 }) {
+    const __denied = await guardAction('period-actions', 'createFinancialPeriod');
+    if (__denied) return __denied;
     try {
         const { db } = await requireTenantContext();
 
@@ -59,6 +63,8 @@ export async function createFinancialPeriod(data: {
 }
 
 export async function closeFinancialPeriod(id: number) {
+    const __denied = await guardAction('period-actions', 'closeFinancialPeriod');
+    if (__denied) return __denied;
     try {
         const { db, session } = await requireTenantContext();
 

@@ -1,5 +1,7 @@
 'use server';
 
+import { guardAction } from '@/app/lib/action-guard';
+
 import { requireTenantContext, denyUnlessRole, CLINICAL_ROLES } from '@/backend/tenant';
 import { revalidatePath } from 'next/cache';
 // NEWS2 lives in a plain module: a 'use server' file may only export async
@@ -498,6 +500,8 @@ export async function getNursingAssessments(admissionId: string) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function setExpectedDischargeDate(admissionId: string, edd: string) {
+    const __denied = await guardAction('ipd-nursing-actions', 'setExpectedDischargeDate');
+    if (__denied) return __denied;
     try {
         const { db } = await requireTenantContext();
         await db.admissions.update({
@@ -524,6 +528,8 @@ const DEFAULT_DISCHARGE_CHECKLIST = [
 ];
 
 export async function markFitForDischarge(admissionId: string, doctorId: string) {
+    const __denied = await guardAction('ipd-nursing-actions', 'markFitForDischarge');
+    if (__denied) return __denied;
     try {
         const { db } = await requireTenantContext();
         const admission = await db.admissions.findUnique({
@@ -568,6 +574,8 @@ export async function getPreDischargeChecklist(admissionId: string) {
 }
 
 export async function updateDischargeChecklistItem(admissionId: string, itemId: string, done: boolean) {
+    const __denied = await guardAction('ipd-nursing-actions', 'updateDischargeChecklistItem');
+    if (__denied) return __denied;
     try {
         const { db } = await requireTenantContext();
         const admission = await db.admissions.findUnique({
@@ -592,6 +600,8 @@ export async function submitTPAClaim(preAuthId: string, data: {
     final_claimed_amount: number;
     remarks?: string;
 }) {
+    const __denied = await guardAction('ipd-nursing-actions', 'submitTPAClaim');
+    if (__denied) return __denied;
     try {
         const { db } = await requireTenantContext();
         await db.insurancePreAuth.update({
@@ -612,6 +622,8 @@ export async function recordTPAQuery(preAuthId: string, data: {
     query_text: string;
     response_text?: string;
 }) {
+    const __denied = await guardAction('ipd-nursing-actions', 'recordTPAQuery');
+    if (__denied) return __denied;
     try {
         const { db } = await requireTenantContext();
         const existing = await db.insurancePreAuth.findUnique({
@@ -638,6 +650,8 @@ export async function recordTPASettlement(preAuthId: string, data: {
     settlement_date: string;
     remarks?: string;
 }) {
+    const __denied = await guardAction('ipd-nursing-actions', 'recordTPASettlement');
+    if (__denied) return __denied;
     try {
         const { db } = await requireTenantContext();
         await db.insurancePreAuth.update({
@@ -667,6 +681,8 @@ export async function createInsurancePreAuth(data: {
     diagnosis_icd?: string;
     procedure_codes?: any[];
 }) {
+    const __denied = await guardAction('ipd-nursing-actions', 'createInsurancePreAuth');
+    if (__denied) return __denied;
     try {
         const { db, organizationId } = await requireTenantContext();
         const preauth = await db.insurancePreAuth.create({
@@ -690,6 +706,8 @@ export async function createInsurancePreAuth(data: {
 }
 
 export async function updatePreAuthStatus(preAuthId: string, status: string, approvedAmount?: number, remarks?: string) {
+    const __denied = await guardAction('ipd-nursing-actions', 'updatePreAuthStatus');
+    if (__denied) return __denied;
     try {
         const { db } = await requireTenantContext();
         await db.insurancePreAuth.update({

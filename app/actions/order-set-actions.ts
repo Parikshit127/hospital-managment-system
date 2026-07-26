@@ -1,5 +1,7 @@
 'use server';
 
+import { guardAction } from '@/app/lib/action-guard';
+
 /**
  * GAP 8 — Order Set / Saved Prescription Templates
  * Multi-domain combination: Chief Complaints, Gross Examination, Diagnosis,
@@ -21,6 +23,8 @@ export async function createOrderSet(data: {
     advice_medications?: Array<{ name: string; dosage?: string; frequency?: string }>;
     op_procedures?: string[];
 }) {
+    const __denied = await guardAction('order-set-actions', 'createOrderSet');
+    if (__denied) return __denied;
     const { db, organizationId } = await requireTenantContext();
 
     try {
@@ -89,6 +93,8 @@ export async function updateOrderSet(
         op_procedures?: string[];
     }
 ) {
+    const __denied = await guardAction('order-set-actions', 'updateOrderSet');
+    if (__denied) return __denied;
     const { db, organizationId } = await requireTenantContext();
 
     try {
@@ -116,6 +122,8 @@ export async function updateOrderSet(
 }
 
 export async function deleteOrderSet(orderSetId: string) {
+    const __denied = await guardAction('order-set-actions', 'deleteOrderSet');
+    if (__denied) return __denied;
     const { db, organizationId } = await requireTenantContext();
 
     try {
@@ -132,6 +140,8 @@ export async function deleteOrderSet(orderSetId: string) {
 }
 
 export async function toggleOrderSetFavorite(orderSetId: string, isFavorite: boolean) {
+    const __denied = await guardAction('order-set-actions', 'toggleOrderSetFavorite');
+    if (__denied) return __denied;
     const { db, organizationId } = await requireTenantContext();
 
     try {

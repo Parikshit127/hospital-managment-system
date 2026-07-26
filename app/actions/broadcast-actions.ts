@@ -1,5 +1,7 @@
 'use server';
 
+import { guardAction } from '@/app/lib/action-guard';
+
 import { ForbiddenError, AuthError, requireRoleAndTenant } from '@/backend/tenant';
 import { requireDevAdmin } from '@/backend/dev-portal';
 import { BroadcastAudience, BroadcastStatus } from '@prisma/client';
@@ -23,6 +25,8 @@ interface SendBroadcastInput {
  * Developer (non-admin) cannot send broadcasts.
  */
 export async function sendBroadcast(input: SendBroadcastInput) {
+    const __denied = await guardAction('broadcast-actions', 'sendBroadcast');
+    if (__denied) return __denied;
     try {
         const { db, session, organizationId } = await requireDevAdmin();
 
@@ -146,6 +150,8 @@ export async function getBroadcasts() {
  * ignored. Guarded by requireRoleAndTenant(['admin']), NOT requireDevAdmin.
  */
 export async function sendLocalBroadcast(input: { title: string; body: string }) {
+    const __denied = await guardAction('broadcast-actions', 'sendLocalBroadcast');
+    if (__denied) return __denied;
     try {
         const { db, session, organizationId } = await requireRoleAndTenant(['admin']);
 

@@ -1,5 +1,7 @@
 'use server';
 
+import { guardAction } from '@/app/lib/action-guard';
+
 import { requireTenantContext } from '@/backend/tenant';
 import { revalidatePath } from 'next/cache';
 
@@ -36,6 +38,8 @@ export async function createCorporateMaster(data: {
     contract_end?: string;
     covered_services?: string[];
 }) {
+    const __denied = await guardAction('patient-type-actions', 'createCorporateMaster');
+    if (__denied) return __denied;
     const { db, organizationId } = await requireTenantContext();
     try {
         const corporate = await db.corporateMaster.create({
@@ -75,6 +79,8 @@ export async function updateCorporateMaster(id: string, data: {
     is_active?: boolean;
     covered_services?: string[];
 }) {
+    const __denied = await guardAction('patient-type-actions', 'updateCorporateMaster');
+    if (__denied) return __denied;
     const { db, organizationId } = await requireTenantContext();
     try {
         const corporate = await db.corporateMaster.update({
@@ -138,6 +144,8 @@ export async function createTpaProvider(data: {
     covered_services?: string[];
     excluded_services?: string[];
 }) {
+    const __denied = await guardAction('patient-type-actions', 'createTpaProvider');
+    if (__denied) return __denied;
     const { db, organizationId } = await requireTenantContext();
     try {
         const provider = await db.insurance_providers.create({
@@ -181,6 +189,8 @@ export async function updateTpaProvider(id: number, data: {
     covered_services?: string[];
     excluded_services?: string[];
 }) {
+    const __denied = await guardAction('patient-type-actions', 'updateTpaProvider');
+    if (__denied) return __denied;
     const { db, organizationId } = await requireTenantContext();
     try {
         const provider = await db.insurance_providers.update({
@@ -256,6 +266,8 @@ export async function createPreAuthorization(data: {
     valid_until?: string;
     remarks?: string;
 }) {
+    const __denied = await guardAction('patient-type-actions', 'createPreAuthorization');
+    if (__denied) return __denied;
     const { db, organizationId } = await requireTenantContext();
     try {
         const preAuth = await db.preAuthorization.create({
@@ -280,6 +292,8 @@ export async function createPreAuthorization(data: {
 }
 
 export async function updatePreAuthStatus(id: string, status: string, approvedAmount?: number) {
+    const __denied = await guardAction('patient-type-actions', 'updatePreAuthStatus');
+    if (__denied) return __denied;
     const { db, organizationId } = await requireTenantContext();
     try {
         const preAuth = await db.preAuthorization.update({

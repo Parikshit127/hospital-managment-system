@@ -26,7 +26,8 @@
     "db:backup": "mkdir -p backups && pg_dump \"$DIRECT_URL\" --format=custom --no-owner --no-acl --file \"backups/hospitalos-$(date +%Y%m%d-%H%M%S).dump\"",
     "postinstall": "prisma generate",
     "check:server-actions": "node scripts/check-server-actions.mjs",
-    "lint:all": "npm run check:server-actions && npm run lint"
+    "lint:all": "npm run check:server-actions && npm run check:action-guards && npm run lint",
+    "check:action-guards": "node scripts/check-action-guards.mjs"
   },
   "prisma": {
     "seed": "npx ts-node prisma/seed.ts"

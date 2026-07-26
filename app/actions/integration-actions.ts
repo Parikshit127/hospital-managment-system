@@ -1,5 +1,7 @@
 'use server';
 
+import { guardAction } from '@/app/lib/action-guard';
+
 import nodemailer from 'nodemailer';
 import { requireRoleAndTenant } from '@/backend/tenant';
 import {
@@ -108,6 +110,8 @@ export async function getAdminIntegrationSettings() {
 }
 
 export async function updateAdminIntegrationSettings(data: IntegrationUpdate) {
+    const __denied = await guardAction('integration-actions', 'updateAdminIntegrationSettings');
+    if (__denied) return __denied;
     try {
         const { db, organizationId, session } = await requireRoleAndTenant(ADMIN_ROLES);
         const update = sanitizeUpdate(data);
@@ -261,6 +265,8 @@ function getProductionReadinessSnapshot() {
 }
 
 export async function sendRealTestNotification(channel: 'smtp' | 'whatsapp' | 'sms', recipient: string) {
+    const __denied = await guardAction('integration-actions', 'sendRealTestNotification');
+    if (__denied) return __denied;
     try {
         const { db, organizationId, session } = await requireRoleAndTenant(ADMIN_ROLES);
         const config = await db.organizationConfig.findUnique({ where: { organizationId } });

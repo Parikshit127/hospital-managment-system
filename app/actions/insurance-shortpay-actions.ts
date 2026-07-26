@@ -1,5 +1,7 @@
 'use server';
 
+import { guardAction } from '@/app/lib/action-guard';
+
 /**
  * Short-pay / disallowance disposition and the configurable denial-reason library.
  * Each disallowed amount captured at receipt time becomes a ClaimShortPay
@@ -30,6 +32,8 @@ const DEFAULT_DENIAL_REASONS: Array<{ code: string; description: string; categor
 
 // Seed the default denial-reason library for an org (idempotent).
 export async function seedDefaultDenialReasons() {
+    const __denied = await guardAction('insurance-shortpay-actions', 'seedDefaultDenialReasons');
+    if (__denied) return __denied;
   const { db, organizationId } = await requireTenantContext();
   let created = 0;
   for (const r of DEFAULT_DENIAL_REASONS) {

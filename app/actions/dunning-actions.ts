@@ -1,5 +1,7 @@
 'use server';
 
+import { guardAction } from '@/app/lib/action-guard';
+
 import { requireTenantContext } from '@/backend/tenant';
 
 function serialize<T>(data: T): T {
@@ -29,6 +31,8 @@ export async function createDunningRule(data: {
     template_text: string;
     is_active?: boolean;
 }) {
+    const __denied = await guardAction('dunning-actions', 'createDunningRule');
+    if (__denied) return __denied;
     try {
         const { db } = await requireTenantContext();
         const rule = await db.dunningRule.create({
@@ -47,6 +51,8 @@ export async function createDunningRule(data: {
 }
 
 export async function updateDunningRule(id: number, data: { is_active?: boolean; template_text?: string }) {
+    const __denied = await guardAction('dunning-actions', 'updateDunningRule');
+    if (__denied) return __denied;
     try {
         const { db } = await requireTenantContext();
         const rule = await db.dunningRule.update({

@@ -1,5 +1,7 @@
 'use server';
 
+import { guardAction } from '@/app/lib/action-guard';
+
 import { requireTenantContext } from '@/backend/tenant';
 import { logAudit } from '@/app/lib/audit';
 import { createJournalEntry } from './gl-actions';
@@ -414,6 +416,8 @@ export async function createIpdEstimate(data: {
     items: Array<{ description: string; qty: number; rate: number; amount: number }>;
     notes?: string;
 }) {
+    const __denied = await guardAction('ipd-finance-actions', 'createIpdEstimate');
+    if (__denied) return __denied;
     try {
         const { db, session, organizationId } = await requireTenantContext();
         const totalEstimate = data.items.reduce((sum, item) => sum + item.amount, 0);
@@ -516,6 +520,8 @@ export async function postChargeToIpdBill(data: {
      */
     disposition_override?: 'package_consumed' | 'billable_extra';
 }) {
+    const __denied = await guardAction('ipd-finance-actions', 'postChargeToIpdBill');
+    if (__denied) return __denied;
     try {
         const { db, session, organizationId } = await requireTenantContext();
 
@@ -846,6 +852,8 @@ async function resolvePackagePrice(
 }
 
 export async function applyPackageToAdmission(admissionId: string, packageId: number) {
+    const __denied = await guardAction('ipd-finance-actions', 'applyPackageToAdmission');
+    if (__denied) return __denied;
     try {
         const { db, session, organizationId } = await requireTenantContext();
 
@@ -1059,6 +1067,8 @@ export async function getPackagesForAdmission(admissionId: string) {
 // deleting the invoice line does nothing — the package must be broken open.
 // This finds the active package and breaks it open (reverts to itemized billing).
 export async function removeAdmissionPackage(admissionId: string) {
+    const __denied = await guardAction('ipd-finance-actions', 'removeAdmissionPackage');
+    if (__denied) return __denied;
     try {
         const { db } = await requireTenantContext();
         const admPkg = await db.ipdAdmissionPackage.findFirst({
@@ -1076,6 +1086,8 @@ export async function removeAdmissionPackage(admissionId: string) {
 // original recorded qty/rate/tax and original posting date), the package line
 // is removed, and the absorbed-cost expense is dissolved.
 export async function breakOpenPackage(admissionPackageId: number) {
+    const __denied = await guardAction('ipd-finance-actions', 'breakOpenPackage');
+    if (__denied) return __denied;
     try {
         const { db, session, organizationId } = await requireTenantContext();
 
@@ -1263,6 +1275,8 @@ export async function getPackageUtilization(admissionId: string) {
  * invoice line item, then recalculates invoice totals.
  */
 export async function updateAdmissionPackageAmount(admissionPackageId: number, newAmount: number) {
+    const __denied = await guardAction('ipd-finance-actions', 'updateAdmissionPackageAmount');
+    if (__denied) return __denied;
     try {
         const { db, session, organizationId } = await requireTenantContext();
 
@@ -1486,6 +1500,8 @@ export async function reclassifyChargeDisposition(
 // Removes the consumption-ledger posting (and any linked invoice line) and
 // rebuilds the absorbed-cost expense. Does not touch inventory/stock.
 export async function removeAbsorbedCharge(postingId: number) {
+    const __denied = await guardAction('ipd-finance-actions', 'removeAbsorbedCharge');
+    if (__denied) return __denied;
     try {
         const { db, session, organizationId } = await requireTenantContext();
         if (!isPrivilegedBillingRole(session?.role)) {
@@ -1598,6 +1614,8 @@ async function reconcilePackageBillingInternal(
 }
 
 export async function reconcilePackageBilling(admissionId: string) {
+    const __denied = await guardAction('ipd-finance-actions', 'reconcilePackageBilling');
+    if (__denied) return __denied;
     try {
         const { db, session, organizationId } = await requireTenantContext();
         if (!isPrivilegedBillingRole(session?.role)) {
@@ -1663,6 +1681,8 @@ export async function getAbsorbedCharges(admissionId: string) {
 
 /** @deprecated Superseded by automatic posting-time routing; kept for compatibility. Calls reconcilePackageBilling. */
 export async function settlePackageBilling(admissionId: string) {
+    const __denied = await guardAction('ipd-finance-actions', 'settlePackageBilling');
+    if (__denied) return __denied;
     return reconcilePackageBilling(admissionId);
 }
 
@@ -1671,6 +1691,8 @@ export async function settlePackageBilling(admissionId: string) {
 // ============================================
 
 export async function generateInterimBill(admissionId: string) {
+    const __denied = await guardAction('ipd-finance-actions', 'generateInterimBill');
+    if (__denied) return __denied;
     try {
         const { db, organizationId, session } = await requireTenantContext();
 
@@ -2039,6 +2061,8 @@ export async function settleAndDischarge(data: {
     /** Set when a clinician has reviewed the clinical blockers and accepts the risk. */
     clinical_override_reason?: string;
 }) {
+    const __denied = await guardAction('ipd-finance-actions', 'settleAndDischarge');
+    if (__denied) return __denied;
     try {
         const { db, session, organizationId } = await requireTenantContext();
 
@@ -2492,6 +2516,8 @@ export async function applyApprovedDiscount(data: {
     approved_by: string;
     approval_notes?: string;
 }) {
+    const __denied = await guardAction('ipd-finance-actions', 'applyApprovedDiscount');
+    if (__denied) return __denied;
     try {
         const { db } = await requireTenantContext();
 
@@ -2541,6 +2567,8 @@ interface GLEntry {
 
 
 export async function postToGL(entries: GLEntry[]) {
+    const __denied = await guardAction('ipd-finance-actions', 'postToGL');
+    if (__denied) return __denied;
     // Validate double-entry: total debits must equal total credits
     const totalDebit = entries.reduce((s, e) => s + e.debit, 0);
     const totalCredit = entries.reduce((s, e) => s + e.credit, 0);
@@ -2582,6 +2610,8 @@ export async function postChargeToGL(data: {
     source_module: string;
     ref_id: string;
 }) {
+    const __denied = await guardAction('ipd-finance-actions', 'postChargeToGL');
+    if (__denied) return __denied;
     return postToGL([
         {
             account_code: '1100',

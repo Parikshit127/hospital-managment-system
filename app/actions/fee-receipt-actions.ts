@@ -1,5 +1,7 @@
 "use server";
 
+import { guardAction } from '@/app/lib/action-guard';
+
 import type { Prisma } from "@prisma/client";
 import { requireRoleAndTenant, requireTenantContext } from "@/backend/tenant";
 import { revalidatePath } from "next/cache";
@@ -125,6 +127,8 @@ export interface SaveFeeReceiptInput {
 }
 
 export async function saveFeeReceipt(payload: SaveFeeReceiptInput) {
+    const __denied = await guardAction('fee-receipt-actions', 'saveFeeReceipt');
+    if (__denied) return __denied;
     try {
         const { db, organizationId, session } = await requireTenantContext();
 
@@ -473,6 +477,8 @@ export async function getFeeReceiptDetail(invoiceId: number) {
 }
 
 export async function voidFeeReceipt(invoiceId: number, reason: string) {
+    const __denied = await guardAction('fee-receipt-actions', 'voidFeeReceipt');
+    if (__denied) return __denied;
     try {
         const trimmed = (reason || "").trim();
         if (!trimmed) return { success: false, error: "Reason is required before deleting a receipt." };
@@ -521,6 +527,8 @@ export interface UpdateFeeReceiptInput {
 }
 
 export async function updateFeeReceipt(invoiceId: number, payload: UpdateFeeReceiptInput) {
+    const __denied = await guardAction('fee-receipt-actions', 'updateFeeReceipt');
+    if (__denied) return __denied;
     try {
         const { db, organizationId, session } = await requireRoleAndTenant(['admin', 'finance']);
 

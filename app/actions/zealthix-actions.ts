@@ -1,5 +1,7 @@
 'use server';
 
+import { guardAction } from '@/app/lib/action-guard';
+
 import { requireTenantContext } from '@/backend/tenant';
 import { prisma } from '@/backend/db';
 import bcrypt from 'bcryptjs';
@@ -24,6 +26,8 @@ function serialize<T>(data: T): T {
  * Returns the plain key ONCE - it is never stored.
  */
 export async function createZealthixApiKey(label: string) {
+    const __denied = await guardAction('zealthix-actions', 'createZealthixApiKey');
+    if (__denied) return __denied;
     try {
         const { db, organizationId } = await requireTenantContext();
 
@@ -106,6 +110,8 @@ export async function listZealthixApiKeys() {
  * Revoke (deactivate) an API key
  */
 export async function revokeZealthixApiKey(id: string) {
+    const __denied = await guardAction('zealthix-actions', 'revokeZealthixApiKey');
+    if (__denied) return __denied;
     try {
         const { db, organizationId } = await requireTenantContext();
 

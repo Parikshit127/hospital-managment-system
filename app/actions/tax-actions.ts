@@ -1,5 +1,7 @@
 'use server';
 
+import { guardAction } from '@/app/lib/action-guard';
+
 import { requireTenantContext } from '@/backend/tenant';
 
 function serialize<T>(data: T): T {
@@ -30,6 +32,8 @@ export async function addTaxConfig(data: {
     is_default?: boolean;
     applicable_to?: string;
 }) {
+    const __denied = await guardAction('tax-actions', 'addTaxConfig');
+    if (__denied) return __denied;
     try {
         const { db } = await requireTenantContext();
 
@@ -63,6 +67,8 @@ export async function updateTaxConfig(id: number, data: {
     applicable_to?: string;
     is_active?: boolean;
 }) {
+    const __denied = await guardAction('tax-actions', 'updateTaxConfig');
+    if (__denied) return __denied;
     try {
         const { db } = await requireTenantContext();
 

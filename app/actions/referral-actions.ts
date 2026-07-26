@@ -1,5 +1,7 @@
 'use server';
 
+import { guardAction } from '@/app/lib/action-guard';
+
 import { requireTenantContext, requireRoleAndTenant } from '@/backend/tenant';
 import { revalidatePath } from 'next/cache';
 import { backfillReferralCommissions } from '@/app/lib/referral-commission';
@@ -114,6 +116,8 @@ function buildServiceRateRows(input: ReferrerInput) {
 }
 
 export async function createReferrer(input: ReferrerInput) {
+    const __denied = await guardAction('referral-actions', 'createReferrer');
+    if (__denied) return __denied;
     try {
         const { db, session, organizationId } = await requireRoleAndTenant(MANAGE_ROLES);
         const data = sanitizeReferrerInput(input);
@@ -140,6 +144,8 @@ export async function createReferrer(input: ReferrerInput) {
 }
 
 export async function updateReferrer(id: string, input: ReferrerInput) {
+    const __denied = await guardAction('referral-actions', 'updateReferrer');
+    if (__denied) return __denied;
     try {
         const { db, organizationId } = await requireRoleAndTenant(MANAGE_ROLES);
         const data = sanitizeReferrerInput(input);
@@ -171,6 +177,8 @@ export async function updateReferrer(id: string, input: ReferrerInput) {
 }
 
 export async function setReferrerActive(id: string, is_active: boolean) {
+    const __denied = await guardAction('referral-actions', 'setReferrerActive');
+    if (__denied) return __denied;
     try {
         const { db } = await requireRoleAndTenant(MANAGE_ROLES);
         await (db as any).referrer.update({ where: { id }, data: { is_active } });
@@ -331,6 +339,8 @@ export async function createPayoutStatement(input: {
     period_start: string;
     period_end: string;
 }) {
+    const __denied = await guardAction('referral-actions', 'createPayoutStatement');
+    if (__denied) return __denied;
     try {
         const { db, session, organizationId } = await requireRoleAndTenant(MANAGE_ROLES);
         const start = new Date(input.period_start);
@@ -416,6 +426,8 @@ export async function markStatementPaid(input: {
     paid_amount?: number | string;
     notes?: string;
 }) {
+    const __denied = await guardAction('referral-actions', 'markStatementPaid');
+    if (__denied) return __denied;
     try {
         const { db, organizationId } = await requireRoleAndTenant(MANAGE_ROLES);
         const stmt = await (db as any).referralPayoutStatement.findFirst({

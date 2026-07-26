@@ -1,6 +1,8 @@
 // @ts-nocheck
 'use server';
 
+import { guardAction } from '@/app/lib/action-guard';
+
 import { prisma } from '@/backend/db';
 
 // ============================================
@@ -25,6 +27,8 @@ export async function createBudget(data: {
     alert_threshold?: number;
   }>;
 }) {
+    const __denied = await guardAction('budget-actions', 'createBudget');
+    if (__denied) return __denied;
   try {
     const totalBudget = data.budget_lines.reduce(
       (sum: number, line: any) => sum + line.budget_amount, 0
@@ -74,6 +78,8 @@ export async function updateBudget(
     end_date?: Date;
   }
 ) {
+    const __denied = await guardAction('budget-actions', 'updateBudget');
+    if (__denied) return __denied;
   try {
     const budget = await prisma.budgetMaster.update({
       where: { id },
@@ -88,6 +94,8 @@ export async function updateBudget(
 }
 
 export async function approveBudget(id: string, approvedBy: string) {
+    const __denied = await guardAction('budget-actions', 'approveBudget');
+    if (__denied) return __denied;
   try {
     const budget = await prisma.budgetMaster.update({
       where: { id },
@@ -106,6 +114,8 @@ export async function approveBudget(id: string, approvedBy: string) {
 }
 
 export async function activateBudget(id: string) {
+    const __denied = await guardAction('budget-actions', 'activateBudget');
+    if (__denied) return __denied;
   try {
     const budget = await prisma.budgetMaster.update({
       where: { id },
@@ -120,6 +130,8 @@ export async function activateBudget(id: string) {
 }
 
 export async function closeBudget(id: string) {
+    const __denied = await guardAction('budget-actions', 'closeBudget');
+    if (__denied) return __denied;
   try {
     const budget = await prisma.budgetMaster.update({
       where: { id },
@@ -205,6 +217,8 @@ export async function updateBudgetLine(
     alert_threshold?: number;
   }
 ) {
+    const __denied = await guardAction('budget-actions', 'updateBudgetLine');
+    if (__denied) return __denied;
   try {
     const line = await prisma.budgetLine.update({
       where: { id },
@@ -246,6 +260,8 @@ export async function addBudgetLine(data: {
   budget_amount: number;
   alert_threshold?: number;
 }) {
+    const __denied = await guardAction('budget-actions', 'addBudgetLine');
+    if (__denied) return __denied;
   try {
     const line = await prisma.budgetLine.create({
       data: {
@@ -284,6 +300,8 @@ export async function createBudgetRevision(data: {
     new_budget_amount: number;
   }>;
 }) {
+    const __denied = await guardAction('budget-actions', 'createBudgetRevision');
+    if (__denied) return __denied;
   try {
     const budget = await prisma.budgetMaster.findUnique({
       where: { id: data.budget_master_id },
@@ -345,6 +363,8 @@ export async function createBudgetRevision(data: {
 }
 
 export async function approveBudgetRevision(revisionId: string, approvedBy: string) {
+    const __denied = await guardAction('budget-actions', 'approveBudgetRevision');
+    if (__denied) return __denied;
   try {
     const revision = await prisma.budgetRevision.update({
       where: { id: revisionId },
@@ -377,6 +397,8 @@ export async function approveBudgetRevision(revisionId: string, approvedBy: stri
  * Matches by department + expense_category_id within the active budget period.
  */
 export async function syncExpenseToBudget(expenseId: number, organizationId: string) {
+    const __denied = await guardAction('budget-actions', 'syncExpenseToBudget');
+    if (__denied) return __denied;
   try {
     const expense = await prisma.expense.findUnique({
       where: { id: expenseId },
@@ -460,6 +482,8 @@ export async function syncExpenseToBudget(expenseId: number, organizationId: str
  * Update actuals for all lines in a budget from the expenses table.
  */
 export async function updateActuals(budgetId: string) {
+    const __denied = await guardAction('budget-actions', 'updateActuals');
+    if (__denied) return __denied;
   try {
     const budget = await prisma.budgetMaster.findUnique({
       where: { id: budgetId },
@@ -653,6 +677,8 @@ export async function getBudgetAlerts(
 }
 
 export async function acknowledgeBudgetAlert(alertId: string, acknowledgedBy: string) {
+    const __denied = await guardAction('budget-actions', 'acknowledgeBudgetAlert');
+    if (__denied) return __denied;
   try {
     const alert = await prisma.budgetAlert.update({
       where: { id: alertId },

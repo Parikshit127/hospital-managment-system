@@ -1,5 +1,7 @@
 'use server';
 
+import { guardAction } from '@/app/lib/action-guard';
+
 import { requireRoleAndTenant } from '@/backend/tenant';
 import { logAudit } from '@/app/lib/audit';
 import { encryptSecret, decryptSecret } from '@/app/lib/secure-config';
@@ -107,6 +109,8 @@ export async function saveTallyConfig(input: {
     tally_password?: string; // empty string = leave unchanged
     tally_auto_sync?: boolean;
 }) {
+    const __denied = await guardAction('tally-actions', 'saveTallyConfig');
+    if (__denied) return __denied;
     try {
         const { db, session, organizationId } = await requireRoleAndTenant(TALLY_ROLES);
         const data: Record<string, any> = {
@@ -203,6 +207,8 @@ async function postLedger(db: any, organizationId: string, username: string, con
 }
 
 export async function syncLedger(glAccountId: string) {
+    const __denied = await guardAction('tally-actions', 'syncLedger');
+    if (__denied) return __denied;
     try {
         const { db, session, organizationId } = await requireRoleAndTenant(TALLY_ROLES);
         const resolved = await resolveTallyConfig(db, organizationId);
@@ -217,6 +223,8 @@ export async function syncLedger(glAccountId: string) {
 }
 
 export async function syncAllLedgers() {
+    const __denied = await guardAction('tally-actions', 'syncAllLedgers');
+    if (__denied) return __denied;
     try {
         const { db, session, organizationId } = await requireRoleAndTenant(TALLY_ROLES);
         const resolved = await resolveTallyConfig(db, organizationId);
@@ -293,6 +301,8 @@ async function postVoucherEntries(db: any, organizationId: string, username: str
 }
 
 export async function syncVoucher(glJournalEntryId: string) {
+    const __denied = await guardAction('tally-actions', 'syncVoucher');
+    if (__denied) return __denied;
     try {
         const { db, session, organizationId } = await requireRoleAndTenant(TALLY_ROLES);
         const resolved = await resolveTallyConfig(db, organizationId);
@@ -307,6 +317,8 @@ export async function syncVoucher(glJournalEntryId: string) {
 }
 
 export async function postSelectedVouchers(ids: string[]) {
+    const __denied = await guardAction('tally-actions', 'postSelectedVouchers');
+    if (__denied) return __denied;
     try {
         const { db, session, organizationId } = await requireRoleAndTenant(TALLY_ROLES);
         if (!ids?.length) return { success: false, error: 'No vouchers selected.' };
@@ -321,6 +333,8 @@ export async function postSelectedVouchers(ids: string[]) {
 }
 
 export async function syncAllVouchers() {
+    const __denied = await guardAction('tally-actions', 'syncAllVouchers');
+    if (__denied) return __denied;
     try {
         const { db, session, organizationId } = await requireRoleAndTenant(TALLY_ROLES);
         const resolved = await resolveTallyConfig(db, organizationId);
@@ -336,6 +350,8 @@ export async function syncAllVouchers() {
 }
 
 export async function postAllPendingVouchers() {
+    const __denied = await guardAction('tally-actions', 'postAllPendingVouchers');
+    if (__denied) return __denied;
     try {
         const { db, session, organizationId } = await requireRoleAndTenant(TALLY_ROLES);
         const resolved = await resolveTallyConfig(db, organizationId);

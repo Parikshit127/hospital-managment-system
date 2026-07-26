@@ -1,5 +1,7 @@
 'use server';
 
+import { guardAction } from '@/app/lib/action-guard';
+
 import { requireTenantContext, requireRoleAndTenant } from '@/backend/tenant';
 import { generateDepositNumber as genDepNum } from '@/app/lib/sequence-generator';
 import { postDepositToGL } from './gl-actions';
@@ -257,6 +259,8 @@ export async function applyAvailableDepositToInvoice(patientId: string, invoiceI
 }
 
 export async function applyDepositToInvoice(depositId: number, invoiceId: number, amount: number) {
+    const __denied = await guardAction('deposit-actions', 'applyDepositToInvoice');
+    if (__denied) return __denied;
     try {
         const { db, organizationId } = await requireTenantContext();
 
@@ -327,6 +331,8 @@ export async function applyDepositToInvoice(depositId: number, invoiceId: number
 }
 
 export async function refundDeposit(depositId: number, amount: number) {
+    const __denied = await guardAction('deposit-actions', 'refundDeposit');
+    if (__denied) return __denied;
     try {
         const { db, organizationId } = await requireTenantContext();
 
@@ -363,6 +369,8 @@ export async function refundDeposit(depositId: number, amount: number) {
 }
 
 export async function cancelDeposit(depositId: number, reason?: string) {
+    const __denied = await guardAction('deposit-actions', 'cancelDeposit');
+    if (__denied) return __denied;
     try {
         const { db, organizationId, session } = await requireTenantContext();
 
@@ -423,6 +431,8 @@ export async function updateDeposit(
     updates: { amount?: number; payment_method?: string; payment_ref?: string | null; notes?: string | null; created_at?: string },
     reason: string,
 ) {
+    const __denied = await guardAction('deposit-actions', 'updateDeposit');
+    if (__denied) return __denied;
     try {
         // Correcting a deposit after the fact is an Admin/Finance action — the
         // front desk collects deposits but shouldn't be able to alter them post-hoc.
@@ -595,6 +605,8 @@ export async function createCreditNote(data: {
     total_amount: number;
     notes?: string;
 }) {
+    const __denied = await guardAction('deposit-actions', 'createCreditNote');
+    if (__denied) return __denied;
     try {
         const { db, organizationId } = await requireTenantContext();
         const cn = await db.creditNote.create({
@@ -640,6 +652,8 @@ function decToNum(value: unknown): number {
 }
 
 export async function approveCreditNote(id: number) {
+    const __denied = await guardAction('deposit-actions', 'approveCreditNote');
+    if (__denied) return __denied;
     try {
         const { db, session, organizationId } = await requireTenantContext();
         

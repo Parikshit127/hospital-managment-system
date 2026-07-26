@@ -1,5 +1,7 @@
 'use server';
 
+import { guardAction } from '@/app/lib/action-guard';
+
 import { requireTenantContext } from '@/backend/tenant';
 import { dischargePatientIPD } from '@/app/actions/ipd-actions';
 import { notifyPatient } from '@/app/lib/notify-patient';
@@ -31,6 +33,8 @@ function round2(n: number): number {
  * entry with the acting user.
  */
 export async function dischargePatient(patientId: string, overrideReason?: string) {
+    const __denied = await guardAction('discharge-actions', 'dischargePatient');
+    if (__denied) return __denied;
     try {
         const { db } = await requireTenantContext();
 
@@ -105,6 +109,8 @@ export async function processDischarge(
     notes: string,
     overrideReason?: string,
 ) {
+    const __denied = await guardAction('discharge-actions', 'processDischarge');
+    if (__denied) return __denied;
     try {
         const { db } = await requireTenantContext();
 
@@ -140,6 +146,8 @@ export async function processDischarge(
 
 
 export async function generateAISummary(admissionId: string) {
+    const __denied = await guardAction('discharge-actions', 'generateAISummary');
+    if (__denied) return __denied;
     try {
         const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
         const { db, organizationId } = await requireTenantContext();

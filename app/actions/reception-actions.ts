@@ -1,5 +1,7 @@
 'use server';
 
+import { guardAction } from '@/app/lib/action-guard';
+
 import { requireTenantContext } from '@/backend/tenant';
 import { revalidatePath } from 'next/cache';
 import { getTodayRange, getOrgTimezone } from '@/app/lib/timezone';
@@ -382,6 +384,8 @@ export async function getPatientDetail(patientId: string) {
  * Inline update a single patient field.
  */
 export async function updatePatientField(patientId: string, field: string, value: string) {
+    const __denied = await guardAction('reception-actions', 'updatePatientField');
+    if (__denied) return __denied;
     try {
         const { db } = await requireTenantContext();
 
@@ -419,6 +423,8 @@ export async function updatePatientField(patientId: string, field: string, value
  * Used by the admin patient-detail edit mode (Save button).
  */
 export async function updatePatient(patientId: string, payload: Record<string, string | null>) {
+    const __denied = await guardAction('reception-actions', 'updatePatient');
+    if (__denied) return __denied;
     try {
         const { db, organizationId } = await requireTenantContext();
 
@@ -1004,6 +1010,8 @@ export async function bookAppointment(data: {
 }
 
 export async function rescheduleAppointment(appointmentId: string, newDate: string, newSlotId?: string) {
+    const __denied = await guardAction('reception-actions', 'rescheduleAppointment');
+    if (__denied) return __denied;
     try {
         const { db } = await requireTenantContext();
 
@@ -1031,6 +1039,8 @@ export async function rescheduleAppointment(appointmentId: string, newDate: stri
 }
 
 export async function cancelAppointment(appointmentId: string, reason: string) {
+    const __denied = await guardAction('reception-actions', 'cancelAppointment');
+    if (__denied) return __denied;
     try {
         const { db, session, organizationId } = await requireTenantContext();
         const cancellationReason = (reason || '').trim();
@@ -1188,6 +1198,8 @@ export async function createBulkSlots(data: {
     slotType?: string;
     isFree?: boolean;
 }) {
+    const __denied = await guardAction('reception-actions', 'createBulkSlots');
+    if (__denied) return __denied;
     try {
         const { db } = await requireTenantContext();
 
@@ -1500,6 +1512,8 @@ export async function addPatientDues(data: {
     description: string;
     amount: number;
 }) {
+    const __denied = await guardAction('reception-actions', 'addPatientDues');
+    if (__denied) return __denied;
     try {
         const invRes = await createInvoice({
             patient_id: data.patient_id,
@@ -1536,6 +1550,8 @@ export async function processPatientPayment(data: {
     amount: number;
     payment_method: string;
 }) {
+    const __denied = await guardAction('reception-actions', 'processPatientPayment');
+    if (__denied) return __denied;
     try {
         const res = await recordPayment({
             invoice_id: data.invoice_id,
@@ -1578,6 +1594,8 @@ export async function savePatientExternalRecord(patientId: string, data: {
     file_url?: string;
     file_name?: string;
 }) {
+    const __denied = await guardAction('reception-actions', 'savePatientExternalRecord');
+    if (__denied) return __denied;
     try {
         const { db, organizationId } = await requireTenantContext();
         await db.$executeRaw`
@@ -1602,6 +1620,8 @@ export async function savePatientExternalRecord(patientId: string, data: {
 }
 
 export async function deletePatientExternalRecord(id: number) {
+    const __denied = await guardAction('reception-actions', 'deletePatientExternalRecord');
+    if (__denied) return __denied;
     try {
         const { db } = await requireTenantContext();
         await db.$executeRaw`DELETE FROM patient_external_records WHERE id = ${id}`;
@@ -1701,6 +1721,8 @@ export async function getQueueWithSLA() {
 }
 
 export async function archivePatient(patientId: string) {
+    const __denied = await guardAction('reception-actions', 'archivePatient');
+    if (__denied) return __denied;
     try {
         const { db, session } = await requireTenantContext();
 
@@ -1948,6 +1970,8 @@ export async function addToWaitlist(data: {
     preferredDate?: string;
     reason?: string;
 }) {
+    const __denied = await guardAction('reception-actions', 'addToWaitlist');
+    if (__denied) return __denied;
     try {
         const { db, organizationId } = await requireTenantContext();
         const entry = await (db.appointmentWaitlist as any).create({

@@ -1,5 +1,7 @@
 "use server";
 
+import { guardAction } from '@/app/lib/action-guard';
+
 import { requireTenantContext } from "@/backend/tenant";
 import { revalidatePath } from "next/cache";
 
@@ -61,6 +63,8 @@ export async function saveFinanceConfig(payload: {
     checkups: any[];
     medicines: any[];
 }) {
+    const __denied = await guardAction('finance-config-actions', 'saveFinanceConfig');
+    if (__denied) return __denied;
     try {
         const { db, organizationId } = await requireTenantContext();
 

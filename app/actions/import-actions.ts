@@ -1,5 +1,7 @@
 'use server';
 
+import { guardAction } from '@/app/lib/action-guard';
+
 import { requireRoleAndTenant } from '@/backend/tenant';
 import { autoMatchColumns, getUnmappedRequiredFields } from '@/app/lib/import/column-matcher';
 import { getTemplate, getAllTemplates, getRequiredColumns } from '@/app/lib/import/templates';
@@ -41,6 +43,8 @@ export async function createImportJob(
     headers: string[],
     data: Record<string, string>[],
 ) {
+    const __denied = await guardAction('import-actions', 'createImportJob');
+    if (__denied) return __denied;
     const { db, session } = await requireRoleAndTenant(['admin']);
 
     const template = getTemplate(importType);
@@ -68,6 +72,8 @@ export async function createImportJob(
 }
 
 export async function saveColumnMapping(jobId: string, mapping: ColumnMapping) {
+    const __denied = await guardAction('import-actions', 'saveColumnMapping');
+    if (__denied) return __denied;
     const { db } = await requireRoleAndTenant(['admin']);
 
     // Verify all required fields are mapped
@@ -132,6 +138,8 @@ export async function validateImportJob(jobId: string): Promise<{ success: boole
 // ========================================
 
 export async function resolveDuplicates(jobId: string, resolutions: DuplicateResolution[]) {
+    const __denied = await guardAction('import-actions', 'resolveDuplicates');
+    if (__denied) return __denied;
     const { db } = await requireRoleAndTenant(['admin']);
 
     const job = await db.dataImportJob.findUnique({ where: { id: jobId } });
@@ -305,6 +313,8 @@ export async function getImportHistory(page: number = 1, limit: number = 20) {
 }
 
 export async function cancelImport(jobId: string) {
+    const __denied = await guardAction('import-actions', 'cancelImport');
+    if (__denied) return __denied;
     const { db } = await requireRoleAndTenant(['admin']);
 
     const job = await db.dataImportJob.findUnique({ where: { id: jobId } });

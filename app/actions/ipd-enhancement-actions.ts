@@ -1,4 +1,6 @@
 'use server';
+
+import { guardAction } from '@/app/lib/action-guard';
 import { requireTenantContext } from '@/backend/tenant';
 import { revalidatePath } from 'next/cache';
 
@@ -21,6 +23,8 @@ export async function createDaycareInvoice(data: {
   paymentMethod: string;   // Cash | Card | UPI | Online
   notes?: string;
 }) {
+    const __denied = await guardAction('ipd-enhancement-actions', 'createDaycareInvoice');
+    if (__denied) return __denied;
   try {
     const { db, organizationId } = await requireTenantContext();
 
@@ -133,6 +137,8 @@ export async function createAdmissionBooking(data: {
   department: string; doctorId?: string; doctorName?: string;
   estimatedCost?: number; notes?: string; admissionType?: string;
 }) {
+    const __denied = await guardAction('ipd-enhancement-actions', 'createAdmissionBooking');
+    if (__denied) return __denied;
   try {
     const { db, organizationId } = await requireTenantContext();
     const count = await (db.admissionBooking as any).count({ where: { organizationId } });
@@ -154,6 +160,8 @@ export async function createAdmissionBooking(data: {
 }
 
 export async function updateAdmissionBookingStatus(id: string, status: 'In Progress' | 'Completed' | 'Cancelled') {
+    const __denied = await guardAction('ipd-enhancement-actions', 'updateAdmissionBookingStatus');
+    if (__denied) return __denied;
   try {
     const { db, organizationId } = await requireTenantContext();
     const booking = await (db.admissionBooking as any).update({
@@ -182,6 +190,8 @@ export async function recordPatientMovement(data: {
   admissionId: string; patientId: string; fromLocation: string;
   toLocation: string; purpose?: string; movedBy?: string; escortName?: string;
 }) {
+    const __denied = await guardAction('ipd-enhancement-actions', 'recordPatientMovement');
+    if (__denied) return __denied;
   try {
     const { db, organizationId } = await requireTenantContext();
     const movement = await (db.patientMovement as any).create({
@@ -232,6 +242,8 @@ export async function updateClearanceDept(
   status: 'Cleared' | 'Waived',
   clearedBy: string
 ) {
+    const __denied = await guardAction('ipd-enhancement-actions', 'updateClearanceDept');
+    if (__denied) return __denied;
   try {
     const { db } = await requireTenantContext();
     const updateData: any = { [dept]: status, [`${dept}_by`]: clearedBy, [`${dept}_at`]: new Date(), updated_at: new Date() };
@@ -255,6 +267,8 @@ export async function getDischargeClearance(admissionId: string) {
 export async function addPatientConsent(data: {
   admissionId: string; consentType: string; formUrl?: string; witnessName?: string; notes?: string;
 }) {
+    const __denied = await guardAction('ipd-enhancement-actions', 'addPatientConsent');
+    if (__denied) return __denied;
   try {
     const { db, organizationId } = await requireTenantContext();
     const consent = await (db.patientConsent_IPD as any).create({

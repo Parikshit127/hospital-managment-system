@@ -322,6 +322,31 @@ export async function proxy(request: NextRequest) {
     const userRole = payload.role as string;
     const isSystemRole = Object.prototype.hasOwnProperty.call(ROLE_PERMISSIONS, userRole);
 
+    // Within /ipd, a nurse gets the ward screens and nothing else.
+    //
+    // /ipd has to list nurses — the nursing station, eMAR, vitals, assessments
+    // and care record all live there. But listing them opened the whole module,
+    // including discharge settlement, IPD billing and the audit trail. A nurse
+    // walked into /ipd/discharge-settlement from a link and discharged a
+    // patient. The action-level guards now refuse that, but bouncing her here
+    // is the honest answer: a screen she cannot use should not open at all,
+    // half-working and reporting a record that "is not available".
+    const NURSE_IPD_ALLOWED = [
+      "/ipd/nursing-station", "/ipd/care-record", "/ipd/incidents",
+      "/ipd/medication-admin", "/ipd/vitals", "/ipd/nursing-assessment",
+      "/ipd/case-sheet", "/ipd/ward-rounds", "/ipd/handover", "/ipd/diet",
+      "/ipd/movement", "/ipd/transfer", "/ipd/bed-matrix", "/ipd/census",
+      "/ipd/assessment-alerts", "/ipd/daycare", "/ipd/consent",
+    ];
+    if (userRole === "nurse" && pathname.startsWith("/ipd")) {
+      const permitted = NURSE_IPD_ALLOWED.some(
+        (prefix) => pathname === prefix || pathname.startsWith(prefix + "/"),
+      );
+      if (!permitted) {
+        return NextResponse.redirect(new URL("/nurse/dashboard", request.url));
+      }
+    }
+
     // Match the MOST SPECIFIC prefix, not merely the first one that matches.
     // Object key order previously decided this, so "/opd-manager/..." was judged
     // against the "/opd" rules purely because "/opd" is declared earlier.
