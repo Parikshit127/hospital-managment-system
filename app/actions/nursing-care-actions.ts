@@ -481,8 +481,8 @@ export async function reviewIncident(id: string, data: {
     const denied = await denyUnlessRole(['admin', 'ipd_manager'], 'review an incident');
     if (denied) return denied;
     try {
-        const { db, session } = await requireTenantContext();
-        await db.clinicalIncident.update({
+        const { db, organizationId, session } = await requireTenantContext();
+        const updated = await db.clinicalIncident.update({
             where: { id },
             data: {
                 review_notes: data.review_notes?.trim() || undefined,
@@ -492,6 +492,33 @@ export async function reviewIncident(id: string, data: {
                 ...(data.close ? { closed_by: session.id, closed_at: new Date() } : {}),
             },
         });
+
+        // Close the loop with whoever reported it. Reporting a fall and never
+        // hearing anything back is precisely how a reporting culture dies —
+        // staff stop bothering. Best-effort; never fails the review.
+        try {
+            if (updated.reported_by && updated.reported_by !== session.id) {
+                await db.notification.createMany({
+                    data: [{
+                        organizationId,
+                        user_id: updated.reported_by,
+                        title: data.close
+                            ? `Incident closed — ${updated.incident_type}`
+                            : `Incident reviewed — ${updated.incident_type}`,
+                        body: data.close
+                            ? `${session.name || 'The IPD manager'} reviewed and closed the ${updated.incident_type.toLowerCase()} you reported.`
+                                + (data.preventive_action?.trim() ? ` What changes: ${data.preventive_action.trim()}` : '')
+                            : `${session.name || 'The IPD manager'} is reviewing the ${updated.incident_type.toLowerCase()} you reported.`
+                                + (data.review_notes?.trim() ? ` Note: ${data.review_notes.trim()}` : ''),
+                        type: 'info',
+                        link: '/ipd/incidents',
+                    }],
+                });
+            }
+        } catch (e) {
+            console.error('incident review notification failed:', e);
+        }
+
         revalidatePath('/ipd/incidents');
         return { success: true };
     } catch (error) {

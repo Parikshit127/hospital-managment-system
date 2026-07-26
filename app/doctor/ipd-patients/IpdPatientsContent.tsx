@@ -1,5 +1,7 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
+
 import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { Search, BedDouble, Loader2, Users } from 'lucide-react';
@@ -29,6 +31,7 @@ interface IpdAdmissionRow {
 type StatusFilter = 'Admitted' | 'Discharged' | 'All';
 
 export default function IpdPatientsContent() {
+    const router = useRouter();
     const toast = useToast();
     const [admissions, setAdmissions] = useState<IpdAdmissionRow[]>([]);
     const [loading, setLoading] = useState(true);
@@ -125,7 +128,12 @@ export default function IpdPatientsContent() {
                         </thead>
                         <tbody>
                             {filtered.map((a) => (
-                                <tr key={a.admission_id} className="border-b border-gray-100 last:border-0 hover:bg-orange-500/5 transition-colors">
+                                // The whole row opens the patient. Only the name was
+                                // clickable, so a click anywhere else did nothing and
+                                // looked broken.
+                                <tr key={a.admission_id}
+                                    onClick={() => router.push(`/doctor/ipd-patients/${a.admission_id}`)}
+                                    className="border-b border-gray-100 last:border-0 hover:bg-orange-500/5 transition-colors cursor-pointer">
                                     <td className="px-5 py-4">
                                         <Link href={`/doctor/ipd-patients/${a.admission_id}`} className="font-bold text-gray-900 hover:text-orange-600 hover:underline underline-offset-2">
                                             {a.patient.full_name}

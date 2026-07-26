@@ -973,7 +973,13 @@ export default function NursePatientsPage() {
                                                 <BedDouble className="h-3 w-3 text-blue-400" />{p.bedLabel || p.bedId || 'N/A'}
                                             </span>
                                         </td>
-                                        <td className="px-6 py-4 text-gray-600 font-medium max-w-[200px] truncate">{p.diagnosis || 'N/A'}</td>
+                                        {/* Truncated to keep the row height sane, but the full text
+                                            has to be reachable — a half-shown diagnosis is worse than
+                                            none. title= gives the hover tooltip. */}
+                                        <td className="px-6 py-4 text-gray-600 font-medium max-w-[200px] truncate"
+                                            title={p.diagnosis || 'No diagnosis recorded'}>
+                                            {p.diagnosis || 'N/A'}
+                                        </td>
                                         <td className="px-6 py-4">
                                             <span className="inline-flex items-center gap-1 text-xs font-medium text-gray-600">
                                                 <Stethoscope className="h-3 w-3 text-gray-400" />{p.doctorName || 'Unassigned'}

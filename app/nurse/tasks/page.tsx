@@ -63,6 +63,7 @@ export default function NurseTasksPage() {
         setCompleting(taskId);
         try {
             const res = await completeNursingTask(taskId);
+            if (!res.success) setMsg(res.error || 'Could not complete that task');
             if (res.success) await loadTasks();
         } catch (e) {
             console.error('Complete task error', e);
@@ -240,6 +241,11 @@ export default function NurseTasksPage() {
                                                 {!isDone && task.isMine && (
                                                     <span className="px-2 py-0.5 rounded-full text-[10px] font-bold border bg-teal-50 text-teal-700 border-teal-200">
                                                         You
+                                                    </span>
+                                                )}
+                                                {isDone && task.completedByName && (
+                                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold border bg-emerald-50 text-emerald-700 border-emerald-200">
+                                                        done by {task.completedByName}
                                                     </span>
                                                 )}
                                                 {!isDone && !task.isMine && task.assignedToName && (

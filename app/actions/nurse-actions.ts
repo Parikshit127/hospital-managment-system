@@ -442,7 +442,9 @@ export async function getNursingTasks(options?: {
         const rank: Record<string, number> = { stat: 0, urgent: 1, routine: 2 };
         // Who each task belongs to, so the ward can see at a glance what is
         // already picked up and what nobody has taken.
-        const assigneeIds = [...new Set(tasks.map((t: any) => t.assigned_to).filter(Boolean))] as string[];
+        const assigneeIds = [...new Set(
+            tasks.flatMap((t: any) => [t.assigned_to, t.completed_by]).filter(Boolean),
+        )] as string[];
         const assignees = assigneeIds.length
             ? await db.user.findMany({ where: { id: { in: assigneeIds } }, select: { id: true, name: true } })
             : [];
@@ -455,6 +457,7 @@ export async function getNursingTasks(options?: {
             bedId: admissionMap[t.admission_id]?.bedId || '',
             wardName: admissionMap[t.admission_id]?.wardName || '',
             assignedToName: t.assigned_to ? (nameById[t.assigned_to] || 'Another nurse') : null,
+            completedByName: t.completed_by ? (nameById[t.completed_by] || 'A nurse') : null,
             isMine: !!t.assigned_to && t.assigned_to === session.id,
             isUnclaimed: !t.assigned_to,
         })).sort((a: any, b: any) => {
@@ -552,18 +555,69 @@ export async function releaseNursingTask(taskId: number) {
     }
 }
 
+/**
+ * Close a task, and record who actually did it.
+ *
+ * This wrote status and completed_at and nothing else. completed_by exists on
+ * the table and was never set, so the chart said a two-hourly turn had been
+ * done but not by whom — worthless as a record and impossible to follow up.
+ *
+ * It also let anyone close anyone else's task: a nurse could mark a colleague's
+ * work done from her own screen, and the colleague would never know. Closing
+ * work assigned to someone else is now refused by name. An unclaimed task can
+ * be closed by whoever did it, and doing so stamps their name on it — if you
+ * did the work, you own the record of it.
+ */
 export async function completeNursingTask(taskId: number) {
     const denied = await denyUnlessRole(CLINICAL_ROLES.CHART, 'complete a nursing task');
     if (denied) return denied;
     try {
-        const { db } = await requireTenantContext();
+        const { db, session } = await requireTenantContext();
+
+        const task = await db.nursingTask.findUnique({
+            where: { id: taskId },
+            select: { assigned_to: true, status: true, completed_by: true },
+        });
+        if (!task) return { success: false, error: 'That task no longer exists.' };
+
+        if (task.status === 'Completed') {
+            const by = task.completed_by
+                ? await db.user.findUnique({ where: { id: task.completed_by }, select: { name: true } })
+                : null;
+            return {
+                success: false,
+                error: `That task was already completed${by?.name ? ` by ${by.name}` : ''}.`,
+            };
+        }
+
+        if (task.assigned_to && task.assigned_to !== session.id) {
+            const holder = await db.user.findUnique({
+                where: { id: task.assigned_to },
+                select: { name: true },
+            });
+            return {
+                success: false,
+                error: `This task is assigned to ${holder?.name || 'another nurse'}. `
+                    + `Only they can close it — ask them to, or have them hand it back first.`,
+            };
+        }
 
         await db.nursingTask.update({
             where: { id: taskId },
-            data: { status: 'Completed', completed_at: new Date() },
+            data: {
+                status: 'Completed',
+                completed_at: new Date(),
+                // The record of who did it. Previously left null on every task.
+                completed_by: session.id,
+                // Closing an unclaimed task claims it: you did the work, so the
+                // chart should say so.
+                assigned_to: task.assigned_to ?? session.id,
+            },
         });
 
         revalidatePath('/nurse/tasks');
+        revalidatePath('/nurse/dashboard');
+        revalidatePath('/ipd/nursing-station');
         return { success: true };
     } catch (error) {
         console.error('Complete Task Error:', error);

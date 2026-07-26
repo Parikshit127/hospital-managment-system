@@ -33,7 +33,11 @@ const BILLING = ['admin', 'finance', 'ipd_manager', 'receptionist', 'opd_manager
 const INSURANCE = ['admin', 'finance', 'ipd_manager'];                             // /insurance
 const PHARMACY = ['admin', 'pharmacist'];                                          // /pharmacy/*
 const FRONT_DESK = ['admin', 'receptionist'];                                      // /reception/*
-const WARD = ['admin', 'ipd_manager'];                                             // /ipd/*
+// proxy.ts allows nurse and doctor on /ipd, so the palette must too — this list
+// is supposed to mirror it, and excluding nurses hid every ward screen from the
+// people who spend the whole shift in them.
+const WARD = ['admin', 'ipd_manager', 'nurse', 'doctor'];                          // /ipd/*
+const NURSING = ['admin', 'nurse'];                                                // /nurse/*
 const ADMIN_ONLY = ['admin'];                                                      // /admin/*
 const LAB = ['admin', 'lab_technician'];                                           // /lab/*
 
@@ -77,6 +81,19 @@ export const SCREEN_INDEX: ScreenEntry[] = [
 
     // IPD
     { label: 'IPD Dashboard', href: '/ipd', group: 'IPD', keywords: ['inpatient', 'admitted'], roles: WARD },
+    // The nursing module had no entries whatsoever, so a nurse's palette could
+    // find patients but not one of her own screens.
+    { label: 'Nurse Dashboard', href: '/nurse/dashboard', group: 'Nursing', keywords: ['nurse', 'shift', 'home'], roles: NURSING },
+    { label: 'My Patients', href: '/nurse/patients', group: 'Nursing', keywords: ['ward patients', 'my patients', 'marij'], roles: NURSING },
+    { label: 'Vitals', href: '/nurse/vitals', group: 'Nursing', keywords: ['vitals', 'observations', 'news', 'bp', 'temperature', 'obs'], roles: NURSING },
+    { label: 'Medications (eMAR)', href: '/nurse/medications', group: 'Nursing', keywords: ['emar', 'medication', 'drug', 'dawai', 'administer', 'dose'], roles: NURSING },
+    { label: 'Nursing Notes', href: '/nurse/nursing-notes', group: 'Nursing', keywords: ['notes', 'nursing note'], roles: NURSING },
+    { label: 'Nursing Tasks', href: '/nurse/tasks', group: 'Nursing', keywords: ['task', 'todo', 'kaam', 'pending'], roles: NURSING },
+    { label: 'Shift Handover', href: '/nurse/handover', group: 'Nursing', keywords: ['handover', 'shift change', 'sbar'], roles: NURSING },
+    { label: 'Nursing Care Record', href: '/ipd/care-record', group: 'Nursing', keywords: ['care plan', 'fluid balance', 'wound', 'device', 'transfusion', 'teaching'], roles: WARD },
+    { label: 'Clinical Incidents', href: '/ipd/incidents', group: 'Nursing', keywords: ['incident', 'fall', 'medication error', 'needlestick'], roles: WARD },
+    { label: 'Escalations', href: '/doctor/escalations', group: 'Clinical', keywords: ['escalation', 'news', 'deteriorating', 'acknowledge'], roles: ['admin', 'doctor'] },
+    { label: 'Controlled Drugs', href: '/pharmacy/controlled-drugs', group: 'Pharmacy', keywords: ['narcotic', 'ndps', 'schedule x', 'controlled'], roles: PHARMACY },
     { label: 'Admissions Hub', href: '/ipd/admissions-hub', group: 'IPD', keywords: ['admission', 'admitted patients'], roles: WARD },
     { label: 'Bed Matrix', href: '/ipd/bed-matrix', group: 'IPD', keywords: ['bed', 'ward', 'occupancy'], roles: WARD },
     { label: 'Discharge Settlement', href: '/ipd/discharge-settlement', group: 'IPD', keywords: ['discharge', 'final bill', 'settlement'], roles: WARD },

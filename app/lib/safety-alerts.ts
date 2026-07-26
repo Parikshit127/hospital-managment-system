@@ -178,3 +178,35 @@ export async function notifyDoseNotGiven(
     const notified = await send(db, organizationId, ids, title, body, 'warning');
     return { notified, consecutive };
 }
+
+/**
+ * Tell the second nurse her name is on a controlled drug.
+ *
+ * A co-signature is a legal record that two people checked the dose. The
+ * witness was selected from a dropdown and never told, so she could find her
+ * name against a controlled drug she never saw given. Whether she agrees is
+ * the entire point of the check.
+ */
+export async function notifyWitness(
+    db: Db,
+    organizationId: string,
+    args: {
+        witnessId: string;
+        patientName: string;
+        medicationName: string;
+        dose: string;
+        givenByName: string;
+    },
+): Promise<number> {
+    if (!args.witnessId) return 0;
+    return send(
+        db,
+        organizationId,
+        [args.witnessId],
+        `You co-signed ${args.medicationName}`,
+        `${args.givenByName} recorded you as the second checker for ${args.medicationName} ` +
+        `${args.dose} given to ${args.patientName}. If you did not witness this dose, tell the ` +
+        `nurse in charge now — your name is on the controlled-drug record.`,
+        'warning',
+    );
+}

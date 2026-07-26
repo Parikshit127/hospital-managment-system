@@ -11,7 +11,7 @@
  * session and the tenant-scoped client.
  */
 
-import { notifyAllergyOverride, notifyDoseNotGiven } from './safety-alerts';
+import { notifyAllergyOverride, notifyDoseNotGiven, notifyWitness } from './safety-alerts';
 import { classRelation } from './drug-classes';
 import { WITNESS_REQUIRED_SCHEDULES } from './controlled-substances';
 
@@ -335,6 +335,17 @@ export async function applyAdministration(
                     reason: input.allergy_override_reason.trim(),
                     actedByName,
                     stage: 'administered',
+                });
+            }
+
+            // A co-signature the witness never heard about is not a check.
+            if (input.status === 'Administered' && input.witness_id?.trim()) {
+                await notifyWitness(db, ctx.organizationId, {
+                    witnessId: input.witness_id.trim(),
+                    patientName,
+                    medicationName: updated.medication_name,
+                    dose: updated.dose || '',
+                    givenByName: actedByName,
                 });
             }
 
