@@ -238,6 +238,8 @@ export async function getPatientDepositBalance(patientId: string) {
 // to cover from a held deposit, so the invoice's real balance drops
 // immediately instead of leaving the deposit sitting unused.
 export async function applyAvailableDepositToInvoice(patientId: string, invoiceId: number, amount: number) {
+    const __denied = await guardAction('deposit-actions', 'applyAvailableDepositToInvoice');
+    if (__denied) return { ...__denied, applied: 0 };
     try {
         const requested = round2(Number(amount) || 0);
         if (requested <= 0) return { success: true, applied: 0 };
