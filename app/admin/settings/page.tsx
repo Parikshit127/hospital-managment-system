@@ -95,6 +95,20 @@ export default function OrgSettingsPage() {
                     </div>
                     <div className="p-6 space-y-4">
                         <label className="flex items-center gap-4 p-4 border border-gray-200 rounded-xl hover:bg-gray-50 cursor-pointer transition-colors">
+                            <input type="checkbox" checked={!!config.ward_scoping_enabled} onChange={e => handleChange('ward_scoping_enabled', e.target.checked)} className="w-5 h-5 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500" />
+                            <div>
+                                <p className="font-bold text-gray-900">Ward-first nursing screens</p>
+                                <p className="text-xs text-gray-500 font-medium">
+                                    Puts each nurse&rsquo;s own ward at the top of her patients, tasks and
+                                    medication list. Nothing is hidden &mdash; a nurse can still see and act on
+                                    any patient in the hospital. Leave off if your nurses genuinely cover
+                                    every ward. Needs a ward set against each nurse in Staff, or a shift
+                                    assigned on the nursing shift board.
+                                </p>
+                            </div>
+                        </label>
+
+                        <label className="flex items-center gap-4 p-4 border border-gray-200 rounded-xl hover:bg-gray-50 cursor-pointer transition-colors">
                             <input type="checkbox" checked={config.enable_ai_triage} onChange={e => handleChange('enable_ai_triage', e.target.checked)} className="w-5 h-5 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500" />
                             <div>
                                 <p className="font-bold text-gray-900 flex items-center gap-2">Enable Open-AI Clinical Summaries <span className="bg-indigo-100 text-indigo-700 text-[10px] px-2 py-0.5 rounded font-bold uppercase tracking-wider">Premium</span></p>

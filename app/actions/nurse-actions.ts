@@ -6,6 +6,7 @@ import { generateIndentNumber } from '@/app/lib/sequence-generator';
 import { applyAdministration } from '@/app/lib/medication-safety';
 import { topUpMedicationSchedules } from '@/app/actions/ipd-emr-actions';
 import { recordObservation, parseBloodPressure } from '@/app/lib/vitals-recording';
+import { getWardContext, isOwnWard, wardFirst } from '@/app/lib/ward-scoping';
 
 // ========================================
 // NURSE DASHBOARD
@@ -55,11 +56,12 @@ export async function getWardPatients(wardId?: number, status?: string) {
         // status 'All' → no filter; otherwise filter (default 'Admitted')
         if (status && status !== 'All') where.status = status;
         else if (!status) where.status = 'Admitted';
-        // An explicit ward filter wins; otherwise a ward-assigned nurse sees their
-        // own ward instead of every admitted patient in the hospital. Users with no
-        // assignment are unscoped, which is how every account behaves today.
-        const effectiveWard = wardId ?? (session.role === 'nurse' ? session.assigned_ward_id ?? undefined : undefined);
-        if (effectiveWard) where.ward_id = Number(effectiveWard);
+        // An explicit ward filter from the UI still filters — that is the nurse
+        // asking. Ward scoping itself only sorts: her own ward comes first and is
+        // labelled, and nothing is hidden. Hiding a patient she may need to act
+        // on is the failure mode worth avoiding.
+        if (wardId) where.ward_id = Number(wardId);
+        const ward = await getWardContext(db, session);
 
         const admissions = await db.admissions.findMany({
             where,
@@ -73,7 +75,8 @@ export async function getWardPatients(wardId?: number, status?: string) {
 
         return {
             success: true,
-            data: admissions.map((a: any) => {
+            wardScoping: { enabled: ward.enabled, wardIds: ward.wardIds, source: ward.source },
+            data: wardFirst(ward, admissions, (a: any) => a.ward_id).map((a: any) => {
                 const prefix = `${a.organizationId}-${a.ward_id}-`;
                 const bedLabel = a.bed_id?.startsWith(prefix) ? a.bed_id.slice(prefix.length) : a.bed_id;
                 return {
@@ -89,6 +92,7 @@ export async function getWardPatients(wardId?: number, status?: string) {
                     wardName: a.ward?.ward_name || 'Unassigned',
                     wardType: a.ward?.ward_type,
                     diagnosis: a.diagnosis,
+                    isMyWard: isOwnWard(ward, a.ward_id),
                     doctorName: a.doctor_name,
                     status: a.status,
                     admissionDate: a.admission_date,
@@ -215,11 +219,10 @@ export async function getMedicationSchedule(
         const admissionWhere: any = { status: 'Admitted' };
         if (admissionId) admissionWhere.admission_id = admissionId;
 
-        // Ward scoping: a nurse assigned to a ward sees that ward. Staff without an
-        // assignment (and admins) still see everything, so nothing breaks for sites
-        // that have not filled the field in.
-        const effectiveWard = wardId ?? (session.role === 'nurse' ? session.assigned_ward_id ?? undefined : undefined);
-        if (effectiveWard) admissionWhere.ward_id = Number(effectiveWard);
+        // Same rule as the ward list: an explicit filter filters, scoping only
+        // sorts. A dose due on the next ward must never become invisible.
+        if (wardId) admissionWhere.ward_id = Number(wardId);
+        const ward = await getWardContext(db, session);
 
         const admissions = await db.admissions.findMany({
             where: admissionWhere,
@@ -253,13 +256,21 @@ export async function getMedicationSchedule(
 
         return {
             success: true,
+            wardScoping: { enabled: ward.enabled, wardIds: ward.wardIds, source: ward.source },
             data: medications.map((m: any) => ({
                 ...m,
                 patientName: admissionMap[m.admission_id]?.patientName || 'Unknown',
                 patientId: admissionMap[m.admission_id]?.patientId || '',
                 wardName: admissionMap[m.admission_id]?.wardName || '',
                 bedId: admissionMap[m.admission_id]?.bedId || '',
-            })),
+                isMyWard: isOwnWard(ward, admissionMap[m.admission_id]?.wardId),
+            })).sort((a: any, b: any) => {
+                // Due time still leads — a dose overdue on the next ward is more
+                // urgent than one due in an hour on your own.
+                const t = new Date(a.scheduled_time).getTime() - new Date(b.scheduled_time).getTime();
+                if (t !== 0) return t;
+                return Number(b.isMyWard) - Number(a.isMyWard);
+            }),
         };
     } catch (error) {
         console.error('Medication Schedule Error:', error);
@@ -413,9 +424,8 @@ export async function getNursingTasks(options?: {
         // Only tasks for patients still on the ward, scoped to the nurse's ward
         // when they have one. A task for a discharged patient is not work.
         const admissionWhere: any = { status: 'Admitted' };
-        const effectiveWard = options?.wardId
-            ?? (session.role === 'nurse' ? session.assigned_ward_id ?? undefined : undefined);
-        if (effectiveWard) admissionWhere.ward_id = Number(effectiveWard);
+        if (options?.wardId) admissionWhere.ward_id = Number(options.wardId);
+        const ward = await getWardContext(db, session);
 
         const admissions = await db.admissions.findMany({
             where: admissionWhere,
@@ -435,7 +445,7 @@ export async function getNursingTasks(options?: {
         const admissionMap = Object.fromEntries(
             admissions.map((a: any) => [a.admission_id, {
                 patientName: a.patient?.full_name, patientId: a.patient?.patient_id,
-                bedId: a.bed_id, wardName: a.ward?.ward_name,
+                bedId: a.bed_id, wardName: a.ward?.ward_name, wardId: a.ward_id,
             }])
         );
 
@@ -460,9 +470,16 @@ export async function getNursingTasks(options?: {
             completedByName: t.completed_by ? (nameById[t.completed_by] || 'A nurse') : null,
             isMine: !!t.assigned_to && t.assigned_to === session.id,
             isUnclaimed: !t.assigned_to,
+            isMyWard: isOwnWard(ward, admissionMap[t.admission_id]?.wardId),
         })).sort((a: any, b: any) => {
+            // Urgency always wins over ward. A stat task on the next ward still
+            // outranks a routine one on your own — the point of scoping is to
+            // order your day, not to let you miss an emergency next door.
             const pr = (rank[a.priority] ?? 2) - (rank[b.priority] ?? 2);
-            return pr !== 0 ? pr : new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime();
+            if (pr !== 0) return pr;
+            const mine = Number(b.isMyWard) - Number(a.isMyWard);
+            if (mine !== 0) return mine;
+            return new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime();
         });
 
         return { success: true, data: enriched };

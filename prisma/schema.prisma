@@ -350,6 +350,16 @@ model OrganizationConfig {
   // accrual in app/lib/doctor-commission.ts.
   default_doctor_commission_percent Float @default(0)
 
+  /// Put a nurse's own ward first on the nursing screens.
+  ///
+  /// Off by default, which is today's behaviour and the right one for a small
+  /// hospital where everyone genuinely covers everything. When on, the nursing
+  /// screens group and sort by ward instead of hiding anything — a nurse who
+  /// walks past a deteriorating patient on another ward must still be able to
+  /// act on them, and scoping that hides patients gets worked around by sharing
+  /// logins, which destroys every record it was meant to protect.
+  ward_scoping_enabled          Boolean   @default(false)
+
   organization Organization @relation(fields: [organizationId], references: [id])
 
   @@map("organization_configs")
