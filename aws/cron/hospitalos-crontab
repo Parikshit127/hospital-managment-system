@@ -80,6 +80,12 @@ LOG=/home/ubuntu/hospitalos/logs/cron.log
 # that has not been opened over a long weekend — it must never run dry.
 15 2 * * * curl -fsS -m 300 -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/ipd/mar-topup" >> $LOG 2>&1
 
+# Unanswered NEWS escalations. Every minute: the emergency band allows ten
+# minutes to acknowledge, so a coarser schedule spends most of that budget
+# waiting for the next tick. Cheap when there is nothing overdue - one indexed
+# lookup per organization.
+* * * * * curl -fsS -m 60 -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/ipd/escalation-timeout" >> $LOG 2>&1
+
 # ---------------------------------------------------------------------------
 # DELIBERATELY NOT SCHEDULED — each needs a decision, not a default:
 #

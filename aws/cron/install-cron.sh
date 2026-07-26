@@ -49,7 +49,7 @@ if [[ "$MODE" == "--verify" ]]; then
                cron/assessment-alerts cron/mis-scheduled-delivery \
                cron/appointment-reminders cron/budget-alerts \
                cron/mis-rollup cron/mis-cleanup cron/asset-maintenance-reminders \
-               ipd/bed-cleaning-sla ipd/deposit-alerts ipd/interim-billing ipd/mar-topup; do
+               ipd/bed-cleaning-sla ipd/deposit-alerts ipd/interim-billing ipd/mar-topup ipd/escalation-timeout; do
     code="$(curl -s -o /dev/null -w '%{http_code}' -m 60 \
             -H "Authorization: Bearer ${CRON_SECRET}" "${APP_URL}/api/${entry}" || echo 000)"
     if [[ "$code" == "200" ]]; then

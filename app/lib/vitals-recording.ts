@@ -12,6 +12,7 @@
  * Not a 'use server' module — server actions own the session and tenant client
  * and pass them in.
  */
+import { ackDeadline } from './escalation-policy';
 import { calcNEWS2, type NEWS2Input } from '@/app/lib/news2';
 
 export type ObservationInput = NEWS2Input & {
@@ -234,6 +235,40 @@ export async function escalateOnNEWS(
                     type: emergency ? 'error' : 'warning',
                 })),
             });
+        }
+
+        // An owned, time-limited escalation. A notification can be ignored and a
+        // task can sit unclaimed; this one has a named doctor against it and a
+        // deadline, and chases itself when nobody answers.
+        try {
+            const existingEsc = await db.nEWSEscalation.findFirst({
+                where: { admission_id: admissionId, status: 'awaiting' },
+            });
+            if (existingEsc) {
+                // Already open for this patient — update the score rather than
+                // stacking a second one and restarting the clock.
+                await db.nEWSEscalation.update({
+                    where: { id: existingEsc.id },
+                    data: { news_score: score, band, news_level: emergency ? 'high' : 'medium' },
+                });
+            } else {
+                await db.nEWSEscalation.create({
+                    data: {
+                        admission_id: admissionId,
+                        patient_id: patientId,
+                        news_score: score,
+                        news_level: emergency ? 'high' : 'medium',
+                        band,
+                        raised_by: args.recordedBy,
+                        target_doctor_id: admission?.attending_doctor_id ?? null,
+                        due_at: ackDeadline(band),
+                        status: 'awaiting',
+                    },
+                });
+            }
+        } catch (e) {
+            // Never lose the observation because the escalation record failed.
+            console.error('NEWS escalation record failed:', e);
         }
 
         // A notification can be dismissed; a task has to be closed. One open
