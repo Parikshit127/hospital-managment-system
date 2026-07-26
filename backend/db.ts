@@ -135,6 +135,16 @@ const TENANT_SCOPED_MODELS = new Set([
     'report_access_logs', 'report_jobs', 'report_presets', 'report_schedules',
     'stock_adjustments', 'stock_count_sessions', 'stock_issues', 'stock_transfers',
     'store_item_settings', 'store_stocks', 'stores',
+    // Nursing care-record models. These were added without being registered
+    // here, which is the same mistake this list exists to prevent: most of
+    // their reads filter only on admission_id, and getIncidents filtered on
+    // nothing but status — so the incident list showed every hospital's
+    // incidents, and the shift board keyed on ward_id, which is an integer that
+    // collides across organizations (ward 3 exists in both). Registering them
+    // makes isolation automatic rather than something each query must remember.
+    'NursingCarePlan', 'FluidBalanceEntry', 'WoundCareRecord', 'PatientDevice',
+    'TransfusionRecord', 'ClinicalIncident', 'PatientEducationRecord',
+    'NurseShiftAssignment', 'NEWSEscalation',
 ]);
 
 // Models where organizationId is nullable (audit logs, etc.)

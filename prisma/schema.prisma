@@ -261,6 +261,8 @@ model Organization {
   clinical_incidents        ClinicalIncident[]
   patient_education_records PatientEducationRecord[]
   nurse_shift_assignments   NurseShiftAssignment[]
+  news_escalations          NEWSEscalation[]
+
   @@map("organizations")
 }
 
@@ -308,16 +310,16 @@ model SubscriptionPlan {
 }
 
 model OrganizationConfig {
-  id                            String       @id @default(uuid())
-  organizationId                String       @unique
-  uhid_prefix                   String       @default("AVN")
-  timezone                      String       @default("Asia/Kolkata")
-  currency                      String       @default("INR")
-  date_format                   String       @default("DD/MM/YYYY")
-  session_timeout               Int          @default(15)
-  enable_whatsapp               Boolean      @default(false)
-  enable_razorpay               Boolean      @default(false)
-  enable_ai_triage              Boolean      @default(true)
+  id                            String    @id @default(uuid())
+  organizationId                String    @unique
+  uhid_prefix                   String    @default("AVN")
+  timezone                      String    @default("Asia/Kolkata")
+  currency                      String    @default("INR")
+  date_format                   String    @default("DD/MM/YYYY")
+  session_timeout               Int       @default(15)
+  enable_whatsapp               Boolean   @default(false)
+  enable_razorpay               Boolean   @default(false)
+  enable_ai_triage              Boolean   @default(true)
   razorpay_key_id               String?
   razorpay_key_secret           String?
   smtp_host                     String?
@@ -334,12 +336,12 @@ model OrganizationConfig {
   sms_api_key                   String?
   sms_sender_id                 String?
   sender_phone_number           String?
-  tally_enabled                 Boolean      @default(false)
+  tally_enabled                 Boolean   @default(false)
   tally_url                     String?
   tally_company                 String?
   tally_username                String?
   tally_password                String?
-  tally_auto_sync               Boolean      @default(false)
+  tally_auto_sync               Boolean   @default(false)
   tally_last_sync_at            DateTime?
   tally_voucher_type_map        String?
 
@@ -348,7 +350,7 @@ model OrganizationConfig {
   // accrual in app/lib/doctor-commission.ts.
   default_doctor_commission_percent Float @default(0)
 
-  organization                  Organization @relation(fields: [organizationId], references: [id])
+  organization Organization @relation(fields: [organizationId], references: [id])
 
   @@map("organization_configs")
 }
@@ -471,12 +473,12 @@ model SuperAdmin {
 }
 
 model User {
-  id                                                      String               @id @default(uuid())
-  username                                                String               @unique
+  id                                                      String                @id @default(uuid())
+  username                                                String                @unique
   password                                                String
   role                                                    String
-  is_dev_admin                                            Boolean              @default(false)
-  is_developer                                            Boolean              @default(false)
+  is_dev_admin                                            Boolean               @default(false)
+  is_developer                                            Boolean               @default(false)
   name                                                    String?
   specialty                                               String?
   email                                                   String?
@@ -486,19 +488,19 @@ model User {
   doctor_registration_no                                  String?
   qualifications                                          String?
   organizationId                                          String
-  is_active                                               Boolean              @default(true)
-  working_hours                                           String               @default("09:00-17:00")
-  slot_duration                                           Int                  @default(20)
-  consultation_fee                                        Float                @default(500)
-  follow_up_fee                                           Float                @default(300)
-  max_overbooking_per_slot                                Int                  @default(0)
+  is_active                                               Boolean               @default(true)
+  working_hours                                           String                @default("09:00-17:00")
+  slot_duration                                           Int                   @default(20)
+  consultation_fee                                        Float                 @default(500)
+  follow_up_fee                                           Float                 @default(300)
+  max_overbooking_per_slot                                Int                   @default(0)
   gender                                                  String?
   working_days                                            String?
   max_patients_per_day                                    Int?
-  createdAt                                               DateTime             @default(now())
+  createdAt                                               DateTime              @default(now())
   supervisor_id                                           String?
   doctor_group_id                                         String?
-  is_group_lead                                           Boolean              @default(false)
+  is_group_lead                                           Boolean               @default(false)
   employee_code                                           String?
   designation                                             String?
   department                                              String?
@@ -509,16 +511,16 @@ model User {
   report_jobs                                             report_jobs[]
   report_presets                                          report_presets[]
   report_schedules                                        report_schedules[]
-  stock_transfers_stock_transfers_dispatch_user_idTousers stock_transfers[]    @relation("stock_transfers_dispatch_user_idTousers")
-  stock_transfers_stock_transfers_receive_user_idTousers  stock_transfers[]    @relation("stock_transfers_receive_user_idTousers")
+  stock_transfers_stock_transfers_dispatch_user_idTousers stock_transfers[]     @relation("stock_transfers_dispatch_user_idTousers")
+  stock_transfers_stock_transfers_receive_user_idTousers  stock_transfers[]     @relation("stock_transfers_receive_user_idTousers")
   stores                                                  stores[]
-  tickets                                                 Ticket[]             @relation("TicketCreator")
-  assigned_tickets                                        Ticket[]             @relation("TicketAssignee")
+  tickets                                                 Ticket[]              @relation("TicketCreator")
+  assigned_tickets                                        Ticket[]              @relation("TicketAssignee")
   notifications                                           Notification[]
   ticket_notes                                            TicketNote[]
   broadcasts_created                                      Broadcast[]
   notification_receipts                                   NotificationReceipt[]
-  organization                                            Organization         @relation(fields: [organizationId], references: [id])
+  organization                                            Organization          @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId])
   @@index([doctor_group_id])
@@ -802,23 +804,23 @@ model LabPanelTest {
 }
 
 model radiology_imaging {
-  id                    Int            @id @default(autoincrement())
+  id                    Int          @id @default(autoincrement())
   procedure_name        String
   procedure_code        String?
   price                 Float
-  category              String?        // e.g., "X-Ray", "MRI", "CT Scan", "Ultrasound", "ECG", "Echo"
+  category              String? // e.g., "X-Ray", "MRI", "CT Scan", "Ultrasound", "ECG", "Echo"
   description           String?
-  is_available          Boolean        @default(true)
+  is_available          Boolean      @default(true)
   hsn_sac_code          String?
-  tax_rate              Float?         @default(0)
-  turnaround_time       String?        // e.g., "2 hours", "1 day"
-  requires_prescription Boolean        @default(false)
-  modality              String?        // e.g., "X-Ray", "MRI", "CT", "USG", "Fluoroscopy"
-  body_part             String?        // e.g., "Chest", "Head", "Abdomen"
+  tax_rate              Float?       @default(0)
+  turnaround_time       String? // e.g., "2 hours", "1 day"
+  requires_prescription Boolean      @default(false)
+  modality              String? // e.g., "X-Ray", "MRI", "CT", "USG", "Fluoroscopy"
+  body_part             String? // e.g., "Chest", "Head", "Abdomen"
   organizationId        String
-  created_at            DateTime       @default(now())
-  updated_at            DateTime       @updatedAt
-  organization          Organization   @relation(fields: [organizationId], references: [id])
+  created_at            DateTime     @default(now())
+  updated_at            DateTime     @updatedAt
+  organization          Organization @relation(fields: [organizationId], references: [id])
 
   @@unique([procedure_name, organizationId])
   @@index([organizationId])
@@ -931,7 +933,7 @@ model pharmacy_orders {
   indent_number         String?                @unique // Requisition no, e.g. AVS-IND-26-27-001 (null on legacy rows until backfilled)
   patient_id            String
   doctor_id             String
-  requested_by_name     String?               // Display name of nurse/staff who placed the indent
+  requested_by_name     String? // Display name of nurse/staff who placed the indent
   total_amount          Float                  @default(0.0)
   status                String                 @default("Pending")
   total_items_requested Int?
@@ -1003,96 +1005,97 @@ model pharmacy_order_items {
 }
 
 model admissions {
-  admission_id              String                 @id @default(uuid())
-  patient_id                String
-  bed_id                    String?
-  ward_id                   Int?
-  status                    String
-  diagnosis                 String?
-  doctor_name               String?
-  line_of_treatment         String?
-  admission_type            String?
-  surgery_requested         String?
-  is_death                  Boolean                @default(false)
-  case_fir_number           String?
-  case_is_rta               Boolean                @default(false)
-  case_is_substance_abuse   Boolean                @default(false)
-  case_is_police_report     Boolean                @default(false)
-  case_is_test_conducted    Boolean                @default(false)
-  case_injury_date          DateTime?
-  past_ailments             String?
-  past_ailment_duration     String?
-  other_ailments            String?
-  consent_signature_url     String?
-  id_cards_url              String?
-  organizationId            String
-  is_archived               Boolean                @default(false)
-  archived_at               DateTime?
-  admission_date            DateTime               @default(now())
-  discharge_date            DateTime?
-  admission_category        String?
-  expected_discharge_date   DateTime?
-  fit_for_discharge_at      DateTime?
-  fit_for_discharge_by      String?
-  discharge_checklist       Json?
-  fall_risk_score           Int?
-  pressure_ulcer_risk       Int?
-  code_status               String?
-  news_score_latest         Int?
-  attending_doctor_id       String?
-  admission_source          String?
-  discharge_type            String?
-  discharge_disposition     String?
-  patient_class             String?
-  primary_diagnosis_icd     String?
-  secondary_diagnoses       Json?
-  isolation_type            String?
-  medication_reconciliation Json?
-  discharge_instructions    String?
-  allergy_alerts            Json?
-  version                   Int                    @default(0)
-  billing_category          String?                @default("General")
-  cancellation_reason       String?
-  cancellation_date         DateTime?
-  cancelled_by              String?
-  admission_consultants     AdmissionConsultant[]
-  bed                       beds?                  @relation(fields: [bed_id], references: [bed_id])
-  organization              Organization           @relation(fields: [organizationId], references: [id])
-  patient                   OPD_REG                @relation(fields: [patient_id], references: [patient_id])
-  ward                      wards?                 @relation(fields: [ward_id], references: [ward_id])
-  bed_transfers             BedTransfer[]
-  diet_plans                DietPlan[]
-  summaries                 discharge_summaries[]
-  gl_accounts               GL_Account[]
-  gl_journal_entries        GL_JournalEntry[]
-  gl_journal_lines          GL_JournalLine[]
-  gst_invoice_register      GST_Invoice_Register[]
-  gst_return_filings        GST_Return_Filing[]
-  hsn_sac_master            HSN_SAC_Master[]
-  indents                   indents[]
-  insurance_claims          insurance_claims[]
-  insurance_preauths        InsurancePreAuth[]
-  inventory_movements       inventory_movements[]
-  invoices                  invoices[]
-  ipd_admission_packages    IpdAdmissionPackage[]
-  clinical_orders           ClinicalOrder[]
-  physician_orders          PhysicianOrder[]
-  active_medications        ActiveMedication[]
-  nursing_notes_rel         NursingNote[]
+  admission_id               String                     @id @default(uuid())
+  patient_id                 String
+  bed_id                     String?
+  ward_id                    Int?
+  status                     String
+  diagnosis                  String?
+  doctor_name                String?
+  line_of_treatment          String?
+  admission_type             String?
+  surgery_requested          String?
+  is_death                   Boolean                    @default(false)
+  case_fir_number            String?
+  case_is_rta                Boolean                    @default(false)
+  case_is_substance_abuse    Boolean                    @default(false)
+  case_is_police_report      Boolean                    @default(false)
+  case_is_test_conducted     Boolean                    @default(false)
+  case_injury_date           DateTime?
+  past_ailments              String?
+  past_ailment_duration      String?
+  other_ailments             String?
+  consent_signature_url      String?
+  id_cards_url               String?
+  organizationId             String
+  is_archived                Boolean                    @default(false)
+  archived_at                DateTime?
+  admission_date             DateTime                   @default(now())
+  discharge_date             DateTime?
+  admission_category         String?
+  expected_discharge_date    DateTime?
+  fit_for_discharge_at       DateTime?
+  fit_for_discharge_by       String?
+  discharge_checklist        Json?
+  fall_risk_score            Int?
+  pressure_ulcer_risk        Int?
+  code_status                String?
+  news_score_latest          Int?
+  attending_doctor_id        String?
+  admission_source           String?
+  discharge_type             String?
+  discharge_disposition      String?
+  patient_class              String?
+  primary_diagnosis_icd      String?
+  secondary_diagnoses        Json?
+  isolation_type             String?
+  medication_reconciliation  Json?
+  discharge_instructions     String?
+  allergy_alerts             Json?
+  version                    Int                        @default(0)
+  billing_category           String?                    @default("General")
+  cancellation_reason        String?
+  cancellation_date          DateTime?
+  cancelled_by               String?
+  admission_consultants      AdmissionConsultant[]
+  bed                        beds?                      @relation(fields: [bed_id], references: [bed_id])
+  organization               Organization               @relation(fields: [organizationId], references: [id])
+  patient                    OPD_REG                    @relation(fields: [patient_id], references: [patient_id])
+  ward                       wards?                     @relation(fields: [ward_id], references: [ward_id])
+  bed_transfers              BedTransfer[]
+  diet_plans                 DietPlan[]
+  summaries                  discharge_summaries[]
+  gl_accounts                GL_Account[]
+  gl_journal_entries         GL_JournalEntry[]
+  gl_journal_lines           GL_JournalLine[]
+  gst_invoice_register       GST_Invoice_Register[]
+  gst_return_filings         GST_Return_Filing[]
+  hsn_sac_master             HSN_SAC_Master[]
+  indents                    indents[]
+  insurance_claims           insurance_claims[]
+  insurance_preauths         InsurancePreAuth[]
+  inventory_movements        inventory_movements[]
+  invoices                   invoices[]
+  ipd_admission_packages     IpdAdmissionPackage[]
+  clinical_orders            ClinicalOrder[]
+  physician_orders           PhysicianOrder[]
+  active_medications         ActiveMedication[]
+  nursing_notes_rel          NursingNote[]
   medication_administrations MedicationAdministration[]
-  care_plans                NursingCarePlan[]
-  fluid_balance             FluidBalanceEntry[]
-  wound_care                WoundCareRecord[]
-  devices                   PatientDevice[]
-  transfusions              TransfusionRecord[]
-  incidents                 ClinicalIncident[]
-  education_records         PatientEducationRecord[]
-  ipd_vitals                IPDVitals[]
-  medical_notes             medical_notes[]
-  nursing_assessments       NursingAssessment[]
-  nursing_tasks             NursingTask[]
-  tally_exports             TallyExport[]
-  ward_rounds               WardRound[]
+  care_plans                 NursingCarePlan[]
+  fluid_balance              FluidBalanceEntry[]
+  wound_care                 WoundCareRecord[]
+  devices                    PatientDevice[]
+  transfusions               TransfusionRecord[]
+  incidents                  ClinicalIncident[]
+  education_records          PatientEducationRecord[]
+  ipd_vitals                 IPDVitals[]
+  medical_notes              medical_notes[]
+  nursing_assessments        NursingAssessment[]
+  nursing_tasks              NursingTask[]
+  tally_exports              TallyExport[]
+  ward_rounds                WardRound[]
+  news_escalations           NEWSEscalation[]
 
   @@index([organizationId])
   @@index([status])
@@ -1251,7 +1254,7 @@ model invoices {
   doctor_name String?
 
   // Discounts and TPA
-  bill_discount Decimal @default(0)
+  bill_discount   Decimal @default(0)
   discount_remark String?
 
   // Hard edit-lock
@@ -1285,25 +1288,25 @@ model invoices {
 }
 
 model invoice_items {
-  id               Int          @id @default(autoincrement())
-  invoice_id       Int
-  department       String
-  description      String
-  quantity         Float        @default(1)
-  unit_price       Decimal
-  total_price      Decimal
-  discount         Decimal      @default(0)
-  net_price        Decimal
-  ref_id           String?
-  tax_rate         Decimal      @default(0)
-  tax_amount       Decimal      @default(0)
-  hsn_sac_code     String?
-  service_category String?
+  id                    Int          @id @default(autoincrement())
+  invoice_id            Int
+  department            String
+  description           String
+  quantity              Float        @default(1)
+  unit_price            Decimal
+  total_price           Decimal
+  discount              Decimal      @default(0)
+  net_price             Decimal
+  ref_id                String?
+  tax_rate              Decimal      @default(0)
+  tax_amount            Decimal      @default(0)
+  hsn_sac_code          String?
+  service_category      String?
   rendered_by_doctor_id String? // User.id — doctor who performed this specific line item (commission attribution)
-  organizationId   String
-  created_at       DateTime     @default(now())
-  invoice          invoices     @relation(fields: [invoice_id], references: [id])
-  organization     Organization @relation(fields: [organizationId], references: [id])
+  organizationId        String
+  created_at            DateTime     @default(now())
+  invoice               invoices     @relation(fields: [invoice_id], references: [id])
+  organization          Organization @relation(fields: [organizationId], references: [id])
 
   @@index([invoice_id])
   @@index([organizationId])
@@ -2175,33 +2178,33 @@ model NursingNote {
 }
 
 model MedicationAdministration {
-  id                Int          @id @default(autoincrement())
-  admission_id      String
-  medication_name   String
-  dose              String
-  route             String
-  scheduled_time    DateTime
-  administered_at   DateTime?
-  status            String       @default("Scheduled")
-  administered_by   String?
-  notes             String?
-  organizationId    String
-  created_at        DateTime     @default(now())
-  frequency         String?
-  is_prn            Boolean      @default(false)
-  prn_reason        String?
-  pain_score_before Int?
-  pain_score_after  Int?
+  id                      Int          @id @default(autoincrement())
+  admission_id            String
+  medication_name         String
+  dose                    String
+  route                   String
+  scheduled_time          DateTime
+  administered_at         DateTime?
+  status                  String       @default("Scheduled")
+  administered_by         String?
+  notes                   String?
+  organizationId          String
+  created_at              DateTime     @default(now())
+  frequency               String?
+  is_prn                  Boolean      @default(false)
+  prn_reason              String?
+  pain_score_before       Int?
+  pain_score_after        Int?
   // A dose that was not given must record why, as a code plus optional free text.
   // Previously Held/Refused/Missed were stored with no reason at all.
-  not_given_reason  String?
+  not_given_reason        String?
   // Second-nurse check. Required for high-alert and controlled drugs.
-  witness_id        String?
+  witness_id              String?
   // Set when the dose was given despite a recorded allergy match, with the
   // clinician's justification. Null means no allergy conflict was detected.
   allergy_override_reason String?
-  admission         admissions   @relation(fields: [admission_id], references: [admission_id])
-  organization      Organization @relation(fields: [organizationId], references: [id])
+  admission               admissions   @relation(fields: [admission_id], references: [admission_id])
+  organization            Organization @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId])
   @@index([admission_id])
@@ -2457,22 +2460,22 @@ enum TicketStatus {
 }
 
 model Ticket {
-  id             String              @id @default(uuid())
+  id             String             @id @default(uuid())
   title          String
   description    String
   module         String?
-  priority       TicketPriority      @default(Medium)
-  status         TicketStatus        @default(Open)
+  priority       TicketPriority     @default(Medium)
+  status         TicketStatus       @default(Open)
   user_id        String
   assigned_to_id String?
   branch_id      String
   organizationId String
-  created_at     DateTime            @default(now())
-  updated_at     DateTime            @updatedAt
-  user           User                @relation("TicketCreator", fields: [user_id], references: [id])
-  assignee       User?               @relation("TicketAssignee", fields: [assigned_to_id], references: [id])
-  branch         Branch              @relation(fields: [branch_id], references: [id])
-  organization   Organization        @relation(fields: [organizationId], references: [id])
+  created_at     DateTime           @default(now())
+  updated_at     DateTime           @updatedAt
+  user           User               @relation("TicketCreator", fields: [user_id], references: [id])
+  assignee       User?              @relation("TicketAssignee", fields: [assigned_to_id], references: [id])
+  branch         Branch             @relation(fields: [branch_id], references: [id])
+  organization   Organization       @relation(fields: [organizationId], references: [id])
   attachments    TicketAttachment[]
   notifications  Notification[]
   notes          TicketNote[]
@@ -2914,20 +2917,20 @@ model WhatsAppIncomingMessage {
 }
 
 model IpdServiceMaster {
-  id               Int             @id @default(autoincrement())
-  service_code     String
-  service_name     String
-  service_category String
-  default_rate     Decimal
-  hsn_sac_code     String?
-  tax_rate         Decimal         @default(0)
-  is_active        Boolean         @default(true)
-  requires_rendered_by Boolean     @default(false)
-  organizationId   String
-  created_at       DateTime        @default(now())
-  updated_at       DateTime        @updatedAt
-  organization     Organization    @relation(fields: [organizationId], references: [id])
-  tariff_rates     IpdTariffRate[]
+  id                   Int             @id @default(autoincrement())
+  service_code         String
+  service_name         String
+  service_category     String
+  default_rate         Decimal
+  hsn_sac_code         String?
+  tax_rate             Decimal         @default(0)
+  is_active            Boolean         @default(true)
+  requires_rendered_by Boolean         @default(false)
+  organizationId       String
+  created_at           DateTime        @default(now())
+  updated_at           DateTime        @updatedAt
+  organization         Organization    @relation(fields: [organizationId], references: [id])
+  tariff_rates         IpdTariffRate[]
 
   @@unique([service_code, organizationId])
   @@index([organizationId])
@@ -2957,26 +2960,26 @@ model IpdTariffRate {
 }
 
 model IpdPackage {
-  id                 Int                   @id @default(autoincrement())
-  package_code       String
-  package_name       String
-  description        String?
-  total_amount       Decimal
-  validity_days      Int                   @default(7)
-  inclusions         Json                  @default("[]")
-  exclusions         Json                  @default("[]")
-  is_active          Boolean               @default(true)
+  id                    Int                   @id @default(autoincrement())
+  package_code          String
+  package_name          String
+  description           String?
+  total_amount          Decimal
+  validity_days         Int                   @default(7)
+  inclusions            Json                  @default("[]")
+  exclusions            Json                  @default("[]")
+  is_active             Boolean               @default(true)
   // When set, this package belongs exclusively to one TPA — hidden from other
   // providers' rate views, the cash/standard package list, and cash patients'
   // picker. Null = shared package (today's default behavior).
   exclusive_provider_id Int?
-  organizationId     String
-  created_at         DateTime              @default(now())
-  updated_at         DateTime              @updatedAt
-  admission_packages IpdAdmissionPackage[]
-  tpa_rates          IpdPackageTpaRate[]
-  organization       Organization          @relation(fields: [organizationId], references: [id])
-  exclusive_provider  insurance_providers?  @relation("PackageExclusiveProvider", fields: [exclusive_provider_id], references: [id])
+  organizationId        String
+  created_at            DateTime              @default(now())
+  updated_at            DateTime              @updatedAt
+  admission_packages    IpdAdmissionPackage[]
+  tpa_rates             IpdPackageTpaRate[]
+  organization          Organization          @relation(fields: [organizationId], references: [id])
+  exclusive_provider    insurance_providers?  @relation("PackageExclusiveProvider", fields: [exclusive_provider_id], references: [id])
 
   @@unique([package_code, organizationId])
   @@index([organizationId])
@@ -2985,29 +2988,29 @@ model IpdPackage {
 }
 
 model IpdAdmissionPackage {
-  id             Int          @id @default(autoincrement())
-  admission_id   String
-  package_id     Int
-  applied_amount Decimal
+  id                   Int                @id @default(autoincrement())
+  admission_id         String
+  package_id           Int
+  applied_amount       Decimal
   // Snapshot of the resolved display name (TPA override or master name) at the
   // moment this package was applied — so later name edits don't retroactively
   // change already-billed paperwork. Null on rows applied before this field existed.
   applied_package_name String?
-  is_broken_open Boolean      @default(false)
-  broken_at      DateTime?
-  applied_by     String?
-  organizationId String
-  created_at     DateTime     @default(now())
+  is_broken_open       Boolean            @default(false)
+  broken_at            DateTime?
+  applied_by           String?
+  organizationId       String
+  created_at           DateTime           @default(now())
   // Two-ledger package billing: explicit lifecycle. 'active' | 'broken_open' | 'closed'.
   // Supersedes is_broken_open (kept for backward compatibility).
-  status         String       @default("active")
-  closed_at      DateTime?
+  status               String             @default("active")
+  closed_at            DateTime?
   // Rolling "Package Absorbed Cost" expense for this admission package (if any).
-  expense_id     Int?
-  admission      admissions   @relation(fields: [admission_id], references: [admission_id])
-  organization   Organization @relation(fields: [organizationId], references: [id])
-  package        IpdPackage   @relation(fields: [package_id], references: [id])
-  consumptions   IpdChargePosting[]
+  expense_id           Int?
+  admission            admissions         @relation(fields: [admission_id], references: [admission_id])
+  organization         Organization       @relation(fields: [organizationId], references: [id])
+  package              IpdPackage         @relation(fields: [package_id], references: [id])
+  consumptions         IpdChargePosting[]
 
   @@index([admission_id])
   @@index([organizationId])
@@ -3020,16 +3023,16 @@ model IpdAdmissionPackage {
 // cash rate) when applied to an admission. See applyPackageToAdmission /
 // resolvePackagePrice in ipd-finance-actions.ts.
 model IpdPackageTpaRate {
-  id             Int      @id @default(autoincrement())
-  package_id     Int
-  provider_id    Int
-  tpa_amount     Decimal
+  id               Int      @id @default(autoincrement())
+  package_id       Int
+  provider_id      Int
+  tpa_amount       Decimal
   // This TPA's own name for the package. Null/blank falls back to
   // IpdPackage.package_name when displaying/printing for this provider.
   tpa_package_name String?
-  organizationId String
-  created_at     DateTime @default(now())
-  updated_at     DateTime @updatedAt
+  organizationId   String
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
 
   package      IpdPackage          @relation(fields: [package_id], references: [id])
   provider     insurance_providers @relation(fields: [provider_id], references: [id])
@@ -3067,30 +3070,30 @@ model IpdEstimate {
 }
 
 model IpdChargePosting {
-  id              Int          @id @default(autoincrement())
-  admission_id    String
-  invoice_item_id Int?
-  source_module   String
-  source_ref_id   String?
-  description     String
-  amount          Decimal
-  posted_by       String?
-  posted_at       DateTime     @default(now())
-  organizationId  String
-  is_backdated    Boolean      @default(false)
+  id                    Int                  @id @default(autoincrement())
+  admission_id          String
+  invoice_item_id       Int?
+  source_module         String
+  source_ref_id         String?
+  description           String
+  amount                Decimal
+  posted_by             String?
+  posted_at             DateTime             @default(now())
+  organizationId        String
+  is_backdated          Boolean              @default(false)
   // Two-ledger package billing (all additive; existing rows keep semantics via defaults):
   //   'billed'            → normal invoice line (invoice_item_id set)
   //   'package_consumed'  → absorbed under an active package (invoice_item_id NULL, never claimed)
   //   'billable_extra'    → package exclusion billed over the package (invoice_item_id set)
-  disposition          String   @default("billed")
-  admission_package_id Int?
-  service_category     String?
-  quantity             Float    @default(1)
-  unit_price           Decimal  @default(0)
-  tax_rate             Decimal  @default(0)
+  disposition           String               @default("billed")
+  admission_package_id  Int?
+  service_category      String?
+  quantity              Float                @default(1)
+  unit_price            Decimal              @default(0)
+  tax_rate              Decimal              @default(0)
   rendered_by_doctor_id String? // User.id — carried into invoice_items if/when this posting is reclassified to billable
-  organization         Organization         @relation(fields: [organizationId], references: [id])
-  admission_package    IpdAdmissionPackage? @relation(fields: [admission_package_id], references: [id])
+  organization          Organization         @relation(fields: [organizationId], references: [id])
+  admission_package     IpdAdmissionPackage? @relation(fields: [admission_package_id], references: [id])
 
   @@index([admission_id])
   @@index([organizationId])
@@ -3295,32 +3298,32 @@ model patient_external_records {
 }
 
 model IPDVitals {
-  id               Int          @id @default(autoincrement())
-  admission_id     String
-  patient_id       String
-  organizationId   String
-  bp_systolic      Int?
-  bp_diastolic     Int?
-  heart_rate       Int?
-  temperature      Float?
-  respiratory_rate Int?
-  spo2             Int?
-  pain_score       Int?
-  consciousness    String?
-  blood_sugar      Int?
-  urine_output_ml  Int?
-  news_score       Int?
-  news_level       String?
+  id                     Int          @id @default(autoincrement())
+  admission_id           String
+  patient_id             String
+  organizationId         String
+  bp_systolic            Int?
+  bp_diastolic           Int?
+  heart_rate             Int?
+  temperature            Float?
+  respiratory_rate       Int?
+  spo2                   Int?
+  pain_score             Int?
+  consciousness          String?
+  blood_sugar            Int?
+  urine_output_ml        Int?
+  news_score             Int?
+  news_level             String?
   // NEWS2 scores +2 for any supplemental oxygen; without it an oxygen-dependent
   // patient scores two points below the RCP chart.
-  on_supplemental_oxygen Boolean @default(false)
+  on_supplemental_oxygen Boolean      @default(false)
   // Highest score contributed by any single parameter. NEWS2 escalates on a
   // single parameter of 3 even when the total is low.
   news_max_single_param  Int?
-  recorded_by      String?
-  created_at       DateTime     @default(now())
-  admission        admissions   @relation(fields: [admission_id], references: [admission_id])
-  organization     Organization @relation(fields: [organizationId], references: [id])
+  recorded_by            String?
+  created_at             DateTime     @default(now())
+  admission              admissions   @relation(fields: [admission_id], references: [admission_id])
+  organization           Organization @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId])
   @@index([admission_id])
@@ -4863,13 +4866,13 @@ model ReferralCommission {
 }
 
 model ReferralPayoutStatement {
-  id             String   @id @default(uuid())
-  organizationId String
-  referrer_id    String
+  id               String   @id @default(uuid())
+  organizationId   String
+  referrer_id      String
   // Human-readable consultant-charge invoice number, e.g. AVS-CNI-26-27-001.
-  statement_number String? @unique
-  period_start   DateTime
-  period_end     DateTime
+  statement_number String?  @unique
+  period_start     DateTime
+  period_end       DateTime
 
   total_commission Decimal @default(0)
   // draft | finalized | paid
@@ -4982,14 +4985,14 @@ model DoctorCommission {
 }
 
 model DoctorPayoutStatement {
-  id             String   @id @default(uuid())
-  organizationId String
-  doctor_id      String
+  id               String   @id @default(uuid())
+  organizationId   String
+  doctor_id        String
   // Human-readable doctor invoice number, e.g. AVS-DRI-26-27-001. Nullable so the
   // pre-existing rows created before numbering was introduced stay valid.
-  statement_number String? @unique
-  period_start   DateTime
-  period_end     DateTime
+  statement_number String?  @unique
+  period_start     DateTime
+  period_end       DateTime
 
   total_commission Decimal @default(0)
   // draft | finalized | paid
@@ -5021,30 +5024,30 @@ model DoctorPayoutStatement {
 // via InsuranceReceiptAllocation. The benchmark "Insurance Receipts" + "unmapped
 // receipt" concepts live here.
 model InsuranceReceipt {
-  id               Int      @id @default(autoincrement())
-  receipt_number   String // org-unique, e.g. AXT-IRC-26-27-001
-  payer_type       String // tpa_insurance | corporate
-  provider_id      Int? // when payer_type = tpa_insurance
-  corporate_id     String? // when payer_type = corporate
-  instrument       String   @default("NEFT") // NEFT | RTGS | Cheque | UPI | Other
-  reference_number String // UTR / cheque no — unique per org
-  receipt_date     DateTime
-  total_amount     Decimal  @default(0) // amount actually received (net of TDS/service charge/disallowance)
-  allocated_amount Decimal  @default(0)
-  unmapped_amount  Decimal  @default(0) // total_amount - allocated_amount (the "unmapped receipt")
-  tds_total        Decimal  @default(0)
+  id                Int      @id @default(autoincrement())
+  receipt_number    String // org-unique, e.g. AXT-IRC-26-27-001
+  payer_type        String // tpa_insurance | corporate
+  provider_id       Int? // when payer_type = tpa_insurance
+  corporate_id      String? // when payer_type = corporate
+  instrument        String   @default("NEFT") // NEFT | RTGS | Cheque | UPI | Other
+  reference_number  String // UTR / cheque no — unique per org
+  receipt_date      DateTime
+  total_amount      Decimal  @default(0) // amount actually received (net of TDS/service charge/disallowance)
+  allocated_amount  Decimal  @default(0)
+  unmapped_amount   Decimal  @default(0) // total_amount - allocated_amount (the "unmapped receipt")
+  tds_total         Decimal  @default(0)
   // Settlement-advice breakdown (MEDNET-style): claim − sanctioned = disallowed;
   // sanctioned − tds_total − service_charge = total_amount (received).
-  claim_amount      Decimal @default(0) // gross amount claimed from the payer
-  sanctioned_amount Decimal @default(0) // amount the payer approved
-  service_charge    Decimal @default(0) // TPA service charge deducted from the sanctioned amount
-  status           String   @default("Open") // Open | PartiallyAllocated | Allocated | Reversed
-  remarks          String?
-  gl_posted        Boolean  @default(false)
-  organizationId   String
-  created_by       String?
-  created_at       DateTime @default(now())
-  updated_at       DateTime @updatedAt
+  claim_amount      Decimal  @default(0) // gross amount claimed from the payer
+  sanctioned_amount Decimal  @default(0) // amount the payer approved
+  service_charge    Decimal  @default(0) // TPA service charge deducted from the sanctioned amount
+  status            String   @default("Open") // Open | PartiallyAllocated | Allocated | Reversed
+  remarks           String?
+  gl_posted         Boolean  @default(false)
+  organizationId    String
+  created_by        String?
+  created_at        DateTime @default(now())
+  updated_at        DateTime @updatedAt
 
   organization Organization                 @relation(fields: [organizationId], references: [id])
   provider     insurance_providers?         @relation(fields: [provider_id], references: [id])
@@ -5911,32 +5914,32 @@ model EmailJob {
 /// evaluation — the structure nursing practice is taught and audited against.
 /// There was previously nowhere to record a plan of care, only free-text notes.
 model NursingCarePlan {
-  id             String       @id @default(uuid())
+  id             String @id @default(uuid())
   admission_id   String
   organizationId String
 
   /// Assessment — the cue or finding the problem was identified from.
-  assessment     String
+  assessment    String
   /// Diagnosis — the nursing problem, e.g. "Risk of falls related to sedation".
-  diagnosis      String
+  diagnosis     String
   /// Planning — the measurable goal and its target date.
-  goal           String
-  target_date    DateTime?
+  goal          String
+  target_date   DateTime?
   /// Implementation — planned interventions.
-  interventions  Json?
+  interventions Json?
   /// Evaluation — progress against the goal, appended over time.
-  evaluations    Json?
+  evaluations   Json?
 
-  priority       String       @default("routine")
-  status         String       @default("active")
-  opened_by      String
-  opened_at      DateTime     @default(now())
-  closed_by      String?
-  closed_at      DateTime?
-  closure_note   String?
+  priority     String    @default("routine")
+  status       String    @default("active")
+  opened_by    String
+  opened_at    DateTime  @default(now())
+  closed_by    String?
+  closed_at    DateTime?
+  closure_note String?
 
-  admission      admissions   @relation(fields: [admission_id], references: [admission_id])
-  organization   Organization @relation(fields: [organizationId], references: [id])
+  admission    admissions   @relation(fields: [admission_id], references: [admission_id])
+  organization Organization @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId])
   @@index([admission_id])
@@ -5947,23 +5950,23 @@ model NursingCarePlan {
 /// Fluid balance — the most-used chart on any ward, and the one with no home
 /// here. Intake and output entries roll up into a running balance per shift.
 model FluidBalanceEntry {
-  id             String       @id @default(uuid())
+  id             String @id @default(uuid())
   admission_id   String
   organizationId String
 
   /// intake | output
-  direction      String
+  direction   String
   /// Oral, IV, NG, Urine, Drain, Vomitus, Stool, Blood loss, Other.
-  route          String
-  volume_ml      Int
-  description    String?
-  recorded_at    DateTime     @default(now())
+  route       String
+  volume_ml   Int
+  description String?
+  recorded_at DateTime @default(now())
   /// morning | evening | night — so a balance can be struck per shift.
-  shift          String?
-  recorded_by    String
+  shift       String?
+  recorded_by String
 
-  admission      admissions   @relation(fields: [admission_id], references: [admission_id])
-  organization   Organization @relation(fields: [organizationId], references: [id])
+  admission    admissions   @relation(fields: [admission_id], references: [admission_id])
+  organization Organization @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId])
   @@index([admission_id, recorded_at])
@@ -5973,7 +5976,7 @@ model FluidBalanceEntry {
 /// Wound and pressure-area care. The Braden score was already captured on the
 /// nursing assessment, but nothing followed it — there was no wound chart.
 model WoundCareRecord {
-  id             String       @id @default(uuid())
+  id             String @id @default(uuid())
   admission_id   String
   organizationId String
 
@@ -5989,12 +5992,12 @@ model WoundCareRecord {
   pain_score     Int?
   intervention   String?
   next_review_at DateTime?
-  status         String       @default("open")
+  status         String    @default("open")
   assessed_by    String
-  assessed_at    DateTime     @default(now())
+  assessed_at    DateTime  @default(now())
 
-  admission      admissions   @relation(fields: [admission_id], references: [admission_id])
-  organization   Organization @relation(fields: [organizationId], references: [id])
+  admission    admissions   @relation(fields: [admission_id], references: [admission_id])
+  organization Organization @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId])
   @@index([admission_id])
@@ -6006,9 +6009,9 @@ model WoundCareRecord {
 /// Insertion and removal dates drive device-days and infection surveillance, and
 /// the review date is what stops a line being left in beyond its window.
 model PatientDevice {
-  id              String       @id @default(uuid())
-  admission_id    String
-  organizationId  String
+  id             String @id @default(uuid())
+  admission_id   String
+  organizationId String
 
   device_type     String
   site            String
@@ -6023,10 +6026,10 @@ model PatientDevice {
   /// Site appearance at the last check.
   last_site_check String?
   last_checked_at DateTime?
-  status          String       @default("in_situ")
+  status          String    @default("in_situ")
 
-  admission       admissions   @relation(fields: [admission_id], references: [admission_id])
-  organization    Organization @relation(fields: [organizationId], references: [id])
+  admission    admissions   @relation(fields: [admission_id], references: [admission_id])
+  organization Organization @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId])
   @@index([admission_id])
@@ -6037,32 +6040,32 @@ model PatientDevice {
 /// Blood transfusion. Consent, cross-match, the bedside two-person check and the
 /// observation trail are all required and had nowhere to live.
 model TransfusionRecord {
-  id                 String       @id @default(uuid())
-  admission_id       String
-  organizationId     String
+  id             String @id @default(uuid())
+  admission_id   String
+  organizationId String
 
-  component          String
-  unit_number        String
-  blood_group        String
-  crossmatch_ref     String?
-  consent_taken      Boolean      @default(false)
-  consent_by         String?
+  component      String
+  unit_number    String
+  blood_group    String
+  crossmatch_ref String?
+  consent_taken  Boolean @default(false)
+  consent_by     String?
 
   /// The bedside check requires two people; both are recorded.
-  checked_by         String?
-  witness_id         String?
+  checked_by String?
+  witness_id String?
 
-  started_at         DateTime?
-  completed_at       DateTime?
-  volume_ml          Int?
+  started_at        DateTime?
+  completed_at      DateTime?
+  volume_ml         Int?
   /// Observations at 0/15/30 minutes and hourly.
-  observations       Json?
-  reaction_occurred  Boolean      @default(false)
-  reaction_details   String?
-  status             String       @default("prepared")
+  observations      Json?
+  reaction_occurred Boolean   @default(false)
+  reaction_details  String?
+  status            String    @default("prepared")
 
-  admission          admissions   @relation(fields: [admission_id], references: [admission_id])
-  organization       Organization @relation(fields: [organizationId], references: [id])
+  admission    admissions   @relation(fields: [admission_id], references: [admission_id])
+  organization Organization @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId])
   @@index([admission_id])
@@ -6073,33 +6076,33 @@ model TransfusionRecord {
 /// Clinical incidents — falls, medication errors, pressure injuries, restraint
 /// use, needlestick. There was no mechanism to report or follow one up.
 model ClinicalIncident {
-  id                String       @id @default(uuid())
-  organizationId    String
+  id             String  @id @default(uuid())
+  organizationId String
   /// Optional: an incident can involve staff rather than a specific admission.
-  admission_id      String?
-  patient_id        String?
+  admission_id   String?
+  patient_id     String?
 
-  incident_type     String
-  severity          String
-  occurred_at       DateTime
-  location          String?
-  description       String
-  immediate_action  String?
+  incident_type    String
+  severity         String
+  occurred_at      DateTime
+  location         String?
+  description      String
+  immediate_action String?
   /// Whether the patient or family were informed, which is itself auditable.
-  patient_informed  Boolean      @default(false)
+  patient_informed Boolean  @default(false)
 
-  reported_by       String
-  reported_at       DateTime     @default(now())
+  reported_by String
+  reported_at DateTime @default(now())
 
-  status            String       @default("open")
+  status            String    @default("open")
   review_notes      String?
   root_cause        String?
   preventive_action String?
   closed_by         String?
   closed_at         DateTime?
 
-  admission         admissions?  @relation(fields: [admission_id], references: [admission_id])
-  organization      Organization @relation(fields: [organizationId], references: [id])
+  admission    admissions?  @relation(fields: [admission_id], references: [admission_id])
+  organization Organization @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId])
   @@index([admission_id])
@@ -6111,24 +6114,24 @@ model ClinicalIncident {
 /// Patient and family education, including discharge teaching — evidence that
 /// teaching was given and understood.
 model PatientEducationRecord {
-  id                    String       @id @default(uuid())
-  admission_id          String
-  organizationId        String
+  id             String @id @default(uuid())
+  admission_id   String
+  organizationId String
 
   topic                 String
   content               String
   method                String?
-  audience              String       @default("patient")
+  audience              String   @default("patient")
   language              String?
   /// Teach-back: did they demonstrate understanding?
   understanding         String?
-  repeat_required       Boolean      @default(false)
+  repeat_required       Boolean  @default(false)
   taught_by             String
-  taught_at             DateTime     @default(now())
-  is_discharge_teaching Boolean      @default(false)
+  taught_at             DateTime @default(now())
+  is_discharge_teaching Boolean  @default(false)
 
-  admission             admissions   @relation(fields: [admission_id], references: [admission_id])
-  organization          Organization @relation(fields: [organizationId], references: [id])
+  admission    admissions   @relation(fields: [admission_id], references: [admission_id])
+  organization Organization @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId])
   @@index([admission_id])
@@ -6138,7 +6141,7 @@ model PatientEducationRecord {
 /// Nurse-to-patient assignment for a shift. Without it there is no record of who
 /// was responsible for a patient at a given time, and no workload view.
 model NurseShiftAssignment {
-  id             String       @id @default(uuid())
+  id             String   @id @default(uuid())
   organizationId String
   nurse_id       String
   ward_id        Int
@@ -6149,12 +6152,64 @@ model NurseShiftAssignment {
   /// Simple acuity total, for balancing workload across the team.
   acuity_total   Int?
   assigned_by    String
-  created_at     DateTime     @default(now())
+  created_at     DateTime @default(now())
 
-  organization   Organization @relation(fields: [organizationId], references: [id])
+  organization Organization @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId])
   @@index([ward_id, shift_date])
   @@index([nurse_id])
   @@map("nurse_shift_assignments")
+}
+
+/// A deteriorating patient, and whether anyone actually responded.
+///
+/// Raising a NEWS alert was previously a notification and a nursing task, and
+/// nothing required a reply. The ward had no way to know whether the doctor had
+/// seen it, and nothing happened if they had not. This closes the loop: the
+/// alert is owned by a named doctor, must be acknowledged inside a time limit,
+/// carries the instructions back to the nurse as tasks, and escalates by itself
+/// when nobody answers.
+model NEWSEscalation {
+  id             String @id @default(uuid())
+  organizationId String
+  admission_id   String
+  patient_id     String
+
+  news_score Int
+  news_level String?
+  /// urgent | emergency — the RCP response band.
+  band       String
+
+  raised_at DateTime @default(now())
+  raised_by String
+
+  /// The doctor this was sent to. Null when the admission has no attending
+  /// doctor recorded, in which case it goes straight to the managers.
+  target_doctor_id String?
+
+  /// awaiting | acknowledged | closed
+  status String   @default("awaiting")
+  /// When acknowledgement is due. The timeout job reads this.
+  due_at DateTime
+
+  acknowledged_at DateTime?
+  acknowledged_by String?
+  /// What the doctor told the ward to do. Each line becomes a nursing task.
+  instructions    String?
+
+  /// 0 = not yet chased, 1 = doctor re-alerted, 2 = managers and admins pulled in.
+  escalation_level  Int       @default(0)
+  last_escalated_at DateTime?
+
+  closed_at DateTime?
+  closed_by String?
+
+  admission    admissions   @relation(fields: [admission_id], references: [admission_id])
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+  @@index([admission_id])
+  @@index([status, due_at])
+  @@map("news_escalations")
 }
