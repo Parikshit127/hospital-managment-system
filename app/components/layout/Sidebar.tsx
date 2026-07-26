@@ -180,6 +180,7 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
         { label: "Dashboard", href: "/doctor/overview", icon: LayoutDashboard },
         { label: "My Patients", href: "/doctor/dashboard", icon: Stethoscope },
         { label: "IPD Patients", href: "/doctor/ipd-patients", icon: BedDouble },
+        { label: "Escalations", href: "/doctor/escalations", icon: ShieldAlert },
         { label: "Medical Notes", href: "/doctor/medical-notes", icon: ScrollText },
         { label: "Video Consultations", href: "/doctor/video-calls", icon: MonitorPlay },
         { label: "Schedule", href: "/doctor/schedule", icon: CalendarClock },
@@ -254,6 +255,7 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
         { label: "IP Orders", href: "/pharmacy/ip-orders", icon: ClipboardList },
         { label: "Customer Invoices", href: "/pharmacy/invoices", icon: FileText },
         { label: "Narcotics Register", href: "/pharmacy/narcotics", icon: ShieldAlert },
+        { label: "Controlled Drugs", href: "/pharmacy/controlled-drugs", icon: ShieldCheck },
       ],
     },
     {
