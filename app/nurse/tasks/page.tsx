@@ -6,7 +6,7 @@ import {
     ClipboardCheck, Loader2, CheckCircle2, Clock, Filter,
     AlertTriangle, Search, User, ListTodo, Flame
 } from 'lucide-react';
-import { getNursingTasks, completeNursingTask } from '@/app/actions/nurse-actions';
+import { getNursingTasks, completeNursingTask, claimNursingTask, releaseNursingTask } from '@/app/actions/nurse-actions';
 
 export default function NurseTasksPage() {
     const [tasks, setTasks] = useState<any[]>([]);
@@ -15,6 +15,8 @@ export default function NurseTasksPage() {
     const [filter, setFilter] = useState<'pending' | 'completed' | 'all'>('pending');
     const [search, setSearch] = useState('');
     const [completing, setCompleting] = useState<number | null>(null);
+    const [claiming, setClaiming] = useState<number | null>(null);
+    const [msg, setMsg] = useState<string | null>(null);
 
     const loadTasks = useCallback(async () => {
         setRefreshing(true);
@@ -30,6 +32,32 @@ export default function NurseTasksPage() {
     }, [filter]);
 
     useEffect(() => { setLoading(true); loadTasks(); }, [loadTasks]);
+
+    // Taking a task stamps your name on it so two nurses do not walk to the
+    // same bedside. A refusal names who already has it.
+    const handleClaim = async (taskId: number) => {
+        setClaiming(taskId);
+        try {
+            const res = await claimNursingTask(taskId);
+            if (!res.success) setMsg(res.error || 'Could not take that task');
+            await loadTasks();
+        } finally {
+            setClaiming(null);
+            setTimeout(() => setMsg(null), 5000);
+        }
+    };
+
+    const handleRelease = async (taskId: number) => {
+        setClaiming(taskId);
+        try {
+            const res = await releaseNursingTask(taskId);
+            if (!res.success) setMsg(res.error || 'Could not hand that task back');
+            await loadTasks();
+        } finally {
+            setClaiming(null);
+            setTimeout(() => setMsg(null), 5000);
+        }
+    };
 
     const handleComplete = async (taskId: number) => {
         setCompleting(taskId);
@@ -140,6 +168,13 @@ export default function NurseTasksPage() {
                     </div>
                 </div>
 
+                {/* A refused claim names who already holds the task. */}
+                {msg && (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs font-semibold text-amber-800">
+                        {msg}
+                    </div>
+                )}
+
                 {/* Task List */}
                 {loading ? (
                     <div className="flex items-center justify-center py-16">
@@ -196,9 +231,43 @@ export default function NurseTasksPage() {
                                                         <Clock className="h-2.5 w-2.5" /> {new Date(task.scheduled_at).toLocaleString([], { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
                                                     </span>
                                                 )}
+                                                {/* Who owns this. Unclaimed work used to be invisible. */}
+                                                {!isDone && task.isUnclaimed && (
+                                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-black border bg-violet-100 text-violet-700 border-violet-200 uppercase tracking-wide">
+                                                        Unclaimed
+                                                    </span>
+                                                )}
+                                                {!isDone && task.isMine && (
+                                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold border bg-teal-50 text-teal-700 border-teal-200">
+                                                        You
+                                                    </span>
+                                                )}
+                                                {!isDone && !task.isMine && task.assignedToName && (
+                                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold border bg-gray-100 text-gray-600 border-gray-200">
+                                                        {task.assignedToName}
+                                                    </span>
+                                                )}
                                             </div>
                                         </div>
                                     </div>
+                                    {!isDone && task.isUnclaimed && (
+                                        <button onClick={() => handleClaim(task.id)}
+                                            disabled={claiming === task.id}
+                                            className="shrink-0 flex items-center gap-1.5 px-4 py-2 bg-violet-600 text-white text-xs font-bold rounded-xl hover:shadow-md transition-all disabled:opacity-50">
+                                            {claiming === task.id
+                                                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                : <User className="h-3.5 w-3.5" />}
+                                            I'll take it
+                                        </button>
+                                    )}
+                                    {!isDone && task.isMine && (
+                                        <button onClick={() => handleRelease(task.id)}
+                                            disabled={claiming === task.id}
+                                            title="Put this back for anyone on the ward"
+                                            className="shrink-0 px-3 py-2 border border-gray-200 text-gray-500 text-xs font-bold rounded-xl hover:bg-gray-50 transition-all disabled:opacity-50">
+                                            Hand back
+                                        </button>
+                                    )}
                                     {!isDone && (
                                         <button onClick={() => handleComplete(task.id)}
                                             disabled={completing === task.id}

@@ -392,7 +392,14 @@ export async function getNursingTasks(options?: {
         // for every filter. Normalise instead of relying on the caller's casing.
         if (options?.status) {
             const s = options.status.trim();
-            where.status = s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+            const normalised = s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+            // "Pending" on the ward means outstanding, not a literal status.
+            // Claiming a task moves it to In Progress, and matching the string
+            // exactly made it disappear from the nurse's own default view the
+            // moment she took it.
+            where.status = normalised === 'Pending'
+                ? { in: ['Pending', 'In Progress'] }
+                : normalised;
         }
 
         if (options?.dateFilter === 'today') {
@@ -433,12 +440,23 @@ export async function getNursingTasks(options?: {
         );
 
         const rank: Record<string, number> = { stat: 0, urgent: 1, routine: 2 };
+        // Who each task belongs to, so the ward can see at a glance what is
+        // already picked up and what nobody has taken.
+        const assigneeIds = [...new Set(tasks.map((t: any) => t.assigned_to).filter(Boolean))] as string[];
+        const assignees = assigneeIds.length
+            ? await db.user.findMany({ where: { id: { in: assigneeIds } }, select: { id: true, name: true } })
+            : [];
+        const nameById = Object.fromEntries(assignees.map((u: any) => [u.id, u.name]));
+
         const enriched = tasks.map((t: any) => ({
             ...t,
             patientName: admissionMap[t.admission_id]?.patientName || 'Unknown',
             patientId: admissionMap[t.admission_id]?.patientId || '',
             bedId: admissionMap[t.admission_id]?.bedId || '',
             wardName: admissionMap[t.admission_id]?.wardName || '',
+            assignedToName: t.assigned_to ? (nameById[t.assigned_to] || 'Another nurse') : null,
+            isMine: !!t.assigned_to && t.assigned_to === session.id,
+            isUnclaimed: !t.assigned_to,
         })).sort((a: any, b: any) => {
             const pr = (rank[a.priority] ?? 2) - (rank[b.priority] ?? 2);
             return pr !== 0 ? pr : new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime();
@@ -448,6 +466,89 @@ export async function getNursingTasks(options?: {
     } catch (error) {
         console.error('Get Nursing Tasks Error:', error);
         return { success: false, data: [] };
+    }
+}
+
+/**
+ * Take an unclaimed ward task.
+ *
+ * A task with nobody's name on it was invisible: the dashboard counts only
+ * tasks assigned to the signed-in nurse, so unassigned work showed as zero on
+ * everyone's screen and was simply not done. Now the ward is told when one is
+ * raised, and whoever picks it up stamps their name so two nurses do not walk
+ * to the same bedside.
+ *
+ * Claiming is first-come. A task already held by someone else is refused with
+ * their name rather than silently reassigned — quietly taking work off a
+ * colleague is how a task ends up done twice or not at all.
+ */
+export async function claimNursingTask(taskId: number) {
+    const denied = await denyUnlessRole(CLINICAL_ROLES.CHART, 'claim a nursing task');
+    if (denied) return denied;
+    try {
+        const { db, session } = await requireTenantContext();
+
+        const task = await db.nursingTask.findUnique({
+            where: { id: taskId },
+            select: { assigned_to: true, status: true },
+        });
+        if (!task) return { success: false, error: 'That task no longer exists.' };
+        if (task.status === 'Completed') return { success: false, error: 'That task is already completed.' };
+
+        if (task.assigned_to && task.assigned_to !== session.id) {
+            const holder = await db.user.findUnique({
+                where: { id: task.assigned_to },
+                select: { name: true },
+            });
+            return {
+                success: false,
+                error: `${holder?.name || 'Another nurse'} has already taken this task.`,
+            };
+        }
+
+        // Conditional update: two nurses tapping Claim at the same moment must
+        // not both succeed. Only the row still unassigned is updated.
+        const claimed = await db.nursingTask.updateMany({
+            where: { id: taskId, assigned_to: null },
+            data: { assigned_to: session.id, status: 'In Progress' },
+        });
+
+        if (claimed.count === 0 && task.assigned_to !== session.id) {
+            return { success: false, error: 'Someone else just took this task.' };
+        }
+
+        revalidatePath('/nurse/tasks');
+        revalidatePath('/nurse/dashboard');
+        revalidatePath('/ipd/nursing-station');
+        return { success: true, data: { assignedTo: session.id, assignedToName: session.name } };
+    } catch (error) {
+        console.error('Claim Task Error:', error);
+        return { success: false, error: 'Failed to claim task' };
+    }
+}
+
+/** Put a claimed task back for anyone on the ward to pick up. */
+export async function releaseNursingTask(taskId: number) {
+    const denied = await denyUnlessRole(CLINICAL_ROLES.CHART, 'release a nursing task');
+    if (denied) return denied;
+    try {
+        const { db, session } = await requireTenantContext();
+
+        const released = await db.nursingTask.updateMany({
+            // Only your own task, and only while it is still outstanding.
+            where: { id: taskId, assigned_to: session.id, status: { not: 'Completed' } },
+            data: { assigned_to: null, status: 'Pending' },
+        });
+        if (released.count === 0) {
+            return { success: false, error: 'You can only hand back a task you are holding.' };
+        }
+
+        revalidatePath('/nurse/tasks');
+        revalidatePath('/nurse/dashboard');
+        return { success: true };
+    } catch (error) {
+        console.error('Release Task Error:', error);
+        return { success: false, error: 'Failed to release task' };
     }
 }
 

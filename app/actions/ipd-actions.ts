@@ -1790,23 +1790,107 @@ export async function createNursingTask(data: {
   task_type: string;
   description: string;
   scheduled_at: string;
+  /** Give it to one nurse. Left empty, the whole ward is told and anyone can claim it. */
+  assigned_to?: string;
+  priority?: 'routine' | 'urgent' | 'stat';
 }) {
   try {
     const { db, organizationId } = await requireTenantContext();
-    await db.nursingTask.create({
+    const task = await db.nursingTask.create({
       data: {
         admission_id: data.admission_id,
         task_type: data.task_type,
         description: data.description,
         scheduled_at: new Date(data.scheduled_at),
         status: "Pending",
+        assigned_to: data.assigned_to || null,
+        priority: data.priority || 'routine',
         organizationId,
       },
     });
+
+    // An unassigned task used to reach nobody: the dashboard counts only tasks
+    // assigned to the signed-in nurse, so work with no name on it showed as
+    // zero on every screen. Tell the ward, and let whoever takes it claim it.
+    await notifyTaskRecipients(db, organizationId, {
+      admissionId: data.admission_id,
+      assignedTo: data.assigned_to || null,
+      taskType: data.task_type,
+      description: data.description,
+      priority: data.priority || 'routine',
+    });
+
     revalidatePath(`/ipd/admission/${data.admission_id}`);
-    return { success: true };
+    revalidatePath('/nurse/tasks');
+    return { success: true, data: { id: task.id } };
   } catch (error) {
+    console.error('createNursingTask error:', error);
     return { success: false, error: "Failed" };
+  }
+}
+
+/**
+ * Tell the right nurses a task exists.
+ *
+ * Assigned to someone → only they hear about it. Unassigned → every nurse on
+ * that ward hears, because it is theirs collectively until someone claims it.
+ * Best-effort: a notification failure must never lose the task.
+ */
+async function notifyTaskRecipients(
+  db: any,
+  organizationId: string,
+  args: {
+    admissionId: string;
+    assignedTo: string | null;
+    taskType: string;
+    description: string;
+    priority: string;
+  },
+) {
+  try {
+    let userIds: string[] = [];
+
+    if (args.assignedTo) {
+      userIds = [args.assignedTo];
+    } else {
+      const admission = await db.admissions.findUnique({
+        where: { admission_id: args.admissionId },
+        select: { ward_id: true },
+      });
+      const wardId = admission?.ward_id ?? null;
+      const nurses = await db.user.findMany({
+        where: {
+          organizationId,
+          is_active: true,
+          role: 'nurse',
+          // Nurses with no ward set are included, so a site that does not use
+          // ward assignment still reaches its nursing staff rather than nobody.
+          ...(wardId ? { OR: [{ assigned_ward_id: wardId }, { assigned_ward_id: null }] } : {}),
+        },
+        select: { id: true },
+      });
+      userIds = nurses.map((n: { id: string }) => n.id);
+    }
+
+    if (!userIds.length) return;
+
+    const urgent = args.priority !== 'routine';
+    await db.notification.createMany({
+      data: userIds.map((user_id) => ({
+        organizationId,
+        user_id,
+        title: args.assignedTo
+          ? `New task: ${args.taskType}`
+          : `Unclaimed task: ${args.taskType}`,
+        body: args.assignedTo
+          ? args.description
+          : `${args.description} — nobody has taken this yet. Open Tasks to claim it.`,
+        type: urgent ? 'warning' : 'info',
+        link: '/nurse/tasks',
+      })),
+    });
+  } catch (e) {
+    console.error('notifyTaskRecipients failed (task still created):', e);
   }
 }
 
