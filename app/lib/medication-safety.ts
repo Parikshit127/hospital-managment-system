@@ -13,6 +13,7 @@
 
 import { notifyAllergyOverride, notifyDoseNotGiven } from './safety-alerts';
 import { classRelation } from './drug-classes';
+import { WITNESS_REQUIRED_SCHEDULES } from './controlled-substances';
 
 /**
  * Administration times of day for each supported frequency.
@@ -218,7 +219,12 @@ export async function requiresWitness(db: any, medicationName: string): Promise<
         });
         if (!match) return false;
         if (match.is_narcotic) return true;
-        return ['H1', 'X'].includes(String(match.drug_schedule || '').toUpperCase());
+        // NDPS and Schedule X only. H1 was in this list, but H1 is a
+        // record-keeping schedule covering antibiotic stewardship and anti-TB
+        // drugs — demanding a second nurse for every dose of meropenem is
+        // friction with no safety gain, and teaches staff to click through the
+        // warning that does matter.
+        return WITNESS_REQUIRED_SCHEDULES.includes(String(match.drug_schedule || '').toUpperCase());
     } catch {
         // Never block a dose because the lookup failed.
         return false;
