@@ -166,8 +166,10 @@ export async function administerMedication(data: {
     if (denied) return denied;
 
     try {
-        const { db, session } = await requireTenantContext();
-        const outcome = await applyAdministration(db, session.id, data);
+        const { db, session, organizationId } = await requireTenantContext();
+        const outcome = await applyAdministration(db, session.id, data, {
+            organizationId, actorName: session.name,
+        });
         if (!outcome.ok) {
             return { success: false, error: outcome.error, allergyConflict: outcome.allergyConflict };
         }

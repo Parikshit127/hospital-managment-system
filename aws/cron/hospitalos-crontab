@@ -75,6 +75,11 @@ LOG=/home/ubuntu/hospitalos/logs/cron.log
 # generating a financial document needs an accountable user.
 30 6 * * * curl -fsS -m 300 -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/ipd/interim-billing" >> $LOG 2>&1
 
+# Medication chart top-up. The MAR is filled to a rolling three-day horizon and
+# opening an eMAR already rolls it forward, so this is the safety net for a ward
+# that has not been opened over a long weekend — it must never run dry.
+15 2 * * * curl -fsS -m 300 -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/ipd/mar-topup" >> $LOG 2>&1
+
 # ---------------------------------------------------------------------------
 # DELIBERATELY NOT SCHEDULED — each needs a decision, not a default:
 #

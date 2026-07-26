@@ -11,6 +11,9 @@
  * session and the tenant-scoped client.
  */
 
+import { notifyAllergyOverride, notifyDoseNotGiven } from './safety-alerts';
+import { classRelation } from './drug-classes';
+
 /**
  * Administration times of day for each supported frequency.
  *
@@ -31,8 +34,16 @@ export function dosingHours(frequency: string): { hours: number[]; isPrn: boolea
     return { hours: [9], isPrn: false }; // OD and anything unrecognised
 }
 
-/** How far ahead the MAR is kept populated for an open-ended medication. */
-export const MAR_HORIZON_DAYS = 14;
+/**
+ * How far ahead the MAR is kept populated for an open-ended medication.
+ *
+ * Was 14 days, which meant one TDS order wrote 42 rows the moment it was
+ * prescribed and a three-patient test ballooned to 164 doses. Nothing needs a
+ * fortnight of future doses on screen. Three days covers a long weekend, and
+ * the window rolls forward both when an eMAR is opened and from the nightly
+ * top-up job, so a chart can never run dry.
+ */
+export const MAR_HORIZON_DAYS = 3;
 
 /**
  * The bedside checks that must pass before a transfusion is started.
@@ -64,6 +75,8 @@ export type AllergyConflict = {
     allergen: string;
     severity: string | null;
     reaction: string | null;
+    /** Why this matched, when it was not a plain name match. */
+    via?: string;
 };
 
 /** Statuses meaning the dose did not reach the patient. All require a reason. */
@@ -82,29 +95,13 @@ export function isNotGiven(status: string): boolean {
  * check would miss. Deliberately errs toward flagging: a false positive costs
  * one override with a typed reason, a false negative can kill someone.
  */
-export async function findAllergyConflict(
-    db: any,
-    medId: number,
-): Promise<AllergyConflict | null> {
-    const med = await db.medicationAdministration.findUnique({
-        where: { id: medId },
-        select: { medication_name: true, admission_id: true },
-    });
-    if (!med?.medication_name) return null;
+export function matchAllergy(
+    allergies: Array<{ allergen_name: string; severity?: string | null; reaction?: string | null }>,
+    medicationName: string,
+): AllergyConflict | null {
+    if (!medicationName || !allergies?.length) return null;
 
-    const admission = await db.admissions.findUnique({
-        where: { admission_id: med.admission_id },
-        select: { patient_id: true },
-    });
-    if (!admission?.patient_id) return null;
-
-    const allergies = await db.patientAllergy.findMany({
-        where: { patient_id: admission.patient_id, status: 'active' },
-        select: { allergen_name: true, severity: true, reaction: true },
-    });
-    if (!allergies.length) return null;
-
-    const drug = String(med.medication_name).toLowerCase();
+    const drug = String(medicationName).toLowerCase();
     const drugWords = drug.split(/[^a-z]+/i).filter((w: string) => w.length >= 4);
 
     for (const a of allergies) {
@@ -125,8 +122,60 @@ export async function findAllergyConflict(
                 reaction: a.reaction ?? null,
             };
         }
+
+        // Text matching alone misses the case that matters most: a patient
+        // allergic to penicillin, prescribed amoxicillin. Same class, no shared
+        // substring, so the check above sees two unrelated drugs.
+        const relation = classRelation(allergen, drug);
+        if (relation) {
+            return {
+                allergen: a.allergen_name,
+                severity: a.severity ?? null,
+                reaction: a.reaction ?? null,
+                via: relation,
+            };
+        }
     }
     return null;
+}
+
+/**
+ * Allergy check by patient and drug name, for the prescribing screens.
+ *
+ * The administration check below is the last line of defence; this is the
+ * first. Both call matchAllergy so the two can never drift apart, which is
+ * exactly how the original bug happened.
+ */
+export async function findAllergyConflictForPatient(
+    db: any,
+    patientId: string,
+    medicationName: string,
+): Promise<AllergyConflict | null> {
+    if (!patientId || !medicationName) return null;
+    const allergies = await db.patientAllergy.findMany({
+        where: { patient_id: patientId, status: 'active' },
+        select: { allergen_name: true, severity: true, reaction: true },
+    });
+    return matchAllergy(allergies, medicationName);
+}
+
+export async function findAllergyConflict(
+    db: any,
+    medId: number,
+): Promise<AllergyConflict | null> {
+    const med = await db.medicationAdministration.findUnique({
+        where: { id: medId },
+        select: { medication_name: true, admission_id: true },
+    });
+    if (!med?.medication_name) return null;
+
+    const admission = await db.admissions.findUnique({
+        where: { admission_id: med.admission_id },
+        select: { patient_id: true },
+    });
+    if (!admission?.patient_id) return null;
+
+    return findAllergyConflictForPatient(db, admission.patient_id, med.medication_name);
 }
 
 export function allergyBlockMessage(c: AllergyConflict): string {
@@ -134,6 +183,9 @@ export function allergyBlockMessage(c: AllergyConflict): string {
     if (c.severity) parts.push(`(${c.severity}`);
     if (c.reaction) parts.push(`— ${c.reaction})`);
     else if (c.severity) parts.push(')');
+    // A class match is not obvious from the two names, so say why it fired --
+    // otherwise it reads as a false alarm and gets overridden on reflex.
+    if (c.via) parts.push(`— ${c.via}`);
     return `${parts.join(' ')}. Confirm with the prescriber. To proceed anyway, re-submit with an override reason.`;
 }
 
@@ -192,11 +244,16 @@ export type AdministerOutcome =
 /**
  * Apply one administration event. Callers supply the tenant-scoped client and the
  * authenticated user id — this never reads identity from its arguments.
+ *
+ * ctx carries what the alerting needs. It is optional so an existing caller
+ * cannot break, but without it an override or a withheld dose is recorded
+ * silently, which is the behaviour being fixed — pass it.
  */
 export async function applyAdministration(
     db: any,
     userId: string,
     input: AdministerInput,
+    ctx?: { organizationId: string; actorName?: string },
 ): Promise<AdministerOutcome> {
     const notGiven = isNotGiven(input.status);
 
@@ -249,6 +306,46 @@ export async function applyAdministration(
             prn_reason: input.prn_reason,
         },
     });
+
+    // Recording it is not the same as anyone knowing. Alerting must never fail
+    // the administration itself — the dose has already been given.
+    if (ctx?.organizationId) {
+        try {
+            const admission = await db.admissions.findUnique({
+                where: { admission_id: updated.admission_id },
+                select: { patient: { select: { full_name: true } } },
+            });
+            const patientName = admission?.patient?.full_name ?? 'Patient';
+            const actedByName = ctx.actorName || 'a member of staff';
+
+            if (input.status === 'Administered' && input.allergy_override_reason?.trim()) {
+                const conflict = await findAllergyConflict(db, input.med_id);
+                await notifyAllergyOverride(db, ctx.organizationId, {
+                    admissionId: updated.admission_id,
+                    patientName,
+                    medicationName: updated.medication_name,
+                    allergen: conflict?.allergen ?? 'a recorded allergen',
+                    severity: conflict?.severity ?? null,
+                    reason: input.allergy_override_reason.trim(),
+                    actedByName,
+                    stage: 'administered',
+                });
+            }
+
+            if (notGiven) {
+                await notifyDoseNotGiven(db, ctx.organizationId, {
+                    admissionId: updated.admission_id,
+                    patientName,
+                    medicationName: updated.medication_name,
+                    status: input.status,
+                    reason: input.not_given_reason?.trim() || input.notes?.trim() || 'no reason given',
+                    actedByName,
+                });
+            }
+        } catch (e) {
+            console.error('administration alerting failed (dose still recorded):', e);
+        }
+    }
 
     return { ok: true, data: updated };
 }

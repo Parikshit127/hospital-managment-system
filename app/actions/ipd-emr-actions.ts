@@ -9,7 +9,10 @@
 
 import { requireTenantContext, denyUnlessRole, CLINICAL_ROLES } from '@/backend/tenant';
 import { revalidatePath } from 'next/cache';
-import { dosingHours, MAR_HORIZON_DAYS } from '@/app/lib/medication-safety';
+import {
+    dosingHours, MAR_HORIZON_DAYS, findAllergyConflictForPatient, allergyBlockMessage,
+} from '@/app/lib/medication-safety';
+import { notifyAllergyOverride } from '@/app/lib/safety-alerts';
 
 // ── GAP 6: Clinical Orders ─────────────────────────────────────────────────
 
@@ -405,8 +408,14 @@ export async function scheduleMedicationAdministrations(dbOrTx: any, activeMed: 
  * Cheap when there is nothing to do: scheduleMedicationAdministrations() skips
  * times already present, so a repeat call writes nothing.
  */
-export async function topUpMedicationSchedules(admissionId?: string) {
-    const { db, organizationId } = await requireTenantContext();
+export async function topUpMedicationSchedules(
+    admissionId?: string,
+    tenant?: { db: any; organizationId: string },
+) {
+    // A cron has no session. Passing the tenant in explicitly is what stops this
+    // from throwing inside requireTenantContext, swallowing the error and
+    // reporting success while scheduling nothing — see the bed-cleaning route.
+    const { db, organizationId } = tenant ?? (await requireTenantContext());
     try {
         const meds = await (db as any).activeMedication.findMany({
             where: {
@@ -471,15 +480,52 @@ export async function addActiveMedication(data: {
     frequency: string;
     prescribed_by: string;
     end_date?: string;
+    /** Justification for prescribing despite a recorded allergy match. */
+    allergy_override_reason?: string;
 }) {
-    const { db, organizationId } = await requireTenantContext();
+    // Prescribing is a doctor's act. Every other order path on this page is
+    // guarded; this one was not, so any signed-in clinical user — a nurse
+    // included — could add a drug to the chart and have doses scheduled from it.
+    const denied = await denyUnlessRole(CLINICAL_ROLES.PRESCRIBE, 'prescribe a medication');
+    if (denied) return denied;
+
+    const { db, organizationId, session } = await requireTenantContext();
 
     try {
+        // Resolve the patient from the admission rather than trusting the caller,
+        // exactly as createClinicalOrder does. The case sheet passes
+        // caseSheet?.admission.patient.patient_id || '', so any failure loading
+        // the case sheet silently produced a prescription attached to nobody —
+        // and an allergy check with no patient to check against.
+        const adm = await db.admissions.findUnique({
+            where: { admission_id: data.admission_id },
+            select: { patient_id: true },
+        });
+        const patientId = adm?.patient_id || data.patient_id;
+        if (!patientId) return { success: false, error: 'Could not resolve the patient for this admission.' };
+
+        // Check the allergy at the point of prescribing, not only at the point of
+        // giving. The nurse's check at the bedside is the last line of defence and
+        // was, until now, the only one: a doctor could prescribe a drug the patient
+        // is documented as anaphylactic to and see nothing at all. A safety checker
+        // for this already existed in drug-interaction-actions.ts and was never
+        // called from anywhere.
+        if (!data.allergy_override_reason?.trim()) {
+            const conflict = await findAllergyConflictForPatient(db, patientId, data.medication_name);
+            if (conflict) {
+                return {
+                    success: false,
+                    error: allergyBlockMessage(conflict),
+                    allergyConflict: conflict,
+                };
+            }
+        }
+
         const med = await db.$transaction(async (tx: any) => {
             const m = await (tx as any).activeMedication.create({
                 data: {
                     admission_id: data.admission_id,
-                    patient_id: data.patient_id,
+                    patient_id: patientId,
                     medication_name: data.medication_name,
                     dosage: data.dosage,
                     route: data.route,
@@ -493,6 +539,30 @@ export async function addActiveMedication(data: {
             await scheduleMedicationAdministrations(tx, m, organizationId);
             return m;
         });
+
+        // Prescribing over a documented allergy is a governance event, not a
+        // private decision. Never let the alert fail the prescription.
+        if (data.allergy_override_reason?.trim()) {
+            try {
+                const conflict = await findAllergyConflictForPatient(db, patientId, data.medication_name);
+                const patient = await db.oPD_REG.findFirst({
+                    where: { patient_id: patientId },
+                    select: { full_name: true },
+                });
+                await notifyAllergyOverride(db, organizationId, {
+                    admissionId: data.admission_id,
+                    patientName: patient?.full_name ?? patientId,
+                    medicationName: data.medication_name,
+                    allergen: conflict?.allergen ?? 'a recorded allergen',
+                    severity: conflict?.severity ?? null,
+                    reason: data.allergy_override_reason.trim(),
+                    actedByName: session.name || data.prescribed_by,
+                    stage: 'prescribed',
+                });
+            } catch (e) {
+                console.error('prescribing allergy alert failed (prescription still created):', e);
+            }
+        }
 
         return { success: true, data: JSON.parse(JSON.stringify(med)) };
     } catch (error) {
@@ -560,8 +630,14 @@ export async function get24HourCaseSheet(admissionId: string, date?: string) {
         const [vitals, wardRounds, medications, labOrders, nursingTasks, dietPlans, clinicalOrders, physicianOrders] =
             await Promise.all([
                 db.iPDVitals.findMany({
-                    where: { admission_id: admissionId, organizationId, recorded_at: { gte: startOfDay, lte: endOfDay } },
-                    orderBy: { recorded_at: 'asc' },
+                    // IPDVitals timestamps its rows with created_at. Filtering on
+                    // recorded_at threw "Unknown argument", which rejected the whole
+                    // Promise.all and made this action return { success: false } every
+                    // time — so the 24-hour case sheet rendered with no patient header,
+                    // no timeline and no medications, and the prescribe form below it
+                    // posted an empty patient_id.
+                    where: { admission_id: admissionId, organizationId, created_at: { gte: startOfDay, lte: endOfDay } },
+                    orderBy: { created_at: 'asc' },
                 }),
                 db.wardRound.findMany({
                     where: { admission_id: admissionId, organizationId, created_at: { gte: startOfDay, lte: endOfDay } },
@@ -612,7 +688,7 @@ export async function get24HourCaseSheet(admissionId: string, date?: string) {
             }
         };
 
-        addToTimeline(vitals, 'vitals', 'recorded_at');
+        addToTimeline(vitals, 'vitals', 'created_at');
         addToTimeline(wardRounds, 'ward_round', 'created_at');
         addToTimeline(medications, 'medication', 'start_date');
         addToTimeline(labOrders, 'lab_order', 'created_at');

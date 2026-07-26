@@ -119,6 +119,7 @@ export async function proxy(request: NextRequest) {
     pathname === "/api/ipd/deposit-alerts" ||
     pathname === "/api/ipd/interim-billing" ||
     pathname === "/api/ipd/daily-accrual" ||
+    pathname === "/api/ipd/mar-topup" ||
     pathname.startsWith("/api/reports/") ||
     pathname.startsWith("/api/invoice/") ||
     pathname.startsWith("/api/discharge/") ||

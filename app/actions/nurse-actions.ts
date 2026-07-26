@@ -282,14 +282,14 @@ export async function administerMedication(
     const denied = await denyUnlessRole(CLINICAL_ROLES.ADMINISTER, 'administer medication');
     if (denied) return denied;
     try {
-        const { db, session } = await requireTenantContext();
+        const { db, session, organizationId } = await requireTenantContext();
         const outcome = await applyAdministration(db, session.id, {
             med_id: id,
             status: 'Administered',
             notes,
             witness_id: options?.witness_id,
             allergy_override_reason: options?.allergy_override_reason,
-        });
+        }, { organizationId, actorName: session.name });
         if (!outcome.ok) {
             return { success: false, error: outcome.error, allergyConflict: outcome.allergyConflict };
         }
@@ -306,13 +306,13 @@ export async function updateMedicationStatus(id: number, status: string, reason?
     const denied = await denyUnlessRole(CLINICAL_ROLES.ADMINISTER, 'change a medication status');
     if (denied) return denied;
     try {
-        const { db, session } = await requireTenantContext();
+        const { db, session, organizationId } = await requireTenantContext();
         const outcome = await applyAdministration(db, session.id, {
             med_id: id,
             status: status as 'Administered' | 'Missed' | 'Held' | 'Refused',
             not_given_reason: reason,
             notes: reason,
-        });
+        }, { organizationId, actorName: session.name });
         if (!outcome.ok) return { success: false, error: outcome.error };
         revalidatePath('/nurse/medications');
         revalidatePath('/ipd/medication-admin');
