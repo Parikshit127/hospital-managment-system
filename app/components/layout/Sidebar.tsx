@@ -251,7 +251,7 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
         { label: "Dashboard", href: "/pharmacy/dashboard", icon: LayoutDashboard },
         { label: "Orders", href: "/pharmacy/orders", icon: ScrollText },
         { label: "Dispensing", href: "/pharmacy/billing", icon: Pill },
-        { label: "IP Orders", href: "/pharmacy/ip-orders", icon: ClipboardList },
+        { label: "Nursing Indent", href: "/pharmacy/ip-orders", icon: ClipboardList },
         { label: "Customer Invoices", href: "/pharmacy/invoices", icon: FileText },
         { label: "Narcotics Register", href: "/pharmacy/narcotics", icon: ShieldAlert },
       ],

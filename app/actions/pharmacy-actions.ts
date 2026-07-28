@@ -1672,6 +1672,258 @@ export async function dispenseIndentWithShortages(orderId: number) {
     }
 }
 
+/**
+ * Manual dispense for the Nursing Indent page. The pharmacist explicitly enters
+ * the quantity to dispense per line (including overriding zero-system-stock items).
+ *
+ * Strategy for overrides (Option A):
+ *  - Deduct from batch stock up to what is available (FEFO).
+ *  - Any qty the pharmacist says to dispense beyond batch stock is treated as
+ *    "physically dispensed, not in system" — the patient is charged for the full
+ *    qty but no batch deduction is attempted for the overage. A note is recorded
+ *    on the order item so it can be reconciled during stock audit.
+ *  - Lines where qty_to_dispense === 0 are skipped (stay Pending).
+ */
+export async function dispenseIndentManual(
+    orderId: number,
+    lines: { order_item_id: number; qty_to_dispense: number }[]
+) {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+
+        // Validate order exists and is dispensable
+        const order = await db.pharmacy_orders.findUnique({
+            where: { id: orderId },
+            include: { items: true },
+        });
+        if (!order) return { success: false, error: 'Order not found' };
+        if (!['Verified', 'Dispensing', 'Partial'].includes(order.status)) {
+            return { success: false, error: `Cannot dispense an order with status "${order.status}"` };
+        }
+
+        // Gate on IPD bill status (same as dispenseMedicine)
+        const preActiveAdmission = order.patient_id ? await db.admissions.findFirst({
+            where: { patient_id: order.patient_id, status: 'Admitted', organizationId },
+            select: { admission_id: true },
+        }) : null;
+        const targetAdmissionId = order.admission_id || preActiveAdmission?.admission_id;
+        const isIpdPatient = !!(order.is_ipd_linked || order.admission_id || preActiveAdmission);
+
+        if (isIpdPatient && targetAdmissionId) {
+            const admRec = await db.admissions.findUnique({
+                where: { admission_id: targetAdmissionId },
+                select: { status: true },
+            });
+            if (admRec?.status === 'Discharged') {
+                return { success: false, error: BILL_FINALIZED_INTENT_MSG };
+            }
+            const activeInvoice = await db.invoices.findFirst({
+                where: { admission_id: targetAdmissionId, status: { not: 'Cancelled' } },
+                select: { status: true, is_locked: true },
+            });
+            if (isBillClosedForCharges(activeInvoice)) {
+                return { success: false, error: BILL_FINALIZED_INTENT_MSG };
+            }
+        }
+
+        // Build per-item maps for quick lookup
+        const itemMap = new Map(order.items.map((i: any) => [i.id, i]));
+
+        // Filter to only lines the pharmacist wants to dispense (qty > 0)
+        const activeLines = lines.filter(l => l.qty_to_dispense > 0);
+        if (activeLines.length === 0) {
+            return { success: false, error: 'No items selected for dispensing. Please enter a quantity for at least one item.' };
+        }
+
+        // For each active line, resolve batch allocations (FEFO) and detect overrides
+        const dispensedItems: any[] = [];   // goes into dispenseMedicine for stock-backed qty
+        const overrideItems: any[] = [];    // qty beyond system stock — manual override
+
+        for (const line of activeLines) {
+            const orderItem = itemMap.get(line.order_item_id) as any;
+            if (!orderItem) continue;
+            if (!orderItem.medicine_id) {
+                // Unresolved medicine — treat entire qty as override
+                overrideItems.push({
+                    order_item_id: line.order_item_id,
+                    medicine_name: orderItem.medicine_name,
+                    qty_override: line.qty_to_dispense,
+                });
+                continue;
+            }
+
+            const batches = await db.pharmacy_batch_inventory.findMany({
+                where: { medicine_id: orderItem.medicine_id, current_stock: { gt: 0 }, is_quarantined: false },
+                orderBy: { expiry_date: 'asc' },
+            });
+
+            let remaining = line.qty_to_dispense;
+
+            // Allocate from batches FEFO
+            for (const b of batches) {
+                if (remaining <= 0) break;
+                const take = Math.min(remaining, b.current_stock);
+                if (take <= 0) continue;
+                dispensedItems.push({
+                    order_item_id: line.order_item_id,
+                    medicine_id: orderItem.medicine_id,
+                    medicine_name: orderItem.medicine_name,
+                    batch_no: b.batch_no,
+                    quantity: take,
+                });
+                remaining -= take;
+            }
+
+            // Any qty beyond available batch stock → manual override
+            if (remaining > 0) {
+                overrideItems.push({
+                    order_item_id: line.order_item_id,
+                    medicine_id: orderItem.medicine_id,
+                    medicine_name: orderItem.medicine_name,
+                    qty_override: remaining,
+                });
+            }
+        }
+
+        // --- Process stock-backed dispensing via the existing dispenseMedicine path ---
+        let dispenseResult: any = { success: true, shortages: [], total: 0 };
+        if (dispensedItems.length > 0) {
+            dispenseResult = await dispenseMedicine(orderId, dispensedItems);
+            if (!dispenseResult.success) return dispenseResult;
+        }
+
+        // --- Process manual overrides (no batch stock) ---
+        // For each override: charge the patient for the quantity, record a note,
+        // update the order item status. No inventory movement (physical stock
+        // reconciliation is done by the pharmacist separately).
+        const overrideShortages: { medicine_name: string; requested: number; dispensed: number }[] = [];
+
+        if (overrideItems.length > 0) {
+            for (const ov of overrideItems) {
+                const orderItem = itemMap.get(ov.order_item_id) as any;
+                const requested = orderItem?.quantity_requested ?? ov.qty_override;
+
+                // Get medicine price for billing
+                let unitPrice = 0;
+                if (ov.medicine_id) {
+                    const med = await db.pharmacy_medicine_master.findUnique({ where: { id: ov.medicine_id } });
+                    unitPrice = Number(med?.selling_price || med?.price_per_unit || 0);
+                }
+                const totalCharge = unitPrice * ov.qty_override;
+                const taxRate = 0; // no batch → use 0, reconcile later
+
+                // Mark order item as dispensed (or partial if override qty < requested)
+                const alreadyDispensed = dispensedItems
+                    .filter(d => d.order_item_id === ov.order_item_id)
+                    .reduce((sum: number, d: any) => sum + d.quantity, 0);
+                const totalDispensed = alreadyDispensed + ov.qty_override;
+
+                await db.pharmacy_order_items.update({
+                    where: { id: ov.order_item_id },
+                    data: {
+                        quantity_dispensed: totalDispensed,
+                        unit_price: unitPrice,
+                        total_price: totalCharge,
+                        status: totalDispensed >= requested ? 'Dispensed' : 'Partial',
+                    },
+                });
+
+                // Post charge to IPD bill for the override qty
+                if (isIpdPatient && targetAdmissionId && unitPrice > 0) {
+                    const chargeResult = await postChargeToIpdBill({
+                        admission_id: targetAdmissionId,
+                        source_module: 'pharmacy',
+                        source_ref_id: `PHARM-${orderId}-OVR-${ov.order_item_id}`,
+                        description: `Pharmacy (Manual Override): ${ov.medicine_name} x${ov.qty_override}`,
+                        quantity: ov.qty_override,
+                        unit_price: unitPrice,
+                        tax_rate: taxRate,
+                        hsn_sac_code: '3004',
+                        service_category: 'Pharmacy',
+                    });
+                    if (!chargeResult?.success) {
+                        console.error(`Override charge failed for ${ov.medicine_name}:`, chargeResult?.error);
+                    }
+                }
+
+                if (totalDispensed < requested) {
+                    overrideShortages.push({ medicine_name: ov.medicine_name, requested, dispensed: totalDispensed });
+                }
+            }
+
+            // Re-evaluate order status after overrides
+            const allItems = await db.pharmacy_order_items.findMany({ where: { order_id: orderId } });
+            const skippedIds = new Set(
+                lines.filter(l => l.qty_to_dispense === 0).map(l => l.order_item_id)
+            );
+            const relevantItems = allItems.filter((i: any) => !skippedIds.has(i.id));
+            const allDone = relevantItems.every((i: any) => i.status === 'Dispensed');
+            await db.pharmacy_orders.update({
+                where: { id: orderId },
+                data: { status: allDone ? 'Completed' : 'Partial' },
+            });
+        }
+
+        // --- Handle lines pharmacist intentionally skipped (qty = 0) ---
+        // These stay 'Pending' — no status change needed. The order stays Partial.
+        const skippedLines = lines.filter(l => l.qty_to_dispense === 0);
+        if (skippedLines.length > 0) {
+            // Ensure order is at least 'Partial' if there are still pending lines
+            const currentOrder = await db.pharmacy_orders.findUnique({ where: { id: orderId }, select: { status: true } });
+            if (currentOrder?.status === 'Completed') {
+                await db.pharmacy_orders.update({ where: { id: orderId }, data: { status: 'Partial' } });
+            }
+        }
+
+        revalidatePath('/pharmacy/orders');
+        revalidatePath('/pharmacy/ip-orders');
+        revalidatePath('/pharmacy/billing');
+        invalidatePharmacyTags(['stock', 'orders']);
+
+        const allShortages = [
+            ...(dispenseResult.shortages || []),
+            ...overrideShortages,
+        ];
+
+        // Notify nursing if there are still shortages after the manual dispense
+        if (allShortages.length > 0 && (isIpdPatient || order.admission_id)) {
+            try {
+                const patient = await db.oPD_REG.findFirst({
+                    where: { patient_id: order.patient_id },
+                    select: { full_name: true },
+                });
+                const ref = order.indent_number || `IND-${orderId}`;
+                const lines_summary = allShortages
+                    .map((s: any) => `${s.medicine_name} ${s.dispensed}/${s.requested} (short ${s.requested - s.dispensed})`)
+                    .join('; ');
+                await notifyUsersByRole('nurse', {
+                    title: `Pharmacy shortage — ${ref}`,
+                    body: `Indent ${ref} for ${patient?.full_name || order.patient_id} was dispensed with shortages: ${lines_summary}.`,
+                    type: 'warning',
+                    link: '/pharmacy/ip-orders',
+                });
+            } catch (notifyErr) {
+                console.error('Shortage notification failed:', notifyErr);
+            }
+        }
+
+        const overrideCount = overrideItems.length;
+        const skippedCount = skippedLines.length;
+
+        return {
+            success: true,
+            total: dispenseResult.total || 0,
+            shortages: allShortages,
+            partial: allShortages.length > 0 || skippedCount > 0,
+            overrides: overrideCount,
+            skipped: skippedCount,
+        };
+    } catch (error: any) {
+        console.error('dispenseIndentManual error:', error);
+        return { success: false, error: error?.message || 'Failed to dispense indent' };
+    }
+}
+
 export async function searchMedicine(
     queryOrOpts?: string | {
         query?: string;

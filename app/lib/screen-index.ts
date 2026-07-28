@@ -64,7 +64,7 @@ export const SCREEN_INDEX: ScreenEntry[] = [
 
     // Pharmacy
     { label: 'Pharmacy Dispensing', href: '/pharmacy/billing', group: 'Pharmacy', keywords: ['dispense', 'medicine', 'sale', 'counter'], roles: PHARMACY },
-    { label: 'IP Orders (Nurse Indents)', href: '/pharmacy/ip-orders', group: 'Pharmacy', keywords: ['indent', 'ip order', 'ward request'], roles: PHARMACY },
+    { label: 'Nursing Indent', href: '/pharmacy/ip-orders', group: 'Pharmacy', keywords: ['indent', 'ip order', 'ward request', 'nursing indent'], roles: PHARMACY },
     { label: 'Pharmacy Stock', href: '/pharmacy/inventory', group: 'Pharmacy', keywords: ['stock', 'inventory', 'batch', 'expiry', 'adjust'], roles: PHARMACY },
     { label: 'Purchase Orders', href: '/pharmacy/purchase-orders', group: 'Pharmacy', keywords: ['po', 'purchase'], roles: PHARMACY },
     { label: 'Suppliers', href: '/pharmacy/suppliers', group: 'Pharmacy', keywords: ['vendor', 'supplier'], roles: PHARMACY },
