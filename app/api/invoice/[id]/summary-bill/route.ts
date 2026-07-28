@@ -403,9 +403,13 @@ function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposit
                     ${balance < 0
                         ? `<tr><td style="padding:3px 8px;font-size:11px;font-weight:bold;color:#1d4ed8;">Advance / Credit :</td><td style="font-size:11px;color:#1d4ed8;">${Math.abs(balance).toFixed(2)} - ${numberToWords(Math.abs(balance))}</td></tr>`
                         : (isTpaFlagged
+                            // No separate "Balance :" row here — Patient + TPA Outstanding
+                            // already ARE the balance, split by who owes it. A third row
+                            // built from the naive net-minus-paid figure double-counts
+                            // TDS/disallowed amounts the TPA settlement already accounted
+                            // for, showing money as still due when both lines above are ₹0.
                             ? `<tr><td style="padding:3px 8px;font-size:11px;font-weight:bold;color:${patientOutstanding > 0 ? '#991b1b' : '#166534'};">Patient Outstanding :</td><td style="font-size:11px;font-weight:700;color:${patientOutstanding > 0 ? '#991b1b' : '#166534'};">${patientOutstanding.toFixed(2)} - ${numberToWords(patientOutstanding)}</td></tr>
-                            <tr><td style="padding:3px 8px;font-size:11px;font-weight:bold;color:${tpaOutstanding > 0 ? '#92400e' : '#166534'};">TPA Outstanding :</td><td style="font-size:11px;font-weight:700;color:${tpaOutstanding > 0 ? '#92400e' : '#166534'};">${tpaOutstanding.toFixed(2)} - ${numberToWords(tpaOutstanding)}</td></tr>
-                            <tr><td style="padding:3px 8px;font-size:11px;font-weight:bold;">Balance :</td><td style="font-size:11px;">${balance.toFixed(2)} - ${numberToWords(balance)}</td></tr>`
+                            <tr><td style="padding:3px 8px;font-size:11px;font-weight:bold;color:${tpaOutstanding > 0 ? '#92400e' : '#166534'};">TPA Outstanding :</td><td style="font-size:11px;font-weight:700;color:${tpaOutstanding > 0 ? '#92400e' : '#166534'};">${tpaOutstanding.toFixed(2)} - ${numberToWords(tpaOutstanding)}</td></tr>`
                             : `<tr><td style="padding:3px 8px;font-size:11px;font-weight:bold;">Balance :</td><td style="font-size:11px;">${balance.toFixed(2)} - ${numberToWords(balance)}</td></tr>`)}
                 </table>
                 <p style="font-size:10px;text-align:right;color:#666;margin-bottom:10px;">(All figures are in Rupees (INR) only)</p>

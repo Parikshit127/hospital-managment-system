@@ -426,12 +426,20 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
                                 <tr><td style="padding:4px 12px;font-size:11px;color:#059669;">Total Paid</td><td style="padding:4px 12px;font-size:11px;text-align:right;color:#059669;">${paid.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>
                                 ${balance < 0
                                     ? `<tr style="background:#eff6ff;"><td style="padding:6px 12px;font-size:12px;font-weight:800;color:#1d4ed8;">Advance / Credit Balance</td><td style="padding:6px 12px;font-size:12px;text-align:right;font-weight:800;color:#1d4ed8;">${Math.abs(balance).toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>`
-                                    : balance === 0 && !(isTpaFlagged && tpaOutstanding > 0)
-                                        ? `<tr style="background:#f0fdf4;"><td style="padding:6px 12px;font-size:12px;font-weight:800;color:#059669;">FULLY PAID</td><td style="padding:6px 12px;font-size:12px;text-align:right;font-weight:800;color:#059669;">&#10003;</td></tr>`
-                                        : isTpaFlagged && (tpaOutstanding > 0 || patientOutstanding > 0)
+                                    // TPA bills: fully-paid-ness is judged by Patient + TPA
+                                    // Outstanding (both TDS/disallowed-aware), never by the
+                                    // naive net-minus-paid `balance` — that figure still counts
+                                    // TDS/disallowed amounts the settlement already accounted
+                                    // for as "unpaid", so it can sit above zero even once both
+                                    // outstanding lines are genuinely ₹0.
+                                    : isTpaFlagged
+                                        ? (tpaOutstanding > 0 || patientOutstanding > 0
                                             // Split the single Balance Due into Patient Outstanding + TPA Outstanding so
                                             // the bill never bundles an unpaid TPA receivable into the patient's amount due.
                                             ? `${patientOutstanding > 0 ? `<tr style="background:#fef2f2;"><td style="padding:6px 12px;font-size:12px;font-weight:800;color:#dc2626;">Patient Outstanding</td><td style="padding:6px 12px;font-size:12px;text-align:right;font-weight:800;color:#dc2626;">${patientOutstanding.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>` : ''}${tpaOutstanding > 0 ? `<tr style="background:#fffbeb;"><td style="padding:6px 12px;font-size:12px;font-weight:800;color:#92400e;">TPA Outstanding</td><td style="padding:6px 12px;font-size:12px;text-align:right;font-weight:800;color:#92400e;">${tpaOutstanding.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>` : ''}`
+                                            : `<tr style="background:#f0fdf4;"><td style="padding:6px 12px;font-size:12px;font-weight:800;color:#059669;">FULLY PAID</td><td style="padding:6px 12px;font-size:12px;text-align:right;font-weight:800;color:#059669;">&#10003;</td></tr>`)
+                                        : balance === 0
+                                            ? `<tr style="background:#f0fdf4;"><td style="padding:6px 12px;font-size:12px;font-weight:800;color:#059669;">FULLY PAID</td><td style="padding:6px 12px;font-size:12px;text-align:right;font-weight:800;color:#059669;">&#10003;</td></tr>`
                                             : `<tr style="background:#fef2f2;"><td style="padding:6px 12px;font-size:12px;font-weight:800;color:#dc2626;">Balance Due</td><td style="padding:6px 12px;font-size:12px;text-align:right;font-weight:800;color:#dc2626;">${balance.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>`}
                             </table>
                         </div>
