@@ -255,7 +255,13 @@ export function deriveInvoiceTotals(invoice: any) {
     // balance_due is absent (e.g. fresh in-memory invoice objects).
     const tpaApproved = Number(invoice?.tpa_approved_amount || 0);
     const tpaReceived = Number(invoice?.tpa_settled_amount || 0);
-    const tpaOutstanding = Math.max(0, tpaApproved - tpaReceived);
+    // tpa_payable is the authoritative balance, maintained by the settlement
+    // action against whichever base the receipt was actually allocated to
+    // (gross bill or pre-auth approved amount) net of TDS withheld and the
+    // disallowed/short-pay portion. Re-deriving it here as tpaApproved minus
+    // tpaReceived ignored both, so a fully-accounted claim (settled + TDS +
+    // disallowed = the full approved/bill amount) still showed a false balance.
+    const tpaOutstanding = Math.max(0, Number(invoice?.tpa_payable || 0));
     const storedBalanceDue = invoice?.balance_due != null
         ? Number(invoice.balance_due)
         : balance;
