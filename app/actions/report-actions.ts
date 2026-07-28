@@ -1074,14 +1074,19 @@ export async function getMISReport(filters: { from: string; to: string; billType
             }
         }
 
-        // Deposits — applied to the invoice + available (un-applied) admission advances,
-        // so the deposit effect shows up in Received Amount.
+        // Deposits applied to the invoice, so the deposit effect shows up in
+        // Received Amount. Deliberately excludes deposits still un-applied on the
+        // admission — that money hasn't settled against ANY bill yet, and since
+        // it was keyed by admission_id it was being added to every invoice under
+        // that admission, inflating Received (and its Cash/UPI/Card/Bank Transfer
+        // breakup) by the same unapplied balance on each one. The query below still
+        // fetches admission-scoped rows too (kept broad for depositTenderByNumber /
+        // resolvePaymentTender's refund-tender lookup below) — they're just no
+        // longer aggregated into any invoice's received amount.
         const invoiceIds = invoices.map((i: any) => i.id);
         const admissionIds = [...new Set(invoices.filter((i: any) => i.admission_id).map((i: any) => i.admission_id))] as string[];
         const appliedDepByInvoice: Record<number, number> = {};
         const appliedDepBreakupByInvoice: Record<number, MISPaymentBreakup> = {};
-        const availDepByAdmission: Record<string, number> = {};
-        const availDepBreakupByAdmission: Record<string, MISPaymentBreakup> = {};
         type DepositTenderRow = {
             deposit_number: string | null;
             payment_method: string | null;
@@ -1123,13 +1128,6 @@ export async function getMISReport(filters: { from: string; to: string; billType
                 const bucket = appliedDepBreakupByInvoice[d.applied_to_invoice] || emptyMISPaymentBreakup();
                 addMISPaymentBreakup(bucket, d.payment_method, applied);
                 appliedDepBreakupByInvoice[d.applied_to_invoice] = bucket;
-            }
-            if (d.admission_id && d.status === 'Active') {
-                const avail = Math.max(0, Number(d.amount || 0) - Number(d.applied_amount || 0) - Number(d.refunded_amount || 0));
-                availDepByAdmission[d.admission_id] = (availDepByAdmission[d.admission_id] || 0) + avail;
-                const bucket = availDepBreakupByAdmission[d.admission_id] || emptyMISPaymentBreakup();
-                addMISPaymentBreakup(bucket, d.payment_method, avail);
-                availDepBreakupByAdmission[d.admission_id] = bucket;
             }
         }
 
@@ -1209,8 +1207,13 @@ export async function getMISReport(filters: { from: string; to: string; billType
 
             const allPayments = inv.payments || [];
             const patientPayments = allPayments.reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
+            // isDepositSettlement also matches on receipt_number (RCP-DEP-*), not just
+            // payment_method — the payment-edit screen lets finance/admin change a
+            // receipt's method after the fact, which would otherwise let an edited
+            // deposit-settlement row slip past this filter and get double-counted
+            // against appliedDep below.
             const nonDepositPaid = allPayments
-                .filter((p: any) => (p.payment_method || '').toLowerCase() !== 'deposit')
+                .filter((p: any) => !isDepositSettlement(p))
                 .reduce((s: number, p: any) => s + Number(p.amount || 0), 0);
 
             // Category — TPA patients were showing as Cash when the bill wasn't
@@ -1339,18 +1342,16 @@ export async function getMISReport(filters: { from: string; to: string; billType
             // even when the stored net_amount is stale.
             const netAmount = Number(inv.total_amount || 0) - Number(inv.total_discount || 0) + Number(inv.total_tax || 0);
             const appliedDep = appliedDepByInvoice[inv.id] || 0;
-            const availDep = inv.admission_id ? (availDepByAdmission[inv.admission_id] || 0) : 0;
             const refundAmount = refundByInvoice[inv.id] || 0;
             // Net refunds off collection figures (floored at 0).
-            const receivedAmount = Math.max(0, nonDepositPaid + appliedDep + availDep - refundAmount);
+            const receivedAmount = Math.max(0, nonDepositPaid + appliedDep - refundAmount);
             const netPatientReceipt = Math.max(0, patientPayments - refundAmount);
             const paymentBreakup = emptyMISPaymentBreakup();
             for (const p of allPayments) {
-                if (canonicalTender(p.payment_method) === 'Deposit') continue;
+                if (isDepositSettlement(p)) continue;
                 addMISPaymentBreakup(paymentBreakup, p.payment_method, Number(p.amount || 0));
             }
             mergeMISPaymentBreakup(paymentBreakup, appliedDepBreakupByInvoice[inv.id]);
-            if (inv.admission_id) mergeMISPaymentBreakup(paymentBreakup, availDepBreakupByAdmission[inv.admission_id]);
             mergeMISPaymentBreakup(paymentBreakup, refundBreakupByInvoice[inv.id], -1);
             paymentBreakup.cash_amount = Math.max(0, paymentBreakup.cash_amount);
             paymentBreakup.upi_amount = Math.max(0, paymentBreakup.upi_amount);
