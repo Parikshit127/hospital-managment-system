@@ -1,7 +1,12 @@
 # Deployment note — nursing module hardening
 
-**Branch:** `fix/nursing-module-hardening` · **27 commits** · 44 files, +5,468 / −703
-**Migrations:** 3 (all additive) · **Crontab:** changed · **Prepared:** 25 Jul 2026
+**Branch:** `fix/nursing-module-hardening` · **Migrations:** 5, all additive ·
+**Crontab:** changed, 15 active jobs · **Prepared:** 25 Jul 2026, revised 27 Jul 2026
+
+> **Read Addendum 2 at the end first.** It is the authoritative state of this
+> branch and supersedes the counts in sections 1-3 below, which were written
+> when the release was two migrations smaller. Sections 1-3 are still accurate
+> about *what* each change does; only the totals moved.
 
 ---
 
@@ -46,7 +51,9 @@ curl -sf http://localhost:3000/api/health
 
 ---
 
-## 3. The three migrations
+## 3. The first three migrations
+
+*(Two more were added later. Addendum 2 lists all five.)*
 
 All additive. **Nothing is dropped, renamed, backfilled or modified.** Every
 statement uses `IF NOT EXISTS`, so all three are safe to re-run.
@@ -356,3 +363,84 @@ answer.
   chain needs that roster built.
 - Escalation timings (10 min emergency / 30 min urgent) are in
   `app/lib/escalation-policy.ts`. Change them there if hospital policy differs.
+
+---
+
+# Addendum 2 — 2026-07-27, authoritative state of this branch
+
+Supersedes the counts in sections 1-3 and in Addendum 1. **Read this section
+before planning the deploy.**
+
+## The five migrations, in order
+
+| # | Migration | What it does | Risk |
+|---|---|---|---|
+| 1 | `20260725000000_nursing_safety_fields` | Adds columns only | None — additive |
+| 2 | `20260725010000_nursing_admission_fks` | FKs added `NOT VALID` + indexes | None — no table scan |
+| 3 | `20260725020000_nursing_care_records` | 8 new tables | None — additive |
+| 4 | `20260726000000_news_escalations` | 1 new table | None — additive |
+| 5 | `20260726100000_ward_scoping_setting` | 1 boolean column, defaults `false` | None — behaviour unchanged until switched on |
+
+All five are additive. Nothing is dropped, renamed, backfilled or modified.
+Apply with `npx prisma migrate deploy`. Deploy order is still **migrate, then
+code, then crontab** — the crontab last, because the new jobs depend on a
+`proxy.ts` change that ships with the code.
+
+## Ward scoping — off by default, nothing to do
+
+`organization_configs.ward_scoping_enabled` ships as `false`, which is exactly
+today's behaviour. Turn it on in **Admin → Settings** only if the hospital wants
+each nurse's own ward sorted to the top of her patients, tasks and medication
+list. It sorts and labels; it never hides a patient. It needs a ward set against
+each nurse in **Admin → Staff**, or a shift on the nursing shift board.
+
+## What is NOT in this branch — and why it matters
+
+An earlier version of this work added a role check to 450 mutating server
+actions. **It was reverted.** The policy was stricter than `proxy.ts` for about
+forty hand-listed modules — pharmacy, lab and reception among them — so nurses
+could not raise an indent, doctors could not order a test, and it presented as
+"everyone is blocked" because 450 actions changed at once with no staged
+rollout.
+
+**The hole it was meant to close is still open.** A server action is a POST to
+whatever route the caller is standing on, so `proxy.ts` — which guards pages —
+does not protect actions. A role allowed on a page can invoke any action
+reachable from it. This was demonstrated: a nurse opened the discharge screen
+that `/ipd` legitimately allows her and discharged a patient and settled a bill.
+
+Redoing it needs:
+1. Per-module verification against how staff actually work, not inference from
+   reading the code.
+2. A **log-only** phase first — record what *would* have been refused for a
+   week, review the real traffic, then enforce.
+
+What **is** in this branch and must stay: **44 hand-written `denyUnlessRole`
+guards** on the clinical actions. Each was written against a real flow and
+tested. A nurse still cannot prescribe or discharge.
+
+## CI
+
+`npm run check:server-actions` runs in `ci.yml` and in the test gate of both
+deploy workflows. A sync export from a `'use server'` module 500s every page
+that imports it, including `/api/session`, which breaks login app-wide.
+
+## Verified on the demo database
+
+- All five migrations applied; `migrate status` reports up to date, no drift.
+- Every new table and column confirmed present.
+- All 15 scheduled cron endpoints called and returned 200.
+- `/api/cron/mis-jobs` is retired and answers 410 by design. It is documented in
+  the crontab as "do not schedule" and is not scheduled. Leave it that way.
+
+## Still outstanding
+
+1. **A pharmacist must flag the controlled drugs.** Until then the narcotic
+   register, the pharmacy dispensing controls and the bedside two-nurse check
+   are all inert. The scan finds only 6 molecules in 6,571 lines because the
+   formulary is keyed on brand names — the rest is manual.
+2. **Confirm the escalation timings** (10 min emergency / 30 min urgent) with a
+   clinician. Clinical policy, not an engineering decision.
+3. **No on-call or duty roster exists.** Unanswered escalations go to IPD
+   managers rather than the on-call doctor. Worth raising with the hospital.
+4. **Server-action authorization**, as above.

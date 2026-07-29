@@ -73,3 +73,7 @@ docs/voice-agents/ai-voice-agent-prd.md
 docs/voice-agents/ai-voice-agent-prd.pdf
 # Local Claude context (contains creds — keep local only)
 CLAUDE.local.md
+
+# Generated deployment note PDF — rebuild from the .md, never commit.
+# A binary that drifts from its source is worse than no binary.
+DEPLOYMENT_2026-07-25_nursing_hardening.pdf
