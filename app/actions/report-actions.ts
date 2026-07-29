@@ -1501,6 +1501,26 @@ export async function getDoctorRevenueRecon(filters: { from: string; to: string;
         });
         if (!doctor) return { success: false, error: 'Doctor not found' };
 
+        // Same name resolution as getMISReport, so the two reports never disagree
+        // about whose bill this is: attending_doctor_id is authoritative when it
+        // resolves to a real (non-generic) doctor; otherwise fall back to the
+        // free-text doctor_name recorded on the admission/bill. A lot of IPD
+        // admissions never got the FK properly linked, so trusting the FK alone
+        // silently dumps those bills into "Axten" even though the chart says
+        // whose patient it was.
+        const allDoctors = await db.user.findMany({ where: { role: 'doctor' }, select: { id: true, name: true } });
+        const docNameById = new Map<string, string>(allDoctors.map((d: any) => [d.id, d.name || '']));
+        const isGenericDocName = (n?: string | null) => {
+            if (!n) return true;
+            const core = String(n).trim()
+                .replace(/\s*\([^)]*\)\s*/g, '')
+                .replace(/^\s*(dr\.?|doctor)\s+/i, '')
+                .trim();
+            return !core || /^(rmo|resident(\s+(doctor|medical\s+officer))?|duty\s*doctor)$/i.test(core);
+        };
+        const nameKey = (n?: string | null) => String(n || '').replace(/^\s*(dr\.?|doctor)\s+/i, '').trim().toLowerCase();
+        const spotlightNameKey = nameKey(doctor.name || doctor.username);
+
         const fromDate = new Date(filters.from + 'T00:00:00+05:30');
         const toDate = new Date(filters.to + 'T23:59:59.999+05:30');
         const reportDateRange = { gte: fromDate, lte: toDate };
@@ -1528,11 +1548,11 @@ export async function getDoctorRevenueRecon(filters: { from: string; to: string;
         const invoices = await db.invoices.findMany({
             where,
             select: {
-                patient_id: true, invoice_type: true, admission_id: true, doctor_id: true,
+                patient_id: true, invoice_type: true, admission_id: true, doctor_id: true, doctor_name: true,
                 total_amount: true, total_tax: true, total_discount: true, paid_amount: true,
                 billing_patient_type: true, corporate_id: true, tpa_provider_id: true, pre_auth_id: true,
                 tpa_approved_amount: true, tpa_settled_amount: true,
-                admission: { select: { attending_doctor_id: true } },
+                admission: { select: { attending_doctor_id: true, doctor_name: true } },
                 insurance_claims: { select: { id: true } },
             },
         });
@@ -1574,7 +1594,18 @@ export async function getDoctorRevenueRecon(filters: { from: string; to: string;
             }
 
             const attendingId = isIPD ? (inv.doctor_id ?? inv.admission?.attending_doctor_id ?? null) : inv.doctor_id;
-            const which = attendingId === doctor.id ? 'spotlight' : 'axten';
+            let which: 'spotlight' | 'axten';
+            if (attendingId === doctor.id) {
+                which = 'spotlight';
+            } else {
+                const attendingName = attendingId ? docNameById.get(attendingId) : null;
+                if (isIPD && (!attendingId || isGenericDocName(attendingName))) {
+                    const freeName = inv.admission?.doctor_name || inv.doctor_name;
+                    which = freeName && nameKey(freeName) === spotlightNameKey ? 'spotlight' : 'axten';
+                } else {
+                    which = 'axten';
+                }
+            }
 
             const gross = Number(inv.total_amount || 0) + Number(inv.total_tax || 0);
             const discount = Number(inv.total_discount || 0);
