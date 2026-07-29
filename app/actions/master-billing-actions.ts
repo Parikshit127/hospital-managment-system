@@ -804,6 +804,7 @@ export async function getPatientFinancialProfile(patientId: string) {
             corporate: { select: { id: true, company_name: true, credit_limit: true } },
             insurance_policies: {
               where: { status: "Active" },
+              orderBy: { created_at: "desc" },
               include: { provider: { select: { provider_name: true } } },
             },
           },
