@@ -35,17 +35,18 @@ export async function getIpdServices(category?: string) {
 }
 
 /**
- * Get ALL billable services — IPD services + charge catalog + lab tests
+ * Get ALL billable services — IPD services + charge catalog + lab tests + radiology/imaging
  * Unified format: { id, service_name, service_code, default_rate, tax_rate, service_category, source }
  */
 export async function getAllBillableServices() {
     try {
         const { db, organizationId } = await requireTenantContext();
 
-        const [ipdServices, chargeCatalog, labTests] = await Promise.all([
+        const [ipdServices, chargeCatalog, labTests, radiology] = await Promise.all([
             db.ipdServiceMaster.findMany({ where: { is_active: true }, orderBy: { service_name: 'asc' } }),
             db.charge_catalog.findMany({ where: { is_active: true }, orderBy: { item_name: 'asc' } }),
             db.lab_test_inventory.findMany({ where: { is_available: true }, orderBy: { test_name: 'asc' } }),
+            db.radiology_imaging.findMany({ where: { is_available: true }, orderBy: { procedure_name: 'asc' } }),
         ]);
 
         const all = [
@@ -79,6 +80,16 @@ export async function getAllBillableServices() {
                 hsn_sac_code: s.hsn_sac_code || '9993',
                 source: 'lab',
             })),
+            ...radiology.map((s: any) => ({
+                id: `rad-${s.id}`,
+                service_name: s.procedure_name,
+                service_code: s.procedure_code || '',
+                default_rate: Number(s.price),
+                tax_rate: Number(s.tax_rate || 0),
+                service_category: s.category || s.modality || 'Radiology',
+                hsn_sac_code: s.hsn_sac_code || '9993',
+                source: 'radiology',
+            })),
         ];
 
         return { success: true, data: serialize(all) };
@@ -99,7 +110,7 @@ type CatalogService = {
     tax_rate: number;
     service_category: string;
     hsn_sac_code: string;
-    source: 'ipd' | 'catalog' | 'lab';
+    source: 'ipd' | 'catalog' | 'lab' | 'radiology';
 };
 
 /**
@@ -112,10 +123,11 @@ function fetchCatalogForOrg(organizationId: string) {
             // IMPORTANT: use the raw prisma client with an explicit org filter here.
             // requireTenantContext() reads cookies, which Next.js forbids inside
             // unstable_cache() — doing so threw and made the catalog come back empty.
-            const [ipdServices, chargeCatalog, labTests] = await Promise.all([
+            const [ipdServices, chargeCatalog, labTests, radiology] = await Promise.all([
                 prisma.ipdServiceMaster.findMany({ where: { organizationId, is_active: true }, orderBy: { service_name: 'asc' } }),
                 prisma.charge_catalog.findMany({ where: { organizationId, is_active: true }, orderBy: { item_name: 'asc' } }),
                 prisma.lab_test_inventory.findMany({ where: { organizationId, is_available: true }, orderBy: { test_name: 'asc' } }),
+                prisma.radiology_imaging.findMany({ where: { organizationId, is_available: true }, orderBy: { procedure_name: 'asc' } }),
             ]);
             const all: CatalogService[] = [
                 ...ipdServices.map((s: any) => ({
@@ -147,6 +159,16 @@ function fetchCatalogForOrg(organizationId: string) {
                     service_category: s.category || 'Laboratory',
                     hsn_sac_code: s.hsn_sac_code || '9993',
                     source: 'lab' as const,
+                })),
+                ...radiology.map((s: any) => ({
+                    id: `rad-${s.id}`,
+                    service_name: s.procedure_name,
+                    service_code: s.procedure_code || '',
+                    default_rate: Number(s.price),
+                    tax_rate: Number(s.tax_rate || 0),
+                    service_category: s.category || s.modality || 'Radiology',
+                    hsn_sac_code: s.hsn_sac_code || '9993',
+                    source: 'radiology' as const,
                 })),
             ];
             return all;

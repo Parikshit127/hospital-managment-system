@@ -6,6 +6,7 @@ import toast from 'react-hot-toast';
 import {
   listDoctors, createDoctor, updateDoctor, deactivateDoctor,
 } from '@/app/actions/doctor-master-actions';
+import { getDepartments } from '@/app/actions/admin-actions';
 import MasterImportButton from '@/app/components/master/MasterImportButton';
 import MasterExportButton from '@/app/components/master/MasterExportButton';
 
@@ -85,6 +86,9 @@ export default function DoctorMasterPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<typeof EMPTY_FORM>(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
+  // The org's own departments (e.g. "Reconstructive Surgeon") merged with the
+  // common list, so the specialty dropdown isn't limited to a hardcoded set.
+  const [deptNames, setDeptNames] = useState<string[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -100,6 +104,25 @@ export default function DoctorMasterPage() {
   }, [search, page]);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    getDepartments().then((res: any) => {
+      if (res?.success && Array.isArray(res.data)) {
+        setDeptNames(res.data.map((d: any) => d.name).filter(Boolean));
+      }
+    });
+  }, []);
+
+  // Common specialties + this org's departments, de-duplicated (case-insensitive),
+  // alphabetical. Any current value that's off-list is appended so editing an
+  // existing doctor never loses their specialty.
+  const specialtyOptions = React.useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const s of [...SPECIALTIES, ...deptNames, form.specialty].filter(Boolean)) {
+      const k = String(s).trim().toLowerCase();
+      if (k && !seen.has(k)) seen.set(k, String(s).trim());
+    }
+    return [...seen.values()].sort((a, b) => a.localeCompare(b));
+  }, [deptNames, form.specialty]);
   useEffect(() => {
     const t = setTimeout(() => { setSearch(searchInput); setPage(1); }, 350);
     return () => clearTimeout(t);
@@ -312,7 +335,7 @@ export default function DoctorMasterPage() {
                   <FieldLabel label="Specialty / Department" badge="mandatory" />
                   <select required value={form.specialty} onChange={e => set('specialty', e.target.value)} className={selectCls}>
                     <option value="">Select specialty</option>
-                    {SPECIALTIES.map(s => <option key={s} value={s}>{s}</option>)}
+                    {specialtyOptions.map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </div>
 

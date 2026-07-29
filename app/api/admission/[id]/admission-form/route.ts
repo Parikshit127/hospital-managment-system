@@ -35,7 +35,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
                     },
                 },
                 ward: { select: { ward_name: true, ward_type: true, cost_per_day: true } },
-                bed: { select: { bed_id: true, bed_category: true } },
+                bed: { select: { bed_id: true, bed_name: true, bed_category: true } },
             },
         });
         if (!admission) {
@@ -157,7 +157,7 @@ function renderAdmissionFormHtml(admission: any, b: BillBranding): string {
                 </div>
                 <div class="grid-3" style="margin-top:4px;">
                     ${field('Ward / Room Type', ward.ward_name || ward.ward_type)}
-                    ${field('Bed No.', bed.bed_id)}
+                    ${field('Bed No.', bed.bed_name || bed.bed_id)}
                     ${field('Patient Class', admission.patient_class || admission.billing_category)}
                 </div>
 

@@ -12,7 +12,7 @@ export type CatalogService = {
   tax_rate: number;
   service_category: string;
   hsn_sac_code: string;
-  source: 'ipd' | 'catalog' | 'lab';
+  source: 'ipd' | 'catalog' | 'lab' | 'radiology';
 };
 
 type Props = {

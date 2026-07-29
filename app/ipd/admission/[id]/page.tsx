@@ -1743,12 +1743,12 @@ export default function AdmissionDetailPage() {
                                                             <td className="px-4 py-3 whitespace-nowrap text-gray-500 text-xs">
                                                                 {new Date(v.created_at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                                                             </td>
-                                                            <td className="px-4 py-3 font-mono text-xs">{v.bp_systolic ? `${v.bp_systolic}/${v.bp_diastolic}` : '—'}</td>
+                                                            <td className="px-4 py-3 font-mono text-xs">{v.bp_systolic ? `${v.bp_systolic}/${v.bp_diastolic ?? ''}` : (v.blood_pressure || '—')}</td>
                                                             <td className="px-4 py-3 font-mono text-xs">{v.heart_rate ?? '—'}</td>
-                                                            <td className="px-4 py-3 font-mono text-xs">{v.spo2 ? `${v.spo2}%` : '—'}</td>
+                                                            <td className="px-4 py-3 font-mono text-xs">{v.spo2 ? `${v.spo2}%` : (v.oxygen_sat ? `${v.oxygen_sat}%` : '—')}</td>
                                                             <td className="px-4 py-3 font-mono text-xs">{v.temperature ? `${v.temperature}°` : '—'}</td>
                                                             <td className="px-4 py-3 font-mono text-xs">{v.respiratory_rate ?? '—'}</td>
-                                                            <td className="px-4 py-3 font-mono text-xs">{v.pain_score != null ? `${v.pain_score}/10` : '—'}</td>
+                                                            <td className="px-4 py-3 font-mono text-xs">{v.pain_score != null ? `${v.pain_score}/10` : (v.pain_scale != null ? `${v.pain_scale}/10` : '—')}</td>
                                                             <td className="px-4 py-3 text-xs">{v.consciousness ?? '—'}</td>
                                                             <td className="px-4 py-3">
                                                                 <NEWSScoreBadge score={v.news_score ?? 0} level={v.news_level} size="sm" />

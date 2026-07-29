@@ -26,7 +26,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ admi
             include: {
                 patient: { select: { full_name: true, patient_id: true, phone: true, age: true, gender: true } },
                 ward: { select: { ward_name: true } },
-                bed: { select: { bed_id: true } },
+                bed: { select: { bed_id: true, bed_name: true } },
             },
         });
         if (!admission) return NextResponse.json({ error: 'Admission not found' }, { status: 404 });
@@ -186,7 +186,7 @@ function generateSummaryBillHTML(admission: any, invoice: any, org: any, deposit
                                 <p style="font-size:11px;"><strong>Age/Gender:</strong> ${patient.age || '-'} / ${patient.gender || '-'}</p>
                                 <p style="font-size:11px;"><strong>Admission ID:</strong> ${admission.admission_id}</p>
                                 <p style="font-size:11px;"><strong>Doctor:</strong> ${formatDoctorName(admission.doctor_name) || '-'}</p>
-                                <p style="font-size:11px;"><strong>Ward/Bed:</strong> ${admission.ward?.ward_name || '-'} / ${admission.bed?.bed_id || '-'}</p>
+                                <p style="font-size:11px;"><strong>Ward/Bed:</strong> ${admission.ward?.ward_name || '-'} / ${admission.bed?.bed_name || admission.bed?.bed_id || '-'}</p>
                                 <p style="font-size:11px;"><strong>Admitted:</strong> ${admissionDate}</p>
                                 <p style="font-size:11px;"><strong>Discharged:</strong> ${dischargeDate || '—'}</p>
                                 <p style="font-size:11px;"><strong>LOS:</strong> ${los} day(s)</p>

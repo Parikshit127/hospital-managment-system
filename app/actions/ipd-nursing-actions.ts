@@ -149,11 +149,109 @@ export async function recordIPDVitals(data: {
 export async function getIPDVitalsHistory(admissionId: string) {
     try {
         const { db } = await requireTenantContext();
-        const vitals = await db.iPDVitals.findMany({
-            where: { admission_id: admissionId },
+
+        let admission = await db.admissions.findFirst({
+            where: {
+                OR: [
+                    { admission_id: admissionId },
+                    { patient_id: admissionId },
+                ],
+            },
+            select: { admission_id: true, patient_id: true },
+        });
+
+        const targetAdmissionId = admission?.admission_id || admissionId;
+        const targetPatientId = admission?.patient_id || (admission ? undefined : admissionId);
+
+        const ipdVitals = await db.iPDVitals.findMany({
+            where: {
+                OR: [
+                    { admission_id: targetAdmissionId },
+                    ...(targetPatientId ? [{ patient_id: targetPatientId }] : []),
+                ],
+            },
             orderBy: { created_at: 'asc' },
         });
-        return { success: true, data: JSON.parse(JSON.stringify(vitals)) };
+
+        const vitalSigns = targetPatientId
+            ? await db.vital_signs.findMany({
+                where: {
+                    OR: [
+                        { patient_id: targetPatientId },
+                        ...(targetAdmissionId ? [{ appointment_id: targetAdmissionId }] : []),
+                    ],
+                },
+                orderBy: { created_at: 'asc' },
+            })
+            : [];
+
+        // Collect all user IDs to resolve names
+        const userIdsSet = new Set<string>();
+        ipdVitals.forEach((v: any) => { if (v.recorded_by) userIdsSet.add(v.recorded_by); });
+        vitalSigns.forEach((v: any) => { if (v.recorded_by) userIdsSet.add(v.recorded_by); });
+
+        const userMap = new Map<string, string>();
+        if (userIdsSet.size > 0) {
+            const users = await db.user.findMany({
+                where: { id: { in: Array.from(userIdsSet) } },
+                select: { id: true, name: true, username: true },
+            });
+            users.forEach((u: any) => userMap.set(u.id, u.name || u.username || u.id));
+        }
+
+        const mappedVitalSigns = vitalSigns.map((vs: any) => {
+            let bp_systolic: number | undefined = undefined;
+            let bp_diastolic: number | undefined = undefined;
+            if (vs.blood_pressure && typeof vs.blood_pressure === 'string') {
+                const parts = vs.blood_pressure.split('/');
+                if (parts.length === 2) {
+                    const sys = parseInt(parts[0].trim(), 10);
+                    const dia = parseInt(parts[1].trim(), 10);
+                    if (!isNaN(sys)) bp_systolic = sys;
+                    if (!isNaN(dia)) bp_diastolic = dia;
+                }
+            }
+            return {
+                id: vs.id,
+                admission_id: targetAdmissionId,
+                patient_id: vs.patient_id,
+                bp_systolic,
+                bp_diastolic,
+                blood_pressure: vs.blood_pressure,
+                heart_rate: vs.heart_rate,
+                temperature: vs.temperature,
+                spo2: vs.oxygen_sat,
+                oxygen_sat: vs.oxygen_sat,
+                respiratory_rate: vs.respiratory_rate,
+                pain_score: vs.pain_scale,
+                pain_scale: vs.pain_scale,
+                weight: vs.weight,
+                height: vs.height,
+                recorded_by: userMap.get(vs.recorded_by || '') || vs.recorded_by || 'Nurse',
+                created_at: vs.created_at,
+                source: 'vital_signs',
+            };
+        });
+
+        const mappedIpdVitals = ipdVitals.map((v: any) => ({
+            ...v,
+            recorded_by: userMap.get(v.recorded_by || '') || v.recorded_by || 'Staff',
+            source: 'ipd_vitals',
+        }));
+
+        const mergedMap = new Map<string, any>();
+        [...mappedIpdVitals, ...mappedVitalSigns].forEach((item) => {
+            const timeKey = `${item.patient_id}_${Math.floor(new Date(item.created_at).getTime() / 60000)}`;
+            if (!mergedMap.has(timeKey)) {
+                mergedMap.set(timeKey, item);
+            }
+        });
+
+        const sorted = Array.from(mergedMap.values()).sort(
+            (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+        );
+
+        return { success: true, data: JSON.parse(JSON.stringify(sorted)) };
     } catch (error: any) {
         console.error('getIPDVitalsHistory error:', error);
         return { success: false, data: [] };

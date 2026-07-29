@@ -59,9 +59,11 @@ export function InlineBillBuilder({ patient, onCreated, onCancel }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [overrideTpaCash, setOverrideTpaCash] = useState(false);
+
   const patientType = (patient.patient_type || 'cash').toLowerCase();
   const isCorporate = patientType === 'corporate';
-  const isTpa = patientType === 'tpa_insurance' || patientType === 'tpa';
+  const isTpa = (patientType === 'tpa_insurance' || patientType === 'tpa') && !overrideTpaCash;
   const tpaBlocked = isTpa && !patient.pre_auth_approved;
 
   // ── Bootstrap: load doctors + suggested doctor ──
@@ -263,7 +265,15 @@ export function InlineBillBuilder({ patient, onCreated, onCancel }: Props) {
                 This patient is enrolled with a TPA / insurance provider. A Cash bill cannot be generated until pre-auth is approved.
                 Open the TPA / Insurance workflow to submit or check the pre-auth request.
               </p>
-              <div className="mt-3 flex gap-2">
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setOverrideTpaCash(true)}
+                  className="text-xs font-bold px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white inline-flex items-center gap-1.5 shadow-sm transition-colors"
+                >
+                  <Wallet className="h-3.5 w-3.5" />
+                  Bill as Cash / Self-Pay (OPD)
+                </button>
                 <a
                   href={`/reception/finance/tpa-insurance?patientId=${patient.patient_id}`}
                   className="text-xs font-bold px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white inline-flex items-center gap-1.5"

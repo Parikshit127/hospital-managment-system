@@ -64,7 +64,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
                 where: { admission_id: invoice.admission_id },
                 include: {
                     ward: { select: { ward_name: true } },
-                    bed: { select: { bed_id: true } },
+                    bed: { select: { bed_id: true, bed_name: true } },
                 },
             });
         }
@@ -262,7 +262,7 @@ function generateTpaBillHTML(
         beneficiaryHTML += `
             <p style="font-size:11px;"><strong>Admission ID:</strong> ${admission.admission_id}</p>
             <p style="font-size:11px;"><strong>Doctor:</strong> ${formatDoctorName(admission.doctor_name) || '-'}</p>
-            <p style="font-size:11px;"><strong>Ward/Bed:</strong> ${admission.ward?.ward_name || '-'} / ${admission.bed?.bed_id || '-'}</p>
+            <p style="font-size:11px;"><strong>Ward/Bed:</strong> ${admission.ward?.ward_name || '-'} / ${admission.bed?.bed_name || admission.bed?.bed_id || '-'}</p>
             <p style="font-size:11px;"><strong>Admitted:</strong> ${admissionDate}</p>
             <p style="font-size:11px;"><strong>${semi ? 'Discharge Date &amp; Time' : 'Discharged'}:</strong> ${dischargeDate || '—'}</p>
             ${semi ? `<p style="font-size:11px;"><strong>Status:</strong> <span style="display:inline-block;padding:2px 8px;font-size:10px;font-weight:700;border-radius:9999px;background:#fef3c7;color:#b45309;border:1px solid #fde68a;">SEMI DISCHARGED — awaiting TPA approval</span></p>` : ''}

@@ -73,6 +73,7 @@ export interface DoctorStatementPDFProps {
     doctor: { name: string; specialty?: string | null };
     statement: {
         period_start: string; period_end: string; total_commission: number; status: string;
+        tds_rate_percent?: number; total_tds?: number; net_payable?: number;
         paid_amount?: number | null; paid_at?: string | null; payment_mode?: string | null;
         payment_reference?: string | null; notes?: string | null;
     };
@@ -93,6 +94,10 @@ function cellText(key: string, row: Line): string {
 
 export default function DoctorStatementPDF({ hospitalName, doctor, statement, lines }: DoctorStatementPDFProps) {
     const isPaid = statement.status === 'paid';
+    // Statements created before TDS support existed have net_payable = 0 (schema
+    // default) — fall back to the gross commission rather than showing ₹0 net.
+    const netPayable = statement.net_payable && statement.net_payable > 0 ? statement.net_payable : statement.total_commission;
+    const totalTds = statement.total_tds ?? 0;
     return (
         <Document>
             <Page size="A4" style={styles.page} wrap>
@@ -111,8 +116,8 @@ export default function DoctorStatementPDF({ hospitalName, doctor, statement, li
                         <Text style={[styles.metaValue, { color: isPaid ? GREEN : '#b45309' }]}>{statement.status.replace(/_/g, ' ').toUpperCase()}</Text>
                     </View>
                     <View style={styles.totalBox}>
-                        <Text style={styles.totalLabel}>Total Payout</Text>
-                        <Text style={styles.totalValue}>{money(statement.total_commission)}</Text>
+                        <Text style={styles.totalLabel}>Net Payout (after TDS)</Text>
+                        <Text style={styles.totalValue}>{money(netPayable)}</Text>
                     </View>
                 </View>
 
@@ -145,6 +150,16 @@ export default function DoctorStatementPDF({ hospitalName, doctor, statement, li
                     <View style={styles.totalRow} wrap={false}>
                         <View style={{ width: '64%' }}><Text style={[styles.td, { fontFamily: 'Helvetica-Bold', color: INK }]}>TOTAL ({lines.length} line{lines.length === 1 ? '' : 's'})</Text></View>
                         <View style={{ width: '20%', alignItems: 'flex-end', justifyContent: 'center' }}><Text style={[styles.td, { fontFamily: 'Helvetica-Bold', color: INK }]}>{money(statement.total_commission)}</Text></View>
+                        <View style={{ width: '16%' }} />
+                    </View>
+                    <View style={[styles.tr, { borderBottomWidth: 0 }]} wrap={false}>
+                        <View style={{ width: '64%' }}><Text style={[styles.td, { color: MUTED }]}>TDS deducted ({statement.tds_rate_percent ?? 10}%)</Text></View>
+                        <View style={{ width: '20%', alignItems: 'flex-end', justifyContent: 'center' }}><Text style={[styles.td, { color: MUTED }]}>−{money(totalTds)}</Text></View>
+                        <View style={{ width: '16%' }} />
+                    </View>
+                    <View style={[styles.totalRow, { backgroundColor: '#d1fae5' }]} wrap={false}>
+                        <View style={{ width: '64%' }}><Text style={[styles.td, { fontFamily: 'Helvetica-Bold', color: INK }]}>NET PAYABLE</Text></View>
+                        <View style={{ width: '20%', alignItems: 'flex-end', justifyContent: 'center' }}><Text style={[styles.td, { fontFamily: 'Helvetica-Bold', color: INK }]}>{money(netPayable)}</Text></View>
                         <View style={{ width: '16%' }} />
                     </View>
                 </View>
