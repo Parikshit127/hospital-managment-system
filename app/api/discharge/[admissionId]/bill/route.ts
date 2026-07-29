@@ -32,7 +32,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ admi
                     },
                 },
                 ward: { select: { ward_name: true, ward_type: true } },
-                bed: { select: { bed_id: true } },
+                // bed_name is the human label ("pvt-1"); bed_id is an internal key that
+                // for admission-created beds is "<org>-<ward>-<name>" — ugly on a bill.
+                bed: { select: { bed_id: true, bed_name: true } },
             },
         });
 
@@ -376,7 +378,7 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
                                 <p style="font-size:11px;"><strong>Age/Gender:</strong> ${patient.age || '-'} / ${patient.gender || '-'}</p>
                                 <p style="font-size:11px;"><strong>Admission ID:</strong> ${admission.admission_id}</p>
                                 <p style="font-size:11px;"><strong>Doctor:</strong> ${formatDoctorName(admission.doctor_name) || '-'}</p>
-                                <p style="font-size:11px;"><strong>Ward/Bed:</strong> ${admission.ward?.ward_name || '-'} / ${admission.bed?.bed_id || '-'}</p>
+                                <p style="font-size:11px;"><strong>Ward/Bed:</strong> ${admission.ward?.ward_name || '-'} / ${admission.bed?.bed_name || admission.bed?.bed_id || '-'}</p>
                                 <p style="font-size:11px;"><strong>Admitted:</strong> ${admissionDate}</p>
                                 <p style="font-size:11px;"><strong>Discharged:</strong> ${admission.discharge_date ? dischargeDate : '—'}</p>
                                 <p style="font-size:11px;"><strong>LOS:</strong> ${los} day(s)</p>
