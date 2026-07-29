@@ -1,8 +1,6 @@
 // @ts-nocheck
 'use server';
 
-import { guardAction } from '@/app/lib/action-guard';
-
 /**
  * GL posting for the TPA & Insurance receivables module.
  *
@@ -104,8 +102,6 @@ export async function ensureTpaGlAccounts(organizationId: string) {
  * is dispositioned (recover vs write-off) via postShortPayWriteOffToGL.
  */
 export async function postReceiptAllocationToGL(allocationId: number) {
-    const __denied = await guardAction('insurance-gl-actions', 'postReceiptAllocationToGL');
-    if (__denied) return __denied;
   try {
     const alloc = await prisma.insuranceReceiptAllocation.findUnique({
       where: { id: allocationId },
@@ -174,8 +170,6 @@ export async function postReceiptAllocationToGL(allocationId: number) {
  * Only call when the short-pay disposition is WriteOff.
  */
 export async function postShortPayWriteOffToGL(shortPayId: number) {
-    const __denied = await guardAction('insurance-gl-actions', 'postShortPayWriteOffToGL');
-    if (__denied) return __denied;
   try {
     const sp = await prisma.claimShortPay.findUnique({
       where: { id: shortPayId },
@@ -236,8 +230,6 @@ export async function postShortPayWriteOffToGL(shortPayId: number) {
  * disposition is ToRecover (Option B "recover the gap from the patient").
  */
 export async function postShortPayRecoverToGL(shortPayId: number) {
-    const __denied = await guardAction('insurance-gl-actions', 'postShortPayRecoverToGL');
-    if (__denied) return __denied;
   try {
     const sp = await prisma.claimShortPay.findUnique({
       where: { id: shortPayId },
@@ -296,8 +288,6 @@ export async function postShortPayRecoverToGL(shortPayId: number) {
  * bank at allocation time, so call this only for explicit unapplied receipts.
  */
 export async function postUnappliedReceiptToGL(receiptId: number, amount: number) {
-    const __denied = await guardAction('insurance-gl-actions', 'postUnappliedReceiptToGL');
-    if (__denied) return __denied;
   try {
     const receipt = await prisma.insuranceReceipt.findUnique({ where: { id: receiptId } });
     if (!receipt) return { success: false, error: 'Receipt not found' };

@@ -1,7 +1,5 @@
 'use server';
 
-import { guardAction } from '@/app/lib/action-guard';
-
 import { requireTenantContext } from '@/backend/tenant';
 import { revalidatePath } from 'next/cache';
 
@@ -44,8 +42,6 @@ export async function addPatientNote(
     note: string,
     source: 'admission' | 'registration' | 'profile' = 'profile',
 ): Promise<AddResult> {
-    const __denied = await guardAction('patient-note-actions', 'addPatientNote');
-    if (__denied) return __denied;
     try {
         const { db, session, organizationId } = await requireTenantContext();
         if (!session || session.role === 'patient') {

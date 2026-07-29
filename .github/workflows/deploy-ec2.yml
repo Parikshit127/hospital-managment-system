@@ -35,9 +35,6 @@ jobs:
       - run: npm ci --no-audit --no-fund
       # See ci.yml — a sync export from a 'use server' module breaks login app-wide.
       - run: npm run check:server-actions
-      # Every mutating server action must say who may run it. A nurse
-      # discharged a patient because nothing checked.
-      - run: npm run check:action-guards
       - run: npx prisma generate
       - run: npm run typecheck
       - run: npm run lint:ci

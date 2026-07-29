@@ -1,7 +1,5 @@
 'use server';
 
-import { guardAction } from '@/app/lib/action-guard';
-
 /**
  * GAP 4 — Coordinator Login with Doctor Approval Workflow
  * Coordinator enters EMR data on doctor's behalf.
@@ -21,8 +19,6 @@ export async function createEncounterAsCoordinator(data: {
     assessment?: unknown[];
     plan?: Record<string, unknown>;
 }) {
-    const __denied = await guardAction('coordinator-actions', 'createEncounterAsCoordinator');
-    if (__denied) return __denied;
     // Identity comes from the session, never the client.
     const { db, session, organizationId } = await requireRoleAndTenant(['coordinator', 'admin']);
     const coordinatorId = session.id;
@@ -73,8 +69,6 @@ export async function updateEncounterAsCoordinator(
         plan?: Record<string, unknown>;
     }
 ) {
-    const __denied = await guardAction('coordinator-actions', 'updateEncounterAsCoordinator');
-    if (__denied) return __denied;
     const { db, session, organizationId } = await requireRoleAndTenant(['coordinator', 'admin']);
     const coordinatorId = session.id;
 
@@ -111,8 +105,6 @@ export async function updateEncounterAsCoordinator(
 }
 
 export async function approveEncounter(encounterId: string) {
-    const __denied = await guardAction('coordinator-actions', 'approveEncounter');
-    if (__denied) return __denied;
     // Only the signing clinician (doctor) or an admin may approve. The signer
     // identity is taken from the session — never supplied by the client.
     const { db, session, organizationId } = await requireRoleAndTenant(['doctor', 'admin']);
@@ -138,8 +130,6 @@ export async function approveEncounter(encounterId: string) {
 }
 
 export async function rejectEncounter(encounterId: string, reason: string) {
-    const __denied = await guardAction('coordinator-actions', 'rejectEncounter');
-    if (__denied) return __denied;
     const { db, organizationId } = await requireRoleAndTenant(['doctor', 'admin']);
 
     try {

@@ -1,7 +1,5 @@
 'use server';
 
-import { guardAction } from '@/app/lib/action-guard';
-
 import { requireTenantContext } from '@/backend/tenant';
 import { z } from 'zod';
 import * as bcrypt from 'bcryptjs';
@@ -125,8 +123,6 @@ export async function listDoctors(opts?: {
 }
 
 export async function createDoctor(input: unknown) {
-    const __denied = await guardAction('doctor-master-actions', 'createDoctor');
-    if (__denied) return __denied;
   try {
     const { db, organizationId, session } = await requireTenantContext();
     assertAdmin(session);
@@ -189,8 +185,6 @@ export async function createDoctor(input: unknown) {
 }
 
 export async function updateDoctor(id: string, input: unknown) {
-    const __denied = await guardAction('doctor-master-actions', 'updateDoctor');
-    if (__denied) return __denied;
   try {
     const { db, organizationId, session } = await requireTenantContext();
     assertAdmin(session);
@@ -240,8 +234,6 @@ export async function updateDoctor(id: string, input: unknown) {
 }
 
 export async function deactivateDoctor(id: string) {
-    const __denied = await guardAction('doctor-master-actions', 'deactivateDoctor');
-    if (__denied) return __denied;
   try {
     const { db, organizationId, session } = await requireTenantContext();
     assertAdmin(session);

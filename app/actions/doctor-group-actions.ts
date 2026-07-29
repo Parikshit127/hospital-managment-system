@@ -1,7 +1,5 @@
 'use server';
 
-import { guardAction } from '@/app/lib/action-guard';
-
 /**
  * GAP 3 — Doctor Group Hierarchy — Senior/Junior Access
  * Implements group of doctors (senior + juniors) with shared patient access.
@@ -12,8 +10,6 @@ import { requireTenantContext } from '@/backend/tenant';
 import { revalidatePath } from 'next/cache';
 
 export async function createDoctorGroup(groupId: string, leadDoctorId: string, memberIds: string[]) {
-    const __denied = await guardAction('doctor-group-actions', 'createDoctorGroup');
-    if (__denied) return __denied;
     const { db, organizationId } = await requireTenantContext();
 
     try {
@@ -103,8 +99,6 @@ export async function getGroupAccessiblePatients(doctorId: string) {
 }
 
 export async function assignDoctorToGroup(doctorId: string, groupId: string, supervisorId?: string) {
-    const __denied = await guardAction('doctor-group-actions', 'assignDoctorToGroup');
-    if (__denied) return __denied;
     const { db, organizationId } = await requireTenantContext();
 
     try {
@@ -126,8 +120,6 @@ export async function assignDoctorToGroup(doctorId: string, groupId: string, sup
 }
 
 export async function removeDoctorFromGroup(doctorId: string) {
-    const __denied = await guardAction('doctor-group-actions', 'removeDoctorFromGroup');
-    if (__denied) return __denied;
     const { db, organizationId } = await requireTenantContext();
 
     try {

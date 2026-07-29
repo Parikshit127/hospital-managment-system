@@ -1,7 +1,5 @@
 'use server';
 
-import { guardAction } from '@/app/lib/action-guard';
-
 import { requireTenantContext, requireAnyTenantContext } from '@/backend/tenant';
 import { requireDevAdmin, requireDeveloper } from '@/backend/dev-portal';
 import { TicketPriority, TicketStatus, TicketNoteVisibility } from '@prisma/client';
@@ -59,8 +57,6 @@ interface CreateTicketInput {
 }
 
 export async function createTicket(input: CreateTicketInput) {
-    const __denied = await guardAction('help-center-actions', 'createTicket');
-    if (__denied) return __denied;
     try {
         const { db, session, organizationId } = await requireTenantContext();
 
@@ -130,8 +126,6 @@ interface SaveTicketAttachmentInput {
 }
 
 export async function saveTicketAttachment(input: SaveTicketAttachmentInput) {
-    const __denied = await guardAction('help-center-actions', 'saveTicketAttachment');
-    if (__denied) return __denied;
     try {
         const { db, organizationId } = await requireTenantContext();
 
@@ -252,8 +246,6 @@ export async function getMyTickets() {
 // ========================================
 
 export async function updateTicketStatus(ticketId: string, status: TicketStatus) {
-    const __denied = await guardAction('help-center-actions', 'updateTicketStatus');
-    if (__denied) return __denied;
     try {
         const { db, organizationId, user } = await requireDeveloper();
 
@@ -398,8 +390,6 @@ export async function getAssignableUsers() {
  * Both the ticket and the assignee must belong to the caller's organization.
  */
 export async function assignTicket(ticketId: string, userId: string | null) {
-    const __denied = await guardAction('help-center-actions', 'assignTicket');
-    if (__denied) return __denied;
     try {
         const { db, organizationId } = await requireDevAdmin();
 
@@ -475,8 +465,6 @@ interface CreateTicketNoteInput {
  * Defaults to INTERNAL visibility (staff-only) unless explicitly shared.
  */
 export async function createTicketNote(input: CreateTicketNoteInput) {
-    const __denied = await guardAction('help-center-actions', 'createTicketNote');
-    if (__denied) return __denied;
     try {
         const { db, session, organizationId, user } = await requireDeveloper();
 

@@ -1,7 +1,5 @@
 'use server';
 
-import { guardAction } from '@/app/lib/action-guard';
-
 import { requireTenantContext, requireRoleAndTenant } from '@/backend/tenant';
 import { prisma } from '@/backend/db';
 import { logAudit } from '@/app/lib/audit';
@@ -88,8 +86,6 @@ export async function createInvoice(data: {
     // Optional backdated service date (datetime-local string). Validated; max 1 year back.
     service_date?: string;
 }) {
-    const __denied = await guardAction('finance-actions', 'createInvoice');
-    if (__denied) return __denied;
     try {
         const { db, organizationId, session } = await requireTenantContext();
 
@@ -212,8 +208,6 @@ export async function addInvoiceItem(data: {
     // Optional backdated service date (datetime-local string). Validated; max 1 year back.
     service_date?: string;
 }) {
-    const __denied = await guardAction('finance-actions', 'addInvoiceItem');
-    if (__denied) return __denied;
     try {
         const { db, organizationId, session } = await requireTenantContext();
 
@@ -731,8 +725,6 @@ export async function getInvoiceDetail(invoiceId: number) {
 
 // Finalize invoice (Draft -> Final)
 export async function finalizeInvoice(invoiceId: number) {
-    const __denied = await guardAction('finance-actions', 'finalizeInvoice');
-    if (__denied) return __denied;
     try {
         const { db, organizationId } = await requireTenantContext();
 
@@ -814,8 +806,6 @@ export async function finalizeInvoice(invoiceId: number) {
  * patient has no draft to lock.
  */
 export async function finalizePatientLatestDraft(patientId: string) {
-    const __denied = await guardAction('finance-actions', 'finalizePatientLatestDraft');
-    if (__denied) return __denied;
     try {
         const { db, organizationId, session } = await requireTenantContext();
         // Only an unlocked draft can be locked. This makes the action idempotent —
@@ -857,8 +847,6 @@ export async function finalizePatientLatestDraft(patientId: string) {
  * finalizeInvoice() (which only flips the status), this freezes the bill.
  */
 export async function finalizeAndLockInvoice(invoiceId: number) {
-    const __denied = await guardAction('finance-actions', 'finalizeAndLockInvoice');
-    if (__denied) return __denied;
     try {
         const { db, session } = await requireTenantContext();
         const existing = await db.invoices.findUnique({
@@ -929,8 +917,6 @@ export async function getMyRole() {
  * Restricted to admin and finance.
  */
 export async function updateInvoiceDoctor(invoiceId: number, doctor_id: string | null, doctor_name: string | null) {
-    const __denied = await guardAction('finance-actions', 'updateInvoiceDoctor');
-    if (__denied) return __denied;
     try {
         const { db, organizationId, session } = await requireRoleAndTenant(['admin', 'finance']);
         const invoice = await db.invoices.findFirst({ where: { id: invoiceId, organizationId } });
@@ -984,8 +970,6 @@ export async function updateInvoiceDoctor(invoiceId: number, doctor_id: string |
  * recorded payments are never silently orphaned.
  */
 export async function cancelInvoice(invoiceId: number, reason: string) {
-    const __denied = await guardAction('finance-actions', 'cancelInvoice');
-    if (__denied) return __denied;
     try {
         const trimmed = (reason || '').trim();
         if (!trimmed) {
@@ -1242,8 +1226,6 @@ export async function recordPayment(data: {
     payer_pan_name?: string;
     notes?: string;
 }) {
-    const __denied = await guardAction('finance-actions', 'recordPayment');
-    if (__denied) return __denied;
     try {
         const { db, session, organizationId } = await requireTenantContext();
 
@@ -1472,8 +1454,6 @@ export async function recordSplitPayment(data: {
     payer_pan_name?: string;
     notes?: string;
 }) {
-    const __denied = await guardAction('finance-actions', 'recordSplitPayment');
-    if (__denied) return __denied;
     try {
         const { db, session, organizationId } = await requireTenantContext();
 
@@ -1621,8 +1601,6 @@ export async function recordSplitPayment(data: {
 
 // Reverse a payment (refund)
 export async function reversePayment(paymentId: number, reason: string) {
-    const __denied = await guardAction('finance-actions', 'reversePayment');
-    if (__denied) return __denied;
     try {
         const { db, session, organizationId } = await requireRoleAndTenant(['admin', 'finance', 'superadmin']);
 
@@ -1773,8 +1751,6 @@ export async function addCatalogItem(data: {
     default_price: number;
     department?: string;
 }) {
-    const __denied = await guardAction('finance-actions', 'addCatalogItem');
-    if (__denied) return __denied;
     try {
         const { db, organizationId } = await requireTenantContext();
 
@@ -1801,8 +1777,6 @@ export async function updateCatalogItem(id: number, data: {
     default_price?: number;
     is_active?: boolean;
 }) {
-    const __denied = await guardAction('finance-actions', 'updateCatalogItem');
-    if (__denied) return __denied;
     try {
         const { db } = await requireTenantContext();
 
@@ -2325,8 +2299,6 @@ export async function requestRefund(data: { invoice_id: string; payment_id?: str
 
 // Edit payment metadata and amount — audited.
 export async function updatePayment(paymentId: number, updates: { amount?: number; created_at?: string; payment_method?: string; reference?: string | null; notes?: string | null; }) {
-    const __denied = await guardAction('finance-actions', 'updatePayment');
-    if (__denied) return __denied;
     try {
         const { db, session, organizationId } = await requireRoleAndTenant(['admin', 'finance', 'superadmin']);
 
@@ -2512,8 +2484,6 @@ export async function processRefund(input: {
     reason: string;
     payment_method: string;
 }) {
-    const __denied = await guardAction('finance-actions', 'processRefund');
-    if (__denied) return __denied;
     try {
         const { db, organizationId, session } = await requireTenantContext();
 
@@ -2685,8 +2655,6 @@ export async function getRefunds() {
 }
 
 export async function updateRefundStatus(id: number, status: string) {
-    const __denied = await guardAction('finance-actions', 'updateRefundStatus');
-    if (__denied) return __denied;
     try {
         const { db } = await requireTenantContext();
         const refund = await db.refund.update({
@@ -2699,8 +2667,6 @@ export async function updateRefundStatus(id: number, status: string) {
     }
 }
 export async function approveInvoice(id: string | number, source: string) {
-    const __denied = await guardAction('finance-actions', 'approveInvoice');
-    if (__denied) return __denied;
     try {
         const { db, organizationId } = await requireTenantContext();
 
@@ -2833,8 +2799,6 @@ export async function searchPatientsForBilling(query: string) {
 
 // Remove an invoice item
 export async function removeInvoiceItem(itemId: number, invoiceId: number) {
-    const __denied = await guardAction('finance-actions', 'removeInvoiceItem');
-    if (__denied) return __denied;
     try {
         const { db, session } = await requireTenantContext();
         const item = await db.invoice_items.findUnique({
@@ -2898,8 +2862,6 @@ export async function requestDiscountOTP(invoiceId: string, discountAmount: numb
 
 // Validate entered OTP and apply discount to invoice
 export async function approveDiscountOTP(otpId: string, enteredOtp: string) {
-    const __denied = await guardAction('finance-actions', 'approveDiscountOTP');
-    if (__denied) return __denied;
     try {
         const { db, organizationId, session } = await requireTenantContext();
 
@@ -2957,8 +2919,6 @@ export async function createBillingOrderSet(data: {
     items: any[];
     total_amount: number;
 }) {
-    const __denied = await guardAction('finance-actions', 'createBillingOrderSet');
-    if (__denied) return __denied;
     try {
         const { db, organizationId } = await requireTenantContext();
         const set = await (db.billingOrderSet as any).create({
@@ -2979,8 +2939,6 @@ export async function createBillingOrderSet(data: {
 
 // Apply a Billing Order Set to an invoice (adds each item as a line)
 export async function applyOrderSetToInvoice(invoiceId: string, orderSetId: string) {
-    const __denied = await guardAction('finance-actions', 'applyOrderSetToInvoice');
-    if (__denied) return __denied;
     try {
         const { db, organizationId } = await requireTenantContext();
         const set = await (db.billingOrderSet as any).findFirst({
@@ -3029,8 +2987,6 @@ export async function createDiscountScheme(data: {
     valid_to?: string;
     requires_otp?: boolean;
 }) {
-    const __denied = await guardAction('finance-actions', 'createDiscountScheme');
-    if (__denied) return __denied;
     try {
         const { db, organizationId } = await requireTenantContext();
         const scheme = await (db.discountScheme as any).create({
@@ -3131,8 +3087,6 @@ export async function updateInvoiceItem(itemId: number, patch: {
     hsn_sac_code?: string | null;
     service_category?: string | null;
 }) {
-    const __denied = await guardAction('finance-actions', 'updateInvoiceItem');
-    if (__denied) return __denied;
     try {
         const { db, organizationId, session } = await requireTenantContext();
 
@@ -3228,8 +3182,6 @@ export async function updateInvoiceHeader(invoiceId: number, patch: {
     discount_remark?: string | null;
     invoice_date?: string | null;
 }) {
-    const __denied = await guardAction('finance-actions', 'updateInvoiceHeader');
-    if (__denied) return __denied;
     try {
         const { db, organizationId, session } = await requireTenantContext();
 
@@ -3406,8 +3358,6 @@ export async function saveInvoiceEdits(invoiceId: number, payload: {
     }>;
     items_to_remove?: number[];
 }) {
-    const __denied = await guardAction('finance-actions', 'saveInvoiceEdits');
-    if (__denied) return __denied;
     try {
         const { db, organizationId, session } = await requireTenantContext();
 
@@ -3674,8 +3624,6 @@ export async function saveInvoiceEdits(invoiceId: number, payload: {
 
 // Create an addendum invoice linked to parent
 export async function createAddendumInvoice(parentInvoiceId: string, reason: string) {
-    const __denied = await guardAction('finance-actions', 'createAddendumInvoice');
-    if (__denied) return __denied;
     try {
         const { db, organizationId } = await requireTenantContext();
 
@@ -4014,8 +3962,6 @@ export async function getInvoiceHistory(invoiceId: number) {
 // the overpayment wasn't spilled over at collection time.
 // ──────────────────────────────────────────────────────────────────────────
 export async function reconcilePatientOverpayments(patientId: string) {
-    const __denied = await guardAction('finance-actions', 'reconcilePatientOverpayments');
-    if (__denied) return __denied;
     try {
         const { db, session, organizationId } = await requireTenantContext();
 

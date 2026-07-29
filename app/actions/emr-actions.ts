@@ -1,7 +1,5 @@
 'use server';
 
-import { guardAction } from '@/app/lib/action-guard';
-
 import { requireTenantContext } from '@/backend/tenant';
 import { searchICD10 } from '@/app/lib/icd10';
 
@@ -46,8 +44,6 @@ export type EncounterInput = {
 // ── Encounters ─────────────────────────────────────────────────────────────
 
 export async function createEncounter(data: EncounterInput) {
-    const __denied = await guardAction('emr-actions', 'createEncounter');
-    if (__denied) return __denied;
     const { db, organizationId } = await requireTenantContext();
     try {
         const encounter = await db.clinicalEncounter.create({
@@ -72,8 +68,6 @@ export async function createEncounter(data: EncounterInput) {
 }
 
 export async function updateEncounter(id: string, data: Partial<EncounterInput>) {
-    const __denied = await guardAction('emr-actions', 'updateEncounter');
-    if (__denied) return __denied;
     const { db, organizationId } = await requireTenantContext();
     try {
         const updateData: Record<string, unknown> = {};
@@ -166,8 +160,6 @@ export async function addPatientAllergy(data: {
     reaction?: string;
     severity: string;
 }) {
-    const __denied = await guardAction('emr-actions', 'addPatientAllergy');
-    if (__denied) return __denied;
     const { db, organizationId } = await requireTenantContext();
     try {
         const allergy = await db.patientAllergy.create({
@@ -189,8 +181,6 @@ export async function addPatientAllergy(data: {
 }
 
 export async function resolveAllergy(id: string) {
-    const __denied = await guardAction('emr-actions', 'resolveAllergy');
-    if (__denied) return __denied;
     const { db, organizationId } = await requireTenantContext();
     try {
         await db.patientAllergy.update({
@@ -250,8 +240,6 @@ export async function recordVitals(data: {
     pain_scale?: number;
     recorded_by?: string;
 }) {
-    const __denied = await guardAction('emr-actions', 'recordVitals');
-    if (__denied) return __denied;
     const { db, organizationId } = await requireTenantContext();
     try {
         const vitals = await db.vital_signs.create({

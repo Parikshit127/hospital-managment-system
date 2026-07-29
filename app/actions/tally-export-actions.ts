@@ -1,8 +1,6 @@
 // @ts-nocheck
 'use server';
 
-import { guardAction } from '@/app/lib/action-guard';
-
 import { prisma } from '@/backend/db';
 import { requireTenantContext } from '@/backend/tenant';
 import { writeFile, mkdir } from 'fs/promises';
@@ -51,8 +49,6 @@ interface TallyVoucher {
 // ========================================
 
 export async function generateTallyXML(options: TallyExportOptions) {
-    const __denied = await guardAction('tally-export-actions', 'generateTallyXML');
-    if (__denied) return __denied;
   try {
     // Convert IST date boundaries to UTC for correct DB filtering
     // IST = UTC+5:30 → subtract 5h30m for start, add 18h29m59s for end
@@ -570,8 +566,6 @@ export async function downloadTallyExport(exportId: string) {
 }
 
 export async function deleteTallyExport(exportId: string) {
-    const __denied = await guardAction('tally-export-actions', 'deleteTallyExport');
-    if (__denied) return __denied;
   try {
     await prisma.tallyExport.delete({
       where: { id: exportId },

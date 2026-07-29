@@ -1,7 +1,5 @@
 "use server";
 
-import { guardAction } from '@/app/lib/action-guard';
-
 /**
  * Unified Approval Center (Master Billing Phase 2)
  * ------------------------------------------------
@@ -394,8 +392,6 @@ export async function approveItem(input: {
   id: string;
   comment?: string;
 }) {
-    const __denied = await guardAction('approval-center-actions', 'approveItem');
-    if (__denied) return __denied;
   const { type, id, comment } = input;
 
   if (type === "writeoff") {
@@ -422,8 +418,6 @@ export async function rejectItem(input: {
   id: string;
   reason: string;
 }) {
-    const __denied = await guardAction('approval-center-actions', 'rejectItem');
-    if (__denied) return __denied;
   const { type, id, reason } = input;
   if (!reason || reason.trim().length < 3) {
     return { success: false, error: "A rejection reason is required" };

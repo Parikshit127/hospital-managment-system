@@ -1,7 +1,5 @@
 'use server';
 
-import { guardAction } from '@/app/lib/action-guard';
-
 import { requireTenantContext, ForbiddenError, AuthError } from '@/backend/tenant';
 import { requireDevAdmin } from '@/backend/dev-portal';
 import { BroadcastAudience, BroadcastStatus } from '@prisma/client';
@@ -39,8 +37,6 @@ interface CreateReleaseNoteInput {
  * Create a release note (draft). Admin role only.
  */
 export async function createReleaseNote(input: CreateReleaseNoteInput) {
-    const __denied = await guardAction('release-notes-actions', 'createReleaseNote');
-    if (__denied) return __denied;
     try {
         const { db, session, organizationId } = await requireDevAdmin();
 

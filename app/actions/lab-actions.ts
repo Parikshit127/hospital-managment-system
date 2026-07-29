@@ -1,7 +1,5 @@
 'use server';
 
-import { guardAction } from '@/app/lib/action-guard';
-
 import { requireTenantContext } from '@/backend/tenant';
 import { getTodayRange, getOrgTimezone } from '@/app/lib/timezone';
 import { revalidatePath } from 'next/cache';
@@ -107,8 +105,6 @@ export async function getLabStats() {
 }
 
 export async function uploadResult(barcode: string, resultValue: string, remarks: string, isCritical?: boolean) {
-    const __denied = await guardAction('lab-actions', 'uploadResult');
-    if (__denied) return __denied;
     try {
         const { db } = await requireTenantContext();
 
@@ -277,8 +273,6 @@ export async function getLabDashboardStats() {
 // ========================================
 
 export async function updateSampleStatus(barcode: string, status: string, notes?: string) {
-    const __denied = await guardAction('lab-actions', 'updateSampleStatus');
-    if (__denied) return __denied;
     try {
         const { db } = await requireTenantContext();
 
@@ -366,8 +360,6 @@ export async function updateLabInventory(id: number, data: {
     min_threshold?: number;
     expiry_date?: string;
 }) {
-    const __denied = await guardAction('lab-actions', 'updateLabInventory');
-    if (__denied) return __denied;
     try {
         const { db } = await requireTenantContext();
 
@@ -390,8 +382,6 @@ export async function addLabReagent(data: {
     min_threshold: number;
     expiry_date?: string;
 }) {
-    const __denied = await guardAction('lab-actions', 'addLabReagent');
-    if (__denied) return __denied;
     try {
         const { db } = await requireTenantContext();
 
@@ -491,8 +481,6 @@ export async function addTestTocatalog(data: {
     critical_value_low?: number;
     critical_value_high?: number;
 }) {
-    const __denied = await guardAction('lab-actions', 'addTestTocatalog');
-    if (__denied) return __denied;
     try {
         const { db, organizationId } = await requireTenantContext();
         const test = await db.lab_test_inventory.create({
@@ -540,8 +528,6 @@ export async function updateTestInCatalog(id: number, data: {
     critical_value_low?: number | null;
     critical_value_high?: number | null;
 }) {
-    const __denied = await guardAction('lab-actions', 'updateTestInCatalog');
-    if (__denied) return __denied;
     try {
         const { db, organizationId } = await requireTenantContext();
         await db.lab_test_inventory.update({
@@ -557,8 +543,6 @@ export async function updateTestInCatalog(id: number, data: {
 }
 
 export async function deleteTestFromCatalog(id: number) {
-    const __denied = await guardAction('lab-actions', 'deleteTestFromCatalog');
-    if (__denied) return __denied;
     try {
         const { db, organizationId } = await requireTenantContext();
         await db.lab_test_inventory.delete({ where: { id, organizationId } });
@@ -571,8 +555,6 @@ export async function deleteTestFromCatalog(id: number) {
 }
 
 export async function toggleTestAvailability(id: number, is_available: boolean) {
-    const __denied = await guardAction('lab-actions', 'toggleTestAvailability');
-    if (__denied) return __denied;
     try {
         const { db, organizationId } = await requireTenantContext();
         await db.lab_test_inventory.update({

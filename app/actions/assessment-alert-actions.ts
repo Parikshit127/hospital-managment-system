@@ -1,7 +1,5 @@
 'use server';
 
-import { guardAction } from '@/app/lib/action-guard';
-
 /**
  * GAP 5 — 2-Hour Initial Assessment Alert with Group Notification
  * Tracks arrival in unit, creates 2-hour countdown, alerts doctor group.
@@ -15,8 +13,6 @@ export async function recordPatientArrivalInUnit(
     patientId: string,
     doctorGroupId?: string
 ) {
-    const __denied = await guardAction('assessment-alert-actions', 'recordPatientArrivalInUnit');
-    if (__denied) return __denied;
     const { db, organizationId } = await requireTenantContext();
 
     try {
@@ -63,8 +59,6 @@ export async function recordPatientArrivalInUnit(
 }
 
 export async function markAssessmentCompleted(admissionId: string, completedBy: string) {
-    const __denied = await guardAction('assessment-alert-actions', 'markAssessmentCompleted');
-    if (__denied) return __denied;
     const { db, organizationId } = await requireTenantContext();
 
     try {

@@ -1,6 +1,4 @@
 'use server';
-
-import { guardAction } from '@/app/lib/action-guard';
 import { requireTenantContext } from '@/backend/tenant';
 import { revalidatePath } from 'next/cache';
 
@@ -13,8 +11,6 @@ export async function createCounsellingSession(data: {
   patientId: string; sessionType: string; counsellorName?: string;
   scheduledAt?: string; notes?: string; financialEstimate?: number; depositAdvised?: number;
 }) {
-    const __denied = await guardAction('counselling-actions', 'createCounsellingSession');
-    if (__denied) return __denied;
   try {
     const { db, organizationId } = await requireTenantContext();
     const session = await (db.counsellingSession as any).create({
@@ -46,8 +42,6 @@ export async function getCounsellingSessions(status?: string) {
 }
 
 export async function updateCounsellingStatus(id: string, status: string, outcome?: string) {
-    const __denied = await guardAction('counselling-actions', 'updateCounsellingStatus');
-    if (__denied) return __denied;
   try {
     const { db } = await requireTenantContext();
     const data: any = { status, updated_at: new Date() };

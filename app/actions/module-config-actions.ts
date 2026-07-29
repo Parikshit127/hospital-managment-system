@@ -1,7 +1,5 @@
 'use server';
 
-import { guardAction } from '@/app/lib/action-guard';
-
 import { requireTenantContext } from '@/backend/tenant';
 import { revalidatePath } from 'next/cache';
 
@@ -141,8 +139,6 @@ export async function getModuleConfig(moduleKey: string) {
 }
 
 export async function updateModuleConfig(moduleKey: string, configData: Record<string, any>) {
-    const __denied = await guardAction('module-config-actions', 'updateModuleConfig');
-    if (__denied) return __denied;
     try {
         const { db, organizationId, session } = await requireTenantContext();
 
@@ -193,8 +189,6 @@ export async function updateModuleConfig(moduleKey: string, configData: Record<s
 }
 
 export async function toggleModule(moduleKey: string, enabled: boolean) {
-    const __denied = await guardAction('module-config-actions', 'toggleModule');
-    if (__denied) return __denied;
     try {
         const { db, organizationId, session } = await requireTenantContext();
 
@@ -264,8 +258,6 @@ export async function getAllModuleStatuses() {
 }
 
 export async function resetModuleConfig(moduleKey: string) {
-    const __denied = await guardAction('module-config-actions', 'resetModuleConfig');
-    if (__denied) return __denied;
     try {
         const { db, organizationId, session } = await requireTenantContext();
 

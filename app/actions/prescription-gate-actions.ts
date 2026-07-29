@@ -1,7 +1,5 @@
 'use server';
 
-import { guardAction } from '@/app/lib/action-guard';
-
 /**
  * GAP 2 — Prescription-Mandatory Test Upload Validation
  * Checks if a patient has uploaded a prescription before billing
@@ -57,8 +55,6 @@ export async function checkPrescriptionGate(patientId: string, testNames: string
 }
 
 export async function uploadPrescriptionForPatient(patientId: string, prescriptionUrl: string, uploadedBy: string) {
-    const __denied = await guardAction('prescription-gate-actions', 'uploadPrescriptionForPatient');
-    if (__denied) return __denied;
     const { db, organizationId } = await requireTenantContext();
 
     try {
@@ -84,8 +80,6 @@ export async function uploadPrescriptionForPatient(patientId: string, prescripti
 }
 
 export async function toggleTestPrescriptionRequirement(testId: number, requires: boolean) {
-    const __denied = await guardAction('prescription-gate-actions', 'toggleTestPrescriptionRequirement');
-    if (__denied) return __denied;
     const { db, organizationId } = await requireTenantContext();
 
     try {

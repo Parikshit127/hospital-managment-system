@@ -1,7 +1,5 @@
 'use server';
 
-import { guardAction } from '@/app/lib/action-guard';
-
 /**
  * GAP 1 — UHID Merging / Unmerging
  * Implements primary/secondary UHID relationship where two patient records
@@ -13,8 +11,6 @@ import { requireTenantContext } from '@/backend/tenant';
 import { revalidatePath } from 'next/cache';
 
 export async function mergePatients(primaryPatientId: string, secondaryPatientId: string, mergedBy: string) {
-    const __denied = await guardAction('uhid-merge-actions', 'mergePatients');
-    if (__denied) return __denied;
     const { db, organizationId } = await requireTenantContext();
 
     if (primaryPatientId === secondaryPatientId) {

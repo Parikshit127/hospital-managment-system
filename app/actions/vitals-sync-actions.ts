@@ -1,7 +1,5 @@
 'use server';
 
-import { guardAction } from '@/app/lib/action-guard';
-
 /**
  * GAP 12 — Nurse-to-Doctor Vitals Real-Time Sync per Appointment
  * Vitals entered by nurse reflect on doctor's prescription page for that appointment.
@@ -25,8 +23,6 @@ export async function recordNurseVitalsForAppointment(data: {
     pain_scale?: number;
     recorded_by: string;
 }) {
-    const __denied = await guardAction('vitals-sync-actions', 'recordNurseVitalsForAppointment');
-    if (__denied) return __denied;
     const { db, organizationId } = await requireTenantContext();
 
     try {

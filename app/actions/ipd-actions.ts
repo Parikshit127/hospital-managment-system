@@ -1,7 +1,5 @@
 "use server";
 
-import { guardAction } from '@/app/lib/action-guard';
-
 import { requireTenantContext, denyUnlessRole, CLINICAL_ROLES } from "@/backend/tenant";
 import { logAudit } from "@/app/lib/audit";
 import { revalidatePath } from "next/cache";
@@ -179,8 +177,6 @@ export async function getAllBeds() {
 
 
 export async function updateBedStatus(bedId: string, newStatus: string) {
-    const __denied = await guardAction('ipd-actions', 'updateBedStatus');
-    if (__denied) return __denied;
   try {
     const { db } = await requireTenantContext();
     const validStatuses = [
@@ -274,8 +270,6 @@ export async function admitPatientIPD(data: {
   insurance_validity_start?: string;
   insurance_validity_end?: string;
 }) {
-    const __denied = await guardAction('ipd-actions', 'admitPatientIPD');
-    if (__denied) return __denied;
   try {
     const { db, organizationId } = await requireTenantContext();
 
@@ -1304,8 +1298,6 @@ export async function addMedicalNote(
   noteType: string,
   details: string,
 ) {
-    const __denied = await guardAction('ipd-actions', 'addMedicalNote');
-    if (__denied) return __denied;
   try {
     const { db } = await requireTenantContext();
     const note = await db.medical_notes.create({
@@ -1399,8 +1391,6 @@ export async function transferPatient(data: {
   to_bed_id: string;
   reason: string;
 }) {
-    const __denied = await guardAction('ipd-actions', 'transferPatient');
-    if (__denied) return __denied;
   try {
     const { db, session, organizationId } = await requireTenantContext();
 
@@ -1477,8 +1467,6 @@ export async function assignDietPlan(data: {
   texture_modification?: string;
   feeding_route?: string;
 }) {
-    const __denied = await guardAction('ipd-actions', 'assignDietPlan');
-    if (__denied) return __denied;
   try {
     const { db, session, organizationId } = await requireTenantContext();
 
@@ -1561,8 +1549,6 @@ export async function recordWardRound(data: {
   escalation_required?: boolean;
   visit_fee?: number;
 }) {
-    const __denied = await guardAction('ipd-actions', 'recordWardRound');
-    if (__denied) return __denied;
   try {
     const { db, session, organizationId } = await requireTenantContext();
 
@@ -1650,8 +1636,6 @@ export async function getNursingTasks(wardId?: number) {
 }
 
 export async function completeNursingTask(taskId: number, notes?: string) {
-    const __denied = await guardAction('ipd-actions', 'completeNursingTask');
-    if (__denied) return __denied;
   try {
     const { db } = await requireTenantContext();
 
@@ -1810,8 +1794,6 @@ export async function createNursingTask(data: {
   assigned_to?: string;
   priority?: 'routine' | 'urgent' | 'stat';
 }) {
-    const __denied = await guardAction('ipd-actions', 'createNursingTask');
-    if (__denied) return __denied;
   try {
     const { db, organizationId } = await requireTenantContext();
     const task = await db.nursingTask.create({
@@ -1927,8 +1909,6 @@ export async function admitEmergency(data: {
   unknown_gender?: string;
   unknown_phone?: string;
 }) {
-    const __denied = await guardAction('ipd-actions', 'admitEmergency');
-    if (__denied) return __denied;
   try {
     const { db, session, organizationId } = await requireTenantContext();
 
@@ -2058,8 +2038,6 @@ export async function updateAdmissionDiagnosis(data: {
   patient_class?: string;
   isolation_type?: string;
 }) {
-    const __denied = await guardAction('ipd-actions', 'updateAdmissionDiagnosis');
-    if (__denied) return __denied;
   try {
     const { db } = await requireTenantContext();
     const admission = await db.admissions.update({
@@ -2093,8 +2071,6 @@ export async function updateAdmissionBasicDetails(data: {
   admission_date?: string;
   discharge_date?: string;
 }) {
-    const __denied = await guardAction('ipd-actions', 'updateAdmissionBasicDetails');
-    if (__denied) return __denied;
   try {
     const { db, session } = await requireTenantContext();
     const allowedRoles = ['receptionist', 'reception', 'admin', 'finance', 'superadmin'];
@@ -2230,8 +2206,6 @@ export async function updateAdmissionPatientCategory(data: {
   insurance_validity_start?: string;
   insurance_validity_end?: string;
 }) {
-    const __denied = await guardAction('ipd-actions', 'updateAdmissionPatientCategory');
-    if (__denied) return __denied;
   try {
     const { db, organizationId, session } = await requireTenantContext();
     const allowedRoles = ['receptionist', 'reception', 'admin', 'finance', 'superadmin'];
@@ -2361,8 +2335,6 @@ export async function allocateBedByRules(data: {
   require_oxygen?: boolean;
   require_monitor?: boolean;
 }) {
-    const __denied = await guardAction('ipd-actions', 'allocateBedByRules');
-    if (__denied) return __denied;
   try {
     const { db } = await requireTenantContext();
 
@@ -2447,8 +2419,6 @@ export async function allocateBedByRules(data: {
 // MARK BED AS AVAILABLE (after cleaning)
 // ============================================
 export async function markBedAvailable(bedId: string) {
-    const __denied = await guardAction('ipd-actions', 'markBedAvailable');
-    if (__denied) return __denied;
   try {
     const { db, organizationId } = await requireTenantContext();
 
@@ -2484,8 +2454,6 @@ export async function markBedAvailable(bedId: string) {
 // CANCEL ADMISSION
 // ============================================
 export async function cancelAdmission(admissionId: string, reason: string, cancellationDate?: string | Date, forceCancel?: boolean) {
-    const __denied = await guardAction('ipd-actions', 'cancelAdmission');
-    if (__denied) return __denied;
   try {
     const { db, organizationId, session } = await requireTenantContext();
     const cancellationReason = (reason || '').trim();

@@ -1,7 +1,5 @@
 'use server';
 
-import { guardAction } from '@/app/lib/action-guard';
-
 import { requireTenantContext } from '@/backend/tenant';
 
 function serialize<T>(data: T): T {
@@ -33,8 +31,6 @@ export async function updateLabTestPrice(id: number, data: {
     hsn_sac_code?: string;
     tax_rate?: number;
 }) {
-    const __denied = await guardAction('master-data-actions', 'updateLabTestPrice');
-    if (__denied) return __denied;
     try {
         const { db } = await requireTenantContext();
         const test = await db.lab_test_inventory.update({
@@ -72,8 +68,6 @@ export async function updateMedicinePrice(id: number, data: {
     hsn_sac_code?: string;
     tax_rate?: number;
 }) {
-    const __denied = await guardAction('master-data-actions', 'updateMedicinePrice');
-    if (__denied) return __denied;
     try {
         const { db } = await requireTenantContext();
         const medicine = await db.pharmacy_medicine_master.update({
@@ -119,8 +113,6 @@ export async function updateDoctorFee(userId: string, data: {
     consultation_fee?: number;
     follow_up_fee?: number;
 }) {
-    const __denied = await guardAction('master-data-actions', 'updateDoctorFee');
-    if (__denied) return __denied;
     try {
         const { db } = await requireTenantContext();
         const doctor = await db.user.update({
@@ -156,8 +148,6 @@ export async function updateWardPricing(wardId: number, data: {
     cost_per_day?: number;
     nursing_charge?: number;
 }) {
-    const __denied = await guardAction('master-data-actions', 'updateWardPricing');
-    if (__denied) return __denied;
     try {
         const { db } = await requireTenantContext();
         const ward = await db.wards.update({

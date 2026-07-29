@@ -1,7 +1,5 @@
 'use server';
 
-import { guardAction } from '@/app/lib/action-guard';
-
 /**
  * Insurance Receipts & Advice reconciliation — the heart of the benchmark
  * "Insurance Receipts" screen and the biggest functional gap in the old module.
@@ -90,8 +88,6 @@ export async function createInsuranceReceipt(input: {
   service_charge?: number;
   remarks?: string;
 }) {
-    const __denied = await guardAction('insurance-receipts-actions', 'createInsuranceReceipt');
-    if (__denied) return __denied;
   try {
     const { db, session, organizationId } = await requireTenantContext();
 
@@ -182,8 +178,6 @@ export async function allocateReceipt(input: {
     is_partial?: boolean;
   }>;
 }) {
-    const __denied = await guardAction('insurance-receipts-actions', 'allocateReceipt');
-    if (__denied) return __denied;
   try {
     const { db, session, organizationId } = await requireTenantContext();
 
@@ -469,8 +463,6 @@ export async function recordAndAllocateReceipt(input: {
     disposition?: 'WriteOff' | 'ToRecover';
   }>;
 }) {
-    const __denied = await guardAction('insurance-receipts-actions', 'recordAndAllocateReceipt');
-    if (__denied) return __denied;
   const { lines, settle_gross, ...header } = input;
 
   const validLines = (lines || []).filter(
@@ -755,8 +747,6 @@ export async function getInsuranceReceiptHistory(receiptId: number) {
 // Reverse a receipt (e.g. bounced). Reverses GL, resets invoice settlement.
 // Guard: only allowed if no allocation has been further reconciled/written-off.
 export async function reverseInsuranceReceipt(receiptId: number, reason: string) {
-    const __denied = await guardAction('insurance-receipts-actions', 'reverseInsuranceReceipt');
-    if (__denied) return __denied;
   try {
     const { db, session, organizationId } = await requireTenantContext();
     if (!reason || !reason.trim()) return { success: false, error: 'reason is required' };

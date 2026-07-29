@@ -1,7 +1,5 @@
 'use server';
 
-import { guardAction } from '@/app/lib/action-guard';
-
 /**
  * GAP 9 — Investigation "My List" Feature
  * Each doctor maintains a personal "My List" of frequently advised investigations.
@@ -27,8 +25,6 @@ export async function addToInvestigationMyList(
     investigationName: string,
     category?: string
 ) {
-    const __denied = await guardAction('investigation-mylist-actions', 'addToInvestigationMyList');
-    if (__denied) return __denied;
     const { db, organizationId } = await requireTenantContext();
 
     try {
@@ -69,8 +65,6 @@ export async function addToInvestigationMyList(
 }
 
 export async function removeFromInvestigationMyList(doctorId: string, investigationName: string) {
-    const __denied = await guardAction('investigation-mylist-actions', 'removeFromInvestigationMyList');
-    if (__denied) return __denied;
     const { db, organizationId } = await requireTenantContext();
 
     try {

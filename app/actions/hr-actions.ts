@@ -1,7 +1,5 @@
 'use server';
 
-import { guardAction } from '@/app/lib/action-guard';
-
 import { requireTenantContext } from '@/backend/tenant';
 import { revalidatePath } from 'next/cache';
 
@@ -170,8 +168,6 @@ export async function createEmployee(data: {
     email?: string;
     userId?: string;
 }) {
-    const __denied = await guardAction('hr-actions', 'createEmployee');
-    if (__denied) return __denied;
     try {
         const { db } = await requireTenantContext();
 
@@ -210,8 +206,6 @@ export async function updateEmployee(id: number, data: {
     email?: string;
     isActive?: boolean;
 }) {
-    const __denied = await guardAction('hr-actions', 'updateEmployee');
-    if (__denied) return __denied;
     try {
         const { db } = await requireTenantContext();
 
@@ -247,8 +241,6 @@ export async function recordAttendance(data: {
     checkOut?: string;
     status: string;
 }) {
-    const __denied = await guardAction('hr-actions', 'recordAttendance');
-    if (__denied) return __denied;
     try {
         const { db } = await requireTenantContext();
 
@@ -343,8 +335,6 @@ export async function applyLeave(data: {
     toDate: string;
     reason?: string;
 }) {
-    const __denied = await guardAction('hr-actions', 'applyLeave');
-    if (__denied) return __denied;
     try {
         const { db } = await requireTenantContext();
 
@@ -368,8 +358,6 @@ export async function applyLeave(data: {
 }
 
 export async function approveLeave(id: number, approvedBy: string) {
-    const __denied = await guardAction('hr-actions', 'approveLeave');
-    if (__denied) return __denied;
     try {
         const { db } = await requireTenantContext();
 
@@ -387,8 +375,6 @@ export async function approveLeave(id: number, approvedBy: string) {
 }
 
 export async function rejectLeave(id: number, approvedBy: string) {
-    const __denied = await guardAction('hr-actions', 'rejectLeave');
-    if (__denied) return __denied;
     try {
         const { db } = await requireTenantContext();
 
@@ -499,8 +485,6 @@ export async function getShiftPatterns() {
 }
 
 export async function createShiftPattern(data: { name: string; startTime: string; endTime: string }) {
-    const __denied = await guardAction('hr-actions', 'createShiftPattern');
-    if (__denied) return __denied;
     try {
         const { db } = await requireTenantContext();
 
@@ -522,8 +506,6 @@ export async function createShiftRoster(data: {
     startDate: string;
     endDate: string;
 }) {
-    const __denied = await guardAction('hr-actions', 'createShiftRoster');
-    if (__denied) return __denied;
     try {
         const { db } = await requireTenantContext();
 

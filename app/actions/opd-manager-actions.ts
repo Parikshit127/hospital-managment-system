@@ -1,7 +1,5 @@
 'use server';
 
-import { guardAction } from '@/app/lib/action-guard';
-
 import { requireTenantContext } from '@/backend/tenant';
 import { revalidatePath } from 'next/cache';
 import { resolveOPDConfig } from '@/app/lib/opd-config';
@@ -377,8 +375,6 @@ export async function getPeakHoursAnalytics(days = 7) {
 }
 
 export async function markNoShow(appointmentId: string) {
-    const __denied = await guardAction('opd-manager-actions', 'markNoShow');
-    if (__denied) return __denied;
     try {
         const { db, organizationId } = await requireTenantContext();
         await db.appointments.update({

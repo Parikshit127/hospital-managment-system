@@ -1,7 +1,5 @@
 'use server';
 
-import { guardAction } from '@/app/lib/action-guard';
-
 import { requireTenantContext } from '@/backend/tenant';
 import { revalidatePath } from 'next/cache';
 
@@ -131,8 +129,6 @@ export async function updateAlertRule(ruleId: string, data: {
     template?: string;
     quiet_hours?: any;
 }) {
-    const __denied = await guardAction('alert-actions', 'updateAlertRule');
-    if (__denied) return __denied;
     try {
         const { db, organizationId, session } = await requireTenantContext();
 
@@ -174,8 +170,6 @@ export async function createAlertRule(data: {
     template?: string;
     quiet_hours?: any;
 }) {
-    const __denied = await guardAction('alert-actions', 'createAlertRule');
-    if (__denied) return __denied;
     try {
         const { db, organizationId, session } = await requireTenantContext();
 
@@ -209,8 +203,6 @@ export async function createAlertRule(data: {
 }
 
 export async function deleteAlertRule(ruleId: string) {
-    const __denied = await guardAction('alert-actions', 'deleteAlertRule');
-    if (__denied) return __denied;
     try {
         const { db, organizationId, session } = await requireTenantContext();
 
@@ -242,8 +234,6 @@ export async function deleteAlertRule(ruleId: string) {
 }
 
 export async function seedDefaultAlertRules() {
-    const __denied = await guardAction('alert-actions', 'seedDefaultAlertRules');
-    if (__denied) return __denied;
     try {
         const { db, organizationId } = await requireTenantContext();
 
@@ -275,8 +265,6 @@ export async function seedDefaultAlertRules() {
 }
 
 export async function toggleAlertRule(ruleId: string) {
-    const __denied = await guardAction('alert-actions', 'toggleAlertRule');
-    if (__denied) return __denied;
     try {
         const { db, organizationId, session } = await requireTenantContext();
 

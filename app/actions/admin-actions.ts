@@ -1,7 +1,5 @@
 "use server";
 
-import { guardAction } from '@/app/lib/action-guard';
-
 import { requireTenantContext } from "@/backend/tenant";
 import { prisma } from "@/backend/db";
 import { addUserSchema, updateUserSchema } from "@/app/lib/validations";
@@ -550,8 +548,6 @@ export async function addUser(data: {
   date_of_joining?: string;
   assigned_ward_id?: number;
 }) {
-    const __denied = await guardAction('admin-actions', 'addUser');
-    if (__denied) return __denied;
   try {
     const { db, organizationId } = await requireTenantContext();
 
@@ -648,8 +644,6 @@ export async function updateUser(
     assigned_ward_id?: number | null;
   },
 ) {
-    const __denied = await guardAction('admin-actions', 'updateUser');
-    if (__denied) return __denied;
   try {
     const { db, organizationId } = await requireTenantContext();
 
@@ -715,8 +709,6 @@ export async function updateUser(
 
 // Reset a staff member's password
 export async function resetUserPassword(userId: string, newPassword: string) {
-    const __denied = await guardAction('admin-actions', 'resetUserPassword');
-    if (__denied) return __denied;
   try {
     const { db, organizationId } = await requireTenantContext();
 
@@ -756,8 +748,6 @@ export async function resetUserPassword(userId: string, newPassword: string) {
 
 // Toggle user active status
 export async function toggleUserActive(userId: string) {
-    const __denied = await guardAction('admin-actions', 'toggleUserActive');
-    if (__denied) return __denied;
   try {
     const { db, organizationId } = await requireTenantContext();
 
@@ -886,8 +876,6 @@ export async function createDepartment(data: {
   base_consultation_fee: number;
   is_active?: boolean;
 }) {
-    const __denied = await guardAction('admin-actions', 'createDepartment');
-    if (__denied) return __denied;
   try {
     const { db, organizationId, session } = await requireTenantContext();
 
@@ -932,8 +920,6 @@ export async function createDepartment(data: {
 }
 
 export async function updateDepartment(id: number, data: any) {
-    const __denied = await guardAction('admin-actions', 'updateDepartment');
-    if (__denied) return __denied;
   try {
     const { db } = await requireTenantContext();
     const dept = await db.department.update({
@@ -961,8 +947,6 @@ export async function getOrganizationSettings() {
 }
 
 export async function updateOrganizationSettings(data: any) {
-    const __denied = await guardAction('admin-actions', 'updateOrganizationSettings');
-    if (__denied) return __denied;
   try {
     const { db, organizationId } = await requireTenantContext();
     const config = await db.organizationConfig.update({
@@ -990,8 +974,6 @@ export async function getOrganizationBranding() {
 }
 
 export async function updateOrganizationBranding(data: any) {
-    const __denied = await guardAction('admin-actions', 'updateOrganizationBranding');
-    if (__denied) return __denied;
   try {
     const { db, organizationId } = await requireTenantContext();
     const brand = await db.organizationBranding.update({
@@ -1033,8 +1015,6 @@ export async function updateHospitalBillingInfo(data: {
   email?: string;
   address?: string;
 }) {
-    const __denied = await guardAction('admin-actions', 'updateHospitalBillingInfo');
-    if (__denied) return __denied;
   try {
     const { organizationId } = await requireTenantContext();
     const org = await prisma.organization.update({
@@ -1276,8 +1256,6 @@ export async function generateAdminReport(
   type: string,
   dateRange: { start: string; end: string },
 ) {
-    const __denied = await guardAction('admin-actions', 'generateAdminReport');
-    if (__denied) return __denied;
   try {
     const { db } = await requireTenantContext();
     const startDate = new Date(dateRange.start);

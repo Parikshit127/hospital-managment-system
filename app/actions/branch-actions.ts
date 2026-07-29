@@ -1,7 +1,5 @@
 'use server';
 
-import { guardAction } from '@/app/lib/action-guard';
-
 import { requireTenantContext, requireAnyTenantContext } from '@/backend/tenant';
 
 // ============================================
@@ -46,8 +44,6 @@ export async function listBranches() {
 
 // Create a new branch
 export async function createBranch(data: BranchInput) {
-    const __denied = await guardAction('branch-actions', 'createBranch');
-    if (__denied) return __denied;
     try {
         const { db, session, organizationId } = await requireTenantContext();
 
@@ -103,8 +99,6 @@ export async function createBranch(data: BranchInput) {
 
 // Update an existing branch
 export async function updateBranch(id: string, data: Partial<BranchInput>) {
-    const __denied = await guardAction('branch-actions', 'updateBranch');
-    if (__denied) return __denied;
     try {
         const { db, session, organizationId } = await requireTenantContext();
 
@@ -162,8 +156,6 @@ export async function updateBranch(id: string, data: Partial<BranchInput>) {
 
 // Toggle branch active/inactive
 export async function toggleBranch(id: string) {
-    const __denied = await guardAction('branch-actions', 'toggleBranch');
-    if (__denied) return __denied;
     try {
         const { db, session, organizationId } = await requireTenantContext();
 
@@ -211,8 +203,6 @@ export async function toggleBranch(id: string) {
 
 // Delete a branch (only if not main branch)
 export async function deleteBranch(id: string) {
-    const __denied = await guardAction('branch-actions', 'deleteBranch');
-    if (__denied) return __denied;
     try {
         const { db, session, organizationId } = await requireTenantContext();
 

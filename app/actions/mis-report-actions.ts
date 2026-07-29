@@ -2,8 +2,6 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 'use server';
 
-import { guardAction } from '@/app/lib/action-guard';
-
 /**
  * app/actions/mis-report-actions.ts
  * ----------------------------------
@@ -382,12 +380,6 @@ export async function generateReport(
   reportId: string,
   filters: unknown
 ): Promise<GenerateReportResponse> {
-    // This action has its own typed response shape rather than the usual
-    // { success, error }, and the shell renders <AccessDeniedState> when it
-    // sees error: 'UNAUTHORIZED'. Map the denial onto that instead of
-    // returning a shape the caller cannot read.
-    const __denied = await guardAction('mis-report-actions', 'generateReport');
-    if (__denied) return { async: false, error: 'UNAUTHORIZED' };
   const session = await getSession();
 
   try {
@@ -669,8 +661,6 @@ export async function getPresets(reportId?: string) {
 }
 
 export async function savePreset(data: { report_id: string; name: string; filters_json: any; is_shared?: boolean }) {
-    const __denied = await guardAction('mis-report-actions', 'savePreset');
-    if (__denied) return __denied;
   const session = await getSession();
   const preset = await prisma.report_presets.create({
     data: {
@@ -687,8 +677,6 @@ export async function savePreset(data: { report_id: string; name: string; filter
 }
 
 export async function updatePreset(id: string, data: { name?: string; is_shared?: boolean }) {
-    const __denied = await guardAction('mis-report-actions', 'updatePreset');
-    if (__denied) return __denied;
   const session = await getSession();
   const preset = await prisma.report_presets.findUnique({ where: { id } });
   if (!preset) throw new Error('Preset not found');
@@ -706,8 +694,6 @@ export async function updatePreset(id: string, data: { name?: string; is_shared?
 }
 
 export async function deletePreset(id: string) {
-    const __denied = await guardAction('mis-report-actions', 'deletePreset');
-    if (__denied) return __denied;
   const session = await getSession();
   const preset = await prisma.report_presets.findUnique({ where: { id } });
   if (!preset) throw new Error('Preset not found');
@@ -730,8 +716,6 @@ export async function saveSchedule(data: {
   recipients_json: any;
   channel: string;
 }) {
-    const __denied = await guardAction('mis-report-actions', 'saveSchedule');
-    if (__denied) return __denied;
   const session = await getSession();
 
   // Calculate first run

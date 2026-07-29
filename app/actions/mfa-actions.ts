@@ -1,7 +1,5 @@
 'use server';
 
-import { guardAction } from '@/app/lib/action-guard';
-
 import { requireTenantContext } from '@/backend/tenant';
 import speakeasy from 'speakeasy';
 import QRCode from 'qrcode';
@@ -16,8 +14,6 @@ export async function isMfaRequiredRole(role: string): Promise<boolean> {
 
 // Generate TOTP secret and QR code for setup
 export async function setupMFA(userId: string) {
-    const __denied = await guardAction('mfa-actions', 'setupMFA');
-    if (__denied) return __denied;
     try {
         const { db, organizationId: orgId } = await requireTenantContext();
 
@@ -70,8 +66,6 @@ export async function setupMFA(userId: string) {
 
 // Verify first TOTP code during setup and enable MFA
 export async function enableMFA(userId: string, token: string) {
-    const __denied = await guardAction('mfa-actions', 'enableMFA');
-    if (__denied) return __denied;
     try {
         const { db, organizationId } = await requireTenantContext();
 
@@ -111,8 +105,6 @@ export async function enableMFA(userId: string, token: string) {
 
 // Verify TOTP code during login
 export async function verifyMFA(userId: string, token: string) {
-    const __denied = await guardAction('mfa-actions', 'verifyMFA');
-    if (__denied) return __denied;
     try {
         const { db, organizationId } = await requireTenantContext();
 
@@ -180,8 +172,6 @@ export async function getMFAStatus(userId: string) {
 
 // Disable MFA for a user (admin action)
 export async function disableMFA(userId: string) {
-    const __denied = await guardAction('mfa-actions', 'disableMFA');
-    if (__denied) return __denied;
     try {
         const { db, organizationId } = await requireTenantContext();
 

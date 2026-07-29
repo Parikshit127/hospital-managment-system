@@ -1,7 +1,5 @@
 'use server';
 
-import { guardAction } from '@/app/lib/action-guard';
-
 import { requireTenantContext } from '@/backend/tenant';
 import { revalidatePath } from 'next/cache';
 
@@ -75,8 +73,6 @@ export async function getMyUnreadNotifications() {
 // ========================================
 
 export async function markNotificationRead(id: number) {
-    const __denied = await guardAction('notification-actions', 'markNotificationRead');
-    if (__denied) return __denied;
     try {
         const { db, organizationId } = await requireTenantContext();
         await db.notification.update({
@@ -91,8 +87,6 @@ export async function markNotificationRead(id: number) {
 }
 
 export async function markAllNotificationsRead(userId: string) {
-    const __denied = await guardAction('notification-actions', 'markAllNotificationsRead');
-    if (__denied) return __denied;
     try {
         const { db, organizationId } = await requireTenantContext();
         await db.notification.updateMany({
@@ -118,8 +112,6 @@ export async function createNotification(data: {
     type?: string;
     link?: string;
 }) {
-    const __denied = await guardAction('notification-actions', 'createNotification');
-    if (__denied) return __denied;
     try {
         const { db, organizationId } = await requireTenantContext();
         await db.notification.create({
@@ -177,8 +169,6 @@ export async function notifyUsersByRole(role: string, data: {
 }
 
 export async function deleteNotification(id: number) {
-    const __denied = await guardAction('notification-actions', 'deleteNotification');
-    if (__denied) return __denied;
     try {
         const { db, organizationId } = await requireTenantContext();
         await db.notification.delete({ where: { id, organizationId } });

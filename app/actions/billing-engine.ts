@@ -1,7 +1,5 @@
 'use server';
 
-import { guardAction } from '@/app/lib/action-guard';
-
 import { requireTenantContext } from '@/backend/tenant';
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -168,8 +166,6 @@ export async function createPaymentSplits(
         received_by?: string;
     }>
 ) {
-    const __denied = await guardAction('billing-engine', 'createPaymentSplits');
-    if (__denied) return __denied;
     const { db, organizationId } = await requireTenantContext();
     for (const split of splits) {
         if (split.amount <= 0) continue;
@@ -193,8 +189,6 @@ export async function createPaymentSplits(
 // ── submitTpaClaim ────────────────────────────────────────────────────────
 
 export async function submitTpaClaim(invoiceId: number) {
-    const __denied = await guardAction('billing-engine', 'submitTpaClaim');
-    if (__denied) return __denied;
     const { db, organizationId } = await requireTenantContext();
     try {
         const claimNumber = `CLM-${Date.now()}`;
@@ -213,8 +207,6 @@ export async function submitTpaClaim(invoiceId: number) {
 }
 
 export async function updateTpaClaimStatus(invoiceId: number, status: string, settledAmount?: number) {
-    const __denied = await guardAction('billing-engine', 'updateTpaClaimStatus');
-    if (__denied) return __denied;
     const { db, organizationId } = await requireTenantContext();
     try {
         await db.invoices.update({

@@ -1,7 +1,5 @@
 'use server';
 
-import { guardAction } from '@/app/lib/action-guard';
-
 import { requireTenantContext } from '@/backend/tenant';
 import { revalidatePath } from 'next/cache';
 
@@ -178,8 +176,6 @@ export async function createRole(data: {
     data_scope: string;
     permissions: string[];
 }) {
-    const __denied = await guardAction('role-actions', 'createRole');
-    if (__denied) return __denied;
     try {
         const { db, organizationId, session } = await requireTenantContext();
 
@@ -231,8 +227,6 @@ export async function updateRole(roleId: string, data: {
     permissions?: string[];
     is_active?: boolean;
 }) {
-    const __denied = await guardAction('role-actions', 'updateRole');
-    if (__denied) return __denied;
     try {
         const { db, organizationId, session } = await requireTenantContext();
 
@@ -277,8 +271,6 @@ export async function updateRole(roleId: string, data: {
 }
 
 export async function deleteRole(roleId: string) {
-    const __denied = await guardAction('role-actions', 'deleteRole');
-    if (__denied) return __denied;
     try {
         const { db, organizationId, session } = await requireTenantContext();
 
@@ -313,8 +305,6 @@ export async function deleteRole(roleId: string) {
 }
 
 export async function seedSystemRoles() {
-    const __denied = await guardAction('role-actions', 'seedSystemRoles');
-    if (__denied) return __denied;
     try {
         const { db, organizationId } = await requireTenantContext();
 
@@ -362,8 +352,6 @@ export async function seedSystemRoles() {
 }
 
 export async function cloneRole(sourceRoleId: string, newName: string, newSlug: string) {
-    const __denied = await guardAction('role-actions', 'cloneRole');
-    if (__denied) return __denied;
     try {
         const { db, organizationId, session } = await requireTenantContext();
 

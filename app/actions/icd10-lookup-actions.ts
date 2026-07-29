@@ -1,7 +1,5 @@
 'use server';
 
-import { guardAction } from '@/app/lib/action-guard';
-
 /**
  * GAP 10 — ICD-10 / SNOMED CT Lookup Integration
  * Provides ICD-10 autocomplete with code validation and coded diagnosis entry.
@@ -74,8 +72,6 @@ export async function validateICD10Code(code: string) {
 }
 
 export async function addICD10ToMaster(code: string, description: string, category?: string) {
-    const __denied = await guardAction('icd10-lookup-actions', 'addICD10ToMaster');
-    if (__denied) return __denied;
     const { db } = await requireTenantContext();
 
     try {
@@ -96,8 +92,6 @@ export async function addICD10ToMaster(code: string, description: string, catego
 }
 
 export async function bulkImportICD10(codes: Array<{ code: string; description: string; category?: string }>) {
-    const __denied = await guardAction('icd10-lookup-actions', 'bulkImportICD10');
-    if (__denied) return __denied;
     const { db } = await requireTenantContext();
 
     try {

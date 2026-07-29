@@ -1,7 +1,5 @@
 'use server';
 
-import { guardAction } from '@/app/lib/action-guard';
-
 import { requireTenantContext } from '@/backend/tenant';
 import { prisma } from '@/backend/db';
 import { logAudit } from '@/app/lib/audit';
@@ -196,8 +194,6 @@ export async function addIpdService(data: {
     hsn_sac_code?: string;
     tax_rate?: number;
 }) {
-    const __denied = await guardAction('ipd-master-actions', 'addIpdService');
-    if (__denied) return __denied;
     try {
         const { db, organizationId } = await requireTenantContext();
         const service = await db.ipdServiceMaster.create({
@@ -231,8 +227,6 @@ export async function updateIpdService(id: number, data: {
     tax_rate?: number;
     is_active?: boolean;
 }) {
-    const __denied = await guardAction('ipd-master-actions', 'updateIpdService');
-    if (__denied) return __denied;
     try {
         const { db } = await requireTenantContext();
         const service = await db.ipdServiceMaster.update({ where: { id }, data });
@@ -268,8 +262,6 @@ export async function addTariffRate(data: {
     tariff_category: string;
     rate: number;
 }) {
-    const __denied = await guardAction('ipd-master-actions', 'addTariffRate');
-    if (__denied) return __denied;
     try {
         const { db, organizationId } = await requireTenantContext();
         const rate = await db.ipdTariffRate.create({
@@ -287,8 +279,6 @@ export async function addTariffRate(data: {
 }
 
 export async function updateTariffRate(id: number, data: { rate?: number; is_active?: boolean }) {
-    const __denied = await guardAction('ipd-master-actions', 'updateTariffRate');
-    if (__denied) return __denied;
     try {
         const { db } = await requireTenantContext();
         const rate = await db.ipdTariffRate.update({ where: { id }, data });
@@ -324,8 +314,6 @@ export async function addIpdPackage(data: {
     inclusions: any[];
     exclusions?: string;
 }) {
-    const __denied = await guardAction('ipd-master-actions', 'addIpdPackage');
-    if (__denied) return __denied;
     try {
         const { db, organizationId } = await requireTenantContext();
         const pkg = await db.ipdPackage.create({
@@ -362,8 +350,6 @@ export async function updateIpdPackage(id: number, data: {
     exclusions?: string;
     is_active?: boolean;
 }) {
-    const __denied = await guardAction('ipd-master-actions', 'updateIpdPackage');
-    if (__denied) return __denied;
     try {
         const { db } = await requireTenantContext();
         const pkg = await db.ipdPackage.update({ where: { id }, data });

@@ -1,7 +1,5 @@
 'use server';
 
-import { guardAction } from '@/app/lib/action-guard';
-
 import { z } from 'zod';
 import { requireRoleAndTenant } from '@/backend/tenant';
 import { revalidatePath } from 'next/cache';
@@ -275,8 +273,6 @@ export async function getCommissionServiceOptions(doctorId?: string) {
  * confirms in the UI first, since that is the point of the button.
  */
 export async function applyDoctorConfigToAll(input: ConfigInput) {
-    const __denied = await guardAction('doctor-commission-actions', 'applyDoctorConfigToAll');
-    if (__denied) return __denied;
     try {
         const { db, session, organizationId } = await requireRoleAndTenant(MANAGE_ROLES);
         const data = sanitizeConfig(input);
@@ -315,8 +311,6 @@ export async function applyDoctorConfigToAll(input: ConfigInput) {
 
 /** Create or update a doctor's commission config (upsert by doctor). */
 export async function saveDoctorConfig(doctorId: string, input: ConfigInput) {
-    const __denied = await guardAction('doctor-commission-actions', 'saveDoctorConfig');
-    if (__denied) return __denied;
     try {
         const { db, session, organizationId } = await requireRoleAndTenant(MANAGE_ROLES);
         if (!doctorId) return { success: false, error: 'Doctor is required' };
@@ -350,8 +344,6 @@ export async function saveDoctorConfig(doctorId: string, input: ConfigInput) {
 }
 
 export async function setDoctorConfigActive(doctorId: string, is_active: boolean) {
-    const __denied = await guardAction('doctor-commission-actions', 'setDoctorConfigActive');
-    if (__denied) return __denied;
     try {
         const { db, organizationId } = await requireRoleAndTenant(MANAGE_ROLES);
         await (db as any).doctorCommissionConfig.update({
@@ -374,8 +366,6 @@ export async function setDoctorConfigActive(doctorId: string, is_active: boolean
  * those doctors' (still-accrued) projections.
  */
 export async function setDefaultDoctorCommission(percent: number | string) {
-    const __denied = await guardAction('doctor-commission-actions', 'setDefaultDoctorCommission');
-    if (__denied) return __denied;
     try {
         const { db, organizationId } = await requireRoleAndTenant(MANAGE_ROLES);
         const pct = num(percent);
@@ -501,8 +491,6 @@ export async function createDoctorPayoutStatement(input: {
     period_start: string;
     period_end: string;
 }) {
-    const __denied = await guardAction('doctor-commission-actions', 'createDoctorPayoutStatement');
-    if (__denied) return __denied;
     try {
         const { db, session, organizationId } = await requireRoleAndTenant(MANAGE_ROLES);
         const start = new Date(input.period_start);
@@ -586,8 +574,6 @@ export async function markDoctorStatementPaid(input: {
     paid_amount?: number | string;
     notes?: string;
 }) {
-    const __denied = await guardAction('doctor-commission-actions', 'markDoctorStatementPaid');
-    if (__denied) return __denied;
     try {
         const { db, organizationId } = await requireRoleAndTenant(MANAGE_ROLES);
         const stmt = await (db as any).doctorPayoutStatement.findFirst({
@@ -738,8 +724,6 @@ export type SettleInput = z.input<typeof settleSchema>;
 
 /** Batch-settle selected accrued commission lines into one paid statement. */
 export async function settleDoctorCommissions(input: SettleInput) {
-    const __denied = await guardAction('doctor-commission-actions', 'settleDoctorCommissions');
-    if (__denied) return __denied;
     try {
         const parsed = settleSchema.safeParse(input);
         if (!parsed.success) {
@@ -1110,8 +1094,6 @@ export type DoctorInvoiceInput = z.input<typeof doctorInvoiceSchema>;
  * the invoice documents the work done without claiming any payout.
  */
 export async function createDoctorInvoiceForBills(input: DoctorInvoiceInput) {
-    const __denied = await guardAction('doctor-commission-actions', 'createDoctorInvoiceForBills');
-    if (__denied) return __denied;
     try {
         const parsed = doctorInvoiceSchema.safeParse(input);
         if (!parsed.success) {

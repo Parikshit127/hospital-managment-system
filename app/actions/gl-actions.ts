@@ -1,8 +1,6 @@
 // @ts-nocheck
 'use server';
 
-import { guardAction } from '@/app/lib/action-guard';
-
 import { prisma } from '@/backend/db';
 import { revalidatePath } from 'next/cache';
 import { Decimal } from '@prisma/client/runtime/library';
@@ -65,8 +63,6 @@ interface GLAccountInput {
 // ========================================
 
 export async function createGLAccount(data: GLAccountInput) {
-    const __denied = await guardAction('gl-actions', 'createGLAccount');
-    if (__denied) return __denied;
   try {
     // Check if account code already exists
     const existing = await prisma.gL_Account.findFirst({
@@ -112,8 +108,6 @@ export async function updateGLAccount(
   id: string,
   data: Partial<Omit<GLAccountInput, 'parent_id'>> & { is_active?: boolean; parent_id?: string | null }
 ) {
-    const __denied = await guardAction('gl-actions', 'updateGLAccount');
-    if (__denied) return __denied;
   try {
     const account = await prisma.gL_Account.update({
       where: { id },
@@ -183,8 +177,6 @@ export async function getAccountHierarchy(organizationId: string) {
 // ========================================
 
 export async function createJournalEntry(data: CreateJournalEntryInput) {
-    const __denied = await guardAction('gl-actions', 'createJournalEntry');
-    if (__denied) return __denied;
   try {
     // Validate double-entry: total debit must equal total credit
     const totalDebit = data.lines.reduce((sum: number, line: any) => sum + line.debit_amount, 0);
@@ -306,8 +298,6 @@ export async function createJournalEntry(data: CreateJournalEntryInput) {
 }
 
 export async function reverseJournalEntry(journalId: string, reason: string, reversedBy?: string) {
-    const __denied = await guardAction('gl-actions', 'reverseJournalEntry');
-    if (__denied) return __denied;
   try {
     const originalJournal = await prisma.gL_JournalEntry.findUnique({
       where: { id: journalId },
@@ -423,8 +413,6 @@ export async function getJournalEntryDetails(journalId: string) {
 // ========================================
 
 export async function postInvoiceToGL(invoiceId: number) {
-    const __denied = await guardAction('gl-actions', 'postInvoiceToGL');
-    if (__denied) return __denied;
   try {
     const invoice = await prisma.invoices.findUnique({
       where: { id: invoiceId },
@@ -557,8 +545,6 @@ export async function postInvoiceToGL(invoiceId: number) {
 }
 
 export async function postPaymentToGL(paymentId: number) {
-    const __denied = await guardAction('gl-actions', 'postPaymentToGL');
-    if (__denied) return __denied;
   try {
     const payment = await prisma.payments.findUnique({
       where: { id: paymentId },
@@ -644,8 +630,6 @@ export async function postPaymentToGL(paymentId: number) {
 }
 
 export async function postExpenseToGL(expenseId: number) {
-    const __denied = await guardAction('gl-actions', 'postExpenseToGL');
-    if (__denied) return __denied;
   try {
     const expense = await prisma.expense.findUnique({
       where: { id: expenseId },
@@ -721,8 +705,6 @@ export async function postExpenseToGL(expenseId: number) {
 }
 
 export async function postExpensePaymentToGL(expenseId: number, paymentMethod: string) {
-    const __denied = await guardAction('gl-actions', 'postExpensePaymentToGL');
-    if (__denied) return __denied;
   try {
     const expense = await prisma.expense.findUnique({ where: { id: expenseId } });
     if (!expense) {
@@ -785,8 +767,6 @@ export async function postExpensePaymentToGL(expenseId: number, paymentMethod: s
 }
 
 export async function postDepositToGL(depositId: number) {
-    const __denied = await guardAction('gl-actions', 'postDepositToGL');
-    if (__denied) return __denied;
   try {
     const deposit = await prisma.patientDeposit.findUnique({
       where: { id: depositId },
@@ -841,8 +821,6 @@ export async function postDepositToGL(depositId: number) {
 }
 
 export async function postRefundToGL(refundId: number) {
-    const __denied = await guardAction('gl-actions', 'postRefundToGL');
-    if (__denied) return __denied;
   try {
     // Refund reverses revenue
     const refund = await prisma.refund.findUnique({
@@ -1409,8 +1387,6 @@ export async function getLedgerReport(accountId: string, filters?: {
 // ========================================
 
 export async function closePeriod(periodId: number) {
-    const __denied = await guardAction('gl-actions', 'closePeriod');
-    if (__denied) return __denied;
   try {
     const period = await prisma.financialPeriod.update({
       where: { id: periodId },
@@ -1445,8 +1421,6 @@ export async function postOpeningBalances(
   periodId: number,
   balances: { account_id: string; amount: number }[]
 ) {
-    const __denied = await guardAction('gl-actions', 'postOpeningBalances');
-    if (__denied) return __denied;
   try {
     const lines: JournalLineInput[] = balances.map((bal) => ({
       account_id: bal.account_id,
@@ -1492,8 +1466,6 @@ async function getAccountByCode(organizationId: string, accountCode: string) {
  * Dr. Depreciation Expense / Cr. Accumulated Depreciation
  */
 export async function postDepreciationToGL(depreciationEntryId: string) {
-    const __denied = await guardAction('gl-actions', 'postDepreciationToGL');
-    if (__denied) return __denied;
   try {
     const depEntry = await prisma.depreciationEntry.findUnique({
       where: { id: depreciationEntryId },

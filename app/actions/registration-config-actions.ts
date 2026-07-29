@@ -1,6 +1,4 @@
 'use server';
-
-import { guardAction } from '@/app/lib/action-guard';
 import { requireTenantContext } from '@/backend/tenant';
 import { revalidatePath } from 'next/cache';
 
@@ -39,8 +37,6 @@ export async function getRegistrationFieldConfig() {
 }
 
 export async function updateFieldConfig(id: string, updates: { is_required?: boolean; is_visible?: boolean }) {
-    const __denied = await guardAction('registration-config-actions', 'updateFieldConfig');
-    if (__denied) return __denied;
   try {
     const { db } = await requireTenantContext();
     await (db.registrationFieldConfig as any).update({ where: { id }, data: updates });

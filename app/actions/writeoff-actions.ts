@@ -1,7 +1,5 @@
 "use server";
 
-import { guardAction } from '@/app/lib/action-guard';
-
 /**
  * Write-off Engine (Master Billing Phase 2)
  * ------------------------------------------
@@ -189,8 +187,6 @@ export async function requestWriteoff(input: {
 // ──────────────────────────────────────────────────────────────────────────
 
 export async function approveWriteoff(writeoffId: string, comment?: string) {
-    const __denied = await guardAction('writeoff-actions', 'approveWriteoff');
-    if (__denied) return __denied;
   try {
     const { db, session } = await requireTenantContext();
     const wo = await db.writeoff.findUnique({ where: { id: writeoffId } });
@@ -242,8 +238,6 @@ export async function approveWriteoff(writeoffId: string, comment?: string) {
 }
 
 export async function rejectWriteoff(writeoffId: string, rejection_reason: string) {
-    const __denied = await guardAction('writeoff-actions', 'rejectWriteoff');
-    if (__denied) return __denied;
   try {
     if (!rejection_reason || rejection_reason.trim().length < 3) {
       return { success: false, error: "A rejection reason is required" };
@@ -389,8 +383,6 @@ async function nextJournalNumber(db: any, organizationId: string): Promise<strin
 }
 
 export async function postWriteoff(writeoffId: string) {
-    const __denied = await guardAction('writeoff-actions', 'postWriteoff');
-    if (__denied) return __denied;
   try {
     const { db, organizationId, session } = await requireTenantContext();
     const wo = await db.writeoff.findUnique({ where: { id: writeoffId } });
@@ -506,8 +498,6 @@ export async function postWriteoff(writeoffId: string) {
 // ──────────────────────────────────────────────────────────────────────────
 
 export async function reverseWriteoff(writeoffId: string, reason: string) {
-    const __denied = await guardAction('writeoff-actions', 'reverseWriteoff');
-    if (__denied) return __denied;
   try {
     if (!reason || reason.trim().length < 3) {
       return { success: false, error: "Reversal reason is required" };

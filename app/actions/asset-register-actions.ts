@@ -1,7 +1,5 @@
 'use server';
 
-import { guardAction } from '@/app/lib/action-guard';
-
 /**
  * Tenant-scoped wrappers around the fixed-asset engine.
  *
@@ -107,8 +105,6 @@ export async function addAsset(input: {
     warranty_expiry?: string;
     depreciation_rate?: number;
 }) {
-    const __denied = await guardAction('asset-register-actions', 'addAsset');
-    if (__denied) return __denied;
     try {
         const { organizationId } = await requireTenantContext();
 
@@ -157,8 +153,6 @@ export async function addAsset(input: {
 }
 
 export async function editAsset(id: string, data: any) {
-    const __denied = await guardAction('asset-register-actions', 'editAsset');
-    if (__denied) return __denied;
     try {
         await requireTenantContext();
         const res: any = await updateFixedAsset(id, data);
@@ -176,8 +170,6 @@ export async function moveAsset(input: {
     transfer_date?: string;
     reason?: string;
 }) {
-    const __denied = await guardAction('asset-register-actions', 'moveAsset');
-    if (__denied) return __denied;
     try {
         const { organizationId, session } = await requireTenantContext();
 

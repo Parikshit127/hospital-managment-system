@@ -1,7 +1,5 @@
 "use server";
 
-import { guardAction } from '@/app/lib/action-guard';
-
 import { requireTenantContext } from "@/backend/tenant";
 import { prisma } from "@/backend/db";
 import { logAudit } from "@/app/lib/audit";
@@ -53,8 +51,6 @@ export async function createSurgeryRequest(input: {
   icd_codes?: string[] | null;
   requested_date?: string | Date | null;
 }) {
-    const __denied = await guardAction('ot-actions', 'createSurgeryRequest');
-    if (__denied) return __denied;
   try {
     const { db, organizationId } = await requireTenantContext();
     const request_number = await nextRequestNumber(db, organizationId);
@@ -99,8 +95,6 @@ export async function approveSurgeryRequest(
   requestId: string,
   approverName: string,
 ) {
-    const __denied = await guardAction('ot-actions', 'approveSurgeryRequest');
-    if (__denied) return __denied;
   try {
     const { db } = await requireTenantContext();
     const updated = await db.surgeryRequest.update({
@@ -127,8 +121,6 @@ export async function approveSurgeryRequest(
 }
 
 export async function rejectSurgeryRequest(requestId: string, reason: string) {
-    const __denied = await guardAction('ot-actions', 'rejectSurgeryRequest');
-    if (__denied) return __denied;
   try {
     const { db } = await requireTenantContext();
     const updated = await db.surgeryRequest.update({
@@ -151,8 +143,6 @@ export async function rejectSurgeryRequest(requestId: string, reason: string) {
 }
 
 export async function cancelSurgery(requestId: string, reason: string) {
-    const __denied = await guardAction('ot-actions', 'cancelSurgery');
-    if (__denied) return __denied;
   return rejectSurgeryRequest(requestId, reason);
 }
 
@@ -221,8 +211,6 @@ export async function scheduleSurgery(input: {
     specialty?: string | null;
   }>;
 }) {
-    const __denied = await guardAction('ot-actions', 'scheduleSurgery');
-    if (__denied) return __denied;
   try {
     const { db, organizationId } = await requireTenantContext();
 
@@ -316,8 +304,6 @@ export async function rescheduleSurgery(input: {
   start_time: string;
   end_time: string;
 }) {
-    const __denied = await guardAction('ot-actions', 'rescheduleSurgery');
-    if (__denied) return __denied;
   return scheduleSurgery(input);
 }
 
@@ -403,8 +389,6 @@ export async function savePACClearance(input: {
   conditions?: string | null;
   notes?: string | null;
 }) {
-    const __denied = await guardAction('ot-actions', 'savePACClearance');
-    if (__denied) return __denied;
   try {
     const { db } = await requireTenantContext();
     const cleared = input.fitness_status === "Fit" || input.fitness_status === "ConditionallyFit";
@@ -476,8 +460,6 @@ export async function saveOTChecklist(input: {
   data: Record<string, unknown>;
   signed_by: string;
 }) {
-    const __denied = await guardAction('ot-actions', 'saveOTChecklist');
-    if (__denied) return __denied;
   try {
     const { db } = await requireTenantContext();
     const now = new Date();
@@ -536,8 +518,6 @@ export async function saveOTChecklist(input: {
 // ============================================
 
 export async function recordWheelIn(surgery_request_id: string) {
-    const __denied = await guardAction('ot-actions', 'recordWheelIn');
-    if (__denied) return __denied;
   try {
     const { db } = await requireTenantContext();
     const sched = await db.oTSchedule.update({
@@ -562,8 +542,6 @@ export async function recordWheelIn(surgery_request_id: string) {
 }
 
 export async function recordWheelOut(surgery_request_id: string) {
-    const __denied = await guardAction('ot-actions', 'recordWheelOut');
-    if (__denied) return __denied;
   try {
     const { db } = await requireTenantContext();
     const sched = await db.oTSchedule.update({
@@ -584,8 +562,6 @@ export async function recordWheelOut(surgery_request_id: string) {
 }
 
 export async function startSurgery(surgery_request_id: string) {
-    const __denied = await guardAction('ot-actions', 'startSurgery');
-    if (__denied) return __denied;
   try {
     const { db } = await requireTenantContext();
     const sched = await db.oTSchedule.update({
@@ -610,8 +586,6 @@ export async function startSurgery(surgery_request_id: string) {
 }
 
 export async function completeSurgery(surgery_request_id: string) {
-    const __denied = await guardAction('ot-actions', 'completeSurgery');
-    if (__denied) return __denied;
   try {
     const { db } = await requireTenantContext();
     const sched = await db.oTSchedule.update({
@@ -649,8 +623,6 @@ export async function saveSurgeryNote(input: {
   duration_mins?: number | null;
   created_by: string;
 }) {
-    const __denied = await guardAction('ot-actions', 'saveSurgeryNote');
-    if (__denied) return __denied;
   try {
     const { db } = await requireTenantContext();
     const note = await db.surgeryNote.create({
@@ -682,8 +654,6 @@ export async function addSurgeryConsumable(input: {
   batch_no?: string | null;
   serial_no?: string | null;
 }) {
-    const __denied = await guardAction('ot-actions', 'addSurgeryConsumable');
-    if (__denied) return __denied;
   try {
     const { db } = await requireTenantContext();
     const item = await db.surgeryConsumable.create({
@@ -716,8 +686,6 @@ export async function updateSurgeryBillFees(
     ot_charges: number;
   },
 ) {
-    const __denied = await guardAction('ot-actions', 'updateSurgeryBillFees');
-    if (__denied) return __denied;
   try {
     const { db } = await requireTenantContext();
     const existing = await db.surgeryBilling.findUnique({ where: { surgery_request_id } });
@@ -761,8 +729,6 @@ export async function updateSurgeryBillFees(
 }
 
 export async function generateSurgeryBill(surgery_request_id: string) {
-    const __denied = await guardAction('ot-actions', 'generateSurgeryBill');
-    if (__denied) return __denied;
   try {
     const { db } = await requireTenantContext();
     const req = await db.surgeryRequest.findUnique({
@@ -847,8 +813,6 @@ export async function generateSurgeryBill(surgery_request_id: string) {
  * Idempotent on the SurgeryBilling.posted_to_ipd flag — won't double-post.
  */
 export async function postSurgeryChargesToIPD(surgery_request_id: string) {
-    const __denied = await guardAction('ot-actions', 'postSurgeryChargesToIPD');
-    if (__denied) return __denied;
   try {
     const { db } = await requireTenantContext();
     const req = await db.surgeryRequest.findUnique({
@@ -1058,8 +1022,6 @@ export async function createOTRoom(input: {
   wing?: string | null;
   equipment?: string[] | null;
 }) {
-    const __denied = await guardAction('ot-actions', 'createOTRoom');
-    if (__denied) return __denied;
   try {
     const { db, organizationId } = await requireTenantContext();
     const room = await db.oTRoom.create({
@@ -1090,8 +1052,6 @@ export async function updateOTRoom(
     is_active: boolean;
   }>,
 ) {
-    const __denied = await guardAction('ot-actions', 'updateOTRoom');
-    if (__denied) return __denied;
   try {
     const { db } = await requireTenantContext();
     const room = await db.oTRoom.update({
@@ -1131,8 +1091,6 @@ export async function createSurgeryMaster(input: {
   requires_icu?: boolean;
   billing_components?: Record<string, number> | null;
 }) {
-    const __denied = await guardAction('ot-actions', 'createSurgeryMaster');
-    if (__denied) return __denied;
   try {
     const { db, organizationId } = await requireTenantContext();
     const master = await db.surgeryMaster.create({

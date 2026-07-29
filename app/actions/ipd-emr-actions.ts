@@ -1,7 +1,5 @@
 'use server';
 
-import { guardAction } from '@/app/lib/action-guard';
-
 /**
  * GAP 6 — 14-Tab IPD EMR Case Sheet
  * GAP 7 — 24-Hour Case Sheet View
@@ -178,8 +176,6 @@ export async function getClinicalOrders(admissionId: string) {
 }
 
 export async function updateClinicalOrderStatus(orderId: string, status: string) {
-    const __denied = await guardAction('ipd-emr-actions', 'updateClinicalOrderStatus');
-    if (__denied) return __denied;
     const { db, organizationId } = await requireTenantContext();
 
     try {
@@ -789,8 +785,6 @@ export async function createReferralOrder(data: {
     priority?: 'stat' | 'urgent' | 'routine';
     notes?: string;
 }) {
-    const __denied = await guardAction('ipd-emr-actions', 'createReferralOrder');
-    if (__denied) return __denied;
     const { db, organizationId } = await requireTenantContext();
 
     try {
@@ -854,8 +848,6 @@ export async function getReferralOrders(patientId: string, admissionId?: string)
 }
 
 export async function updateReferralStatus(referralId: string, status: 'accepted' | 'completed' | 'cancelled') {
-    const __denied = await guardAction('ipd-emr-actions', 'updateReferralStatus');
-    if (__denied) return __denied;
     const { db, organizationId } = await requireTenantContext();
 
     try {

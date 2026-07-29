@@ -1,7 +1,5 @@
 'use server';
 
-import { guardAction } from '@/app/lib/action-guard';
-
 import { postExpenseToGL, postExpensePaymentToGL } from './gl-actions';
 import { syncExpenseToBudget } from './budget-actions';
 import { sendExpenseApprovedEmail, sendExpenseRejectedEmail, sendExpensePaidEmail } from '@/backend/email';
@@ -43,8 +41,6 @@ export async function getExpenseCategories() {
 }
 
 export async function addExpenseCategory(data: { name: string; code: string; parent_id?: number }) {
-    const __denied = await guardAction('expense-actions', 'addExpenseCategory');
-    if (__denied) return __denied;
     try {
         const { db } = await requireTenantContext();
         const category = await db.expenseCategory.create({
@@ -61,8 +57,6 @@ export async function addExpenseCategory(data: { name: string; code: string; par
 }
 
 export async function updateExpenseCategory(id: number, data: { name?: string; code?: string; is_active?: boolean }) {
-    const __denied = await guardAction('expense-actions', 'updateExpenseCategory');
-    if (__denied) return __denied;
     try {
         const { db } = await requireTenantContext();
         const category = await db.expenseCategory.update({
@@ -112,8 +106,6 @@ export async function addVendor(data: {
     bank_ifsc?: string;
     address?: string;
 }) {
-    const __denied = await guardAction('expense-actions', 'addVendor');
-    if (__denied) return __denied;
     try {
         const { db } = await requireTenantContext();
         const vendor = await db.vendor.create({
@@ -150,8 +142,6 @@ export async function updateVendor(id: number, data: {
     address?: string;
     is_active?: boolean;
 }) {
-    const __denied = await guardAction('expense-actions', 'updateVendor');
-    if (__denied) return __denied;
     try {
         const { db } = await requireTenantContext();
         const vendor = await db.vendor.update({ where: { id }, data });
@@ -212,8 +202,6 @@ export async function createExpense(data: {
     notes?: string;
     receipt_key?: string;
 }) {
-    const __denied = await guardAction('expense-actions', 'createExpense');
-    if (__denied) return __denied;
     try {
         const { db, organizationId } = await requireTenantContext();
         const taxAmount = data.tax_amount || 0;
@@ -255,8 +243,6 @@ export async function createExpense(data: {
 }
 
 export async function approveExpense(id: number) {
-    const __denied = await guardAction('expense-actions', 'approveExpense');
-    if (__denied) return __denied;
     try {
         const { db, session, organizationId } = await requireTenantContext();
         const expense = await db.expense.update({
@@ -309,8 +295,6 @@ export async function markExpensePaid(id: number, paymentData: {
     payment_date?: string;
     reference_no?: string;
 }) {
-    const __denied = await guardAction('expense-actions', 'markExpensePaid');
-    if (__denied) return __denied;
     try {
         const { db, organizationId } = await requireTenantContext();
         const expense = await db.expense.update({
@@ -359,8 +343,6 @@ export async function markExpensePaid(id: number, paymentData: {
 }
 
 export async function rejectExpense(id: number, reason: string) {
-    const __denied = await guardAction('expense-actions', 'rejectExpense');
-    if (__denied) return __denied;
     try {
         const { db, session, organizationId } = await requireTenantContext();
         const expense = await db.expense.update({

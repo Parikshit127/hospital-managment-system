@@ -1,8 +1,6 @@
 // @ts-nocheck
 'use server';
 
-import { guardAction } from '@/app/lib/action-guard';
-
 import { prisma } from '@/backend/db';
 import { revalidatePath } from 'next/cache';
 
@@ -11,8 +9,6 @@ import { revalidatePath } from 'next/cache';
 // ========================================
 
 export async function syncInvoiceToGSTRegister(invoiceId: number) {
-    const __denied = await guardAction('gst-compliance-actions', 'syncInvoiceToGSTRegister');
-    if (__denied) return __denied;
   try {
     const invoice = await prisma.invoices.findUnique({
       where: { id: invoiceId },
@@ -81,8 +77,6 @@ export async function syncInvoiceToGSTRegister(invoiceId: number) {
 }
 
 export async function syncExpenseToGSTRegister(expenseId: number) {
-    const __denied = await guardAction('gst-compliance-actions', 'syncExpenseToGSTRegister');
-    if (__denied) return __denied;
   try {
     const expense = await prisma.expense.findUnique({
       where: { id: expenseId },
@@ -197,8 +191,6 @@ export async function generateGSTR1(
     return_period_end: Date;
   }
 ) {
-    const __denied = await guardAction('gst-compliance-actions', 'generateGSTR1');
-    if (__denied) return __denied;
   try {
     const outwardSupplies = await prisma.gST_Invoice_Register.findMany({
       where: {
@@ -344,8 +336,6 @@ export async function generateGSTR3B(
     return_period_end: Date;
   }
 ) {
-    const __denied = await guardAction('gst-compliance-actions', 'generateGSTR3B');
-    if (__denied) return __denied;
   try {
     // Outward supplies
     const outward = await prisma.gST_Invoice_Register.findMany({
@@ -511,8 +501,6 @@ export async function saveReturnFiling(data: {
   return_period_end: Date;
   json_data: any;
 }) {
-    const __denied = await guardAction('gst-compliance-actions', 'saveReturnFiling');
-    if (__denied) return __denied;
   try {
     const filing = await prisma.gST_Return_Filing.upsert({
       where: {

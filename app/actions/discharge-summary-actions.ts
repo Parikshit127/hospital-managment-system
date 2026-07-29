@@ -1,7 +1,5 @@
 'use server';
 
-import { guardAction } from '@/app/lib/action-guard';
-
 import { requireTenantContext, requireRoleAndTenant } from '@/backend/tenant';
 import OpenAI from 'openai';
 import {
@@ -107,8 +105,6 @@ export async function saveDischargeSummary(
     input: Partial<DischargeSummaryData>,
     dischargeDateTime?: string,
 ) {
-    const __denied = await guardAction('discharge-summary-actions', 'saveDischargeSummary');
-    if (__denied) return __denied;
     try {
         const { db, organizationId, session } = await requireRoleAndTenant(AUTHORS);
         const admission = await loadAdmission(db, admissionId);
@@ -213,8 +209,6 @@ export async function saveDischargeSummary(
 // Optional AI assist — drafts the narrative sections from the patient's clinical data.
 // Returns a partial DischargeSummaryData the doctor reviews/edits before saving.
 export async function generateDischargeSummaryDraft(admissionId: string) {
-    const __denied = await guardAction('discharge-summary-actions', 'generateDischargeSummaryDraft');
-    if (__denied) return __denied;
     try {
         const { db, organizationId } = await requireRoleAndTenant(AUTHORS);
         if (!process.env.OPENAI_API_KEY) {

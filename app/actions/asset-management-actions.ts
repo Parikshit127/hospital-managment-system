@@ -1,8 +1,6 @@
 // @ts-nocheck
 'use server';
 
-import { guardAction } from '@/app/lib/action-guard';
-
 import { prisma } from '@/backend/db';
 import { postDepreciationToGL } from './gl-actions';
 
@@ -22,8 +20,6 @@ export async function createAssetCategory(data: {
   gl_depreciation_account_id?: string;
   gl_expense_account_id?: string;
 }) {
-    const __denied = await guardAction('asset-management-actions', 'createAssetCategory');
-    if (__denied) return __denied;
   try {
     const category = await prisma.assetCategory.create({
       data: {
@@ -61,8 +57,6 @@ export async function updateAssetCategory(
     is_active?: boolean;
   }
 ) {
-    const __denied = await guardAction('asset-management-actions', 'updateAssetCategory');
-    if (__denied) return __denied;
   try {
     const category = await prisma.assetCategory.update({
       where: { id },
@@ -124,8 +118,6 @@ export async function createFixedAsset(data: {
   is_capitalized?: boolean;
   capitalization_date?: Date;
 }) {
-    const __denied = await guardAction('asset-management-actions', 'createFixedAsset');
-    if (__denied) return __denied;
   try {
     const salvageValue = data.salvage_value || 0;
     const bookValue = data.acquisition_cost - salvageValue;
@@ -182,8 +174,6 @@ export async function updateFixedAsset(
     model_number?: string;
   }
 ) {
-    const __denied = await guardAction('asset-management-actions', 'updateFixedAsset');
-    if (__denied) return __denied;
   try {
     const asset = await prisma.fixedAsset.update({
       where: { id },
@@ -369,8 +359,6 @@ export async function calculateDepreciation(assetId: string, period: string) {
  * Post monthly depreciation for all active assets
  */
 export async function postMonthlyDepreciation(organizationId: string, period: string) {
-    const __denied = await guardAction('asset-management-actions', 'postMonthlyDepreciation');
-    if (__denied) return __denied;
   try {
     const assets = await prisma.fixedAsset.findMany({
       where: {
@@ -502,8 +490,6 @@ export async function getDepreciationSchedule(assetId: string) {
 }
 
 export async function reverseDepreciation(entryId: string, reason: string) {
-    const __denied = await guardAction('asset-management-actions', 'reverseDepreciation');
-    if (__denied) return __denied;
   try {
     const entry = await prisma.depreciationEntry.findUnique({
       where: { id: entryId },
@@ -561,8 +547,6 @@ export async function transferAsset(data: {
   transfer_reason?: string;
   approved_by?: string;
 }) {
-    const __denied = await guardAction('asset-management-actions', 'transferAsset');
-    if (__denied) return __denied;
   try {
     const transfer = await prisma.assetTransfer.create({
       data,
@@ -595,8 +579,6 @@ export async function recordMaintenance(data: {
   next_due_date?: Date;
   performed_by?: string;
 }) {
-    const __denied = await guardAction('asset-management-actions', 'recordMaintenance');
-    if (__denied) return __denied;
   try {
     const maintenance = await prisma.assetMaintenance.create({
       data,

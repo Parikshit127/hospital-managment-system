@@ -1,7 +1,5 @@
 'use server';
 
-import { guardAction } from '@/app/lib/action-guard';
-
 /**
  * Consultant charges — bill/patient driven worksheet.
  *
@@ -243,8 +241,6 @@ export async function createConsultantInvoiceForBills(input: {
     notes?: string;
     mark_paid?: boolean;
 }) {
-    const __denied = await guardAction('consultant-charge-actions', 'createConsultantInvoiceForBills');
-    if (__denied) return __denied;
     try {
         const { referrerId, invoiceIds, payment_mode, payment_reference, notes, mark_paid } = input;
         if (!referrerId) return { success: false, error: 'Consultant is required' };

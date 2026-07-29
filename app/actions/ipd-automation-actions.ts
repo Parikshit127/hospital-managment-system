@@ -1,7 +1,5 @@
 'use server';
 
-import { guardAction } from '@/app/lib/action-guard';
-
 import { requireTenantContext } from '@/backend/tenant';
 import { accrueIPDDailyCharges } from '@/app/actions/ipd-actions';
 
@@ -254,8 +252,6 @@ export async function getBedCleaningSLAStatus() {
 }
 
 export async function startBedCleaning(bedId: string) {
-    const __denied = await guardAction('ipd-automation-actions', 'startBedCleaning');
-    if (__denied) return __denied;
     try {
         const { db } = await requireTenantContext();
         await db.beds.update({
@@ -269,8 +265,6 @@ export async function startBedCleaning(bedId: string) {
 }
 
 export async function completeBedCleaning(bedId: string) {
-    const __denied = await guardAction('ipd-automation-actions', 'completeBedCleaning');
-    if (__denied) return __denied;
     try {
         const { db } = await requireTenantContext();
         await db.beds.update({
@@ -371,8 +365,6 @@ export async function autoReleaseStaleCleaningBeds(ctx?: { db: any; organization
 }
 
 export async function escalateBedCleaningSLA() {
-    const __denied = await guardAction('ipd-automation-actions', 'escalateBedCleaningSLA');
-    if (__denied) return __denied;
     try {
         const { db, organizationId } = await requireTenantContext();
 

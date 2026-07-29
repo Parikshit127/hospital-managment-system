@@ -1,7 +1,5 @@
 'use server';
 
-import { guardAction } from '@/app/lib/action-guard';
-
 import { getTenantPrisma } from '@/backend/db';
 import { getPatientSession } from '@/app/patient/login/actions';
 import { revalidatePath } from 'next/cache';
@@ -95,8 +93,6 @@ export async function getPatientRecords() {
 }
 
 export async function submitPatientFeedback(rating: number, comments: string) {
-    const __denied = await guardAction('patient-actions', 'submitPatientFeedback');
-    if (__denied) return __denied;
     try {
         const session = await getPatientSession();
         if (!session) return { success: false, error: 'Not authenticated' };
@@ -156,8 +152,6 @@ export async function getPrivacySettings() {
 }
 
 export async function updateConsent(consentType: string, granted: boolean) {
-    const __denied = await guardAction('patient-actions', 'updateConsent');
-    if (__denied) return __denied;
     try {
         const session = await getPatientSession();
         if (!session) return { success: false, error: 'Not authenticated' };
@@ -260,8 +254,6 @@ export async function exportMyData() {
 }
 
 export async function generateLabReportUrl(barcode: string) {
-    const __denied = await guardAction('patient-actions', 'generateLabReportUrl');
-    if (__denied) return __denied;
     try {
         const session = await getPatientSession();
         if (!session) return { success: false, error: 'Not authenticated' };
@@ -347,8 +339,6 @@ export async function saveExternalRecord(data: {
     file_name?: string;
     file_type?: string;
 }) {
-    const __denied = await guardAction('patient-actions', 'saveExternalRecord');
-    if (__denied) return __denied;
     try {
         const session = await getPatientSession();
         if (!session) return { success: false, error: 'Not authenticated' };
@@ -380,8 +370,6 @@ export async function saveExternalRecord(data: {
 }
 
 export async function deleteExternalRecord(id: number) {
-    const __denied = await guardAction('patient-actions', 'deleteExternalRecord');
-    if (__denied) return __denied;
     try {
         const session = await getPatientSession();
         if (!session) return { success: false, error: 'Not authenticated' };

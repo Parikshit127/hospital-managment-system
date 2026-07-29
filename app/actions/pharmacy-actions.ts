@@ -1,7 +1,5 @@
 'use server';
 
-import { guardAction } from '@/app/lib/action-guard';
-
 import { requireTenantContext } from '@/backend/tenant';
 import { getTenantPrisma } from '@/backend/db';
 import { buildWalkinNote, parseWalkinNote } from '@/app/lib/walkin-note';
@@ -268,8 +266,6 @@ export async function updateBatchDetails(data: {
     mrp?: number;
     cost_price?: number;
 }) {
-    const __denied = await guardAction('pharmacy-actions', 'updateBatchDetails');
-    if (__denied) return __denied;
     try {
         const { db, organizationId } = await requireTenantContext();
 
@@ -373,8 +369,6 @@ export async function generateInvoice(
     items: any[],
     optionsOrWalkInName?: string | { walkInName?: string; walkInContact?: string; billDateTime?: string; doctorId?: string; doctorName?: string; paymentMethod?: string; discount?: number; discountPct?: number }
 ) {
-    const __denied = await guardAction('pharmacy-actions', 'generateInvoice');
-    if (__denied) return __denied;
     try {
         const { db, organizationId, session } = await requireTenantContext();
         const rawOptions = typeof optionsOrWalkInName === 'string'
@@ -787,8 +781,6 @@ export async function generateInvoice(
 }
 
 export async function processDoctorOrder(orderId: number, paymentMethod: string = 'Cash') {
-    const __denied = await guardAction('pharmacy-actions', 'processDoctorOrder');
-    if (__denied) return __denied;
     try {
         const { db } = await requireTenantContext();
 
@@ -956,8 +948,6 @@ export async function getPharmacyQueue() {
 }
 
 export async function markOrderAsPaid(orderId: number, paymentMethod: string = 'Cash') {
-    const __denied = await guardAction('pharmacy-actions', 'markOrderAsPaid');
-    if (__denied) return __denied;
     try {
         const { db, organizationId, session } = await requireTenantContext();
 
@@ -1032,8 +1022,6 @@ export async function addInventoryBatch(data: {
     // product), not on the batch — so this writes through to the medicine.
     hsn_sac_code?: string
 }) {
-    const __denied = await guardAction('pharmacy-actions', 'addInventoryBatch');
-    if (__denied) return __denied;
     try {
         const { db, organizationId } = await requireTenantContext();
 
@@ -1866,8 +1854,6 @@ export async function createSupplier(data: {
     drug_license_expiry?: string;
     pharmacy_payment_terms?: number;
 }) {
-    const __denied = await guardAction('pharmacy-actions', 'createSupplier');
-    if (__denied) return __denied;
     try {
         const { db, organizationId } = await requireTenantContext();
         // Generate vendor_code from name
@@ -1908,8 +1894,6 @@ export async function updateSupplier(id: number, data: {
     pharmacy_payment_terms?: number;
     is_active?: boolean;
 }) {
-    const __denied = await guardAction('pharmacy-actions', 'updateSupplier');
-    if (__denied) return __denied;
     try {
         const { db } = await requireTenantContext();
         const updateData: any = {};
@@ -1952,8 +1936,6 @@ export async function createPurchaseOrder(
     }[],
     options?: { vendor_id?: number; notes?: string; submit?: boolean }
 ) {
-    const __denied = await guardAction('pharmacy-actions', 'createPurchaseOrder');
-    if (__denied) return __denied;
     try {
         const { db, organizationId } = await requireTenantContext();
 
@@ -2142,8 +2124,6 @@ export async function updatePurchaseOrder(
     }[],
     options?: { vendor_id?: number; notes?: string }
 ) {
-    const __denied = await guardAction('pharmacy-actions', 'updatePurchaseOrder');
-    if (__denied) return __denied;
     try {
         const { db, organizationId } = await requireTenantContext();
 
@@ -2244,8 +2224,6 @@ export async function updatePurchaseOrder(
 }
 
 export async function submitPurchaseOrder(poId: number) {
-    const __denied = await guardAction('pharmacy-actions', 'submitPurchaseOrder');
-    if (__denied) return __denied;
     try {
         const { db } = await requireTenantContext();
         const po = await db.purchaseOrder.findUnique({ where: { id: poId } });
@@ -2277,8 +2255,6 @@ export async function submitPurchaseOrder(poId: number) {
 }
 
 export async function approvePurchaseOrder(poId: number, userId: string, approve: boolean, reason?: string) {
-    const __denied = await guardAction('pharmacy-actions', 'approvePurchaseOrder');
-    if (__denied) return __denied;
     try {
         const { db } = await requireTenantContext();
         const po = await db.purchaseOrder.findUnique({ where: { id: poId } });
@@ -2502,8 +2478,6 @@ export async function processReturn(data: {
     po_id?: number,         // for supplier returns
     purchase_invoice_id?: number, // for supplier returns
 }) {
-    const __denied = await guardAction('pharmacy-actions', 'processReturn');
-    if (__denied) return __denied;
     try {
         const { db, organizationId, session } = await requireTenantContext();
 
@@ -2973,8 +2947,6 @@ export async function getPharmacyOrderDetails(orderId: number) {
 // ========================================
 
 export async function verifyPharmacyOrder(orderId: number, notes?: string) {
-    const __denied = await guardAction('pharmacy-actions', 'verifyPharmacyOrder');
-    if (__denied) return __denied;
     try {
         const { db } = await requireTenantContext();
 
@@ -3041,8 +3013,6 @@ export async function addNarcoticEntry(data: {
     transaction_type: string;
     notes?: string;
 }) {
-    const __denied = await guardAction('pharmacy-actions', 'addNarcoticEntry');
-    if (__denied) return __denied;
     try {
         const { db, organizationId } = await requireTenantContext();
 
@@ -3090,8 +3060,6 @@ export async function addNarcoticEntry(data: {
 }
 
 export async function generatePullSheet(wardId?: string) {
-    const __denied = await guardAction('pharmacy-actions', 'generatePullSheet');
-    if (__denied) return __denied;
     try {
         const { db, organizationId } = await requireTenantContext();
 
@@ -3686,8 +3654,6 @@ export async function createPurchaseInvoice(data: {
         mrp?: number;
     }>;
 }) {
-    const __denied = await guardAction('pharmacy-actions', 'createPurchaseInvoice');
-    if (__denied) return __denied;
     try {
         const { db, organizationId } = await requireTenantContext();
 
@@ -3865,8 +3831,6 @@ function parsePoExpiry(raw: any): Date | null {
 }
 
 export async function postPurchaseInvoice(invoiceId: number) {
-    const __denied = await guardAction('pharmacy-actions', 'postPurchaseInvoice');
-    if (__denied) return __denied;
     try {
         const { db, organizationId } = await requireTenantContext();
 
@@ -4020,8 +3984,6 @@ export async function recordSupplierPayment(data: {
     payment_method: string;
     payment_reference?: string;
 }) {
-    const __denied = await guardAction('pharmacy-actions', 'recordSupplierPayment');
-    if (__denied) return __denied;
     try {
         const { db } = await requireTenantContext();
 
@@ -4115,8 +4077,6 @@ export async function adjustStock(data: {
     target_stock_qty?: number; // direct target stock count (e.g. 50)
     reason: string;
 }) {
-    const __denied = await guardAction('pharmacy-actions', 'adjustStock');
-    if (__denied) return __denied;
     try {
         const { db, organizationId, session } = await requireTenantContext();
 
