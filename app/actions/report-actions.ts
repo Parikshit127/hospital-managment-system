@@ -1457,15 +1457,22 @@ type ReconCategory = {
     net: number;
     approved?: number;
     collection: number;
+    // TPA only: what the PATIENT paid (co-pay/deposit) on a TPA bill, shown as its
+    // own column. Kept separate from `collection` (= TPA settled) so the report
+    // still reconciles against the hospital's workbook while nothing is hidden.
+    patient_paid?: number;
     outstanding: number;
 };
 
 function emptyReconAccumulator() {
-    return { patients: new Set<string>(), gross: 0, discount: 0, net: 0, approved: 0, collection: 0 };
+    return { patients: new Set<string>(), gross: 0, discount: 0, net: 0, approved: 0, collection: 0, patient_paid: 0 };
 }
 type ReconAccumulator = ReturnType<typeof emptyReconAccumulator>;
 
 function finalizeReconCategory(acc: ReconAccumulator, isTpa: boolean): ReconCategory {
+    // TPA outstanding stays what the INSURER still owes (approved − settled); the
+    // patient co-pay is separate money and is reported in its own column, so it
+    // must not reduce the TPA outstanding here.
     const outstanding = isTpa ? acc.approved - acc.collection : acc.net - acc.collection;
     return {
         patients: acc.patients.size,
@@ -1474,6 +1481,7 @@ function finalizeReconCategory(acc: ReconAccumulator, isTpa: boolean): ReconCate
         net: round2(acc.net),
         ...(isTpa ? { approved: round2(acc.approved) } : {}),
         collection: round2(acc.collection),
+        ...(isTpa ? { patient_paid: round2(acc.patient_paid) } : {}),
         outstanding: round2(outstanding),
     };
 }
@@ -1486,6 +1494,7 @@ function sumReconCategory(a: ReconCategory, b: ReconCategory, isTpa: boolean): R
         net: round2(a.net + b.net),
         ...(isTpa ? { approved: round2((a.approved || 0) + (b.approved || 0)) } : {}),
         collection: round2(a.collection + b.collection),
+        ...(isTpa ? { patient_paid: round2((a.patient_paid || 0) + (b.patient_paid || 0)) } : {}),
         outstanding: round2(a.outstanding + b.outstanding),
     };
 }
@@ -1619,6 +1628,8 @@ export async function getDoctorRevenueRecon(filters: { from: string; to: string;
             if (category === 'ipd_tpa') {
                 acc.approved += Number(inv.tpa_approved_amount || 0);
                 acc.collection += Number(inv.tpa_settled_amount || 0);
+                // Co-pay / deposit the patient paid on this TPA bill — its own column.
+                acc.patient_paid += Number(inv.paid_amount || 0);
             } else {
                 acc.collection += Number(inv.paid_amount || 0);
             }
@@ -1659,12 +1670,25 @@ export async function getDoctorRevenueRecon(filters: { from: string; to: string;
 
         const billedRev = round2(totalRow.ipd_tpa.net + totalRow.ipd_cash.net + totalRow.opd_cash.net);
 
+        // Flag (don't include) IPD bills that were discharged in the window but never
+        // finalised — they're silently excluded, so staff should know how many are
+        // sitting in Draft and being left out of the revenue figures above.
+        const excludedDraftIpd = await db.invoices.count({
+            where: {
+                invoice_type: 'IPD',
+                is_archived: false,
+                status: { notIn: ['Final', 'Cancelled'] },
+                admission: { discharge_date: reportDateRange },
+            },
+        });
+
         return {
             success: true,
             data: {
                 rows: [spotlightRow, axtenRow, totalRow],
                 snapshot: [snapshot(spotlightRow), snapshot(axtenRow), snapshot({ ...totalRow, label: 'Both' } as any)],
                 billedRev,
+                excludedDraftIpd,
             },
         };
     } catch (error: any) {

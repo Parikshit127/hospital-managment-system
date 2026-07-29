@@ -20,7 +20,7 @@ import { ArrowLeft, FileSpreadsheet, Loader2, Printer, Stethoscope } from 'lucid
 const fmt = (n: number) => Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 });
 const fmtCur = (n: number) => '₹' + fmt(n);
 
-type Category = { patients: number; gross: number; discount: number; net: number; approved?: number; collection: number; outstanding: number };
+type Category = { patients: number; gross: number; discount: number; net: number; approved?: number; collection: number; patient_paid?: number; outstanding: number };
 type Row = { label: string; doctor_id: string | null; ipd_tpa: Category; ipd_cash: Category; opd_cash: Category };
 type SnapshotCell = { net: number; collection: number; credit: number };
 type SnapshotRow = { label: string; ipd_tpa: SnapshotCell; ipd_cash: SnapshotCell; opd_cash: SnapshotCell; total: SnapshotCell };
@@ -40,6 +40,7 @@ export function DoctorReconContent({ shell = 'app' }: { shell?: 'app' | 'admin' 
     const [rows, setRows] = useState<Row[] | null>(null);
     const [snapshot, setSnapshot] = useState<SnapshotRow[] | null>(null);
     const [billedRev, setBilledRev] = useState(0);
+    const [excludedDraftIpd, setExcludedDraftIpd] = useState(0);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -62,6 +63,7 @@ export function DoctorReconContent({ shell = 'app' }: { shell?: 'app' | 'admin' 
             setRows(res.data.rows as any);
             setSnapshot(res.data.snapshot as any);
             setBilledRev(res.data.billedRev);
+            setExcludedDraftIpd((res.data as any).excludedDraftIpd ?? 0);
         } else {
             setRows(null);
             setSnapshot(null);
@@ -78,13 +80,13 @@ export function DoctorReconContent({ shell = 'app' }: { shell?: 'app' | 'admin' 
         const XLSX = xlsxModule.default ?? xlsxModule;
 
         const aoa: any[][] = [];
-        aoa.push(['', 'IPD TPA', '', '', '', '', '', '', 'IPD CASH', '', '', '', '', '', 'OPD', '', '', '', '', '']);
-        aoa.push(['', 'No. of Patients', 'Gross Rev.', 'Discount', 'IPD TPA Net Rev', 'Approved Amount', 'Collection', 'Outstanding',
+        aoa.push(['', 'IPD TPA', '', '', '', '', '', '', '', 'IPD CASH', '', '', '', '', '', 'OPD', '', '', '', '', '']);
+        aoa.push(['', 'No. of Patients', 'Gross Rev.', 'Discount', 'IPD TPA Net Rev', 'Approved Amount', 'TPA Settled', 'Patient Paid', 'Outstanding',
             'No. of Patients', 'Gross Rev.', 'Discount', 'IPD CASH Net Rev', 'Collection', 'Outstanding',
             'No. of Patients', 'OPD Cash Gross Rev', 'Discount', 'OPD Cash Net Rev', 'Collection', 'Outstanding']);
         const rowLine = (r: Row) => [
             r.label,
-            r.ipd_tpa.patients, r.ipd_tpa.gross, r.ipd_tpa.discount, r.ipd_tpa.net, r.ipd_tpa.approved, r.ipd_tpa.collection, r.ipd_tpa.outstanding,
+            r.ipd_tpa.patients, r.ipd_tpa.gross, r.ipd_tpa.discount, r.ipd_tpa.net, r.ipd_tpa.approved, r.ipd_tpa.collection, r.ipd_tpa.patient_paid ?? 0, r.ipd_tpa.outstanding,
             r.ipd_cash.patients, r.ipd_cash.gross, r.ipd_cash.discount, r.ipd_cash.net, r.ipd_cash.collection, r.ipd_cash.outstanding,
             r.opd_cash.patients, r.opd_cash.gross, r.opd_cash.discount, r.opd_cash.net, r.opd_cash.collection, r.opd_cash.outstanding,
         ];
@@ -163,6 +165,15 @@ export function DoctorReconContent({ shell = 'app' }: { shell?: 'app' | 'admin' 
 
                 {error && <div className="mb-4 rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm font-bold text-red-600">{error}</div>}
 
+                {/* Draft bills discharged in the period are excluded from the figures —
+                    surface the count so staff know to finalise them, not lose them. */}
+                {rows && excludedDraftIpd > 0 && (
+                    <div className="mb-4 rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800">
+                        <b>{excludedDraftIpd}</b> IPD bill{excludedDraftIpd === 1 ? '' : 's'} discharged in this period {excludedDraftIpd === 1 ? 'is' : 'are'} still
+                        in <b>Draft</b> and excluded from the figures below. Finalise them to have their revenue counted.
+                    </div>
+                )}
+
                 {loading && !rows ? (
                     <div className="p-10 text-center text-gray-400"><Loader2 className="h-6 w-6 animate-spin inline" /> Loading…</div>
                 ) : !spotlight || !axten || !total ? (
@@ -174,7 +185,7 @@ export function DoctorReconContent({ shell = 'app' }: { shell?: 'app' | 'admin' 
                                 <thead>
                                     <tr className="text-center">
                                         <th className="border border-gray-200 p-1.5 bg-gray-50"></th>
-                                        <th className="border border-gray-200 p-1.5 bg-indigo-50 font-black" colSpan={7}>IPD TPA</th>
+                                        <th className="border border-gray-200 p-1.5 bg-indigo-50 font-black" colSpan={8}>IPD TPA</th>
                                         <th className="border border-gray-200 p-1.5 bg-emerald-50 font-black" colSpan={6}>IPD CASH</th>
                                         <th className="border border-gray-200 p-1.5 bg-amber-50 font-black" colSpan={6}>OPD</th>
                                     </tr>
@@ -185,7 +196,8 @@ export function DoctorReconContent({ shell = 'app' }: { shell?: 'app' | 'admin' 
                                         <th className="border border-gray-200 p-1.5">Discount</th>
                                         <th className="border border-gray-200 p-1.5">Net Rev</th>
                                         <th className="border border-gray-200 p-1.5">Approved Amount</th>
-                                        <th className="border border-gray-200 p-1.5">Collection</th>
+                                        <th className="border border-gray-200 p-1.5">TPA Settled</th>
+                                        <th className="border border-gray-200 p-1.5">Patient Paid</th>
                                         <th className="border border-gray-200 p-1.5">Outstanding</th>
                                         <th className="border border-gray-200 p-1.5">No. of Patients</th>
                                         <th className="border border-gray-200 p-1.5">Gross Rev.</th>
@@ -211,6 +223,7 @@ export function DoctorReconContent({ shell = 'app' }: { shell?: 'app' | 'admin' 
                                             <td className="border border-gray-200 p-1.5">{fmtCur(r.ipd_tpa.net)}</td>
                                             <td className="border border-gray-200 p-1.5">{fmtCur(r.ipd_tpa.approved || 0)}</td>
                                             <td className="border border-gray-200 p-1.5">{fmtCur(r.ipd_tpa.collection)}</td>
+                                            <td className="border border-gray-200 p-1.5 text-emerald-700">{fmtCur(r.ipd_tpa.patient_paid || 0)}</td>
                                             <td className="border border-gray-200 p-1.5 font-bold text-amber-700">{fmtCur(r.ipd_tpa.outstanding)}</td>
                                             <td className="border border-gray-200 p-1.5">{fmt(r.ipd_cash.patients)}</td>
                                             <td className="border border-gray-200 p-1.5">{fmtCur(r.ipd_cash.gross)}</td>
@@ -234,6 +247,7 @@ export function DoctorReconContent({ shell = 'app' }: { shell?: 'app' | 'admin' 
                                         <td className="border border-gray-200 p-1.5">{fmtCur(total.ipd_tpa.net)}</td>
                                         <td className="border border-gray-200 p-1.5">{fmtCur(total.ipd_tpa.approved || 0)}</td>
                                         <td className="border border-gray-200 p-1.5">{fmtCur(total.ipd_tpa.collection)}</td>
+                                        <td className="border border-gray-200 p-1.5 text-emerald-700">{fmtCur(total.ipd_tpa.patient_paid || 0)}</td>
                                         <td className="border border-gray-200 p-1.5 text-amber-700">{fmtCur(total.ipd_tpa.outstanding)}</td>
                                         <td className="border border-gray-200 p-1.5">{fmt(total.ipd_cash.patients)}</td>
                                         <td className="border border-gray-200 p-1.5">{fmtCur(total.ipd_cash.gross)}</td>
