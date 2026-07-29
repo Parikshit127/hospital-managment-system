@@ -4914,6 +4914,13 @@ model DoctorCommission {
   rate_applied      Float   @default(0) // percent (0 for fixed_per_bill rows)
   commission_amount Decimal @default(0)
 
+  // TDS withheld by the hospital before paying the doctor (Section 194J on
+  // professional fees). Stamped at invoice-raise time from the statement's rate,
+  // so each line carries its own share for audit/traceability even though the
+  // rate itself is set once per statement.
+  tds_rate_percent Float   @default(10)
+  tds_amount       Decimal @default(0)
+
   // accrued | included_in_statement | paid | void
   status       String  @default("accrued")
   statement_id String?
@@ -4946,6 +4953,12 @@ model DoctorPayoutStatement {
   period_end     DateTime
 
   total_commission Decimal @default(0)
+  // TDS withheld under Section 194J before paying the doctor. net_payable =
+  // total_commission - total_tds; that's the amount actually transferred, and
+  // what paid_amount defaults to when the statement is marked paid.
+  tds_rate_percent Float   @default(10)
+  total_tds        Decimal @default(0)
+  net_payable      Decimal @default(0)
   // draft | finalized | paid
   status           String  @default("draft")
 

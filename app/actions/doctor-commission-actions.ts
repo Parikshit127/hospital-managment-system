@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { requireRoleAndTenant } from '@/backend/tenant';
 import { revalidatePath } from 'next/cache';
 import { backfillDoctorCommissions, computeDoctorNetShares, computeCommission, doctorLineShares } from '@/app/lib/doctor-commission';
-import { DOCTOR_SERVICE_TYPES, DOCTOR_COMMISSION_TYPES } from '@/app/lib/doctor-commission-constants';
+import { DOCTOR_SERVICE_TYPES, DOCTOR_COMMISSION_TYPES, DEFAULT_DOCTOR_TDS_PERCENT } from '@/app/lib/doctor-commission-constants';
 import { generateDoctorInvoiceNumber } from '@/app/lib/sequence-generator';
 
 const MANAGE_ROLES = ['admin', 'finance'];
@@ -467,10 +467,13 @@ export async function getDoctorCommissionDetail(doctorId: string) {
                     ...c,
                     eligible_base: num(c.eligible_base),
                     commission_amount: num(c.commission_amount),
+                    tds_amount: num(c.tds_amount),
                 })),
                 statements: statements.map((s: any) => ({
                     ...s,
                     total_commission: num(s.total_commission),
+                    total_tds: num(s.total_tds),
+                    net_payable: num(s.net_payable) > 0 ? num(s.net_payable) : num(s.total_commission),
                     paid_amount: s.paid_amount == null ? null : num(s.paid_amount),
                 })),
             },
@@ -490,6 +493,7 @@ export async function createDoctorPayoutStatement(input: {
     doctor_id: string;
     period_start: string;
     period_end: string;
+    tds_rate_percent?: number;
 }) {
     try {
         const { db, session, organizationId } = await requireRoleAndTenant(MANAGE_ROLES);
@@ -499,6 +503,7 @@ export async function createDoctorPayoutStatement(input: {
             return { success: false, error: 'Invalid date range' };
         }
         end.setHours(23, 59, 59, 999);
+        const tdsRate = input.tds_rate_percent ?? DEFAULT_DOCTOR_TDS_PERCENT;
 
         const result = await (db as any).$transaction(async (tx: any) => {
             const lines = await tx.doctorCommission.findMany({
@@ -510,6 +515,8 @@ export async function createDoctorPayoutStatement(input: {
                 },
             });
             const total = lines.reduce((s: number, l: any) => s + num(l.commission_amount), 0);
+            const totalTds = (total * tdsRate) / 100;
+            const netPayable = total - totalTds;
 
             const statement = await tx.doctorPayoutStatement.create({
                 data: {
@@ -518,18 +525,22 @@ export async function createDoctorPayoutStatement(input: {
                     period_start: start,
                     period_end: end,
                     total_commission: total.toFixed(2),
+                    tds_rate_percent: tdsRate,
+                    total_tds: totalTds.toFixed(2),
+                    net_payable: netPayable.toFixed(2),
                     status: 'draft',
                     created_by: session?.username ?? null,
                 },
             });
 
-            if (lines.length) {
-                await tx.doctorCommission.updateMany({
-                    where: { id: { in: lines.map((l: any) => l.id) } },
-                    data: { status: 'included_in_statement', statement_id: statement.id },
+            for (const l of lines) {
+                const lineTds = (num(l.commission_amount) * tdsRate) / 100;
+                await tx.doctorCommission.update({
+                    where: { id: l.id },
+                    data: { status: 'included_in_statement', statement_id: statement.id, tds_rate_percent: tdsRate, tds_amount: lineTds.toFixed(2) },
                 });
             }
-            return { id: statement.id, lineCount: lines.length, total };
+            return { id: statement.id, lineCount: lines.length, total, tdsRate, totalTds, netPayable };
         });
 
         revalidatePath(`/admin/doctor-invoicing/${input.doctor_id}`);
@@ -582,7 +593,11 @@ export async function markDoctorStatementPaid(input: {
         if (!stmt) return { success: false, error: 'Statement not found' };
         if (stmt.status === 'paid') return { success: false, error: 'Already paid' };
 
-        const paidAmount = input.paid_amount != null ? num(input.paid_amount) : num(stmt.total_commission);
+        // Default to the TDS-adjusted net payable. Statements created before this
+        // field existed have net_payable = 0 (schema default), so fall back to the
+        // gross commission for those rather than showing a false ₹0 payout.
+        const defaultPaidAmount = num(stmt.net_payable) > 0 ? num(stmt.net_payable) : num(stmt.total_commission);
+        const paidAmount = input.paid_amount != null ? num(input.paid_amount) : defaultPaidAmount;
 
         await (db as any).$transaction(async (tx: any) => {
             await tx.doctorPayoutStatement.update({
@@ -1055,6 +1070,7 @@ export async function getDoctorStatementWorkload(doctorId: string, filters?: Doc
                     ? { commission_type: config.commission_type, flat_percent: config.flat_percent, is_active: config.is_active }
                     : null,
                 default_percent: defaultPercent,
+                default_tds_percent: DEFAULT_DOCTOR_TDS_PERCENT,
                 // Surfaced so the UI can warn instead of silently showing ₹0 everywhere.
                 commission_configured: !!(config && config.is_active) || defaultPercent > 0,
                 patients: list,
@@ -1081,6 +1097,8 @@ const doctorInvoiceSchema = z.object({
     notes: z.string().trim().max(500).optional(),
     /** true → raise and settle in one step; false → leave as a draft to approve later. */
     mark_paid: z.boolean().optional(),
+    /** TDS % withheld from the gross commission. Defaults to DEFAULT_DOCTOR_TDS_PERCENT. */
+    tds_rate_percent: z.number().min(0).max(100).optional(),
 });
 
 export type DoctorInvoiceInput = z.input<typeof doctorInvoiceSchema>;
@@ -1099,9 +1117,10 @@ export async function createDoctorInvoiceForBills(input: DoctorInvoiceInput) {
         if (!parsed.success) {
             return { success: false, error: parsed.error.issues[0]?.message || 'Invalid request' };
         }
-        const { doctorId, invoiceIds, payment_mode, payment_reference, notes, mark_paid } = parsed.data;
+        const { doctorId, invoiceIds, payment_mode, payment_reference, notes, mark_paid, tds_rate_percent } = parsed.data;
         const { db, session, organizationId } = await requireRoleAndTenant(MANAGE_ROLES);
 
+        const tdsRate = tds_rate_percent ?? DEFAULT_DOCTOR_TDS_PERCENT;
         const statementNumber = await generateDoctorInvoiceNumber(organizationId, db);
 
         const result = await (db as any).$transaction(async (tx: any) => {
@@ -1153,6 +1172,7 @@ export async function createDoctorInvoiceForBills(input: DoctorInvoiceInput) {
                     period_start: new Date(Math.min(...dates)),
                     period_end: new Date(Math.max(...dates)),
                     total_commission: '0',
+                    tds_rate_percent: tdsRate,
                     status: mark_paid ? 'paid' : 'draft',
                     ...(mark_paid
                         ? { paid_at: new Date(), payment_mode: payment_mode || null, payment_reference: payment_reference || null }
@@ -1163,6 +1183,7 @@ export async function createDoctorInvoiceForBills(input: DoctorInvoiceInput) {
             });
 
             let total = 0;
+            let totalTds = 0;
             for (const inv of eligible) {
                 const attendingId = inv.doctor_id ?? inv.admission?.attending_doctor_id ?? null;
                 const { shares, netAmount } = computeDoctorNetShares(inv.items, inv.net_amount, attendingId);
@@ -1178,6 +1199,8 @@ export async function createDoctorInvoiceForBills(input: DoctorInvoiceInput) {
                     doctorLineShares(inv.items, netAmount, num(inv.paid_amount), attendingId, doctorId),
                 );
                 total += amount;
+                const lineTds = (amount * tdsRate) / 100;
+                totalTds += lineTds;
 
                 const row = {
                     organizationId,
@@ -1188,6 +1211,8 @@ export async function createDoctorInvoiceForBills(input: DoctorInvoiceInput) {
                     eligible_base: doctorCollected.toFixed(2),
                     rate_applied: rate,
                     commission_amount: amount.toFixed(2),
+                    tds_rate_percent: tdsRate,
+                    tds_amount: lineTds.toFixed(2),
                     status: mark_paid ? 'paid' : 'included_in_statement',
                     statement_id: statement.id,
                 };
@@ -1198,6 +1223,8 @@ export async function createDoctorInvoiceForBills(input: DoctorInvoiceInput) {
                         eligible_base: row.eligible_base,
                         rate_applied: row.rate_applied,
                         commission_amount: row.commission_amount,
+                        tds_rate_percent: row.tds_rate_percent,
+                        tds_amount: row.tds_amount,
                         invoice_type: row.invoice_type,
                         status: row.status,
                         statement_id: statement.id,
@@ -1205,11 +1232,14 @@ export async function createDoctorInvoiceForBills(input: DoctorInvoiceInput) {
                 });
             }
 
+            const netPayable = total - totalTds;
             await tx.doctorPayoutStatement.update({
                 where: { id: statement.id },
                 data: {
                     total_commission: total.toFixed(2),
-                    ...(mark_paid ? { paid_amount: total.toFixed(2) } : {}),
+                    total_tds: totalTds.toFixed(2),
+                    net_payable: netPayable.toFixed(2),
+                    ...(mark_paid ? { paid_amount: netPayable.toFixed(2) } : {}),
                 },
             });
 
@@ -1219,6 +1249,9 @@ export async function createDoctorInvoiceForBills(input: DoctorInvoiceInput) {
                 billCount: eligible.length,
                 skipped: invoices.length - eligible.length,
                 total,
+                tdsRate,
+                totalTds,
+                netPayable,
             };
         });
 

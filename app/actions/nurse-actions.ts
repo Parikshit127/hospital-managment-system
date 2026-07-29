@@ -129,6 +129,44 @@ export async function recordVitals(data: {
             },
         });
 
+        // If patient is currently admitted, also create IPDVitals record & revalidate IPD pages
+        const activeAdmission = await db.admissions.findFirst({
+            where: { patient_id: data.patientId, status: 'Admitted' },
+            select: { admission_id: true, organizationId: true },
+        });
+
+        if (activeAdmission) {
+            let bp_systolic: number | undefined;
+            let bp_diastolic: number | undefined;
+            if (data.bloodPressure && typeof data.bloodPressure === 'string') {
+                const parts = data.bloodPressure.split('/');
+                if (parts.length === 2) {
+                    const sys = parseInt(parts[0].trim(), 10);
+                    const dia = parseInt(parts[1].trim(), 10);
+                    if (!isNaN(sys)) bp_systolic = sys;
+                    if (!isNaN(dia)) bp_diastolic = dia;
+                }
+            }
+
+            await db.iPDVitals.create({
+                data: {
+                    admission_id: activeAdmission.admission_id,
+                    patient_id: data.patientId,
+                    organizationId: activeAdmission.organizationId,
+                    bp_systolic,
+                    bp_diastolic,
+                    heart_rate: data.heartRate,
+                    temperature: data.temperature,
+                    spo2: data.oxygenSat,
+                    respiratory_rate: data.respiratoryRate,
+                    recorded_by: data.recordedBy,
+                },
+            }).catch((err: any) => console.error('Failed to create mirror IPDVitals record:', err));
+
+            revalidatePath(`/ipd/admission/${activeAdmission.admission_id}`);
+            revalidatePath(`/reception/ipd/${activeAdmission.admission_id}`);
+        }
+
         revalidatePath('/nurse/vitals');
         revalidatePath('/nurse/patients');
         return { success: true };

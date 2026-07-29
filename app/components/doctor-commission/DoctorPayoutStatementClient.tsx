@@ -17,7 +17,7 @@
  * wrongly reporting that there is nothing to invoice.
  */
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
     ArrowLeft, Loader2, CheckCircle2, Wallet, Printer, Search, Users,
@@ -67,6 +67,7 @@ type Data = {
     org: { name: string; address: string | null; phone: string | null; license_no: string | null };
     config: { commission_type: string; flat_percent: number | null; is_active: boolean } | null;
     default_percent: number;
+    default_tds_percent: number;
     commission_configured: boolean;
     patients: Patient[];
     totals: { patients: number; bills: number; net: number; collected: number; commission: number };
@@ -88,6 +89,8 @@ export default function DoctorPayoutStatementClient({ doctorId, basePath }: { do
     const [reference, setReference] = useState('');
     const [mode, setMode] = useState('Bank Transfer');
     const [markPaid, setMarkPaid] = useState(true);
+    const [tdsPercent, setTdsPercent] = useState(10);
+    const tdsTouched = useRef(false);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [done, setDone] = useState<string | null>(null);
@@ -110,8 +113,10 @@ export default function DoctorPayoutStatementClient({ doctorId, basePath }: { do
             search: appliedSearch || undefined,
         });
         if (res.success && res.data) {
-            setData(res.data as unknown as Data);
+            const loaded = res.data as unknown as Data;
+            setData(loaded);
             setSelected(new Set());
+            if (!tdsTouched.current) setTdsPercent(loaded.default_tds_percent);
         } else {
             setError(res.error || 'Failed to load');
         }
@@ -167,14 +172,18 @@ export default function DoctorPayoutStatementClient({ doctorId, basePath }: { do
             .map((p) => ({ ...p, bills: p.bills.filter((b) => selected.has(b.invoice_id)) }))
             .filter((p) => p.bills.length > 0);
         const bills = rows.flatMap((p) => p.bills);
+        const commission = bills.reduce((s, b) => s + b.commission_amount, 0);
+        const tds = round2((commission * tdsPercent) / 100);
         return {
             patients: rows,
             billCount: bills.length,
             net: bills.reduce((s, b) => s + b.doctor_net, 0),
             collected: bills.reduce((s, b) => s + b.doctor_collected, 0),
-            commission: bills.reduce((s, b) => s + b.commission_amount, 0),
+            commission,
+            tds,
+            netPayable: round2(commission - tds),
         };
-    }, [patients, selected]);
+    }, [patients, selected, tdsPercent]);
 
     const raiseInvoice = async () => {
         if (!selected.size) return;
@@ -187,6 +196,7 @@ export default function DoctorPayoutStatementClient({ doctorId, basePath }: { do
             payment_mode: mode,
             payment_reference: reference || undefined,
             mark_paid: markPaid,
+            tds_rate_percent: tdsPercent,
         });
         setBusy(false);
         if (!res.success) {
@@ -195,7 +205,7 @@ export default function DoctorPayoutStatementClient({ doctorId, basePath }: { do
         }
         const d = res.data as any;
         setDone(
-            `Doctor invoice ${d.statementNumber} raised — ${d.billCount} bill(s), ${inr(d.total)}` +
+            `Doctor invoice ${d.statementNumber} raised — ${d.billCount} bill(s), ${inr(d.total)} gross − ${inr(d.totalTds)} TDS (${d.tdsRate}%) = ${inr(d.netPayable)} net` +
                 (d.skipped ? ` · ${d.skipped} skipped (already invoiced)` : ''),
         );
         setReference('');
@@ -215,9 +225,10 @@ export default function DoctorPayoutStatementClient({ doctorId, basePath }: { do
     const printedAt = fmtIstDateTime(new Date());
     // Nothing ticked yet → the printout falls back to everything on screen.
     const printPatients = selection.patients.length ? selection.patients : patients;
+    const fallbackTds = round2((data.totals.commission * tdsPercent) / 100);
     const printTotals = selection.patients.length
-        ? { net: selection.net, collected: selection.collected, commission: selection.commission, bills: selection.billCount }
-        : { net: data.totals.net, collected: data.totals.collected, commission: data.totals.commission, bills: data.totals.bills };
+        ? { net: selection.net, collected: selection.collected, commission: selection.commission, bills: selection.billCount, tds: selection.tds, netPayable: selection.netPayable }
+        : { net: data.totals.net, collected: data.totals.collected, commission: data.totals.commission, bills: data.totals.bills, tds: fallbackTds, netPayable: round2(data.totals.commission - fallbackTds) };
 
     return (
         <div className="p-6 max-w-7xl mx-auto print:p-0 print:max-w-none">
@@ -261,7 +272,13 @@ export default function DoctorPayoutStatementClient({ doctorId, basePath }: { do
                             <span className="font-black text-black">Bills:</span> {printTotals.bills}
                         </div>
                         <div>
-                            <span className="font-black text-black">Total payable:</span> {inr(printTotals.commission)}
+                            <span className="font-black text-black">Gross commission:</span> {inr(printTotals.commission)}
+                        </div>
+                        <div>
+                            <span className="font-black text-black">TDS ({tdsPercent}%):</span> −{inr(printTotals.tds)}
+                        </div>
+                        <div className="text-sm font-black">
+                            <span className="text-black">Net payable:</span> {inr(printTotals.netPayable)}
                         </div>
                     </div>
                 </div>
@@ -325,6 +342,16 @@ export default function DoctorPayoutStatementClient({ doctorId, basePath }: { do
                             <td className="py-2 text-right">{inr(printTotals.collected)}</td>
                             <td />
                             <td className="py-2 text-right">{inr(printTotals.commission)}</td>
+                        </tr>
+                        <tr>
+                            <td className="pt-1 text-[10px] text-gray-500" colSpan={9}>
+                                TDS ({tdsPercent}%): −{inr(printTotals.tds)}
+                            </td>
+                        </tr>
+                        <tr className="font-black">
+                            <td className="pt-0.5" colSpan={9}>
+                                NET PAYABLE: {inr(printTotals.netPayable)}
+                            </td>
                         </tr>
                     </tfoot>
                 </table>
@@ -633,13 +660,29 @@ export default function DoctorPayoutStatementClient({ doctorId, basePath }: { do
                                     <input type="checkbox" checked={markPaid} onChange={(e) => setMarkPaid(e.target.checked)} />
                                     Mark as paid
                                 </label>
+                                <label className="flex items-center gap-2 text-sm text-gray-600 font-bold">
+                                    TDS
+                                    <input
+                                        type="number"
+                                        min={0}
+                                        max={100}
+                                        step={0.1}
+                                        value={tdsPercent}
+                                        onChange={(e) => { tdsTouched.current = true; setTdsPercent(Math.max(0, Math.min(100, Number(e.target.value) || 0))); }}
+                                        className="px-2 py-2 border border-gray-200 rounded-lg text-sm w-16 text-right"
+                                    />
+                                    %
+                                </label>
                             </div>
                             <div className="flex items-center gap-4">
                                 <div className="text-right">
                                     <div className="text-[10px] uppercase text-gray-400 font-black">
                                         {selection.patients.length} patient(s) · {selection.billCount} bill(s)
                                     </div>
-                                    <div className="text-lg font-black text-gray-800">{inr(selection.commission)}</div>
+                                    <div className="text-xs text-gray-400">
+                                        {inr(selection.commission)} gross − {inr(selection.tds)} TDS
+                                    </div>
+                                    <div className="text-lg font-black text-gray-800">{inr(selection.netPayable)} net</div>
                                 </div>
                                 <button
                                     onClick={raiseInvoice}

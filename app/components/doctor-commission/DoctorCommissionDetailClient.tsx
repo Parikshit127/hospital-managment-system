@@ -199,6 +199,7 @@ function StatementsTab({
     const [showCreate, setShowCreate] = useState(false);
     const [start, setStart] = useState('');
     const [end, setEnd] = useState('');
+    const [tds, setTds] = useState(10);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [payFor, setPayFor] = useState<any | null>(null);
@@ -243,7 +244,7 @@ function StatementsTab({
         }
         setBusy(true);
         setError(null);
-        const res = await createDoctorPayoutStatement({ doctor_id: doctorId, period_start: start, period_end: end });
+        const res = await createDoctorPayoutStatement({ doctor_id: doctorId, period_start: start, period_end: end, tds_rate_percent: tds });
         setBusy(false);
         if (!res.success) {
             setError(res.error || 'Failed');
@@ -294,6 +295,10 @@ function StatementsTab({
                         <label className="text-[10px] font-black text-gray-400 uppercase">To</label>
                         <input type="date" value={end} onChange={(e) => setEnd(e.target.value)} className="block px-3 py-2 border border-gray-200 rounded-lg text-sm" />
                     </div>
+                    <div>
+                        <label className="text-[10px] font-black text-gray-400 uppercase">TDS %</label>
+                        <input type="number" min={0} max={100} step={0.1} value={tds} onChange={(e) => setTds(Math.max(0, Math.min(100, Number(e.target.value) || 0)))} className="block px-3 py-2 border border-gray-200 rounded-lg text-sm w-20" />
+                    </div>
                     <button onClick={create} disabled={busy} className="px-4 py-2 rounded-lg bg-indigo-500 text-white font-bold text-sm disabled:opacity-50">
                         {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Generate'}
                     </button>
@@ -305,13 +310,17 @@ function StatementsTab({
             {!statements.length ? (
                 <Empty text="No statements yet." />
             ) : (
-                <Table head={['Period', 'Total', 'Status', 'Paid', 'Reference', 'Actions']}>
+                <Table head={['Period', 'Gross', 'TDS', 'Net Payable', 'Status', 'Paid', 'Reference', 'Actions']}>
                     {statements.map((s) => (
                         <tr key={s.id} className="hover:bg-gray-50/50">
                             <td className="px-4 py-3 text-gray-600">
                                 {fmtDate(s.period_start)} – {fmtDate(s.period_end)}
                             </td>
                             <td className="px-4 py-3 text-right font-bold">{inr(s.total_commission)}</td>
+                            <td className="px-4 py-3 text-right text-gray-500">
+                                {s.total_tds ? `−${inr(s.total_tds)} (${s.tds_rate_percent ?? 10}%)` : '—'}
+                            </td>
+                            <td className="px-4 py-3 text-right font-bold text-emerald-600">{inr(s.net_payable || s.total_commission)}</td>
                             <td className="px-4 py-3">
                                 <Badge status={s.status} />
                             </td>
@@ -368,7 +377,7 @@ function StatementsTab({
 function MarkPaidModal({ statement, onClose, onDone }: { statement: any; onClose: () => void; onDone: () => void }) {
     const [mode, setMode] = useState('Bank Transfer');
     const [reference, setReference] = useState('');
-    const [amount, setAmount] = useState(String(statement.total_commission));
+    const [amount, setAmount] = useState(String(statement.net_payable || statement.total_commission));
     const [notes, setNotes] = useState('');
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -396,6 +405,11 @@ function MarkPaidModal({ statement, onClose, onDone }: { statement: any; onClose
             <div className="bg-white rounded-2xl w-full max-w-md p-6 space-y-3">
                 <h2 className="text-lg font-black text-gray-800">Mark statement paid</h2>
                 <div className="space-y-2">
+                    {statement.total_tds > 0 && (
+                        <p className="text-[11px] text-gray-400">
+                            Gross {inr(statement.total_commission)} − TDS {inr(statement.total_tds)} ({statement.tds_rate_percent ?? 10}%) = Net {inr(statement.net_payable || statement.total_commission)}
+                        </p>
+                    )}
                     <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Paid amount" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm" />
                     <select value={mode} onChange={(e) => setMode(e.target.value)} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm">
                         {['Bank Transfer', 'Cash', 'UPI', 'Cheque', 'Other'].map((m) => (

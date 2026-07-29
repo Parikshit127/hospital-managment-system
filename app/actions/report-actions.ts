@@ -1442,3 +1442,201 @@ export async function getMISReport(filters: { from: string; to: string; billType
         return { success: false, error: error.message };
     }
 }
+
+// ── Doctor Revenue Recon ────────────────────────────────────────────────────
+// Reproduces the hospital's monthly "Recon" workbook: one spotlighted doctor
+// vs. every other doctor (bucketed as "Axten"), each split into IPD TPA / IPD
+// Cash / OPD Cash. Recognition follows the same rule as the MIS report — an
+// IPD bill counts on its discharge date, an OPD bill on its bill date — so the
+// two reports never disagree about which month a bill belongs to.
+
+type ReconCategory = {
+    patients: number;
+    gross: number;
+    discount: number;
+    net: number;
+    approved?: number;
+    collection: number;
+    outstanding: number;
+};
+
+function emptyReconAccumulator() {
+    return { patients: new Set<string>(), gross: 0, discount: 0, net: 0, approved: 0, collection: 0 };
+}
+type ReconAccumulator = ReturnType<typeof emptyReconAccumulator>;
+
+function finalizeReconCategory(acc: ReconAccumulator, isTpa: boolean): ReconCategory {
+    const outstanding = isTpa ? acc.approved - acc.collection : acc.net - acc.collection;
+    return {
+        patients: acc.patients.size,
+        gross: round2(acc.gross),
+        discount: round2(acc.discount),
+        net: round2(acc.net),
+        ...(isTpa ? { approved: round2(acc.approved) } : {}),
+        collection: round2(acc.collection),
+        outstanding: round2(outstanding),
+    };
+}
+
+function sumReconCategory(a: ReconCategory, b: ReconCategory, isTpa: boolean): ReconCategory {
+    return {
+        patients: a.patients + b.patients,
+        gross: round2(a.gross + b.gross),
+        discount: round2(a.discount + b.discount),
+        net: round2(a.net + b.net),
+        ...(isTpa ? { approved: round2((a.approved || 0) + (b.approved || 0)) } : {}),
+        collection: round2(a.collection + b.collection),
+        outstanding: round2(a.outstanding + b.outstanding),
+    };
+}
+
+export async function getDoctorRevenueRecon(filters: { from: string; to: string; spotlightDoctorId: string }) {
+    try {
+        const { db } = await requireTenantContext();
+        if (!filters.spotlightDoctorId) return { success: false, error: 'Select a doctor to spotlight' };
+
+        const doctor = await db.user.findFirst({
+            where: { id: filters.spotlightDoctorId, role: 'doctor' },
+            select: { id: true, name: true, username: true },
+        });
+        if (!doctor) return { success: false, error: 'Doctor not found' };
+
+        const fromDate = new Date(filters.from + 'T00:00:00+05:30');
+        const toDate = new Date(filters.to + 'T23:59:59.999+05:30');
+        const reportDateRange = { gte: fromDate, lte: toDate };
+
+        // Same recognition rule as getMISReport: IPD on discharge date, everything
+        // else (excluding standalone pharmacy counter bills) on bill date. Only
+        // Final bills count — a recon is about revenue actually raised, not a
+        // gap-free audit trail, so Cancelled/Draft bills are excluded outright.
+        const where: any = {
+            status: 'Final',
+            is_archived: false,
+            OR: [
+                {
+                    OR: [{ invoice_type: 'IPD' }, { admission_id: { not: null } }],
+                    admission: { discharge_date: reportDateRange },
+                },
+                {
+                    admission_id: null,
+                    invoice_type: { notIn: ['IPD', 'Pharmacy', 'PHARMACY'] },
+                    created_at: reportDateRange,
+                },
+            ],
+        };
+
+        const invoices = await db.invoices.findMany({
+            where,
+            select: {
+                patient_id: true, invoice_type: true, admission_id: true, doctor_id: true,
+                total_amount: true, total_tax: true, total_discount: true, paid_amount: true,
+                billing_patient_type: true, corporate_id: true, tpa_provider_id: true, pre_auth_id: true,
+                tpa_approved_amount: true, tpa_settled_amount: true,
+                admission: { select: { attending_doctor_id: true } },
+                insurance_claims: { select: { id: true } },
+            },
+        });
+
+        const normType = (t: any) => {
+            const s = String(t || '').toLowerCase();
+            if (s.includes('tpa') || s.includes('insurance')) return 'tpa_insurance';
+            if (s.includes('corporate')) return 'corporate';
+            return 'cash';
+        };
+
+        const buckets = {
+            spotlight: { ipd_tpa: emptyReconAccumulator(), ipd_cash: emptyReconAccumulator(), opd_cash: emptyReconAccumulator() },
+            axten: { ipd_tpa: emptyReconAccumulator(), ipd_cash: emptyReconAccumulator(), opd_cash: emptyReconAccumulator() },
+        };
+
+        for (const inv of invoices as any[]) {
+            const isIPD = inv.invoice_type === 'IPD' || !!inv.admission_id;
+
+            // Payer type from invoice-level signals only — deliberately no
+            // patient-master fallback for OPD (that inheritance caused an OPD
+            // payer-type bug in the MIS report; IPD legitimately uses the
+            // admission's payer, but a walk-in OPD visit is whatever the bill
+            // itself says, defaulting to Cash).
+            let effectiveType = normType(inv.billing_patient_type);
+            if (effectiveType === 'cash') {
+                if (inv.corporate_id) effectiveType = 'corporate';
+                else if (inv.tpa_provider_id || inv.pre_auth_id || (inv.insurance_claims?.length || 0) > 0) effectiveType = 'tpa_insurance';
+            }
+
+            let category: 'ipd_tpa' | 'ipd_cash' | 'opd_cash';
+            if (isIPD) {
+                category = effectiveType === 'tpa_insurance' ? 'ipd_tpa' : 'ipd_cash';
+            } else {
+                // The workbook's OPD section is Cash-only — OPD TPA/Corporate bills
+                // (rare) fall outside this recon, matching the source file exactly.
+                if (effectiveType !== 'cash') continue;
+                category = 'opd_cash';
+            }
+
+            const attendingId = isIPD ? (inv.doctor_id ?? inv.admission?.attending_doctor_id ?? null) : inv.doctor_id;
+            const which = attendingId === doctor.id ? 'spotlight' : 'axten';
+
+            const gross = Number(inv.total_amount || 0) + Number(inv.total_tax || 0);
+            const discount = Number(inv.total_discount || 0);
+            const net = gross - discount;
+
+            const acc = buckets[which][category];
+            if (inv.patient_id) acc.patients.add(inv.patient_id);
+            acc.gross += gross;
+            acc.discount += discount;
+            acc.net += net;
+            if (category === 'ipd_tpa') {
+                acc.approved += Number(inv.tpa_approved_amount || 0);
+                acc.collection += Number(inv.tpa_settled_amount || 0);
+            } else {
+                acc.collection += Number(inv.paid_amount || 0);
+            }
+        }
+
+        const build = (label: string, doctorId: string | null, b: typeof buckets['spotlight']) => ({
+            label,
+            doctor_id: doctorId,
+            ipd_tpa: finalizeReconCategory(b.ipd_tpa, true),
+            ipd_cash: finalizeReconCategory(b.ipd_cash, false),
+            opd_cash: finalizeReconCategory(b.opd_cash, false),
+        });
+
+        const spotlightRow = build(doctor.name || doctor.username, doctor.id, buckets.spotlight);
+        const axtenRow = build('Axten', null, buckets.axten);
+        const totalRow = {
+            label: 'Total',
+            doctor_id: null,
+            ipd_tpa: sumReconCategory(spotlightRow.ipd_tpa, axtenRow.ipd_tpa, true),
+            ipd_cash: sumReconCategory(spotlightRow.ipd_cash, axtenRow.ipd_cash, false),
+            opd_cash: sumReconCategory(spotlightRow.opd_cash, axtenRow.opd_cash, false),
+        };
+
+        // Snapshot: TPA's "Net Rev" is the Approved amount (what will actually be
+        // recognized once settled), not the gross-billed figure — matches the
+        // source workbook, which treats Approved as the TPA revenue line.
+        const snapshot = (row: typeof spotlightRow) => ({
+            label: row.label,
+            ipd_tpa: { net: row.ipd_tpa.approved ?? 0, collection: row.ipd_tpa.collection, credit: row.ipd_tpa.outstanding },
+            ipd_cash: { net: row.ipd_cash.net, collection: row.ipd_cash.collection, credit: row.ipd_cash.outstanding },
+            opd_cash: { net: row.opd_cash.net, collection: row.opd_cash.collection, credit: row.opd_cash.outstanding },
+            total: {
+                net: round2((row.ipd_tpa.approved ?? 0) + row.ipd_cash.net + row.opd_cash.net),
+                collection: round2(row.ipd_tpa.collection + row.ipd_cash.collection + row.opd_cash.collection),
+                credit: round2(row.ipd_tpa.outstanding + row.ipd_cash.outstanding + row.opd_cash.outstanding),
+            },
+        });
+
+        const billedRev = round2(totalRow.ipd_tpa.net + totalRow.ipd_cash.net + totalRow.opd_cash.net);
+
+        return {
+            success: true,
+            data: {
+                rows: [spotlightRow, axtenRow, totalRow],
+                snapshot: [snapshot(spotlightRow), snapshot(axtenRow), snapshot({ ...totalRow, label: 'Both' } as any)],
+                billedRev,
+            },
+        };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}

@@ -124,6 +124,10 @@ export function FinancialReportsContent({ shell = 'app' }: { shell?: 'app' | 'ad
                     className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg whitespace-nowrap transition bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100">
                     <FileSpreadsheet className="h-4 w-4" /> MIS Report
                 </Link>
+                <Link href={adminMode ? "/admin/finance/reports/doctor-recon" : "/finance/reports/doctor-recon"}
+                    className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg whitespace-nowrap transition bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100">
+                    <FileSpreadsheet className="h-4 w-4" /> Doctor Recon
+                </Link>
             </div>
 
             {/* Date Range + Export */}
