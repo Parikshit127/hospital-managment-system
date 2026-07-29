@@ -359,6 +359,12 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
                             <div>
                                 <p style="font-size:11px;font-weight:700;color:${branding.accentColor};">${branding.hospitalName}</p>
                                 ${gstin !== 'N/A' ? `<p style="font-size:10px;color:#6b7280;">GSTIN: ${gstin}</p>` : ''}
+                                ${/* In letterhead mode the text header above is skipped, so the
+                                      hospital's own address/contact would vanish — the letterhead
+                                      graphic is generic and doesn't carry it. Show it here so every
+                                      bill still prints the org's real address. */''}
+                                ${branding.letterheadUrl && branding.hospitalAddress ? `<p style="font-size:10px;color:#6b7280;">${branding.hospitalAddress}</p>` : ''}
+                                ${branding.letterheadUrl && branding.hospitalPhone ? `<p style="font-size:9px;color:#9ca3af;">Ph: ${branding.hospitalPhone}${branding.hospitalEmail ? ` | ${branding.hospitalEmail}` : ''}</p>` : ''}
                             </div>
                             <div style="text-align:right;">
                                 <h2 style="font-size:16px;font-weight:800;color:${billColor};">${billTitle}</h2>

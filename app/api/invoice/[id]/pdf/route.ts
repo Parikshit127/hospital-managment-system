@@ -68,7 +68,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
                         },
                     },
                 },
-                admission: { select: { admission_id: true, doctor_name: true, admission_date: true, discharge_date: true, status: true, ward: { select: { ward_name: true } }, bed: { select: { bed_id: true } } } },
+                admission: { select: { admission_id: true, doctor_name: true, admission_date: true, discharge_date: true, status: true, ward: { select: { ward_name: true } }, bed: { select: { bed_id: true, bed_name: true } } } },
                 payments: {
                     where: { status: { not: 'Reversed' } },
                     orderBy: { created_at: 'desc' },
@@ -426,7 +426,7 @@ function generateInvoiceHTML(invoice: any, branding: BillBranding, pharmacy: { n
                     <div>
                         <p style="font-size:11px;"><strong>Bill No.:</strong> ${(invoice as any).final_bill_number || invoice.invoice_number || '—'}${(invoice as any).final_bill_number ? ` <span style="color:#9ca3af;font-size:9px;">(Ref: ${invoice.invoice_number})</span>` : ''}</p>
                         ${isIPD ? `<p style="font-size:11px;"><strong>Regn No.:</strong> ${admission.admission_id}</p>` : ''}
-                        ${isIPD ? `<p style="font-size:11px;"><strong>Bed No.:</strong> ${admission.bed?.bed_id || '-'}/${admission.ward?.ward_name || '-'}</p>` : ''}
+                        ${isIPD ? `<p style="font-size:11px;"><strong>Bed No.:</strong> ${admission.bed?.bed_name || admission.bed?.bed_id || '-'}/${admission.ward?.ward_name || '-'}</p>` : ''}
                         <p style="font-size:11px;"><strong>Rate Category:</strong> ${invoice.invoice_type || 'OPD'}</p>
                         <p style="font-size:11px;"><strong>Category:</strong> ${patientCategory}</p>
                     </div>

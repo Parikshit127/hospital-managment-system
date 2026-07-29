@@ -48,7 +48,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
                 where: { admission_id: invoice.admission_id },
                 include: {
                     ward: { select: { ward_name: true } },
-                    bed: { select: { bed_id: true } },
+                    bed: { select: { bed_id: true, bed_name: true } },
                 },
             });
         }
@@ -285,7 +285,7 @@ function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposit
         patientInfoHTML += `
             <p style="font-size:11px;"><strong>Admission ID:</strong> ${admission.admission_id}</p>
             <p style="font-size:11px;"><strong>Doctor:</strong> ${formatDoctorName(admission.doctor_name) || '-'}</p>
-            <p style="font-size:11px;"><strong>Ward/Bed:</strong> ${admission.ward?.ward_name || '-'} / ${admission.bed?.bed_id || '-'}</p>
+            <p style="font-size:11px;"><strong>Ward/Bed:</strong> ${admission.ward?.ward_name || '-'} / ${admission.bed?.bed_name || admission.bed?.bed_id || '-'}</p>
             <p style="font-size:11px;"><strong>Admitted:</strong> ${admissionDate}</p>
             <p style="font-size:11px;"><strong>Discharged:</strong> ${isDischarged ? dischargeDate : 'Not discharged (interim bill)'}</p>
             <p style="font-size:11px;"><strong>LOS:</strong> ${los} day(s)</p>
