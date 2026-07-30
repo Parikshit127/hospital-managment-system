@@ -41,12 +41,26 @@
  *   If lang === "hi-IN", we call the existing `/api/public/voice/translate`
  *   route *server-side* after the final transcript is received, eliminating
  *   the extra HTTP round-trip that the old client-side translate call required.
+ *
+ * Language auto-detect ("auto"):
+ *   Groq's Whisper (both `whisper-large-v3` and the `-turbo` distillation)
+ *   was verified to reliably misidentify Sarvam-synthesized Hindi speech as
+ *   German — a real accuracy gap, not a wiring bug (confirmed by comparing
+ *   both Whisper variants against Sarvam's own STT on the same clips: Sarvam
+ *   returned the correct script + `language_code` with confidence 1.0 for
+ *   both languages). So the FIRST (language-unknown) utterance of a session
+ *   is transcribed via Sarvam (`saaras:v3`, `language_code: "unknown"`),
+ *   which returns the detected language directly — falling back to Groq
+ *   (no language hint) only if Sarvam is unavailable. Once a language is
+ *   detected, the session locks to it and every later utterance goes back to
+ *   the faster Groq path with an explicit hint, unchanged from before.
  */
 
 import type { WebSocket, WebSocketServer } from 'ws';
 import type { NextRequest } from 'next/server';
 import type { RouteContext } from 'next-ws/server';
 import OpenAI from 'openai';
+import { SarvamAIClient } from 'sarvamai';
 
 // WebSocket upgrades require the Node.js runtime and must never be statically
 // optimised.
@@ -165,6 +179,47 @@ async function transcribeWithGroq(
   }
 }
 
+// ── Sarvam auto-detect transcription (used only for the first, language- ──────
+// ── unknown utterance of a session — see the file-header note above) ──────────
+
+/**
+ * Transcribe PCM audio via Sarvam's `saaras:v3` model with
+ * `language_code: "unknown"`, which returns both the transcript (in its
+ * native script) and the detected `language_code` directly — no separate
+ * language-ID step needed. Returns null on any failure so the caller can
+ * fall back to Groq.
+ */
+async function transcribeAutoWithSarvam(
+  pcmChunks: Buffer[],
+): Promise<{ text: string; detectedLangCode: string } | null> {
+  const sarvamKey = process.env.SARVAM_API_KEY;
+  if (!sarvamKey) return null;
+
+  const pcmBuffer = Buffer.concat(pcmChunks);
+  if (pcmBuffer.length === 0) return { text: '', detectedLangCode: 'en-IN' };
+
+  try {
+    const client = new SarvamAIClient({ apiSubscriptionKey: sarvamKey });
+    const wavBuffer = buildWav(pcmBuffer);
+    const audioFile = new File([new Uint8Array(wavBuffer)], 'audio_auto.wav', { type: 'audio/wav' });
+
+    const response = await client.speechToText.transcribe({
+      file: audioFile,
+      model: 'saaras:v3',
+      language_code: 'unknown' as any,
+    });
+
+    const detected = String((response as any).language_code || '').toLowerCase();
+    return {
+      text: ((response as any).transcript || '').trim(),
+      detectedLangCode: detected.startsWith('hi') ? 'hi-IN' : 'en-IN',
+    };
+  } catch (err: any) {
+    console.error('[WS-STT] Sarvam auto-detect error:', err?.message ?? err);
+    return null;
+  }
+}
+
 // ── Server-side translation (Hindi → English) ─────────────────────────────────
 
 /**
@@ -240,6 +295,21 @@ export function UPGRADE(
   };
 
   /**
+   * Transcribe a buffered chunk, routing 'auto' through Sarvam (accurate
+   * language-ID) with a Groq fallback if Sarvam is unavailable/fails; any
+   * already-locked language goes straight to the faster Groq path.
+   */
+  const transcribeAny = async (chunks: Buffer[]): Promise<{ text: string; detectedLangCode: string }> => {
+    if (langCode === 'auto') {
+      const sarvamResult = await transcribeAutoWithSarvam(chunks);
+      if (sarvamResult) return sarvamResult;
+      console.warn('[WS-STT] Sarvam auto-detect unavailable — falling back to Groq');
+    }
+    const text = await transcribeWithGroq(chunks, langCode);
+    return { text, detectedLangCode: langCode };
+  };
+
+  /**
    * Fire an interim (probe) Groq call after PROBE_MS of buffered audio.
    * This gives the user an early transcript so the UI can show a "hearing…"
    * indicator before speech is complete.
@@ -250,7 +320,7 @@ export function UPGRADE(
     console.log(`[WS-STT] Probe: transcribing first ${PROBE_MS}ms of audio`);
     // Snapshot current chunks (don't include audio that arrives after this)
     const snapshot = pcmChunks.map(b => Buffer.from(b));
-    const text = await transcribeWithGroq(snapshot, langCode);
+    const { text } = await transcribeAny(snapshot);
     if (text && !finalDispatched && !aborted) {
       send({ type: 'transcript', text });
     }
@@ -268,7 +338,13 @@ export function UPGRADE(
       `[WS-STT] Final: transcribing ${totalBytes} bytes (${(totalBytes / (SAMPLE_RATE * BYTES_PER_SAMPLE)).toFixed(1)}s)`,
     );
 
-    const rawText = await transcribeWithGroq(pcmChunks, langCode);
+    const { text: rawText, detectedLangCode } = await transcribeAny(pcmChunks);
+    // transcribeAny only actually detects a new language on the 'auto' path;
+    // otherwise detectedLangCode just echoes the already-known langCode back
+    // (see transcribeAny below). Adopt it either way so the translation check
+    // and the `final` message below see the real language, not the literal
+    // string "auto".
+    langCode = detectedLangCode;
     let finalText = rawText;
 
     // Server-side translation for Hindi (eliminates the extra client HTTP call)

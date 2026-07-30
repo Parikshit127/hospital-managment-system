@@ -29,7 +29,7 @@ export default function PatientLoginClient({ branding }: { branding: PortalBrand
         >
             <div className="max-w-md w-full bg-white rounded-2xl shadow-[var(--shadow-lg)] border border-gray-200/60 overflow-hidden">
                 {/* Header */}
-                <div className="p-8 text-center relative overflow-hidden" style={{ background: isDefault ? 'linear-gradient(to bottom right, #1e3a6e, #162d57)' : branding.sidebarBg }}>
+                <div className="p-6 sm:p-8 text-center relative overflow-hidden" style={{ background: isDefault ? 'linear-gradient(to bottom right, #1e3a6e, #162d57)' : branding.sidebarBg }}>
                     <div className="absolute top-0 right-0 translate-x-8 -translate-y-8 w-32 h-32 rounded-full opacity-30 blur-2xl" style={{ backgroundColor: isDefault ? '#1e3a6e' : branding.sidebarBg }}></div>
                     <div className="absolute bottom-0 left-0 -translate-x-6 translate-y-6 w-24 h-24 rounded-full opacity-20 blur-2xl" style={{ backgroundColor: branding.primaryColor }}></div>
                     <div className="relative z-10">
@@ -59,7 +59,7 @@ export default function PatientLoginClient({ branding }: { branding: PortalBrand
                 </div>
 
                 {/* Form Section */}
-                <div className="p-8">
+                <div className="p-6 sm:p-8">
                     {setupSuccess && (
                         <div className="mb-6 border rounded-xl p-4 text-sm font-medium" style={{ backgroundColor: 'color-mix(in srgb, var(--brand) 10%, white)', borderColor: 'color-mix(in srgb, var(--brand) 25%, white)', color: 'var(--brand-strong)' }}>
                             Password setup complete. You can now sign in.
@@ -85,7 +85,7 @@ export default function PatientLoginClient({ branding }: { branding: PortalBrand
                                     type="text"
                                     required
                                     placeholder="e.g. AVN-2024-00001 or email"
-                                    className="w-full pl-11 pr-4 py-3 bg-white border border-gray-200 rounded-xl focus:bg-white focus:border-[var(--brand)] focus:ring-2 focus:ring-[var(--brand)]/15 transition-all outline-none text-sm shadow-sm hover:border-gray-300"
+                                    className="w-full pl-11 pr-4 py-3 bg-white border border-gray-200 rounded-xl focus:bg-white focus:border-[var(--brand)] focus:ring-2 focus:ring-[var(--brand)]/15 transition-all outline-none text-base sm:text-sm shadow-sm hover:border-gray-300"
                                 />
                             </div>
                         </div>
@@ -101,7 +101,7 @@ export default function PatientLoginClient({ branding }: { branding: PortalBrand
                                     type={showPassword ? 'text' : 'password'}
                                     required
                                     placeholder="Enter your portal password"
-                                    className="w-full pl-11 pr-14 py-3 bg-white border border-gray-200 rounded-xl focus:bg-white focus:border-[var(--brand)] focus:ring-2 focus:ring-[var(--brand)]/15 transition-all outline-none text-sm shadow-sm hover:border-gray-300"
+                                    className="w-full pl-11 pr-14 py-3 bg-white border border-gray-200 rounded-xl focus:bg-white focus:border-[var(--brand)] focus:ring-2 focus:ring-[var(--brand)]/15 transition-all outline-none text-base sm:text-sm shadow-sm hover:border-gray-300"
                                 />
                                 <button
                                     type="button"

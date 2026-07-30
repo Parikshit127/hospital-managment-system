@@ -13,7 +13,6 @@ interface VoiceShellProps {
 
 const STATE_LABELS: Record<FSMState, string> = {
   IDLE: 'Ready to start',
-  CONSENT: 'Consent',
   GREETING: 'Welcome',
   COLLECT_FIELD: 'Collecting information',
   CONFIRM_FIELD: 'Confirming',
