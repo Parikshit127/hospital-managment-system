@@ -3086,6 +3086,7 @@ export async function updateInvoiceItem(itemId: number, patch: {
     tax_rate?: number;
     hsn_sac_code?: string | null;
     service_category?: string | null;
+    service_date?: string | null;
 }) {
     try {
         const { db, organizationId, session } = await requireTenantContext();
@@ -3123,6 +3124,16 @@ export async function updateInvoiceItem(itemId: number, patch: {
         const net_price = total_price - discount;
         const tax_amount = (net_price * tax_rate) / 100;
 
+        // Service date (the date the charge is shown against on the bill = created_at).
+        // Accept a correction, but never a future date. Blank/undefined leaves it as-is.
+        let service_date: Date | undefined;
+        if (patch.service_date) {
+            const d = new Date(patch.service_date);
+            if (isNaN(d.getTime())) return { success: false, error: 'Invalid service date.' };
+            if (d.getTime() > Date.now() + 60 * 1000) return { success: false, error: 'Service date cannot be in the future.' };
+            service_date = d;
+        }
+
         await db.invoice_items.update({
             where: { id: itemId },
             data: {
@@ -3137,6 +3148,7 @@ export async function updateInvoiceItem(itemId: number, patch: {
                 total_price,
                 net_price,
                 tax_amount,
+                ...(service_date ? { created_at: service_date } : {}),
             },
         });
 

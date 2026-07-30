@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { getIPDAdmissions } from '@/app/actions/ipd-actions';
 import { generateInterimBill, postChargeToIpdBill, getGstSummary, getAbsorbedCharges, removeAbsorbedCharge } from '@/app/actions/ipd-finance-actions';
-import { recordPayment, recordSplitPayment, removeInvoiceItem } from '@/app/actions/finance-actions';
+import { recordPayment, recordSplitPayment, removeInvoiceItem, updateInvoiceItem } from '@/app/actions/finance-actions';
 import { getCashComplianceConfig } from '@/app/actions/cash-compliance-actions';
 import { CASH_COMPLIANCE_DEFAULTS, isValidPan, normalizePan, resolveRegisteredPan } from '@/app/lib/cash-compliance';
 import { collectDeposit, getPatientDeposits, applyDepositToInvoice } from '@/app/actions/deposit-actions';
@@ -57,6 +57,13 @@ export default function IpdBillingPage() {
     const [chargeTaxRate, setChargeTaxRate] = useState(0);
     const [chargeDateTime, setChargeDateTime] = useState('');
     const [removingItemId, setRemovingItemId] = useState<number | null>(null);
+
+    // Inline edit of a charge row (service name, qty, service date). Rate stays locked.
+    const [editingItemId, setEditingItemId] = useState<number | null>(null);
+    const [editDesc, setEditDesc] = useState('');
+    const [editQty, setEditQty] = useState(1);
+    const [editDate, setEditDate] = useState('');
+    const [savingItem, setSavingItem] = useState(false);
 
     // Deposit state
     const [showDepositModal, setShowDepositModal] = useState(false);
@@ -243,6 +250,41 @@ export default function IpdBillingPage() {
         }
     }
 
+    function startEditItem(item: any) {
+        setEditingItemId(item.id);
+        setEditDesc(item.description || '');
+        setEditQty(Number(item.quantity) || 1);
+        // created_at is the service date the bill shows this charge against.
+        setEditDate(item.created_at ? new Date(item.created_at).toISOString().slice(0, 10) : '');
+    }
+
+    function cancelEditItem() {
+        setEditingItemId(null);
+        setEditDesc('');
+        setEditQty(1);
+        setEditDate('');
+    }
+
+    async function handleSaveItem(item: any) {
+        if (!billData?.invoice?.id) return;
+        if (!editDesc.trim()) { showToast('Service name cannot be empty', 'error'); return; }
+        if (!editQty || editQty < 1) { showToast('Quantity must be at least 1', 'error'); return; }
+        setSavingItem(true);
+        const res = await updateInvoiceItem(item.id, {
+            description: editDesc.trim(),
+            quantity: editQty,
+            service_date: editDate || undefined,
+        });
+        setSavingItem(false);
+        if (res.success) {
+            cancelEditItem();
+            showToast('Charge updated');
+            await refreshBill();
+        } else {
+            showToast(res.error || 'Failed to update charge', 'error');
+        }
+    }
+
     async function handleRemoveCharge(item: any) {
         if (!billData?.invoice?.id) return;
         const label = item.description || 'this charge';
@@ -336,7 +378,7 @@ export default function IpdBillingPage() {
 
     return (
         <div className="min-h-screen bg-gray-50 p-4">
-            <div className="max-w-7xl mx-auto">
+            <div className="max-w-[1680px] mx-auto">
                 <div className="flex items-center gap-3 mb-4">
                     <a
                         href="/reception/dashboard"
@@ -349,7 +391,7 @@ export default function IpdBillingPage() {
 
                 <div className="grid grid-cols-12 gap-4">
                     {/* Left: Patient List */}
-                    <div className="col-span-3 bg-white rounded-lg shadow p-4 max-h-[85vh] overflow-y-auto">
+                    <div className="col-span-3 bg-white rounded-lg shadow p-4 max-h-[88vh] overflow-y-auto">
                         <input
                             type="text"
                             placeholder="Search patient, phone, ID..."
@@ -382,7 +424,7 @@ export default function IpdBillingPage() {
                     </div>
 
                     {/* Center: Bill View */}
-                    <div className="col-span-6 bg-white rounded-lg shadow">
+                    <div className="col-span-7 bg-white rounded-lg shadow">
                         {!selectedAdmission ? (
                             <div className="flex items-center justify-center h-96 text-gray-400">
                                 Select a patient to view their bill
@@ -468,7 +510,7 @@ export default function IpdBillingPage() {
                                 </div>
 
                                 {/* Tab Content */}
-                                <div className="p-4 max-h-[45vh] overflow-y-auto">
+                                <div className="p-4 max-h-[55vh] overflow-y-auto">
                                     {activeTab === 'summary' && (
                                         <div className="space-y-4">
                                             {/* KPI Cards */}
@@ -603,29 +645,92 @@ export default function IpdBillingPage() {
                                                                 <th className="p-2 text-right">Rate</th>
                                                                 <th className="p-2 text-right">GST%</th>
                                                                 <th className="p-2 text-right">Amount</th>
-                                                                <th className="p-2 text-center w-8"></th>
+                                                                <th className="p-2 text-center w-16"></th>
                                                             </tr>
                                                         </thead>
                                                         <tbody>
                                                             {items.map((item: any) => (
-                                                                <tr key={item.id} className="border-b group">
-                                                                    <td className="p-2">{item.description}</td>
-                                                                    <td className="p-2 text-gray-400">{new Date(item.created_at).toLocaleDateString('en-GB')}</td>
-                                                                    <td className="p-2 text-right">{item.quantity}</td>
-                                                                    <td className="p-2 text-right">₹{item.unit_price?.toLocaleString('en-IN')}</td>
-                                                                    <td className="p-2 text-right">{item.tax_rate}%</td>
-                                                                    <td className="p-2 text-right">₹{(item.net_price + item.tax_amount)?.toLocaleString('en-IN')}</td>
-                                                                    <td className="p-2 text-center">
-                                                                        <button
-                                                                            onClick={() => handleRemoveCharge(item)}
-                                                                            disabled={removingItemId === item.id}
-                                                                            title="Remove this charge from the bill"
-                                                                            className="text-gray-300 hover:text-red-600 disabled:opacity-40 text-base leading-none font-bold transition-colors"
-                                                                        >
-                                                                            {removingItemId === item.id ? '…' : '×'}
-                                                                        </button>
-                                                                    </td>
-                                                                </tr>
+                                                                editingItemId === item.id ? (
+                                                                    <tr key={item.id} className="border-b bg-amber-50/60">
+                                                                        <td className="p-1.5">
+                                                                            <input
+                                                                                type="text"
+                                                                                value={editDesc}
+                                                                                onChange={(e) => setEditDesc(e.target.value)}
+                                                                                className="w-full px-2 py-1 border rounded text-xs"
+                                                                                placeholder="Service name"
+                                                                            />
+                                                                        </td>
+                                                                        <td className="p-1.5">
+                                                                            <input
+                                                                                type="date"
+                                                                                value={editDate}
+                                                                                max={new Date().toISOString().slice(0, 10)}
+                                                                                onChange={(e) => setEditDate(e.target.value)}
+                                                                                className="w-full px-1.5 py-1 border rounded text-xs"
+                                                                            />
+                                                                        </td>
+                                                                        <td className="p-1.5">
+                                                                            <input
+                                                                                type="number"
+                                                                                min="1"
+                                                                                value={editQty}
+                                                                                onChange={(e) => setEditQty(parseInt(e.target.value) || 1)}
+                                                                                className="w-16 px-2 py-1 border rounded text-xs text-right ml-auto block"
+                                                                            />
+                                                                        </td>
+                                                                        <td className="p-2 text-right text-gray-400" title="Rate is locked to the master. Apply a discount or re-add the service to change the amount.">
+                                                                            ₹{item.unit_price?.toLocaleString('en-IN')}
+                                                                        </td>
+                                                                        <td className="p-2 text-right text-gray-400">{item.tax_rate}%</td>
+                                                                        <td className="p-2 text-right text-gray-400">₹{(item.net_price + item.tax_amount)?.toLocaleString('en-IN')}</td>
+                                                                        <td className="p-2 text-center whitespace-nowrap">
+                                                                            <button
+                                                                                onClick={() => handleSaveItem(item)}
+                                                                                disabled={savingItem}
+                                                                                title="Save changes"
+                                                                                className="text-emerald-600 hover:text-emerald-800 disabled:opacity-40 text-sm font-bold mr-1.5"
+                                                                            >
+                                                                                {savingItem ? '…' : '✓'}
+                                                                            </button>
+                                                                            <button
+                                                                                onClick={cancelEditItem}
+                                                                                disabled={savingItem}
+                                                                                title="Cancel"
+                                                                                className="text-gray-400 hover:text-gray-700 disabled:opacity-40 text-sm font-bold"
+                                                                            >
+                                                                                ✕
+                                                                            </button>
+                                                                        </td>
+                                                                    </tr>
+                                                                ) : (
+                                                                    <tr key={item.id} className="border-b group">
+                                                                        <td className="p-2">{item.description}</td>
+                                                                        <td className="p-2 text-gray-400">{new Date(item.created_at).toLocaleDateString('en-GB')}</td>
+                                                                        <td className="p-2 text-right">{item.quantity}</td>
+                                                                        <td className="p-2 text-right">₹{item.unit_price?.toLocaleString('en-IN')}</td>
+                                                                        <td className="p-2 text-right">{item.tax_rate}%</td>
+                                                                        <td className="p-2 text-right">₹{(item.net_price + item.tax_amount)?.toLocaleString('en-IN')}</td>
+                                                                        <td className="p-2 text-center whitespace-nowrap">
+                                                                            <button
+                                                                                onClick={() => startEditItem(item)}
+                                                                                disabled={editingItemId !== null}
+                                                                                title="Edit service name, quantity or date"
+                                                                                className="text-gray-300 hover:text-blue-600 disabled:opacity-40 text-sm leading-none mr-1.5 transition-colors"
+                                                                            >
+                                                                                ✎
+                                                                            </button>
+                                                                            <button
+                                                                                onClick={() => handleRemoveCharge(item)}
+                                                                                disabled={removingItemId === item.id || editingItemId !== null}
+                                                                                title="Remove this charge from the bill"
+                                                                                className="text-gray-300 hover:text-red-600 disabled:opacity-40 text-base leading-none font-bold transition-colors"
+                                                                            >
+                                                                                {removingItemId === item.id ? '…' : '×'}
+                                                                            </button>
+                                                                        </td>
+                                                                    </tr>
+                                                                )
                                                             ))}
                                                         </tbody>
                                                     </table>
@@ -706,7 +811,7 @@ export default function IpdBillingPage() {
                     </div>
 
                     {/* Right: Actions */}
-                    <div className="col-span-3 space-y-3">
+                    <div className="col-span-2 space-y-3">
                         <div className="bg-white rounded-lg shadow p-4">
                             <h3 className="font-semibold text-sm mb-3">Quick Actions</h3>
                             <div className="space-y-2">

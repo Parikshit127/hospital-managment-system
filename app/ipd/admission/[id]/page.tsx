@@ -27,7 +27,7 @@ import {
     breakOpenPackage, updateAdmissionPackageAmount, removeAdmissionPackage,
     getPackagesForAdmission,
 } from '@/app/actions/ipd-finance-actions';
-import { removeInvoiceItem } from '@/app/actions/finance-actions';
+import { removeInvoiceItem, updateInvoiceItem } from '@/app/actions/finance-actions';
 import {
     searchDoctorsForIPD,
     getIPDServiceCatalog,
@@ -157,6 +157,13 @@ export default function AdmissionDetailPage() {
     const [chargeDateTime, setChargeDateTime] = useState('');
     const [postingCharge, setPostingCharge] = useState(false);
     const [removingItemId, setRemovingItemId] = useState<number | null>(null);
+
+    // Inline edit of a bill line (service name, qty, service date+time). Rate stays locked.
+    const [editingItemId, setEditingItemId] = useState<number | null>(null);
+    const [editDesc, setEditDesc] = useState('');
+    const [editQty, setEditQty] = useState(1);
+    const [editDateTime, setEditDateTime] = useState('');
+    const [savingItem, setSavingItem] = useState(false);
     const [chargeMode, setChargeMode] = useState<'service' | 'package'>('service');
     const [packages, setPackages] = useState<any[]>([]);
     const [pkgSearch, setPkgSearch] = useState('');
@@ -787,6 +794,46 @@ export default function AdmissionDetailPage() {
             loadBill();
         } else {
             toast.error(res.error || 'Failed to remove charge');
+        }
+    };
+
+    // Format a date into the value a <input type="datetime-local"> expects, in LOCAL
+    // time (toISOString would shift by the timezone offset and show the wrong clock).
+    const toLocalInput = (d: Date) => {
+        const p = (n: number) => String(n).padStart(2, '0');
+        return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+    };
+
+    const startEditItem = (item: any) => {
+        setEditingItemId(item.id);
+        setEditDesc(item.description || '');
+        setEditQty(Number(item.quantity) || 1);
+        // created_at is the service date/time this charge is billed against.
+        setEditDateTime(item.created_at ? toLocalInput(new Date(item.created_at)) : '');
+    };
+
+    const cancelEditItem = () => {
+        setEditingItemId(null);
+        setEditDesc(''); setEditQty(1); setEditDateTime('');
+    };
+
+    const handleSaveItem = async (item: any) => {
+        if (!bill?.invoice?.id) return;
+        if (!editDesc.trim()) { toast.error('Service name cannot be empty'); return; }
+        if (!editQty || editQty < 1) { toast.error('Quantity must be at least 1'); return; }
+        setSavingItem(true);
+        const res = await updateInvoiceItem(item.id, {
+            description: editDesc.trim(),
+            quantity: editQty,
+            service_date: editDateTime || undefined,
+        });
+        setSavingItem(false);
+        if (res.success) {
+            cancelEditItem();
+            toast.success('Charge updated');
+            setBill(null); loadBill();
+        } else {
+            toast.error(res.error || 'Failed to update charge');
         }
     };
 
@@ -2153,13 +2200,75 @@ export default function AdmissionDetailPage() {
                                                             <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest">{cat}</p>
                                                         </div>
                                                         <div className="divide-y divide-gray-100">
-                                                            {items.map((item: any) => (
+                                                            {items.map((item: any) => {
+                                                                const isPackageLine = String(item.service_category || item.department || '') === 'Package';
+                                                                if (editingItemId === item.id) {
+                                                                    return (
+                                                                        <div key={item.id} className="px-4 py-3 bg-amber-50/60 text-xs">
+                                                                            <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-end">
+                                                                                <div className="sm:col-span-5">
+                                                                                    <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Service name</label>
+                                                                                    <input
+                                                                                        type="text"
+                                                                                        value={editDesc}
+                                                                                        onChange={(e) => setEditDesc(e.target.value)}
+                                                                                        className="w-full px-2 py-1.5 border rounded-lg text-xs"
+                                                                                        placeholder="Service name"
+                                                                                    />
+                                                                                </div>
+                                                                                <div className="sm:col-span-4">
+                                                                                    <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Service date &amp; time</label>
+                                                                                    <input
+                                                                                        type="datetime-local"
+                                                                                        value={editDateTime}
+                                                                                        max={toLocalInput(new Date())}
+                                                                                        onChange={(e) => setEditDateTime(e.target.value)}
+                                                                                        className="w-full px-2 py-1.5 border rounded-lg text-xs"
+                                                                                    />
+                                                                                </div>
+                                                                                <div className="sm:col-span-2">
+                                                                                    <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Qty</label>
+                                                                                    <input
+                                                                                        type="number"
+                                                                                        min="1"
+                                                                                        value={editQty}
+                                                                                        onChange={(e) => setEditQty(parseInt(e.target.value) || 1)}
+                                                                                        className="w-full px-2 py-1.5 border rounded-lg text-xs text-right"
+                                                                                    />
+                                                                                </div>
+                                                                                <div className="sm:col-span-1 flex gap-1 justify-end pb-0.5">
+                                                                                    <button
+                                                                                        onClick={() => handleSaveItem(item)}
+                                                                                        disabled={savingItem}
+                                                                                        title="Save changes"
+                                                                                        className="text-emerald-600 hover:text-emerald-800 disabled:opacity-40 text-sm font-bold"
+                                                                                    >
+                                                                                        {savingItem ? '…' : '✓'}
+                                                                                    </button>
+                                                                                    <button
+                                                                                        onClick={cancelEditItem}
+                                                                                        disabled={savingItem}
+                                                                                        title="Cancel"
+                                                                                        className="text-gray-400 hover:text-gray-700 disabled:opacity-40 text-sm font-bold"
+                                                                                    >
+                                                                                        ✕
+                                                                                    </button>
+                                                                                </div>
+                                                                            </div>
+                                                                            <p className="text-[10px] text-gray-400 mt-1.5">Rate ₹{item.unit_price.toLocaleString()} is locked to the master — apply a discount or re-add the service to change the amount.</p>
+                                                                        </div>
+                                                                    );
+                                                                }
+                                                                return (
                                                                 <div key={item.id} className="px-4 py-3 flex items-center justify-between text-xs">
                                                                     <div className="flex-1 min-w-0">
                                                                         <p className="font-medium text-gray-800 truncate">{item.description}</p>
                                                                         <p className="text-gray-400 mt-0.5">
                                                                             {item.quantity} × ₹{item.unit_price.toLocaleString()}
                                                                             {Number(item.discount) > 0 && <span className="text-emerald-600"> − ₹{Number(item.discount).toLocaleString()} disc</span>}
+                                                                        </p>
+                                                                        <p className="text-[10px] text-gray-400 mt-0.5">
+                                                                            {new Date(item.created_at).toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                                                                         </p>
                                                                         {item.rendered_by_doctor_id && (
                                                                             <p className="text-[10px] text-teal-700 font-bold mt-0.5">
@@ -2169,17 +2278,30 @@ export default function AdmissionDetailPage() {
                                                                     </div>
                                                                     <p className="font-black text-gray-900 ml-4">₹{item.net_price.toLocaleString()}</p>
                                                                     {data.status === 'Admitted' && (
-                                                                        <button
-                                                                            onClick={() => handleRemoveBillCharge(item)}
-                                                                            disabled={removingItemId === item.id}
-                                                                            title="Remove this charge from the bill"
-                                                                            className="ml-3 shrink-0 text-gray-300 hover:text-rose-600 disabled:opacity-40 text-base leading-none font-bold transition-colors"
-                                                                        >
-                                                                            {removingItemId === item.id ? '…' : '×'}
-                                                                        </button>
+                                                                        <>
+                                                                            {!isPackageLine && (
+                                                                                <button
+                                                                                    onClick={() => startEditItem(item)}
+                                                                                    disabled={editingItemId !== null}
+                                                                                    title="Edit service name, quantity or date & time"
+                                                                                    className="ml-3 shrink-0 text-gray-300 hover:text-blue-600 disabled:opacity-40 text-sm leading-none transition-colors"
+                                                                                >
+                                                                                    ✎
+                                                                                </button>
+                                                                            )}
+                                                                            <button
+                                                                                onClick={() => handleRemoveBillCharge(item)}
+                                                                                disabled={removingItemId === item.id || editingItemId !== null}
+                                                                                title="Remove this charge from the bill"
+                                                                                className="ml-3 shrink-0 text-gray-300 hover:text-rose-600 disabled:opacity-40 text-base leading-none font-bold transition-colors"
+                                                                            >
+                                                                                {removingItemId === item.id ? '…' : '×'}
+                                                                            </button>
+                                                                        </>
                                                                     )}
                                                                 </div>
-                                                            ))}
+                                                                );
+                                                            })}
                                                         </div>
                                                     </div>
                                                 ))}
