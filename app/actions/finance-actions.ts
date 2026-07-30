@@ -393,8 +393,10 @@ export async function getInvoices(filters?: {
         let pharmacyOrders: any[] = [];
         if (fetchPharm) {
             // 3a. OPD pharmacy invoices (invoice_type = 'Pharmacy')
-            const where: any = { invoice_type: 'Pharmacy' };
-            if (filters?.status) where.status = filters.status;
+            // Exclude Cancelled invoices unless the caller explicitly asks for them;
+            // cancelled invoices retain their original net_amount and would inflate totals.
+            const where: any = { invoice_type: 'Pharmacy', status: { not: 'Cancelled' } };
+            if (filters?.status) where.status = filters.status; // caller override replaces the not-Cancelled guard
             if (filters?.patient_id) where.patient_id = filters.patient_id;
             if (filters?.mobile_number) {
                 where.patient = { phone: { contains: filters.mobile_number } };
@@ -409,17 +411,29 @@ export async function getInvoices(filters?: {
                 where,
                 include: {
                     patient: { select: { full_name: true, phone: true } },
+                    items: true,
                 },
                 orderBy: { created_at: 'desc' },
                 take: limit,
             });
 
             // 3b. IPD invoices that have pharmacy line items
+            // Exclude Cancelled IPD invoices (they retain net_amount but should not
+            // appear in pharmacy sales totals).
             const ipdPharmWhere: any = {
                 invoice_type: 'IPD',
-                items: { some: { service_category: 'Pharmacy' } },
+                status: { not: 'Cancelled' },
+                items: {
+                    some: {
+                        OR: [
+                            { service_category: { equals: 'Pharmacy', mode: 'insensitive' } },
+                            { department: { equals: 'Pharmacy', mode: 'insensitive' } },
+                            { description: { startsWith: 'Pharmacy:', mode: 'insensitive' } },
+                        ]
+                    }
+                },
             };
-            if (filters?.status) ipdPharmWhere.status = filters.status;
+            if (filters?.status) ipdPharmWhere.status = filters.status; // caller override
             if (filters?.patient_id) ipdPharmWhere.patient_id = filters.patient_id;
             if (filters?.mobile_number) {
                 ipdPharmWhere.patient = { phone: { contains: filters.mobile_number } };
@@ -434,7 +448,7 @@ export async function getInvoices(filters?: {
                 where: ipdPharmWhere,
                 include: {
                     patient: { select: { full_name: true, phone: true } },
-                    items: { where: { service_category: 'Pharmacy' } },
+                    items: true,
                     // admission.patient is a fallback for the invoice name — some IPD
                     // invoices don't resolve their own patient relation, but the
                     // admission always carries the registered patient.
@@ -449,12 +463,20 @@ export async function getInvoices(filters?: {
             // pharmacy items by dispensing (created_at to the minute) — three
             // dispensings in a day become three separate Customer-Invoices rows.
             // The discharge/master bill still groups these by day.
+            const isPharmItem = (it: any) => {
+                const cat = String(it.service_category || '').toLowerCase();
+                const dept = String(it.department || '').toLowerCase();
+                const desc = String(it.description || '').toLowerCase();
+                return cat === 'pharmacy' || dept === 'pharmacy' || desc.startsWith('pharmacy:');
+            };
+
             const grossOf = (items: any[]) => items.reduce((s: number, it: any) =>
                 s + Number(it.net_price || 0) + Number(it.tax_amount || 0), 0);
 
             const ipdPharmBills: any[] = [];
             for (const inv of ipdPharmInvoices) {
-                const pharmItems: any[] = inv.items || [];
+                const allItems: any[] = inv.items || [];
+                const pharmItems = allItems.filter(isPharmItem);
                 if (pharmItems.length === 0) continue;
 
                 // Group items into bills by dispensing timestamp.
@@ -465,10 +487,16 @@ export async function getInvoices(filters?: {
                     billMap.get(key)!.push(it);
                 }
 
-                // Allocate the invoice's still-outstanding pharmacy balance across the
-                // bills, oldest paid first, so the latest bills carry the balance.
+                // Total pharmacy gross for this IPD invoice and total IPD net
                 const totalPharmGross = grossOf(pharmItems);
-                const pharmOutstanding = Math.max(0, Math.min(totalPharmGross, Number(inv.balance_due || 0)));
+                const totalIpdNet = Number(inv.net_amount || 0);
+
+                // Proportional allocation of balance due:
+                // Pharmacy portion of outstanding balance is (totalPharmGross / totalIpdNet) * inv.balance_due
+                const pharmOutstanding = totalIpdNet > 0
+                    ? Math.max(0, Math.min(totalPharmGross, (totalPharmGross / totalIpdNet) * Number(inv.balance_due || 0)))
+                    : (inv.status === 'Final' ? 0 : totalPharmGross);
+
                 let paidPharm = totalPharmGross - pharmOutstanding;
 
                 const bills = Array.from(billMap.entries())
@@ -645,25 +673,47 @@ export async function getInvoices(filters?: {
                     source: 'LAB'
                 };
             }),
-            ...pharmacyOrders.map((pharm: any) => ({
-                id: pharm.id,
-                invoice_number: pharm.invoice_number,
-                patient_id: pharm.patient_id,
-                patient: pharm.patient || pharm._admPatient || null,
-                notes: pharm.notes,
-                invoice_type: 'PHARMACY',
-                net_amount: pharm._isIpdPharmacy ? pharm._pharmTotal : pharm.net_amount,
-                total_amount: pharm._isIpdPharmacy ? pharm._pharmTotal : pharm.total_amount,
-                balance_due: pharm._isIpdPharmacy ? pharm._pharmBalance : pharm.balance_due,
-                status: pharm._isPackageConsumed ? 'Package' : pharm.status,
-                created_at: pharm._isIpdPharmacy ? pharm._pharmDate : pharm.created_at,
-                source: pharm._isPackageConsumed ? 'IPD-PKG-PHARMACY' : pharm._isIpdPharmacy ? 'IPD-PHARMACY' : 'PHARMACY',
-                admission_id: pharm.admission_id || null,
-                admission_status: pharm._admissionStatus || null,
-                doctor_name: pharm.doctor_name || null,
-                _billKey: pharm._billKey || null,
-                _isPackageConsumed: pharm._isPackageConsumed || false,
-            }))
+            ...pharmacyOrders.map((pharm: any) => {
+                let netAmt = pharm._isIpdPharmacy ? pharm._pharmTotal : pharm.net_amount;
+                let balDue = pharm._isIpdPharmacy ? pharm._pharmBalance : pharm.balance_due;
+
+                if (!pharm._isIpdPharmacy && !pharm._isPackageConsumed && pharm.items && pharm.items.length > 0) {
+                    const isPharmItem = (it: any) => {
+                        const cat = String(it.service_category || '').toLowerCase();
+                        const dept = String(it.department || '').toLowerCase();
+                        const desc = String(it.description || '').toLowerCase();
+                        return cat === 'pharmacy' || dept === 'pharmacy' || desc.startsWith('pharmacy:');
+                    };
+                    const pharmItems = pharm.items.filter(isPharmItem);
+                    if (pharmItems.length > 0 && pharmItems.length < pharm.items.length) {
+                        const totalPharmGross = pharmItems.reduce((s: number, it: any) =>
+                            s + Number(it.net_price || 0) + Number(it.tax_amount || 0), 0);
+                        const totalInvNet = Number(pharm.net_amount || 0);
+                        netAmt = totalPharmGross;
+                        balDue = totalInvNet > 0 ? (totalPharmGross / totalInvNet) * Number(pharm.balance_due || 0) : Number(pharm.balance_due || 0);
+                    }
+                }
+
+                return {
+                    id: pharm.id,
+                    invoice_number: pharm.invoice_number,
+                    patient_id: pharm.patient_id,
+                    patient: pharm.patient || pharm._admPatient || null,
+                    notes: pharm.notes,
+                    invoice_type: 'PHARMACY',
+                    net_amount: netAmt,
+                    total_amount: netAmt,
+                    balance_due: balDue,
+                    status: pharm._isPackageConsumed ? 'Package' : pharm.status,
+                    created_at: pharm._isIpdPharmacy ? pharm._pharmDate : pharm.created_at,
+                    source: pharm._isPackageConsumed ? 'IPD-PKG-PHARMACY' : pharm._isIpdPharmacy ? 'IPD-PHARMACY' : 'PHARMACY',
+                    admission_id: pharm.admission_id || null,
+                    admission_status: pharm._admissionStatus || null,
+                    doctor_name: pharm.doctor_name || null,
+                    _billKey: pharm._billKey || null,
+                    _isPackageConsumed: pharm._isPackageConsumed || false,
+                };
+            })
         ];
 
         // Sort by date DESC

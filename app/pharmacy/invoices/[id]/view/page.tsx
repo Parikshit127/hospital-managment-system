@@ -81,7 +81,13 @@ export default async function PharmacyInvoiceViewPage({ params, searchParams }: 
 
     const isIpd = invoice.invoice_type === 'IPD';
     const allItems = invoice.items as any[];
-    let items = isIpd ? allItems.filter((i: any) => i.service_category === 'Pharmacy') : allItems;
+    const isPharmItem = (i: any) => {
+        const cat = String(i.service_category || '').toLowerCase();
+        const dept = String(i.department || '').toLowerCase();
+        const desc = String(i.description || '').toLowerCase();
+        return cat === 'pharmacy' || dept === 'pharmacy' || desc.startsWith('pharmacy:');
+    };
+    let items = isIpd ? allItems.filter(isPharmItem) : allItems;
     if (isIpd && billKey) {
         const scoped = items.filter((i: any) => dispensingKey(i.created_at) === billKey);
         if (scoped.length > 0) items = scoped;
@@ -187,8 +193,13 @@ export default async function PharmacyInvoiceViewPage({ params, searchParams }: 
         Number((invoice as any).total_discount || 0) - lineDiscount,
     ));
 
-    const paid    = isIpd ? 0 : Number((invoice as any).paid_amount || 0);
-    const balance = isIpd ? grandTotal : Math.max(0, grandTotal - paid);
+    const totalIpdNet = Number((invoice as any).net_amount || 0);
+    const ipdPaidRatio = isIpd
+        ? (totalIpdNet > 0 ? Math.min(1, Math.max(0, Number((invoice as any).paid_amount || 0) / totalIpdNet)) : (invoice.status === 'Final' ? 1 : 0))
+        : 0;
+
+    const paid    = isIpd ? grandTotal * ipdPaidRatio : Number((invoice as any).paid_amount || 0);
+    const balance = isIpd ? Math.max(0, grandTotal - paid) : Math.max(0, grandTotal - paid);
 
     const dateSource: Date = (isIpd && items.length > 0)
         ? new Date((items[items.length - 1] as any).created_at || invoice.created_at)
