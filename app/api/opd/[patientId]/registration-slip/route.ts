@@ -454,12 +454,15 @@ function renderOpdSlipHtml(patient: any, appt: any, b: BillBranding, org: any, d
                 display: none !important;
             }
             /* On pre-printed stationery the rendered letterhead is hidden and the
-               body is pushed clear of the printed header. The offset belongs on
-               whichever block now comes first — that is the document title, not
-               the patient card, or the title would land on top of the pre-printed
-               header. Driven by the org's Bill Settings → Header Height (same
-               field used by prescriptions/fee receipts) so each hospital's own
-               letterhead spacing applies instead of one fixed value for everyone. */
+               body is pushed clear of the printed header. headerHeight is the
+               TOTAL distance from the page top to the first line of content —
+               exactly the same contract as fee-receipt, prescription, and every
+               other bill page. The slip-outer padding-top must be zeroed here so
+               it doesn't double-stack with the doc-title margin (that was the
+               Axten over-gap bug: 12mm padding + headerHeight px = too much). */
+            body.hide-letterhead .slip-outer {
+                padding-top: 0;
+            }
             body.hide-letterhead .doc-title-row {
                 margin-top: ${b.headerHeight}px;
             }
