@@ -1580,9 +1580,11 @@ export async function savePatientExternalRecord(patientId: string, data: {
 }) {
     try {
         const { db, organizationId } = await requireTenantContext();
+        // updated_at is NOT NULL with no default, and a raw INSERT bypasses Prisma's
+        // @updatedAt — omitting it caused every save to fail with a NULL violation.
         await db.$executeRaw`
             INSERT INTO patient_external_records
-            (patient_id, "organizationId", title, description, hospital_name, record_date, file_url, file_name)
+            (patient_id, "organizationId", title, description, hospital_name, record_date, file_url, file_name, updated_at)
             VALUES (
                 ${patientId},
                 ${organizationId},
@@ -1591,7 +1593,8 @@ export async function savePatientExternalRecord(patientId: string, data: {
                 ${data.hospital_name || null},
                 ${data.record_date ? new Date(data.record_date) : null},
                 ${data.file_url || null},
-                ${data.file_name || null}
+                ${data.file_name || null},
+                ${new Date()}
             )
         `;
         return { success: true };

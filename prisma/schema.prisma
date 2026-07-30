@@ -3248,7 +3248,10 @@ model patient_external_records {
   file_url       String?
   file_name      String?
   created_at     DateTime  @default(now())
-  updated_at     DateTime  @updatedAt
+  // @default(now()) as well as @updatedAt: raw-SQL inserts (savePatientExternalRecord)
+  // bypass Prisma's @updatedAt, so without a DB-level default the NOT NULL column
+  // was left null and every save failed.
+  updated_at     DateTime  @default(now()) @updatedAt
 
   @@index([patient_id])
   @@index([organizationId])
