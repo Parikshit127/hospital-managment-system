@@ -23,7 +23,8 @@ export function VoiceFormMirror({
   onManualChange,
   disabled,
 }: VoiceFormMirrorProps) {
-  const inputCls = "w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 bg-white transition-all duration-200";
+  // text-base (16px) on mobile avoids iOS Safari's auto-zoom-on-focus for small inputs.
+  const inputCls = "w-full px-4 py-3 border border-gray-200 rounded-xl text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 bg-white transition-all duration-200";
   const labelCls = "block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5";
   const activeCls = "ring-[3px] ring-emerald-500/40 border-emerald-500 bg-emerald-50 shadow-lg transform scale-[1.02] z-10 transition-all duration-300";
 

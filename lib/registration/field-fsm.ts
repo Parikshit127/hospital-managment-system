@@ -10,17 +10,16 @@ import {
   deriveAgeFromDOB,
   isSkipIntent,
   isYes,
-  isNo,
   type FieldName,
   type FieldSpec,
 } from './field-specs';
 import { getPrompts, getFieldLabel } from '@/lib/voice/i18n';
+import { speakText } from '@/lib/voice/tts';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
 export type FSMState =
   | 'IDLE'
-  | 'CONSENT'
   | 'GREETING'
   | 'COLLECT_FIELD'
   | 'CONFIRM_FIELD'
@@ -172,46 +171,22 @@ export class RegistrationFSM {
   // ─── Main Flow ─────────────────────────────────────────────────────────────
 
   async start() {
+    // Tapping the mic to get here IS the consent gesture (mic-permission
+    // prompt + on-screen copy already covered it) — no spoken yes/no consent
+    // loop needed, and it would have to run before we know the patient's
+    // language anyway. Go straight to greeting + field collection.
     const prompts = getPrompts(this.session.language);
 
-    // Consent
-    this.update({ state: 'CONSENT' });
-    await this.speak(prompts.consent);
-    
-    const declineMsg = this.session.language === 'hi'
-      ? 'कोई बात नहीं। आप स्क्रीन पर फॉर्म भर सकते हैं।'
-      : 'No problem. You can fill the form on screen instead.';
-
-    let consentRetries = 0;
-    const MAX_CONSENT_RETRIES = 2;
-    while (!this.aborted) {
-      const consentResult = await this.listen('boolean');
-      if (this.aborted) return;
-
-      if (isYes(consentResult.text)) {
-        break; // user consented
-      }
-
-      if (isNo(consentResult.text)) {
-        // Explicit decline — fall back to manual entry immediately.
-        await this.speak(declineMsg);
-        return;
-      }
-
-      // Empty or unrecognised input: don't abort — re-prompt up to MAX times.
-      consentRetries++;
-      if (consentRetries > MAX_CONSENT_RETRIES) {
-        await this.speak(declineMsg);
-        return;
-      }
-      await this.speak(this.session.language === 'hi'
-        ? 'मुझे समझ नहीं आया। कृपया "हाँ" या "नहीं" कहें।'
-        : 'I didn\'t catch that, please say yes or no.');
-    }
-
-    // Greeting
     this.update({ state: 'GREETING' });
     await this.speak(prompts.greeting);
+
+    // The assistant doesn't know the patient's language yet (auto-detected
+    // from their first answer) — a short Hindi line, spoken directly rather
+    // than through the session, tells a Hindi speaker they can just answer
+    // in Hindi instead of waiting for a language prompt that no longer exists.
+    if (!this.aborted) {
+      await speakText('अगर आप हिंदी में बात करना चाहें, तो हिंदी में जवाब दें।', 'hi');
+    }
 
     // Start collecting fields
     await this.collectFields();

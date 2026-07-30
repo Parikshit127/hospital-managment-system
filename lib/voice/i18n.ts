@@ -2,8 +2,7 @@
 import type { LanguageCode } from '@/lib/contracts/voice';
 
 export interface VoicePrompts {
-  // Consent & greeting
-  consent: string;
+  // Greeting
   greeting: string;
   
   // Field prompts (keyed by field name)
@@ -66,7 +65,6 @@ function formatDateForSpeech(isoDate: string, lang: LanguageCode): string {
 }
 
 const EN: VoicePrompts = {
-  consent: 'This assistant will use your microphone to help you register. Your voice will be processed to fill the registration form. Do you consent to proceed? Say "yes" to continue.',
   greeting: 'Welcome! I will help you register as a patient. I will ask you a few questions one by one. You can correct any answer at any time. Let\'s begin.',
   
   field: {
@@ -120,7 +118,6 @@ const EN: VoicePrompts = {
 };
 
 const HI: VoicePrompts = {
-  consent: 'यह सहायक आपका पंजीकरण करने में मदद करेगा। आपकी आवाज़ का उपयोग फॉर्म भरने के लिए किया जाएगा। क्या आप आगे बढ़ना चाहते हैं? "हाँ" कहें।',
   greeting: 'नमस्ते! मैं आपको मरीज़ के रूप में पंजीकृत करने में मदद करूँगी। मैं आपसे एक-एक करके कुछ सवाल पूछूँगी। आप किसी भी जवाब को कभी भी सही कर सकते हैं। चलिए शुरू करते हैं।',
   
   field: {

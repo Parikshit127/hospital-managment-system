@@ -8,6 +8,7 @@ async function transcribeWithSarvam(fileBuffer: Buffer, fileName: string, mimeTy
   if (!sarvamKey) throw new Error('SARVAM_API_KEY not configured');
 
   const client = new SarvamAIClient({ apiSubscriptionKey: sarvamKey });
+  const isAuto = languageCode === 'auto';
   const isEnglish = languageCode === 'en-IN';
 
   // Create a fresh File from the buffer so Sarvam gets its own copy
@@ -16,7 +17,9 @@ async function transcribeWithSarvam(fileBuffer: Buffer, fileName: string, mimeTy
   const response = await client.speechToText.transcribe({
     file,
     model: "saaras:v3",
-    language_code: languageCode as any,
+    // Sarvam's own auto-detect sentinel — used when the patient's language
+    // hasn't been picked/detected yet.
+    language_code: (isAuto ? 'unknown' : languageCode) as any,
     // If English is selected but they speak an Indian name, we want Latin script (translit), not Devanagari.
     mode: isEnglish ? "translit" : "transcribe",
   });
@@ -35,8 +38,10 @@ async function transcribeWithGroqWhisper(fileBuffer: Buffer, fileName: string, m
     baseURL: 'https://api.groq.com/openai/v1',
   });
 
-  // Map our language codes to Whisper's ISO-639-1 codes
-  const whisperLang = languageCode === 'hi-IN' ? 'hi' : 'en';
+  const isAuto = languageCode === 'auto';
+  // Map our language codes to Whisper's ISO-639-1 codes; omit the hint
+  // entirely when unknown so Whisper auto-detects.
+  const whisperLang = languageCode === 'hi-IN' ? 'hi' : languageCode === 'en-IN' ? 'en' : undefined;
 
   // Create a fresh File from the buffer so Groq gets its own copy
   const file = new File([new Uint8Array(fileBuffer)], fileName, { type: mimeType });
@@ -44,12 +49,15 @@ async function transcribeWithGroqWhisper(fileBuffer: Buffer, fileName: string, m
   const response = await groq.audio.transcriptions.create({
     file,
     model: 'whisper-large-v3-turbo',
-    language: whisperLang,
-    response_format: 'json',
-  });
+    ...(whisperLang ? { language: whisperLang } : {}),
+    response_format: isAuto ? 'verbose_json' : 'json',
+  } as any);
 
   return {
     transcript: response.text || '',
+    detectedLanguageCode: isAuto
+      ? ((response as any).language?.toLowerCase().startsWith('hin') ? 'hi-IN' : 'en-IN')
+      : languageCode,
   };
 }
 
@@ -77,9 +85,12 @@ export async function POST(req: Request) {
     // ── 1. Try Sarvam AI (Primary) ────────────────────────────────────────
     if (process.env.SARVAM_API_KEY) {
       try {
-        const response = await transcribeWithSarvam(fileBuffer, fileName, mimeType, langCode);
+        const response: any = await transcribeWithSarvam(fileBuffer, fileName, mimeType, langCode);
         console.log('[STT] ✅ Sarvam succeeded');
-        return NextResponse.json({ ...response, provider: 'sarvam' });
+        const detectedLanguageCode = langCode === 'auto'
+          ? (String(response.language_code || '').toLowerCase().startsWith('hi') ? 'hi-IN' : 'en-IN')
+          : langCode;
+        return NextResponse.json({ ...response, detectedLanguageCode, provider: 'sarvam' });
       } catch (error: any) {
         console.warn('[STT] ⚠️ Sarvam failed:', error?.message || error);
         // Fall through to Groq Whisper

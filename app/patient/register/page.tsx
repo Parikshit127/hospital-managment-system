@@ -20,7 +20,6 @@ function RegisterForm() {
     const [orgsLoading, setOrgsLoading] = useState(true);
     const [success, setSuccess] = useState<{ patient_id: string; password?: string; setup_link: string | null } | null>(null);
     const [error, setError] = useState('');
-    const [showManualForm, setShowManualForm] = useState(false);
 
     const [form, setForm] = useState({
         full_name: '', phone: '', email: '', age: '', gender: 'Male',
@@ -78,67 +77,36 @@ function RegisterForm() {
         );
     }
 
-    const inputCls = "w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 bg-white";
+    // text-base (16px) on mobile avoids iOS Safari's auto-zoom-on-focus for small inputs.
+    const inputCls = "w-full px-4 py-3 border border-gray-200 rounded-xl text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 bg-white";
     const labelCls = "block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5";
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-emerald-50 to-teal-50 py-10 px-4">
+        <div className="min-h-screen bg-gradient-to-br from-emerald-50 to-teal-50 py-6 sm:py-10 px-4 pb-28">
             <div className="max-w-2xl mx-auto">
-                <Link href="/patient/login" className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 mb-6">
+                <Link href="/patient/login" className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 mb-4 sm:mb-6">
                     <ArrowLeft className="w-4 h-4" /> Back to Login
                 </Link>
 
-                {/* ─── Entry Choice: Manual vs Voice ─── */}
-                {!showManualForm && (
-                    <div className="bg-white rounded-3xl shadow-xl overflow-hidden mb-6">
-                        <div className="bg-gradient-to-r from-emerald-500 to-teal-600 px-8 py-8 text-white text-center">
-                            <h1 className="text-2xl font-black">Create Patient Account</h1>
-                            <p className="text-emerald-100 text-sm mt-1">Choose how you would like to register</p>
-                        </div>
-                        <div className="p-8 space-y-4">
-                            <button
-                                onClick={() => setShowManualForm(true)}
-                                className="w-full py-5 px-6 border-2 border-gray-200 rounded-2xl hover:border-emerald-400 hover:bg-emerald-50/50 transition-all flex items-center gap-4 group text-left"
-                            >
-                                <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center shrink-0">
-                                    <User className="w-6 h-6 text-emerald-600" />
-                                </div>
-                                <div>
-                                    <span className="font-bold text-gray-800 group-hover:text-emerald-700 text-lg block">Fill Manually</span>
-                                    <p className="text-sm text-gray-500">Type your details into the registration form</p>
-                                </div>
-                            </button>
-                            <button
-                                onClick={() => router.push('/patient/register/voice')}
-                                className="w-full py-5 px-6 border-2 border-gray-200 rounded-2xl hover:border-emerald-400 hover:bg-emerald-50/50 transition-all flex items-center gap-4 group text-left"
-                            >
-                                <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center shrink-0">
-                                    <Mic className="w-6 h-6 text-blue-600" />
-                                </div>
-                                <div>
-                                    <span className="font-bold text-gray-800 group-hover:text-emerald-700 text-lg block">Register with AI Voice Assistant</span>
-                                    <p className="text-sm text-gray-500">Speak your details — the assistant fills the form for you</p>
-                                </div>
-                            </button>
-                            <p className="text-center text-sm text-gray-500 pt-2">
-                                Already have an account?{' '}
-                                <Link href="/patient/login" className="text-emerald-600 font-bold hover:underline">
-                                    Sign In
-                                </Link>
-                            </p>
-                        </div>
-                    </div>
-                )}
-
-                {/* ─── Manual Registration Form (unchanged) ─── */}
-                {showManualForm && (
                 <div className="bg-white rounded-3xl shadow-xl overflow-hidden">
-                    <div className="bg-gradient-to-r from-emerald-500 to-teal-600 px-8 py-8 text-white">
-                        <h1 className="text-2xl font-black">Create Patient Account</h1>
-                        <p className="text-emerald-100 text-sm mt-1">Register to access your health portal</p>
+                    <div className="bg-gradient-to-r from-emerald-500 to-teal-600 px-6 sm:px-8 py-6 sm:py-8 text-white">
+                        <div className="flex items-start justify-between gap-4">
+                            <div>
+                                <h1 className="text-2xl font-black">Create Patient Account</h1>
+                                <p className="text-emerald-100 text-sm mt-1">Register to access your health portal</p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => router.push('/patient/register/voice')}
+                                className="shrink-0 inline-flex items-center gap-1.5 bg-white/15 hover:bg-white/25 transition-colors rounded-full px-3.5 py-2 text-xs font-bold min-h-[36px]"
+                                title="Register by speaking instead"
+                            >
+                                <Mic className="w-4 h-4" /> Use Voice
+                            </button>
+                        </div>
                     </div>
 
-                    <form onSubmit={handleSubmit} className="p-8 space-y-5">
+                    <form onSubmit={handleSubmit} className="p-6 sm:p-8 space-y-5">
                         {/* Hospital Selection */}
                         <div>
                             <label className={labelCls}>Select Hospital / Clinic *</label>
@@ -314,8 +282,18 @@ function RegisterForm() {
                         </p>
                     </form>
                 </div>
-                )}
             </div>
+
+            {/* Floating voice-entry button — reachable from anywhere on the form */}
+            <button
+                type="button"
+                onClick={() => router.push('/patient/register/voice')}
+                className="fixed bottom-6 right-4 sm:right-6 z-20 flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-full shadow-xl shadow-blue-900/20 px-5 py-4 min-h-[56px] transition-colors"
+                title="Register by speaking instead"
+            >
+                <Mic className="w-5 h-5" />
+                <span className="text-sm">Register with Voice</span>
+            </button>
         </div>
     );
 }

@@ -15,6 +15,8 @@ import { STT_LANG_MAP } from './i18n';
 export interface STTResult {
   text: string;
   confidence: number;
+  /** Set when the call was made with `autoDetect: true` and the server identified a language. */
+  detectedLanguage?: LanguageCode;
 }
 
 export function isSTTSupported(): boolean {
@@ -94,7 +96,8 @@ async function ensureWorkletLoaded(ctx: AudioContext): Promise<void> {
 export async function listenOnce(
   language: LanguageCode,
   timeoutMs: number = 15000,
-  expectedType: 'boolean' | 'text' = 'text'
+  expectedType: 'boolean' | 'text' = 'text',
+  opts?: { autoDetect?: boolean }
 ): Promise<STTResult> {
   if (!isSTTSupported()) {
     throw new Error('Microphone access is not supported in this browser');
@@ -138,7 +141,7 @@ export async function listenOnce(
       recognition.lang = STT_LANG_MAP[language];
       recognition.continuous = false; // Stop immediately after the first phrase
       recognition.interimResults = true;
-      
+
       let localResolved = false;
       const localFinish = (text: string, conf: number) => {
         if (localResolved) return;
@@ -209,7 +212,7 @@ export async function listenOnce(
     // PHASE 3A — WEBSOCKET STREAMING STT PATH (text responses)
     // ─────────────────────────────────────────────────────────────────────────
 
-    const langCode = language === 'hi' ? 'hi-IN' : 'en-IN';
+    const langCode = opts?.autoDetect ? 'auto' : (language === 'hi' ? 'hi-IN' : 'en-IN');
     let resolved = false;
     let ws: WebSocket | null = null;
     let workletNode: AudioWorkletNode | null = null;
@@ -225,12 +228,18 @@ export async function listenOnce(
       }
     };
 
+    /** Map a server-reported lang code (e.g. "hi-IN") back to our LanguageCode. */
+    const toLanguageCode = (lang?: string): LanguageCode | undefined => {
+      if (!lang) return undefined;
+      return lang.toLowerCase().startsWith('hi') ? 'hi' : 'en';
+    };
+
     /** Resolve the outer Promise and clean up. */
-    const finish = (text: string, confidence: number) => {
+    const finish = (text: string, confidence: number, detectedLanguage?: LanguageCode) => {
       if (resolved) return;
       resolved = true;
       cleanup();
-      resolve({ text, confidence });
+      resolve({ text, confidence, detectedLanguage });
     };
 
     /** Tell the server that the user has stopped speaking. */
@@ -325,7 +334,7 @@ export async function listenOnce(
           const res = await fetch('/api/public/voice/stt', { method: 'POST', body: fd });
           if (!res.ok) throw new Error(`STT HTTP ${res.status}`);
           const data = await res.json();
-          finish(data.transcript || '', 1);
+          finish(data.transcript || '', 1, opts?.autoDetect ? toLanguageCode(data.detectedLanguageCode) : undefined);
         } catch {
           finish('', 0);
         }
@@ -390,8 +399,8 @@ export async function listenOnce(
           break;
 
         case 'final':
-          console.log('[STT-WS] Final transcript:', msg.text);
-          finish(msg.text ?? '', 1);
+          console.log('[STT-WS] Final transcript:', msg.text, 'lang:', msg.lang);
+          finish(msg.text ?? '', 1, opts?.autoDetect ? toLanguageCode(msg.lang) : undefined);
           break;
 
         case 'error':

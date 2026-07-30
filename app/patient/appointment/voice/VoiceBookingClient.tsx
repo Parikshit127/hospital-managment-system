@@ -20,7 +20,7 @@
  * =====================================================================
  */
 
-import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
 
@@ -38,9 +38,11 @@ import type {
   DoctorCard,
   SlotCard,
   AppointmentCreationResult,
+  LanguageCode,
 } from '@/lib/contracts/voice';
 
 import { createVoiceSession } from '@/lib/voice/session';
+import { speakText } from '@/lib/voice/tts';
 import { isYes, isNo } from '@/lib/registration/field-specs';
 import { getBookingPrompts, formatDateSpoken, formatTimeSpoken } from '@/lib/voice/booking-i18n';
 
@@ -384,8 +386,15 @@ function VoiceBookingPageInner({
   const [state, dispatch] = useReducer(bookingReducer, initialState);
 
   // ── Bilingual prompts (keyed by the session language en|hi) ─────────────────
-  const lang = registration.language;
-  const prompts = getBookingPrompts(lang);
+  // No pre-selected language — the assistant starts English and switches to
+  // whatever it auto-detects from the patient's first answer (see
+  // runSymptomStep below). `langRef` lets the long-lived useCallback closures
+  // read the CURRENT language instead of the one in scope when they were
+  // created; it's kept in sync with `lang` on every render and bumped
+  // immediately (ahead of the state update) the instant detection happens.
+  const [lang, setLang] = useState<LanguageCode>(registration.language);
+  const langRef = useRef<LanguageCode>(lang);
+  langRef.current = lang;
 
   // ── VoiceSession (singleton ref — created once, browser-only) ─────────────
   const voiceSessionRef = useRef<VoiceSession | null>(null);
@@ -398,9 +407,12 @@ function VoiceBookingPageInner({
   // ── Initialize Real Voice Session ─────────────
   useEffect(() => {
     if (typeof window !== 'undefined' && !voiceSessionRef.current) {
-      voiceSessionRef.current = createVoiceSession(registration.language);
+      // ?language= is an optional QA override; normally absent, in which case
+      // the session starts in 'auto' detect mode.
+      const override = searchParams.get('language');
+      voiceSessionRef.current = createVoiceSession(override === 'en' || override === 'hi' ? override : 'auto');
     }
-  }, [registration.language]);
+  }, [searchParams]);
 
   // ─────────────────────────────────────────────────────────────────────────
   // Helper: speak + update state
@@ -434,7 +446,13 @@ function VoiceBookingPageInner({
   const runSymptomStep = useCallback(async (skipGreeting = false) => {
     if (!skipGreeting) {
       const firstName = registration.patientName.split(' ')[0];
-      await speak(prompts.welcome(firstName));
+      await speak(getBookingPrompts(langRef.current).welcome(firstName));
+      // Language isn't detected yet (that happens from the answer below) — a
+      // short Hindi line, spoken directly rather than through the session,
+      // tells a Hindi speaker they can just answer in Hindi.
+      if (langRef.current === 'en') {
+        await speakText('आप हिंदी में भी अपनी समस्या बता सकते हैं।', 'hi');
+      }
     }
 
     // Listen for symptoms
@@ -446,22 +464,30 @@ function VoiceBookingPageInner({
       console.error('[VoiceBooking] listen() error:', error);
     }
 
+    // The voice kernel auto-detects English vs. Hindi from this first answer.
+    // Sync langRef immediately (usable this tick) and setLang for re-renders.
+    const detectedLang = voiceSessionRef.current?.language;
+    if (detectedLang && detectedLang !== langRef.current) {
+      langRef.current = detectedLang;
+      setLang(detectedLang);
+    }
+
     if (!symptomText.trim()) {
-      await speak(prompts.symptomRetry);
+      await speak(getBookingPrompts(langRef.current).symptomRetry);
       dispatch({ type: 'GO_TO_SYMPTOMS' });
       return;
     }
 
     // Analyse symptoms via NLU API
     dispatch({ type: 'SET_VOICE_STATE', voiceState: 'thinking' });
-    await speak(prompts.analysing);
+    await speak(getBookingPrompts(langRef.current).analysing);
     try {
       const payload = {
         symptomText,
         organisationId: registration.organisationId,
         // Tell the NLU service which language the patient spoke so the
         // reasoning string it returns can be localised (EN/HI).
-        language: lang,
+        language: langRef.current,
       };
 
       const nluRes = await fetch('/api/voice/nlu/symptoms', {
@@ -476,7 +502,7 @@ function VoiceBookingPageInner({
       // Emergency detection — highest priority
       if (nlu.isEmergency) {
         dispatch({ type: 'EMERGENCY_DETECTED', redFlags: nlu.redFlags ?? [] });
-        await speak(prompts.emergency);
+        await speak(getBookingPrompts(langRef.current).emergency);
         return;
       }
 
@@ -488,7 +514,7 @@ function VoiceBookingPageInner({
       if (isLowConfidence) {
         const availableSpecialties: string[] = nlu.availableSpecialties ?? [];
         const reasoning: string = nlu.reasoning
-          || (lang === 'hi'
+          || (langRef.current === 'hi'
             ? 'मुझे यकीन नहीं था कि कौन सा विभाग आपके लिए सबसे उपयुक्त होगा।'
             : 'I wasn\'t sure which department would suit you best.');
 
@@ -501,7 +527,7 @@ function VoiceBookingPageInner({
 
         // Speak the uncertainty reason + ask patient to pick
         const departmentList = availableSpecialties.slice(0, 5).join(', ');
-        await speak(prompts.lowConfidence(reasoning, departmentList));
+        await speak(getBookingPrompts(langRef.current).lowConfidence(reasoning, departmentList));
         return;
       }
 
@@ -514,12 +540,12 @@ function VoiceBookingPageInner({
       });
 
       const specialty = nlu.specialties[0];
-      await speak(prompts.routingToSpecialty(specialty));
+      await speak(getBookingPrompts(langRef.current).routingToSpecialty(specialty));
       await runDoctorStep(specialty);
 
     } catch (err) {
       console.error('[VoiceBooking] Symptom NLU error:', err);
-      await speak(prompts.symptomError);
+      await speak(getBookingPrompts(langRef.current).symptomError);
       dispatch({ type: 'GO_TO_SYMPTOMS' });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -545,23 +571,23 @@ function VoiceBookingPageInner({
       dispatch({ type: 'DOCTORS_LOADED', doctors });
 
       if (doctors.length === 0) {
-        await speak(prompts.noDoctorsRetryGeneral(specialty));
+        await speak(getBookingPrompts(langRef.current).noDoctorsRetryGeneral(specialty));
         // Retry with General Medicine
         if (specialty !== 'General Medicine') {
           await runDoctorStep('General Medicine');
           return;
         }
-        await speak(prompts.noDoctorsAtAll);
-        dispatch({ type: 'SET_ERROR', message: prompts.noDoctorsErrorDisplay });
+        await speak(getBookingPrompts(langRef.current).noDoctorsAtAll);
+        dispatch({ type: 'SET_ERROR', message: getBookingPrompts(langRef.current).noDoctorsErrorDisplay });
         return;
       }
 
       // Read out the available doctors
       const doctorList = doctors
         .slice(0, 3) // Read max 3 to avoid overwhelming the patient
-        .map((d, i) => prompts.doctorLabel(i + 1, d.name.replace(/^Dr\.?\s*/i, ''), d.specialty))
+        .map((d, i) => getBookingPrompts(langRef.current).doctorLabel(i + 1, d.name.replace(/^Dr\.?\s*/i, ''), d.specialty))
         .join('. ');
-      await speak(prompts.doctorList(doctors.length, doctorList));
+      await speak(getBookingPrompts(langRef.current).doctorList(doctors.length, doctorList));
 
       // Listen for voice selection
       let retries = 0;
@@ -575,7 +601,7 @@ function VoiceBookingPageInner({
 
         retries++;
         if (retries < 3) {
-          await speak(prompts.doctorRetry);
+          await speak(getBookingPrompts(langRef.current).doctorRetry);
         }
       }
 
@@ -584,12 +610,12 @@ function VoiceBookingPageInner({
       } else {
         // No valid voice choice — let the user tap the card manually
         dispatch({ type: 'SET_VOICE_STATE', voiceState: 'idle' });
-        await speak(prompts.doctorTapFallback);
+        await speak(getBookingPrompts(langRef.current).doctorTapFallback);
       }
 
     } catch (err) {
       console.error('[VoiceBooking] Doctor fetch error:', err);
-      await speak(prompts.doctorFetchError);
+      await speak(getBookingPrompts(langRef.current).doctorFetchError);
       dispatch({ type: 'GO_TO_SYMPTOMS' });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -621,7 +647,7 @@ function VoiceBookingPageInner({
     dispatch({ type: 'DATE_STEP_START' });
 
     const safeName = doctor.name.replace(/^Dr\.?\s*/i, '');
-    await speak(prompts.datePrompt(safeName));
+    await speak(getBookingPrompts(langRef.current).datePrompt(safeName));
 
     await runDateStep(doctor);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -730,7 +756,7 @@ function VoiceBookingPageInner({
     if (chosenDate) {
       await handleDateSelected(doctor, chosenDate);
     } else {
-      await speak(prompts.dateRetry);
+      await speak(getBookingPrompts(langRef.current).dateRetry);
       await runDateStep(doctor);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -740,8 +766,8 @@ function VoiceBookingPageInner({
     dispatch({ type: 'DATE_SELECTED', date });
     dispatch({ type: 'LOADING_SLOTS', doctorId: doctor.id });
 
-    const friendlyDate = formatDateSpoken(date, lang);
-    await speak(prompts.dateSelected(friendlyDate));
+    const friendlyDate = formatDateSpoken(date, langRef.current);
+    await speak(getBookingPrompts(langRef.current).dateSelected(friendlyDate));
 
     await runSlotStep(doctor, date);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -774,12 +800,12 @@ function VoiceBookingPageInner({
 
       if (availableSlots.length === 0) {
         if (nextAvailableDate) {
-          await speak(prompts.noSlotsNextDate(
-            formatDateSpoken(dateStr, lang),
-            formatDateSpoken(nextAvailableDate, lang),
+          await speak(getBookingPrompts(langRef.current).noSlotsNextDate(
+            formatDateSpoken(dateStr, langRef.current),
+            formatDateSpoken(nextAvailableDate, langRef.current),
           ));
         } else {
-          await speak(prompts.noSlots7Days(doctor.name));
+          await speak(getBookingPrompts(langRef.current).noSlots7Days(doctor.name));
         }
         return;
       }
@@ -789,10 +815,10 @@ function VoiceBookingPageInner({
         .slice(0, 3)
         .map(s => {
           const originalIndex = slots.findIndex(slot => slot.id === s.id) + 1;
-          return prompts.slotLabel(originalIndex, formatTimeSpoken(s.startTime));
+          return getBookingPrompts(langRef.current).slotLabel(originalIndex, formatTimeSpoken(s.startTime));
         })
         .join('. ');
-      await speak(prompts.slotList(formatDateSpoken(dateStr, lang), slotList));
+      await speak(getBookingPrompts(langRef.current).slotList(formatDateSpoken(dateStr, langRef.current), slotList));
 
       // Listen for voice slot selection
       const { text: voiceChoice } = await listen();
@@ -800,19 +826,19 @@ function VoiceBookingPageInner({
 
       if (chosenSlot) {
         if ((chosenSlot as any).isAvailable === false) {
-          await speak(prompts.slotNotAvailable);
+          await speak(getBookingPrompts(langRef.current).slotNotAvailable);
           await runSlotStep(doctor, dateStr);
         } else {
           await handleSlotSelected(chosenSlot, doctor);
         }
       } else {
-        await speak(prompts.slotRetry);
+        await speak(getBookingPrompts(langRef.current).slotRetry);
         await runSlotStep(doctor, dateStr);
       }
 
     } catch (err) {
       console.error('[VoiceBooking] Slot fetch error:', err);
-      await speak(prompts.slotFetchError);
+      await speak(getBookingPrompts(langRef.current).slotFetchError);
       dispatch({ type: 'SET_VOICE_STATE', voiceState: 'idle' });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -853,28 +879,28 @@ function VoiceBookingPageInner({
     // ── Explicit final confirmation before creating the appointment ──────────
     // Read back the chosen doctor + date/slot, then ask a yes/no question using
     // the fast local boolean STT path (listen('boolean')).
-    const readBack = prompts.confirmReadback(
+    const readBack = getBookingPrompts(langRef.current).confirmReadback(
       doctor.name,
       doctor.specialty,
-      formatDateSpoken(slot.date, lang),
+      formatDateSpoken(slot.date, langRef.current),
       formatTimeSpoken(slot.startTime),
     );
 
     // Allow a couple of re-asks if the answer is unclear.
     for (let attempt = 0; attempt < 3; attempt++) {
-      await speak(attempt === 0 ? readBack : prompts.confirmRetry);
+      await speak(attempt === 0 ? readBack : getBookingPrompts(langRef.current).confirmRetry);
 
       const { text } = await listen('boolean');
 
       if (isYes(text)) {
-        await speak(prompts.bookingConfirming);
+        await speak(getBookingPrompts(langRef.current).bookingConfirming);
         await runBookingStep(slot, doctor);
         return;
       }
 
       if (isNo(text)) {
         // Patient declined — return to slot selection so they can pick another time.
-        await speak(prompts.bookingDeclined);
+        await speak(getBookingPrompts(langRef.current).bookingDeclined);
         dispatch({ type: 'SET_VOICE_STATE', voiceState: 'idle' });
         return;
       }
@@ -883,7 +909,7 @@ function VoiceBookingPageInner({
 
     // Exhausted retries — leave the selection on screen for manual confirmation.
     dispatch({ type: 'SET_VOICE_STATE', voiceState: 'idle' });
-    await speak(prompts.confirmExhausted);
+    await speak(getBookingPrompts(langRef.current).confirmExhausted);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [speak, listen]);
 
@@ -914,7 +940,7 @@ function VoiceBookingPageInner({
         const errData = await res.json().catch(() => ({}));
         if (res.status === 409) {
           // Slot was just booked by someone else — let patient pick again
-          await speak(prompts.slotTaken);
+          await speak(getBookingPrompts(langRef.current).slotTaken);
           dispatch({ type: 'SLOTS_LOADED', slots: [], date: slot.date, nextAvailableDate: null });
           if (state.selectedDoctor) {
             await runSlotStep(state.selectedDoctor, slot.date);
@@ -929,7 +955,7 @@ function VoiceBookingPageInner({
       dispatch({ type: 'BOOKING_SUCCESS', result });
 
       // Announce the confirmation aloud in the patient's language.
-      await speak(prompts.bookingSuccess(result.appointmentId ?? ''));
+      await speak(getBookingPrompts(langRef.current).bookingSuccess(result.appointmentId ?? ''));
 
       // Fire-and-forget notification
       fetch('/api/notifications/appointment-confirmation', {
@@ -945,7 +971,7 @@ function VoiceBookingPageInner({
     } catch (err) {
       console.error('[VoiceBooking] Booking error:', err);
       const message = err instanceof Error ? err.message : 'Booking failed. Please try again.';
-      await speak(prompts.bookingError(message));
+      await speak(getBookingPrompts(langRef.current).bookingError(message));
       dispatch({ type: 'SET_ERROR', message });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1207,7 +1233,7 @@ function VoiceBookingPageInner({
                           redFlags: [],
                           symptomText: state.symptomText,
                         });
-                        await speak(prompts.lookingForSpecialist(specialty));
+                        await speak(getBookingPrompts(langRef.current).lookingForSpecialist(specialty));
                         await runDoctorStep(specialty);
                       }}
                       className="text-left px-3 py-2.5 rounded-xl border-2 border-gray-200 bg-white hover:border-blue-400 hover:bg-blue-50 transition-all text-xs font-semibold text-gray-700 hover:text-blue-700 active:scale-[0.97]"
@@ -1295,7 +1321,7 @@ function VoiceBookingPageInner({
                       type="button"
                       disabled={isDisabled}
                       onClick={() => { if (!isDisabled && state.selectedDoctor) handleDateSelected(state.selectedDoctor, dateStr); }}
-                      className={`flex-1 py-2 rounded-xl border-2 text-xs font-bold transition-all ${isSelected
+                      className={`flex-1 py-2.5 rounded-xl border-2 text-xs font-bold transition-all ${isSelected
                           ? 'border-blue-600 bg-blue-50 text-blue-700'
                           : 'border-gray-200 bg-white text-gray-600 hover:border-blue-300'
                         } ${isDisabled && !isSelected ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}

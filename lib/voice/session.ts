@@ -8,19 +8,37 @@ import { speakText, stopSpeaking } from './tts';
 /**
  * Creates a VoiceSession instance that implements the frozen contract.
  * Track B consumes this via the interface only.
+ *
+ * Pass `'auto'` when the patient's language isn't known yet (the normal case
+ * now that there's no language-picker screen): the session starts in English
+ * for TTS purposes, and locks to whatever language `listen()` detects from the
+ * patient's first real (non yes/no) utterance. Pass a concrete `LanguageCode`
+ * to skip detection (e.g. a QA override).
  */
-export function createVoiceSession(language: LanguageCode): VoiceSession {
+export function createVoiceSession(language: LanguageCode | 'auto'): VoiceSession {
   const memory = new Map<string, unknown>();
+  let currentLanguage: LanguageCode = language === 'auto' ? 'en' : language;
+  let locked = language !== 'auto';
 
   const session: VoiceSession = {
-    language,
+    get language(): LanguageCode {
+      return currentLanguage;
+    },
 
     async listen(expectedType?: 'boolean' | 'text'): Promise<{ text: string; confidence: number }> {
-      return listenOnce(language, 15000, expectedType);
+      if (!locked && expectedType !== 'boolean') {
+        const result = await listenOnce(currentLanguage, 15000, expectedType, { autoDetect: true });
+        if (result.detectedLanguage) {
+          currentLanguage = result.detectedLanguage;
+        }
+        locked = true;
+        return result;
+      }
+      return listenOnce(currentLanguage, 15000, expectedType);
     },
 
     async speak(text: string): Promise<void> {
-      return speakText(text, language);
+      return speakText(text, currentLanguage);
     },
 
     get<T>(key: string): T | undefined {
