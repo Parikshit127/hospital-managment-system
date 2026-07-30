@@ -125,6 +125,7 @@ export async function getPatientQueue(options?: {
       doctor_name: appt.doctor_name,
       reason_for_visit: appt.reason_for_visit,
       appointment_date: appt.appointment_date,
+      booking_channel: appt.booking_channel,
     }));
 
     return { success: true, data: queue };

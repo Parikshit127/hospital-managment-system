@@ -441,6 +441,11 @@ export default function AppointmentsPage() {
                                                         Free
                                                     </span>
                                                 )}
+                                                {appt.booking_channel === 'voice_ai' && (
+                                                    <span className="inline-flex items-center px-2 py-0.5 text-[10px] font-bold rounded-full border border-purple-200 bg-purple-50 text-purple-600">
+                                                        via AI Assistant
+                                                    </span>
+                                                )}
                                             </div>
                                         </td>
                                         <td className="px-4 py-3">

@@ -1287,6 +1287,11 @@ export default function DoctorDashboard() {
                           {triageLevel}
                         </span>
                       )}
+                      {p.booking_channel === "voice_ai" && (
+                        <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md border border-purple-200 bg-purple-50 text-purple-600">
+                          via AI Assistant
+                        </span>
+                      )}
                     </div>
                     <span className="text-[10px] text-gray-400 font-bold bg-gray-100 px-1.5 py-0.5 rounded">
                       {p.appointment_date

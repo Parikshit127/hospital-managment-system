@@ -34,6 +34,8 @@ export interface CreateVoiceAppointmentInput {
   organisationId: string;
   /** Optional free-text reason for the visit */
   reason?: string;
+  /** Booking source; defaults to "patient_portal" for backward compatibility. */
+  bookingChannel?: string;
   /**
    * Client-supplied idempotency key.
    * If an appointment with this key already exists, it is returned without
@@ -107,7 +109,7 @@ async function findExistingByIdempotencyKey(
 export async function createVoiceAppointment(
   input: CreateVoiceAppointmentInput,
 ): Promise<AppointmentCreationResult> {
-  const { patientId, doctorId, slotId, organisationId, reason, idempotencyKey } = input;
+  const { patientId, doctorId, slotId, organisationId, reason, idempotencyKey, bookingChannel } = input;
 
   const db = getTenantPrisma(organisationId);
 
@@ -204,7 +206,7 @@ export async function createVoiceAppointment(
           appointment_date: appointmentDate,
           status: 'Scheduled',
           reason_for_visit: encodedReason,
-          booking_channel: 'patient_portal',
+          booking_channel: bookingChannel ?? 'patient_portal',
           payment_mode: 'PAV',
           payment_status: 'PENDING',
           slot_id: slotId,

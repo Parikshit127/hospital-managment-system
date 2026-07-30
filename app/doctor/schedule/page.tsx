@@ -38,6 +38,7 @@ interface QueueItem {
   reason_for_visit?: string;
   appointment_date: string;
   department?: string;
+  booking_channel?: string | null;
 }
 
 interface AppointmentSlot {
@@ -518,6 +519,11 @@ export default function DoctorSchedule() {
                               >
                                 {appointment.status}
                               </span>
+                              {appointment.booking_channel === "voice_ai" && (
+                                <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded border border-purple-200 bg-purple-50 text-purple-600">
+                                  via AI Assistant
+                                </span>
+                              )}
                             </div>
                             <div className="flex items-center gap-3 mt-1.5">
                               <span
