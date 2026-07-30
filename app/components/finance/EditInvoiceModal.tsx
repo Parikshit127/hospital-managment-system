@@ -456,8 +456,18 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
             const header_diff: any = {};
             if (headerOrig) {
                 if (header.notes !== headerOrig.notes) header_diff.notes = header.notes;
-                if (header.billing_patient_type !== headerOrig.billing_patient_type)
+                if (header.billing_patient_type !== headerOrig.billing_patient_type) {
                     header_diff.billing_patient_type = header.billing_patient_type;
+                    // Switching away from TPA/Corporate to Cash must drop the old payer
+                    // links too — otherwise MIS/reporting re-derives TPA/Corporate from
+                    // the stale tpa_provider_id/corporate_id/pre_auth_id and the bill
+                    // keeps showing its old category even though the label says Cash.
+                    if (header.billing_patient_type === 'cash') {
+                        header_diff.corporate_id = null;
+                        header_diff.tpa_provider_id = null;
+                        header_diff.pre_auth_id = null;
+                    }
+                }
                 if (Number(header.concession_amount) !== Number(headerOrig.concession_amount))
                     header_diff.concession_amount = Number(header.concession_amount);
                 if (header.concession_reason !== headerOrig.concession_reason)
