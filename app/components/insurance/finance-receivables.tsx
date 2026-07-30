@@ -778,23 +778,41 @@ export function NewReceiptModal({ providers, onClose, onSaved, defaultProviderId
   const [addResults, setAddResults] = useState<any[]>([]);
   const [addSearching, setAddSearching] = useState(false);
 
+  // A bill picked from the patient search BEFORE a payer was selected — the
+  // payer gets auto-selected from the bill's tpa_provider_id, which triggers
+  // the effect below to (re)fetch that payer's pending advices. That fetch
+  // would otherwise silently drop the very bill the biller just picked, so it
+  // gets queued here and stitched back in once the fetch resolves.
+  const pendingAutoAdd = React.useRef<any>(null);
+
   // Load this payer's approved bills awaiting receipt whenever the payer changes.
   useEffect(() => {
     if (!form.provider_id) { setAdvices([]); setReceived({}); setDispo({}); setTdsOverride({}); setDepositUse({}); return; }
     setAdvLoading(true); setReceived({}); setDispo({}); setTdsOverride({}); setDepositUse({});
     setAddQuery(''); setAddResults([]);
     getPendingAdvices(Number(form.provider_id))
-      .then((r: any) => { if (r?.success) setAdvices(r.data || []); })
+      .then((r: any) => {
+        if (!r?.success) return;
+        let data = r.data || [];
+        const auto = pendingAutoAdd.current;
+        if (auto && String(auto.tpa_provider_id) === form.provider_id && !data.some((d: any) => d.id === auto.id)) {
+          data = [...data, auto];
+        }
+        pendingAutoAdd.current = null;
+        setAdvices(data);
+      })
       .finally(() => setAdvLoading(false));
   }, [form.provider_id]);
 
-  // Debounced search for bills to add to the mapping table.
+  // Debounced search for bills to add to the mapping table. Works with no
+  // payer selected yet — it searches across all payers and picking a result
+  // selects its payer automatically (see selectSearchResult below).
   useEffect(() => {
     const q = addQuery.trim();
-    if (!form.provider_id || q.length < 2) { setAddResults([]); return; }
+    if (q.length < 2) { setAddResults([]); return; }
     setAddSearching(true);
     const t = setTimeout(() => {
-      searchInvoicesForInsuranceReceipt(Number(form.provider_id), q)
+      searchInvoicesForInsuranceReceipt(form.provider_id ? Number(form.provider_id) : undefined, q)
         .then((r: any) => {
           if (!r?.success) return;
           const existingIds = new Set(advices.map((a: any) => a.id));
@@ -808,6 +826,16 @@ export function NewReceiptModal({ providers, onClose, onSaved, defaultProviderId
   const addBill = (invoice: any) => {
     setAdvices((prev) => (prev.some((a) => a.id === invoice.id) ? prev : [...prev, invoice]));
     setAddQuery(''); setAddResults([]);
+  };
+
+  // Called when the biller picks a search result. If a payer is already
+  // chosen, this is a plain add. If not, the bill's own payer becomes the
+  // receipt's payer — the whole point of searching by patient first.
+  const selectSearchResult = (invoice: any) => {
+    if (form.provider_id) { addBill(invoice); return; }
+    pendingAutoAdd.current = invoice;
+    setAddQuery(''); setAddResults([]);
+    setForm((f) => ({ ...f, provider_id: String(invoice.tpa_provider_id) }));
   };
 
   const num = (v: string) => Number(v) || 0;
@@ -990,38 +1018,46 @@ export function NewReceiptModal({ providers, onClose, onSaved, defaultProviderId
             <p className="text-[11px] font-black uppercase tracking-wider text-blue-700">Map to Patient Bills</p>
             <p className="text-[10px] text-gray-500">Bill = Received + Disallowed &nbsp;·&nbsp; TDS (10%) is deducted <em>from</em> Received &nbsp;·&nbsp; Disallowed is net of Patient Paid &amp; Deposit</p>
           </div>
+          {/* Search a patient/bill first — works with no payer chosen yet.
+              Picking a result selects its payer for you, so the biller
+              doesn't have to already know which TPA/insurer it is. Once a
+              payer is set this also covers the old "add a missed bill" case,
+              since getPendingAdvices only surfaces approved/partially_settled
+              claims with a payable balance. */}
+          <div className="relative">
+            <input
+              placeholder={form.provider_id ? 'Search patient name, UHID or bill # to add…' : 'Search patient name, UHID or bill # — its payer will be selected for you…'}
+              value={addQuery}
+              onChange={(e) => setAddQuery(e.target.value)}
+              className={INPUT}
+            />
+            {addSearching && <Loader2 className="absolute right-2.5 top-2.5 h-4 w-4 animate-spin text-gray-400" />}
+            {addResults.length > 0 && (
+              <div className="absolute z-20 mt-1 w-full rounded-lg border border-gray-200 bg-white shadow-lg max-h-48 overflow-auto">
+                {addResults.map((inv: any) => (
+                  <button key={inv.id} type="button" onClick={() => selectSearchResult(inv)}
+                    className="flex w-full items-center justify-between gap-2 border-b border-gray-100 px-3 py-2 text-left text-xs last:border-0 hover:bg-blue-50">
+                    <span className="font-mono">{inv.invoice_number}</span>
+                    <span className="flex-1 truncate px-2">{inv.patient?.full_name || inv.patient_id}</span>
+                    {!form.provider_id && (
+                      <span className="truncate max-w-[140px] text-[10px] font-bold text-blue-600">
+                        {providers.find((p: any) => String(p.id) === String(inv.tpa_provider_id))?.provider_name || '—'}
+                      </span>
+                    )}
+                    <span className="font-semibold">₹{fmt(inv.net_amount)}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {addQuery.trim().length >= 2 && !addSearching && addResults.length === 0 && (
+              <p className="mt-1 text-[11px] text-gray-400">No matching bill found.</p>
+            )}
+          </div>
+
           {!form.provider_id ? (
-            <p className="text-xs text-gray-400">Select a payer to see its approved bills awaiting receipt.</p>
+            <p className="text-xs text-gray-400">Select a payer above, or search a patient/bill — picking one selects its payer automatically.</p>
           ) : (
             <>
-              {/* Add any bill for this payer — getPendingAdvices only surfaces
-                  approved/partially_settled claims with a payable balance, so a
-                  legitimate bill can be missing from the auto list below. */}
-              <div className="relative">
-                <input
-                  placeholder="Search patient name, UHID or bill # to add…"
-                  value={addQuery}
-                  onChange={(e) => setAddQuery(e.target.value)}
-                  className={INPUT}
-                />
-                {addSearching && <Loader2 className="absolute right-2.5 top-2.5 h-4 w-4 animate-spin text-gray-400" />}
-                {addResults.length > 0 && (
-                  <div className="absolute z-20 mt-1 w-full rounded-lg border border-gray-200 bg-white shadow-lg max-h-48 overflow-auto">
-                    {addResults.map((inv: any) => (
-                      <button key={inv.id} type="button" onClick={() => addBill(inv)}
-                        className="flex w-full items-center justify-between gap-2 border-b border-gray-100 px-3 py-2 text-left text-xs last:border-0 hover:bg-blue-50">
-                        <span className="font-mono">{inv.invoice_number}</span>
-                        <span className="flex-1 truncate px-2">{inv.patient?.full_name || inv.patient_id}</span>
-                        <span className="font-semibold">₹{fmt(inv.net_amount)}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-                {addQuery.trim().length >= 2 && !addSearching && addResults.length === 0 && (
-                  <p className="mt-1 text-[11px] text-gray-400">No matching bill found for this payer.</p>
-                )}
-              </div>
-
               {advLoading ? (
                 <div className="py-3"><Loader2 className="mx-auto h-4 w-4 animate-spin text-gray-400" /></div>
               ) : !hasAdvices ? (

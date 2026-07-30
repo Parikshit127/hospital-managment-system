@@ -640,21 +640,25 @@ export async function getPendingAdvices(providerId?: number) {
   return { success: true, data: serialize(await attachPatientMoney(db, organizationId, invoices)) };
 }
 
-// Search TPA bills for this payer, by patient name/phone or bill number, so a
-// biller can pull a bill into the mapping table even when it hasn't cleared
-// getPendingAdvices's strict 'approved/partially_settled + payable > 0' filter
-// (e.g. the payer already paid but the claim wasn't marked approved in-system).
+// Search TPA bills by patient name/phone or bill number, so a biller can pull
+// a bill into the mapping table even when it hasn't cleared getPendingAdvices's
+// strict 'approved/partially_settled + payable > 0' filter (e.g. the payer
+// already paid but the claim wasn't marked approved in-system).
 // Deliberately looser than getPendingAdvices — this is a manual add, so the
 // biller is presumed to already know this is the right bill.
-export async function searchInvoicesForInsuranceReceipt(providerId: number, query: string) {
+//
+// providerId is optional: with no payer picked yet, the biller can search by
+// patient first and the matching payer is picked up from tpa_provider_id on
+// the bill they choose — the receipt form auto-selects it for them.
+export async function searchInvoicesForInsuranceReceipt(providerId: number | undefined, query: string) {
   const { db, organizationId } = await requireTenantContext();
   const q = (query || '').trim();
-  if (!providerId || q.length < 2) return { success: true, data: [] };
+  if (q.length < 2) return { success: true, data: [] };
   const invoices = await db.invoices.findMany({
     where: {
       organizationId,
       billing_patient_type: 'tpa_insurance',
-      tpa_provider_id: providerId,
+      tpa_provider_id: providerId ? providerId : { not: null },
       status: { not: 'Cancelled' },
       OR: [
         { invoice_number: { contains: q, mode: 'insensitive' } },
@@ -667,7 +671,7 @@ export async function searchInvoicesForInsuranceReceipt(providerId: number, quer
       id: true, invoice_number: true, patient_id: true, net_amount: true,
       tpa_approved_amount: true, tpa_settled_amount: true, tpa_payable: true,
       tpa_claim_number: true, tpa_approved_at: true, tpa_claim_status: true, version: true,
-      paid_amount: true,
+      paid_amount: true, tpa_provider_id: true,
       patient: { select: { full_name: true } },
     },
     orderBy: { created_at: 'desc' }, take: 20,
