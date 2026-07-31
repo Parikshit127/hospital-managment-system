@@ -137,13 +137,10 @@ function renderOpdSlipHtml(patient: any, appt: any, b: BillBranding, org: any, d
         hour12: true,
     };
 
-    // "VISIT DATE" is the appointment (or, failing that, the registration) — the
-    // clinically meaningful date. Reprinting a slip the next day used to silently
-    // change the only date on the sheet, because it showed the print time.
-    const visitSource = appt?.appointment_date || patient.created_at || null;
-    const visitDate = visitSource
-        ? new Date(visitSource).toLocaleString('en-IN', istOpts)
-        : new Date().toLocaleString('en-IN', istOpts);
+    // "VISIT DATE" shows the current date the slip is generated, so every printed
+    // OPD slip carries the day it was actually issued rather than the original
+    // registration/appointment date.
+    const visitDate = new Date().toLocaleString('en-IN', istOpts);
 
     // Kept as a separate, smaller line so the two are never confused.
     const printedAt = new Date().toLocaleString('en-IN', istOpts);
