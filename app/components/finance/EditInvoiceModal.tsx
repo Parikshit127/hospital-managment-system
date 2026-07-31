@@ -44,6 +44,9 @@ type EditableItem = {
     service_date?: string;
     // Soft-removed (kept in array so the index stays stable, hidden from UI)
     _removed?: boolean;
+    // Return / credit line (negative net_price, zero unit_price as stored). Its
+    // value inputs are locked so the credit can't be accidentally recomputed away.
+    _credit?: boolean;
     // Original snapshot for diff detection (existing rows only)
     _orig?: {
         department: string;
@@ -218,17 +221,28 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
             });
 
             const loadedItems: EditableItem[] = (inv.items || []).map((it: any) => {
+                const qty = Number(it.quantity ?? 0);
+                let unitPrice = Number(it.unit_price ?? 0);
+                const netPrice = Number(it.net_price ?? NaN);
+                // Return / credit lines (e.g. pharmacy returns) store their value only
+                // in net_price (negative), with a zero unit_price. Left as-is, this
+                // screen would show them as ₹0 AND — because the totals recompute each
+                // line as quantity×unit_price — SAVING the bill would wipe the credit
+                // and inflate the balance back up. Reconstruct a negative unit_price so
+                // the credit is both visible and preserved through a save.
+                const isCredit = unitPrice === 0 && Number.isFinite(netPrice) && netPrice < 0 && qty > 0;
+                if (isCredit) unitPrice = netPrice / qty;
                 const orig = {
                     department: it.department ?? '',
                     description: it.description ?? '',
-                    quantity: Number(it.quantity ?? 0),
-                    unit_price: Number(it.unit_price ?? 0),
+                    quantity: qty,
+                    unit_price: unitPrice,
                     discount: Number(it.discount ?? 0),
                     tax_rate: Number(it.tax_rate ?? 0),
                     hsn_sac_code: it.hsn_sac_code ?? null,
                     service_category: it.service_category ?? null,
                 };
-                return { id: it.id, ...orig, _orig: orig };
+                return { id: it.id, ...orig, _orig: orig, _credit: isCredit };
             });
             setItems(loadedItems);
 
@@ -746,7 +760,7 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
                                                         className={NUM_INPUT}
                                                         value={it.quantity}
                                                         onChange={e => updateItem(idx, { quantity: Number(e.target.value) })}
-                                                        disabled={readOnly || saving}
+                                                        disabled={readOnly || saving || it._credit}
                                                     />
                                                 </td>
                                                 <td className="px-2 py-1.5 text-right">
@@ -758,7 +772,7 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
                                                             className={NUM_INPUT}
                                                             value={it.unit_price}
                                                             onChange={e => updateItem(idx, { unit_price: Number(e.target.value) })}
-                                                            disabled={readOnly || saving}
+                                                            disabled={readOnly || saving || it._credit}
                                                         />
                                                     ) : (
                                                         <input
@@ -779,7 +793,7 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
                                                         className={NUM_INPUT}
                                                         value={it.discount}
                                                         onChange={e => updateItem(idx, { discount: Number(e.target.value) })}
-                                                        disabled={readOnly || saving}
+                                                        disabled={readOnly || saving || it._credit}
                                                     />
                                                 </td>
                                                 <td className="px-2 py-1.5 text-right">
@@ -791,7 +805,7 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
                                                         className={NUM_INPUT}
                                                         value={it.tax_rate}
                                                         onChange={e => updateItem(idx, { tax_rate: Number(e.target.value) })}
-                                                        disabled={readOnly || saving}
+                                                        disabled={readOnly || saving || it._credit}
                                                     />
                                                 </td>
                                                 <td className="px-2 py-1.5">
@@ -809,7 +823,7 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
                                                         />
                                                     )}
                                                 </td>
-                                                <td className="px-2 py-1.5 text-right font-mono text-gray-700">
+                                                <td className={`px-2 py-1.5 text-right font-mono ${(lineNet + lineTax) < 0 ? 'text-rose-600 font-bold' : 'text-gray-700'}`}>
                                                     {fmtINR(lineNet + lineTax)}
                                                 </td>
                                                 <td className="px-2 py-1.5 text-center">
