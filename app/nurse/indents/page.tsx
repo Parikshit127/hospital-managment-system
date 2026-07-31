@@ -9,8 +9,12 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { AppShell } from '@/app/components/layout/AppShell';
 import {
     ClipboardList, Search, Loader2, Clock, User, BedDouble, Package, CheckCircle2,
+    RotateCcw, X,
 } from 'lucide-react';
-import { getWardPatients, getPatientIndentHistory } from '@/app/actions/nurse-actions';
+import { getWardPatients, getPatientIndentHistory, createIndentReturn } from '@/app/actions/nurse-actions';
+import { useToast } from '@/app/components/ui/Toast';
+
+const RETURN_REASONS = ['Unopened / sealed', 'Unused', 'Not administered', 'Excess supplied', 'Other'];
 
 function formatWhen(d: string | Date): string {
     return new Date(d).toLocaleString('en-IN', {
@@ -32,6 +36,7 @@ function statusStyle(status: string) {
 }
 
 export default function NurseIndentsPage() {
+    const toast = useToast();
     const [patients, setPatients] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -39,6 +44,51 @@ export default function NurseIndentsPage() {
     const [selected, setSelected] = useState<any | null>(null);
     const [indents, setIndents] = useState<any[]>([]);
     const [indentsLoading, setIndentsLoading] = useState(false);
+
+    // Return-unused-medicine modal state.
+    const [returnCtx, setReturnCtx] = useState<{ item: any; indentNumber: string } | null>(null);
+    const [returnQty, setReturnQty] = useState('');
+    const [returnReason, setReturnReason] = useState(RETURN_REASONS[0]);
+    const [returnNote, setReturnNote] = useState('');
+    const [returnSubmitting, setReturnSubmitting] = useState(false);
+
+    const reloadIndents = useCallback(async (patientId: string) => {
+        const res = await getPatientIndentHistory(patientId);
+        if (res.success) setIndents(res.data || []);
+    }, []);
+
+    const openReturn = (item: any, indentNumber: string) => {
+        setReturnCtx({ item, indentNumber });
+        setReturnQty(String(item.quantity_dispensed || ''));
+        setReturnReason(RETURN_REASONS[0]);
+        setReturnNote('');
+    };
+
+    const submitReturn = async () => {
+        if (!returnCtx || !selected) return;
+        const qty = Number(returnQty);
+        if (!qty || qty <= 0) { toast.error('Enter a valid quantity'); return; }
+        if (qty > (returnCtx.item.quantity_dispensed || 0)) {
+            toast.error(`Cannot return more than dispensed (${returnCtx.item.quantity_dispensed})`);
+            return;
+        }
+        const reason = returnReason === 'Other'
+            ? (returnNote.trim() || 'Other')
+            : (returnNote.trim() ? `${returnReason} — ${returnNote.trim()}` : returnReason);
+        setReturnSubmitting(true);
+        try {
+            const res = await createIndentReturn({ order_item_id: returnCtx.item.id, quantity: qty, reason });
+            if (res.success) {
+                toast.success('Return filed — stock restocked and bill credited');
+                setReturnCtx(null);
+                await reloadIndents(selected.patientId);
+            } else {
+                toast.error(res.error || 'Failed to file return');
+            }
+        } finally {
+            setReturnSubmitting(false);
+        }
+    };
 
     const loadPatients = useCallback(async () => {
         setRefreshing(true);
@@ -159,12 +209,21 @@ export default function NurseIndentsPage() {
                                                 {(ind.items || []).length === 0 ? (
                                                     <p className="text-xs text-gray-400 py-1.5">No line items.</p>
                                                 ) : ind.items.map((it: any) => (
-                                                    <div key={it.id} className="flex items-center justify-between py-1.5 text-sm">
+                                                    <div key={it.id} className="flex items-center justify-between py-1.5 text-sm gap-2">
                                                         <span className="text-gray-700">{it.medicine_name}</span>
-                                                        <span className="text-gray-500 flex items-center gap-2">
+                                                        <span className="text-gray-500 flex items-center gap-2 shrink-0">
                                                             <span>Req: <b className="text-gray-700">{it.quantity_requested}</b></span>
                                                             {it.quantity_dispensed > 0 && (
                                                                 <span className="text-emerald-600 flex items-center gap-0.5"><CheckCircle2 className="h-3 w-3" /> {it.quantity_dispensed}</span>
+                                                            )}
+                                                            {it.quantity_dispensed > 0 && (
+                                                                <button
+                                                                    onClick={() => openReturn(it, ind.indent_number || `#${ind.id}`)}
+                                                                    className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg px-2 py-1 transition-colors"
+                                                                    title="Return unused / unopened medicine"
+                                                                >
+                                                                    <RotateCcw className="h-3 w-3" /> Return
+                                                                </button>
                                                             )}
                                                         </span>
                                                     </div>
@@ -178,6 +237,89 @@ export default function NurseIndentsPage() {
                     )}
                 </div>
             </div>
+
+            {/* Return unused / unopened medicine modal */}
+            {returnCtx && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+                    <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden">
+                        <div className="px-5 py-4 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <RotateCcw className="h-4 w-4 text-rose-500" />
+                                <h3 className="font-black text-gray-800">Return Medicine</h3>
+                            </div>
+                            <button onClick={() => setReturnCtx(null)} className="text-gray-400 hover:text-gray-700">
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+                        <div className="p-5 space-y-4">
+                            <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3">
+                                <p className="font-bold text-gray-800 text-sm">{returnCtx.item.medicine_name}</p>
+                                <p className="text-[11px] text-gray-500 mt-0.5">
+                                    Indent {returnCtx.indentNumber} · Dispensed: <b className="text-gray-700">{returnCtx.item.quantity_dispensed}</b>
+                                </p>
+                            </div>
+
+                            <div>
+                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-wide mb-1">Return Quantity</label>
+                                <input
+                                    type="number"
+                                    min={1}
+                                    max={returnCtx.item.quantity_dispensed}
+                                    value={returnQty}
+                                    onChange={e => setReturnQty(e.target.value)}
+                                    className="w-full p-2.5 border border-gray-300 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-400"
+                                    placeholder="Units to return"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-wide mb-1">Reason</label>
+                                <select
+                                    value={returnReason}
+                                    onChange={e => setReturnReason(e.target.value)}
+                                    className="w-full p-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-400"
+                                >
+                                    {RETURN_REASONS.map(r => <option key={r} value={r}>{r}</option>)}
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-wide mb-1">
+                                    Note {returnReason === 'Other' ? '(required)' : '(optional)'}
+                                </label>
+                                <input
+                                    type="text"
+                                    value={returnNote}
+                                    onChange={e => setReturnNote(e.target.value)}
+                                    className="w-full p-2.5 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-400"
+                                    placeholder="e.g. strip sealed, patient discharged"
+                                />
+                            </div>
+
+                            <p className="text-[11px] text-gray-400 leading-snug">
+                                Only unopened / unused stock should be returned. This restocks the pharmacy and credits the patient&apos;s bill by the return value.
+                            </p>
+
+                            <div className="flex gap-3 pt-1">
+                                <button
+                                    onClick={() => setReturnCtx(null)}
+                                    className="flex-1 py-2.5 text-sm font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={submitReturn}
+                                    disabled={returnSubmitting}
+                                    className="flex-1 py-2.5 text-sm font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-lg shadow-rose-600/20 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                                >
+                                    {returnSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+                                    File Return
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </AppShell>
     );
 }

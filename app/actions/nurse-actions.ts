@@ -3,6 +3,7 @@
 import { requireTenantContext } from '@/backend/tenant';
 import { revalidatePath } from 'next/cache';
 import { generateIndentNumber } from '@/app/lib/sequence-generator';
+import { processReturn, getReturnInvoiceForPatient } from '@/app/actions/pharmacy-actions';
 
 // ========================================
 // NURSE DASHBOARD
@@ -602,5 +603,80 @@ export async function getPatientIndentHistory(patientId: string) {
     } catch (error) {
         console.error('getPatientIndentHistory error:', error);
         return { success: false, data: [] };
+    }
+}
+
+/**
+ * File a return of unused / unopened medicine straight from a nurse's indent
+ * screen. Reuses the pharmacy `processReturn` (patient_return) flow so the stock
+ * is put back into the dispensed batch and the patient's IPD bill is credited by
+ * the return value — the same as a pharmacy-counter return, just initiated by the
+ * ward. Guards against returning more than was dispensed for the line (across
+ * repeated returns) so the bill can't be over-credited.
+ */
+export async function createIndentReturn(data: {
+    order_item_id: number;
+    quantity: number;
+    reason: string;
+}) {
+    try {
+        const { db } = await requireTenantContext();
+
+        const qty = Math.floor(Number(data.quantity));
+        if (!qty || qty <= 0) return { success: false, error: 'Enter a valid return quantity' };
+
+        const item = await db.pharmacy_order_items.findUnique({
+            where: { id: data.order_item_id },
+            include: { order: { select: { patient_id: true, created_at: true } } },
+        });
+        if (!item || !item.order) return { success: false, error: 'Indent item not found' };
+        if (!item.medicine_id) return { success: false, error: 'Medicine not resolved for this item' };
+
+        const dispensed = item.quantity_dispensed || 0;
+        if (dispensed <= 0) return { success: false, error: 'Nothing was dispensed for this item to return' };
+
+        // Resolve the bill to credit: active IPD invoice for admitted patients,
+        // else the latest counter pharmacy invoice.
+        const inv = await getReturnInvoiceForPatient(item.order.patient_id);
+        const invoiceId = inv?.data?.invoice_id;
+
+        // Cumulative guard: never let total returns for this line exceed what was
+        // dispensed, even across multiple return submissions.
+        const batchRecord = item.batch_id
+            ? await db.pharmacy_batch_inventory.findFirst({
+                where: { batch_no: item.batch_id, medicine_id: item.medicine_id },
+            })
+            : null;
+        let alreadyReturned = 0;
+        if (invoiceId) {
+            const prior = await db.pharmacyReturn.aggregate({
+                _sum: { quantity: true },
+                where: {
+                    return_type: 'patient_return',
+                    medicine_id: item.medicine_id,
+                    original_invoice_id: invoiceId,
+                    ...(batchRecord ? { batch_record_id: batchRecord.id } : {}),
+                },
+            });
+            alreadyReturned = prior._sum.quantity || 0;
+        }
+        const remaining = dispensed - alreadyReturned;
+        if (remaining <= 0) return { success: false, error: 'This item has already been fully returned' };
+        if (qty > remaining) {
+            return { success: false, error: `Only ${remaining} unit(s) can still be returned (dispensed ${dispensed}, already returned ${alreadyReturned})` };
+        }
+
+        return await processReturn({
+            return_type: 'patient_return',
+            medicine_id: item.medicine_id,
+            batch_id: item.batch_id || undefined,
+            quantity: qty,
+            reason: (data.reason || '').trim() || 'Unused ward stock returned',
+            invoice_id: invoiceId,
+            bill_date: item.order.created_at,
+        });
+    } catch (error: any) {
+        console.error('createIndentReturn error:', error);
+        return { success: false, error: error?.message || 'Failed to file return' };
     }
 }
