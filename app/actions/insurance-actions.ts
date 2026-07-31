@@ -555,10 +555,29 @@ export async function submitInsuranceClaim(data: {
 
         // Reflect the filed claim on the invoice so the bill/status stay in step —
         // but never downgrade a bill that is already approved/settled.
+        //
+        // The payer link matters as much as the status: a claim is filed against
+        // a policy, and that policy names the insurer. Without stamping it on the
+        // bill, the bill has an open claim but no payer — invisible to the
+        // receipt screen's bill search and grouped under "Unmapped / Unknown" in
+        // Outstanding, so the biller can't record the money when it arrives.
+        // Same backfill submitTpaClaimAction and discharge settlement already do.
+        const invoiceUpdate: any = {};
         if (!['approved', 'partially_settled', 'settled'].includes(String(claimInvoice.tpa_claim_status ?? ''))) {
+            invoiceUpdate.tpa_claim_status = 'submitted';
+        }
+        if (claimInvoice.tpa_provider_id == null && policy.provider_id != null) {
+            invoiceUpdate.tpa_provider_id = policy.provider_id;
+        }
+        // Bills default to 'cash'; a filed claim makes this a TPA bill. Never
+        // override an explicit 'corporate' billing type.
+        if (claimInvoice.billing_patient_type === 'cash') {
+            invoiceUpdate.billing_patient_type = 'tpa_insurance';
+        }
+        if (Object.keys(invoiceUpdate).length > 0) {
             await db.invoices.update({
                 where: { id: data.invoice_id },
-                data: { tpa_claim_status: 'submitted' },
+                data: invoiceUpdate,
             });
         }
 

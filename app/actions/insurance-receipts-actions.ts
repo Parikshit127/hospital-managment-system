@@ -296,6 +296,13 @@ export async function allocateReceipt(input: {
             upd.balance_due = Math.max(0, round2(netAmount - newPaid));
           }
           if (fullyAccounted && !invoice.tpa_settled_at) upd.tpa_settled_at = new Date();
+          // A bill can reach here with no payer link at all (claimed through a
+          // path that never wrote it). The receipt settles that argument: the
+          // insurer who paid is the payer, so stamp it rather than leave the
+          // bill "Unmapped" in every payer-grouped view from now on.
+          if (invoice.tpa_provider_id == null && receipt.provider_id != null) {
+            upd.tpa_provider_id = receipt.provider_id;
+          }
           await tx.invoices.update({ where: { id: invoice.id }, data: upd });
 
           // Keep the linked claim's settlement mirror in sync.
@@ -650,6 +657,19 @@ export async function getPendingAdvices(providerId?: number) {
 // providerId is optional: with no payer picked yet, the biller can search by
 // patient first and the matching payer is picked up from tpa_provider_id on
 // the bill they choose — the receipt form auto-selects it for them.
+//
+// Two filters used to be applied in SQL and both silently hid real TPA bills:
+//   * billing_patient_type had to be exactly 'tpa_insurance' — the flag drifts
+//     (bill created 'cash', claimed later), so match it the same drift-tolerant
+//     way Outstanding / Bill-Wise Sanction already do.
+//   * tpa_provider_id had to be non-null — but a bill claimed through
+//     Insurance → Submit Claim never got that link written, so a genuinely
+//     TPA-billed patient returned "No matching bill found" no matter what the
+//     biller typed. The payer is instead resolved from the patient's own active
+//     policy below, which is where it should have come from in the first place.
+// With a payer already chosen, a bill whose payer can't be resolved at all is
+// still returned: the biller has explicitly asserted who is paying, and
+// allocateReceipt stamps that payer onto the bill when it maps the money.
 export async function searchInvoicesForInsuranceReceipt(providerId: number | undefined, query: string) {
   const { db, organizationId } = await requireTenantContext();
   const q = (query || '').trim();
@@ -657,26 +677,60 @@ export async function searchInvoicesForInsuranceReceipt(providerId: number | und
   const invoices = await db.invoices.findMany({
     where: {
       organizationId,
-      billing_patient_type: 'tpa_insurance',
-      tpa_provider_id: providerId ? providerId : { not: null },
       status: { not: 'Cancelled' },
-      OR: [
-        { invoice_number: { contains: q, mode: 'insensitive' } },
-        { patient_id: { contains: q, mode: 'insensitive' } },
-        { patient: { full_name: { contains: q, mode: 'insensitive' } } },
-        { patient: { phone: { contains: q, mode: 'insensitive' } } },
+      AND: [
+        { OR: [{ billing_patient_type: 'tpa_insurance' }, { tpa_claim_status: { not: 'not_submitted' } }] },
+        {
+          OR: [
+            { invoice_number: { contains: q, mode: 'insensitive' } },
+            { patient_id: { contains: q, mode: 'insensitive' } },
+            { patient: { full_name: { contains: q, mode: 'insensitive' } } },
+            { patient: { phone: { contains: q, mode: 'insensitive' } } },
+          ],
+        },
       ],
     },
     select: {
       id: true, invoice_number: true, patient_id: true, net_amount: true,
       tpa_approved_amount: true, tpa_settled_amount: true, tpa_payable: true,
       tpa_claim_number: true, tpa_approved_at: true, tpa_claim_status: true, version: true,
-      paid_amount: true, tpa_provider_id: true,
+      paid_amount: true, tpa_provider_id: true, billing_patient_type: true,
       patient: { select: { full_name: true } },
     },
-    orderBy: { created_at: 'desc' }, take: 20,
+    // Fetched wider than we return: the payer filter below runs in JS, after a
+    // missing tpa_provider_id has been resolved from the patient's policy.
+    orderBy: { created_at: 'desc' }, take: 60,
   });
-  return { success: true, data: serialize(await attachPatientMoney(db, organizationId, invoices)) };
+
+  // Resolve the payer for bills that carry no provider link, from the patient's
+  // most recent Active policy — the same backfill submitTpaClaimAction and
+  // discharge settlement already do when they touch a bill.
+  const unlinked = [...new Set(invoices.filter((i: any) => i.tpa_provider_id == null).map((i: any) => i.patient_id))];
+  const policyProvider = new Map<string, number>();
+  if (unlinked.length) {
+    const policies = await db.insurance_policies.findMany({
+      where: { patient_id: { in: unlinked }, status: 'Active' },
+      orderBy: { created_at: 'desc' },
+      select: { patient_id: true, provider_id: true },
+    });
+    for (const p of policies) {
+      if (p.provider_id != null && !policyProvider.has(p.patient_id)) policyProvider.set(p.patient_id, p.provider_id);
+    }
+  }
+
+  const resolved = invoices.map((inv: any) => ({
+    ...inv,
+    // payer_from_policy tells the form the link isn't on the bill yet, so it can
+    // say so instead of pretending the bill is already mapped to this payer.
+    payer_from_policy: inv.tpa_provider_id == null && policyProvider.has(inv.patient_id),
+    tpa_provider_id: inv.tpa_provider_id ?? policyProvider.get(inv.patient_id) ?? null,
+  }));
+
+  const matched = providerId
+    ? resolved.filter((inv: any) => inv.tpa_provider_id === providerId || inv.tpa_provider_id == null)
+    : resolved;
+
+  return { success: true, data: serialize(await attachPatientMoney(db, organizationId, matched.slice(0, 20))) };
 }
 
 /**

@@ -777,6 +777,9 @@ export function NewReceiptModal({ providers, onClose, onSaved, defaultProviderId
   const [addQuery, setAddQuery] = useState('');
   const [addResults, setAddResults] = useState<any[]>([]);
   const [addSearching, setAddSearching] = useState(false);
+  // Explains why a picked bill couldn't select its own payer (no insurer on the
+  // bill and no active policy on the patient) instead of failing silently.
+  const [addNotice, setAddNotice] = useState<string | null>(null);
 
   // A bill picked from the patient search BEFORE a payer was selected — the
   // payer gets auto-selected from the bill's tpa_provider_id, which triggers
@@ -809,6 +812,7 @@ export function NewReceiptModal({ providers, onClose, onSaved, defaultProviderId
   // selects its payer automatically (see selectSearchResult below).
   useEffect(() => {
     const q = addQuery.trim();
+    setAddNotice(null);
     if (q.length < 2) { setAddResults([]); return; }
     setAddSearching(true);
     const t = setTimeout(() => {
@@ -825,7 +829,7 @@ export function NewReceiptModal({ providers, onClose, onSaved, defaultProviderId
 
   const addBill = (invoice: any) => {
     setAdvices((prev) => (prev.some((a) => a.id === invoice.id) ? prev : [...prev, invoice]));
-    setAddQuery(''); setAddResults([]);
+    setAddQuery(''); setAddResults([]); setAddNotice(null);
   };
 
   // Called when the biller picks a search result. If a payer is already
@@ -833,8 +837,14 @@ export function NewReceiptModal({ providers, onClose, onSaved, defaultProviderId
   // receipt's payer — the whole point of searching by patient first.
   const selectSearchResult = (invoice: any) => {
     if (form.provider_id) { addBill(invoice); return; }
+    // No payer on the bill and none on the patient's policies either — there's
+    // nothing to auto-select, so ask rather than set provider_id to "null".
+    if (invoice.tpa_provider_id == null) {
+      setAddNotice('This bill has no insurer recorded and the patient has no active policy to take one from — choose the Insurance / TPA above, then pick the bill again.');
+      return;
+    }
     pendingAutoAdd.current = invoice;
-    setAddQuery(''); setAddResults([]);
+    setAddQuery(''); setAddResults([]); setAddNotice(null);
     setForm((f) => ({ ...f, provider_id: String(invoice.tpa_provider_id) }));
   };
 
@@ -1040,8 +1050,12 @@ export function NewReceiptModal({ providers, onClose, onSaved, defaultProviderId
                     <span className="font-mono">{inv.invoice_number}</span>
                     <span className="flex-1 truncate px-2">{inv.patient?.full_name || inv.patient_id}</span>
                     {!form.provider_id && (
-                      <span className="truncate max-w-[140px] text-[10px] font-bold text-blue-600">
-                        {providers.find((p: any) => String(p.id) === String(inv.tpa_provider_id))?.provider_name || '—'}
+                      <span className="truncate max-w-[160px] text-[10px] font-bold text-blue-600">
+                        {providers.find((p: any) => String(p.id) === String(inv.tpa_provider_id))?.provider_name
+                          || (inv.tpa_provider_id == null ? 'No payer on bill' : '—')}
+                        {/* The insurer came from the patient's policy, not the bill
+                            — worth saying so before it gets picked as the payer. */}
+                        {inv.payer_from_policy && <span className="font-normal text-gray-400"> · from policy</span>}
                       </span>
                     )}
                     <span className="font-semibold">₹{fmt(inv.net_amount)}</span>
@@ -1052,6 +1066,7 @@ export function NewReceiptModal({ providers, onClose, onSaved, defaultProviderId
             {addQuery.trim().length >= 2 && !addSearching && addResults.length === 0 && (
               <p className="mt-1 text-[11px] text-gray-400">No matching bill found.</p>
             )}
+            {addNotice && <p className="mt-1 text-[11px] font-semibold text-amber-600">{addNotice}</p>}
           </div>
 
           {!form.provider_id ? (
