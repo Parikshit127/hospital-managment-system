@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState, useRef } from 'react';
 import { FileText, Sparkles, Save, Printer, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
 import { useToast } from '@/app/components/ui/Toast';
 import {
@@ -9,6 +9,9 @@ import {
     generateDischargeSummaryDraft,
 } from '@/app/actions/discharge-summary-actions';
 import { emptyDischargeData, toIstLocalInput, type DischargeSummaryData } from '@/app/lib/discharge-summary';
+import { createVoiceSession } from '@/lib/voice/session';
+import type { VoiceSession } from '@/lib/contracts/voice';
+import { DischargeMicButton } from './DischargeMicButton';
 
 type Header = {
     patient_name: string; age_gender: string; indoor_no: string; uhid: string;
@@ -32,6 +35,11 @@ export function DischargeSummaryEditor({ admissionId }: { admissionId: string })
     // Discharge date/time captured here. Saving it moves the patient to
     // "Semi Discharged" — bed stays occupied, bill stays Draft.
     const [dischargeDateTime, setDischargeDateTime] = useState('');
+    const voiceSessionRef = useRef<VoiceSession | null>(null);
+    const getVoiceSession = (): VoiceSession => {
+        if (!voiceSessionRef.current) voiceSessionRef.current = createVoiceSession('auto');
+        return voiceSessionRef.current;
+    };
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -55,6 +63,18 @@ export function DischargeSummaryEditor({ admissionId }: { admissionId: string })
 
     const set = (k: keyof DischargeSummaryData, v: string) => {
         setData(prev => ({ ...prev, [k]: v }));
+        setDirty(true);
+    };
+
+    // Voice dictation appends onto existing text instead of overwriting it, so a
+    // doctor can click the mic multiple times to build up a multi-line field
+    // (e.g. dictate one complaint per click). Single-line Field-type fields join
+    // with ", " instead of a newline since they render as one line.
+    const appendField = (k: keyof DischargeSummaryData, text: string, separator: '\n' | ', ') => {
+        setData(prev => {
+            const existing = prev[k];
+            return { ...prev, [k]: existing ? `${existing}${separator}${text}` : text };
+        });
         setDirty(true);
     };
 
@@ -180,21 +200,26 @@ export function DischargeSummaryEditor({ admissionId }: { admissionId: string })
             )}
 
             <Section title="Final Diagnosis">
-                <Field label="Primary Diagnosis" value={data.final_diagnosis_primary} onChange={v => set('final_diagnosis_primary', v)} />
-                <Field label="Secondary Diagnosis (if any)" value={data.final_diagnosis_secondary} onChange={v => set('final_diagnosis_secondary', v)} />
+                <Field label="Primary Diagnosis" value={data.final_diagnosis_primary} onChange={v => set('final_diagnosis_primary', v)}
+                    mic={{ listen: () => getVoiceSession().listen('text'), onResult: t => appendField('final_diagnosis_primary', t, ', ') }} />
+                <Field label="Secondary Diagnosis (if any)" value={data.final_diagnosis_secondary} onChange={v => set('final_diagnosis_secondary', v)}
+                    mic={{ listen: () => getVoiceSession().listen('text'), onResult: t => appendField('final_diagnosis_secondary', t, ', ') }} />
                 <Field label="ICD Code" value={data.icd_code} onChange={v => set('icd_code', v)} />
             </Section>
 
             <Section title="Complaints on Admission">
-                <Area value={data.complaints} onChange={v => set('complaints', v)} rows={3} hint="One complaint per line" />
+                <Area value={data.complaints} onChange={v => set('complaints', v)} rows={3} hint="One complaint per line"
+                    mic={{ listen: () => getVoiceSession().listen('text'), onResult: t => appendField('complaints', t, '\n') }} />
             </Section>
 
             <Section title="Medical History">
-                <Area value={data.medical_history} onChange={v => set('medical_history', v)} rows={2} placeholder="Past medical history / N/A" />
+                <Area value={data.medical_history} onChange={v => set('medical_history', v)} rows={2} placeholder="Past medical history / N/A"
+                    mic={{ listen: () => getVoiceSession().listen('text'), onResult: t => appendField('medical_history', t, '\n') }} />
             </Section>
 
             <Section title="Investigations">
-                <Area value={data.investigations} onChange={v => set('investigations', v)} rows={3} hint="One investigation per line" />
+                <Area value={data.investigations} onChange={v => set('investigations', v)} rows={3} hint="One investigation per line"
+                    mic={{ listen: () => getVoiceSession().listen('text'), onResult: t => appendField('investigations', t, '\n') }} />
             </Section>
 
             {/* Surgery / procedure — collapsible (optional for medical-only admissions) */}
@@ -214,7 +239,10 @@ export function DischargeSummaryEditor({ admissionId }: { admissionId: string })
                             <Field label="Anaesthesia Type" value={data.anaesthesia_type} onChange={v => set('anaesthesia_type', v)} placeholder="General / Spinal / Local" />
                         </div>
                         <div>
-                            <label className="block text-[11px] font-bold text-gray-600 mb-1">Operative Notes</label>
+                            <label className="flex items-center gap-1.5 text-[11px] font-bold text-gray-600 mb-1">
+                                Operative Notes
+                                <DischargeMicButton listen={() => getVoiceSession().listen('text')} onResult={t => appendField('operative_notes', t, '\n')} />
+                            </label>
                             <Area value={data.operative_notes} onChange={v => set('operative_notes', v)} rows={3} />
                         </div>
                     </div>
@@ -223,23 +251,28 @@ export function DischargeSummaryEditor({ admissionId }: { admissionId: string })
 
             <Section title="Course During Hospitalization">
                 <Area value={data.course} onChange={v => set('course', v)} rows={6}
-                    hint="Admission condition, assessment, procedure, post-op recovery, monitoring, condition at discharge, follow-up" />
+                    hint="Admission condition, assessment, procedure, post-op recovery, monitoring, condition at discharge, follow-up"
+                    mic={{ listen: () => getVoiceSession().listen('text'), onResult: t => appendField('course', t, '\n') }} />
             </Section>
 
             <Section title="Discharge Medications">
-                <Area value={data.discharge_medications} onChange={v => set('discharge_medications', v)} rows={4} hint="One per line: Name – Dose – Frequency – Duration" />
+                <Area value={data.discharge_medications} onChange={v => set('discharge_medications', v)} rows={4} hint="One per line: Name – Dose – Frequency – Duration"
+                    mic={{ listen: () => getVoiceSession().listen('text'), onResult: t => appendField('discharge_medications', t, '\n') }} />
             </Section>
 
             <Section title="Discharge Instructions">
-                <Area value={data.discharge_instructions} onChange={v => set('discharge_instructions', v)} rows={4} hint="One instruction per line" />
+                <Area value={data.discharge_instructions} onChange={v => set('discharge_instructions', v)} rows={4} hint="One instruction per line"
+                    mic={{ listen: () => getVoiceSession().listen('text'), onResult: t => appendField('discharge_instructions', t, '\n') }} />
             </Section>
 
             <Section title="Follow-Up">
-                <Area value={data.follow_up} onChange={v => set('follow_up', v)} rows={2} placeholder="Review after X days with Dr. ... in OPD." />
+                <Area value={data.follow_up} onChange={v => set('follow_up', v)} rows={2} placeholder="Review after X days with Dr. ... in OPD."
+                    mic={{ listen: () => getVoiceSession().listen('text'), onResult: t => appendField('follow_up', t, '\n') }} />
             </Section>
 
             <Section title="Discharge Condition">
-                <Area value={data.discharge_condition} onChange={v => set('discharge_condition', v)} rows={2} />
+                <Area value={data.discharge_condition} onChange={v => set('discharge_condition', v)} rows={2}
+                    mic={{ listen: () => getVoiceSession().listen('text'), onResult: t => appendField('discharge_condition', t, '\n') }} />
             </Section>
 
             <Section title="Sign-off">
@@ -281,10 +314,15 @@ function Info({ label, value }: { label: string; value: string }) {
     );
 }
 
-function Field({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string }) {
+type MicProp = { listen: () => Promise<{ text: string; confidence: number }>; onResult: (text: string) => void };
+
+function Field({ label, value, onChange, placeholder, mic }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string; mic?: MicProp }) {
     return (
         <div>
-            <label className="block text-[11px] font-bold text-gray-600 mb-1">{label}</label>
+            <label className="flex items-center gap-1.5 text-[11px] font-bold text-gray-600 mb-1">
+                {label}
+                {mic && <DischargeMicButton listen={mic.listen} onResult={mic.onResult} />}
+            </label>
             <input
                 value={value}
                 onChange={e => onChange(e.target.value)}
@@ -295,9 +333,13 @@ function Field({ label, value, onChange, placeholder }: { label: string; value: 
     );
 }
 
-function Area({ value, onChange, rows = 3, hint, placeholder }: { value: string; onChange: (v: string) => void; rows?: number; hint?: string; placeholder?: string }) {
+function Area({ value, onChange, rows = 3, hint, placeholder, mic }: { value: string; onChange: (v: string) => void; rows?: number; hint?: string; placeholder?: string; mic?: MicProp }) {
     return (
         <div>
+            <div className="flex items-center justify-between mb-1">
+                {hint ? <p className="text-[10px] text-gray-400">{hint}</p> : <span />}
+                {mic && <DischargeMicButton listen={mic.listen} onResult={mic.onResult} />}
+            </div>
             <textarea
                 value={value}
                 onChange={e => onChange(e.target.value)}
@@ -305,7 +347,6 @@ function Area({ value, onChange, rows = 3, hint, placeholder }: { value: string;
                 placeholder={placeholder}
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-y"
             />
-            {hint && <p className="text-[10px] text-gray-400 mt-1">{hint}</p>}
         </div>
     );
 }

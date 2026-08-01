@@ -20,8 +20,8 @@ export function DischargeMicButton({ listen, onResult, className }: {
             const result = await listen();
             setState('idle');
             if (result.text?.trim()) onResult(result.text.trim());
-        } catch (err: any) {
-            setErrorMsg(err?.message || 'Could not transcribe. Try again.');
+        } catch (err: unknown) {
+            setErrorMsg(err instanceof Error ? err.message : 'Could not transcribe. Try again.');
             setState('error');
             setTimeout(() => setState('idle'), 2000);
         }
