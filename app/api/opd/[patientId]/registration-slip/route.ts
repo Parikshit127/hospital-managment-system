@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/backend/db';
 import { resolveRouteAuth } from '@/app/lib/route-auth';
+import { logAudit } from '@/app/lib/audit';
 import {
     getBillBranding,
     type BillBranding,
@@ -61,6 +62,24 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ pati
         });
 
         const html = renderOpdSlipHtml(patient, appointment, branding, org, doctorName);
+
+        // Every slip render is counted as a print for the "OPD Slip Print
+        // Report" — the browser print itself happens client-side (window.print())
+        // and can't be observed server-side, so a served slip is the closest
+        // reliable proxy for "a slip was given to the patient". Awaited (not
+        // fire-and-forget) because on serverless the function can be torn down
+        // right after the response is returned, dropping an unawaited insert.
+        await logAudit({
+            action: 'PRINT_OPD_SLIP',
+            module: 'reception',
+            entity_type: 'patient',
+            entity_id: patientId,
+            details: JSON.stringify({
+                patient_name: patient.full_name,
+                appointment_id: appointment?.appointment_id || null,
+                doctor: doctorName,
+            }),
+        });
 
         return new NextResponse(html, {
             headers: { 'Content-Type': 'text/html; charset=utf-8' },

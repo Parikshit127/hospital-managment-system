@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { AppShell } from '@/app/components/layout/AppShell';
 import { DateField } from '@/app/components/ui/DateField';
-import { Printer, ArrowLeft, Calendar, CalendarRange, CalendarClock } from 'lucide-react';
+import { Printer, ArrowLeft, Calendar, CalendarRange, CalendarClock, FileText } from 'lucide-react';
 import { getUsersList } from '@/app/actions/admin-actions';
 
 type Mode = 'today' | 'single' | 'range';
@@ -25,6 +25,14 @@ export default function CollectionReportPage() {
     // (pharmacy bills at its own counter). Finance's report is unaffected.
     const [excludePharmacy, setExcludePharmacy] = useState(true);
     const [error, setError] = useState('');
+
+    // OPD Slip Print Report — how many OPD slips were printed, and by whom.
+    const [slipMode, setSlipMode] = useState<Mode>('today');
+    const [slipSingleDate, setSlipSingleDate] = useState(today);
+    const [slipFromDate, setSlipFromDate] = useState(today);
+    const [slipToDate, setSlipToDate] = useState(today);
+    const [slipPrintedBy, setSlipPrintedBy] = useState('all');
+    const [slipError, setSlipError] = useState('');
 
     useEffect(() => {
         getUsersList({ is_active: true, limit: 500 }).then((res: any) => {
@@ -62,6 +70,22 @@ export default function CollectionReportPage() {
         window.open(`/api/reports/collections/pdf?from=${r.from}&to=${r.to}${cashierParam}${pharmaParam}`, '_blank');
     }
 
+    function resolveSlipRange(): { from: string; to: string } | null {
+        if (slipMode === 'today') return { from: today, to: today };
+        if (slipMode === 'single') return slipSingleDate ? { from: slipSingleDate, to: slipSingleDate } : null;
+        if (!slipFromDate || !slipToDate) return null;
+        if (slipFromDate > slipToDate) { setSlipError('“From” date cannot be after “To” date.'); return null; }
+        return { from: slipFromDate, to: slipToDate };
+    }
+
+    function generateSlipReport() {
+        setSlipError('');
+        const r = resolveSlipRange();
+        if (!r) { setSlipError('Please select a valid date.'); return; }
+        const printedByParam = slipPrintedBy && slipPrintedBy !== 'all' ? `&printedBy=${encodeURIComponent(slipPrintedBy)}` : '';
+        window.open(`/api/reports/opd-slip-prints/pdf?from=${r.from}&to=${r.to}${printedByParam}`, '_blank');
+    }
+
     const modeCards: { id: Mode; label: string; hint: string; icon: React.ReactNode }[] = [
         { id: 'today', label: "Today", hint: "Current date's collection", icon: <CalendarClock className="h-4 w-4" /> },
         { id: 'single', label: 'Specific / Back Date', hint: 'Any single past date', icon: <Calendar className="h-4 w-4" /> },
@@ -72,11 +96,12 @@ export default function CollectionReportPage() {
 
     return (
         <AppShell pageTitle="Collection Report" pageIcon={<Printer className="h-5 w-5" />}>
-            <div className="max-w-3xl mx-auto space-y-6">
+            <div className="max-w-6xl mx-auto space-y-6">
                 <Link href="/reception/dashboard" className="inline-flex items-center gap-1.5 text-xs font-bold text-gray-500 hover:text-gray-700">
                     <ArrowLeft className="h-3.5 w-3.5" /> Back to Reception
                 </Link>
 
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
                 <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-6 space-y-6">
                     <div>
                         <h2 className="text-lg font-black text-gray-900">Daily Collection Report</h2>
@@ -149,6 +174,72 @@ export default function CollectionReportPage() {
                         </button>
                         <p className="text-[10px] text-gray-400 mt-2">Opens the report in a new tab, ready to print.</p>
                     </div>
+                </div>
+
+                {/* OPD Slip Print Report */}
+                <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-6 space-y-6">
+                    <div>
+                        <h2 className="text-lg font-black text-gray-900">OPD Slip Print Report</h2>
+                        <p className="text-xs text-gray-500 mt-0.5">See how many OPD slips were printed and handed to patients — day-wise count plus a slip-by-slip list.</p>
+                    </div>
+
+                    {/* Mode selector */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        {modeCards.map((m) => (
+                            <button
+                                key={m.id}
+                                onClick={() => { setSlipMode(m.id); setSlipError(''); }}
+                                className={`flex flex-col items-start gap-1 p-3 rounded-xl border text-left transition-all ${
+                                    slipMode === m.id ? 'border-teal-500 bg-teal-50/60 ring-2 ring-teal-500/20' : 'border-gray-200 hover:bg-gray-50'
+                                }`}>
+                                <span className={`flex items-center gap-1.5 text-xs font-black ${slipMode === m.id ? 'text-teal-700' : 'text-gray-700'}`}>
+                                    {m.icon} {m.label}
+                                </span>
+                                <span className="text-[10px] text-gray-400">{m.hint}</span>
+                            </button>
+                        ))}
+                    </div>
+
+                    {/* Date inputs */}
+                    <div className="flex flex-wrap items-end gap-4">
+                        {slipMode === 'single' && (
+                            <div>
+                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-wider mb-1">Date</label>
+                                <DateField value={slipSingleDate} max={today} onChange={(e) => setSlipSingleDate(e.target.value)} className={inputCls} />
+                            </div>
+                        )}
+                        {slipMode === 'range' && (
+                            <>
+                                <div>
+                                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-wider mb-1">From</label>
+                                    <DateField value={slipFromDate} max={today} onChange={(e) => setSlipFromDate(e.target.value)} className={inputCls} />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-wider mb-1">To</label>
+                                    <DateField value={slipToDate} max={today} onChange={(e) => setSlipToDate(e.target.value)} className={inputCls} />
+                                </div>
+                            </>
+                        )}
+                        <div>
+                            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-wider mb-1">Printed By</label>
+                            <select value={slipPrintedBy} onChange={(e) => setSlipPrintedBy(e.target.value)} className={inputCls}>
+                                <option value="all">All staff</option>
+                                {cashierUsers.map((u) => <option key={u.username} value={u.username}>{u.name}</option>)}
+                            </select>
+                        </div>
+                    </div>
+
+                    {slipError && <p className="text-xs font-bold text-rose-600">{slipError}</p>}
+
+                    <div className="pt-2 border-t border-gray-100">
+                        <button
+                            onClick={generateSlipReport}
+                            className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-teal-500 to-emerald-600 text-white text-sm font-bold rounded-xl shadow-sm hover:shadow-md transition-all">
+                            <FileText className="h-4 w-4" /> Generate &amp; Print Report
+                        </button>
+                        <p className="text-[10px] text-gray-400 mt-2">Opens the report in a new tab, ready to print.</p>
+                    </div>
+                </div>
                 </div>
             </div>
         </AppShell>
