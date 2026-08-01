@@ -1362,8 +1362,9 @@ export async function updateAdmissionPackageAmount(admissionPackageId: number, n
 
 /**
  * Reclassify a charge between "consumed under the package" and "billable over
- * the package". Billing-supervisor action (admin/finance): ward staff pick the
- * disposition at posting time; corrections afterwards are privileged + audited.
+ * the package". Ward staff pick the disposition at posting time; corrections
+ * afterwards are restricted to billing-facing roles (reception/admin/finance)
+ * and audited.
  */
 export async function reclassifyChargeDisposition(
     postingId: number,
@@ -1372,8 +1373,10 @@ export async function reclassifyChargeDisposition(
     try {
         const { db, session, organizationId } = await requireTenantContext();
 
-        if (!isPrivilegedBillingRole(session?.role)) {
-            return { success: false, error: 'Only admin/finance can reclassify package charges.' };
+        const canReclassify = isPrivilegedBillingRole(session?.role)
+            || ['receptionist', 'reception'].includes(String(session?.role ?? '').toLowerCase());
+        if (!canReclassify) {
+            return { success: false, error: 'Only reception/admin/finance can reclassify package charges.' };
         }
         if (target !== CHARGE_DISPOSITION.PACKAGE_CONSUMED && target !== CHARGE_DISPOSITION.BILLABLE_EXTRA) {
             return { success: false, error: 'Invalid target disposition' };

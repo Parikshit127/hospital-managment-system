@@ -158,6 +158,21 @@ const radiologyMasterColumns: ImportColumn[] = [
     { name: 'is_available', required: false, type: 'boolean', description: 'Available for ordering', example: 'true' },
 ];
 
+const assetMasterColumns: ImportColumn[] = [
+    { name: 'asset_code', required: false, type: 'string', description: 'Leave blank to auto-generate (e.g. IT-0001); fill in to update an existing asset', example: 'IT-0001' },
+    { name: 'asset_name', required: true, type: 'string', description: 'Asset name', example: 'Dell Latitude 5420 — Reception' },
+    { name: 'category', required: true, type: 'string', description: 'Must match an existing asset category name', example: 'IT Equipment' },
+    { name: 'location', required: false, type: 'string', description: 'Where the asset is kept', example: 'Reception desk' },
+    { name: 'department', required: false, type: 'string', description: 'Owning department', example: 'Front Office' },
+    { name: 'serial_number', required: false, type: 'string', description: 'Serial number', example: 'SN-8842091' },
+    { name: 'manufacturer', required: false, type: 'string', description: 'Manufacturer', example: 'Dell' },
+    { name: 'model_number', required: false, type: 'string', description: 'Model number', example: 'Latitude 5420' },
+    { name: 'invoice_number', required: false, type: 'string', description: 'Purchase invoice number', example: 'INV-3321' },
+    { name: 'acquisition_date', required: true, type: 'date', description: 'Date acquired (YYYY-MM-DD)', example: '2026-04-01' },
+    { name: 'acquisition_cost', required: true, type: 'number', description: 'Acquisition cost (INR)', example: '55000' },
+    { name: 'warranty_expiry', required: false, type: 'date', description: 'Warranty expiry date (YYYY-MM-DD)', example: '2029-04-01' },
+];
+
 const TEMPLATES: Record<ImportType, Omit<ImportTemplate, 'import_type'>> = {
     patients: {
         name: 'Patient Records',
@@ -218,6 +233,11 @@ const TEMPLATES: Record<ImportType, Omit<ImportTemplate, 'import_type'>> = {
         name: 'Radiology/Imaging Master',
         description: 'Bulk import radiology and imaging procedures (X-Ray, MRI, CT, USG, ECG, Echo, etc.)',
         columns: radiologyMasterColumns,
+    },
+    asset_master: {
+        name: 'Asset Register',
+        description: 'Bulk import fixed assets — IT equipment, housekeeping, reception and other owned items',
+        columns: assetMasterColumns,
     },
 };
 

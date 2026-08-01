@@ -7,7 +7,8 @@ export type MasterImportType =
   | 'lab_test_master'
   | 'package_master'
   | 'medicine_master'
-  | 'radiology_master';
+  | 'radiology_master'
+  | 'asset_master';
 
 export const MASTER_IMPORT_MAX_ROWS = 500;
 
@@ -51,6 +52,22 @@ function parseBool(v: unknown): boolean {
   if (s === 'true' || s === 'yes' || s === '1') return true;
   if (s === 'false' || s === 'no' || s === '0') return false;
   return true; // unrecognised — default to true, do not error (admin data, lenient)
+}
+
+// Pushes a "required"/"invalid" error onto `errs` for a date field and
+// returns the raw string to store (server actions parse it with `new Date`).
+// `required` false means a blank value is fine and returns undefined.
+function checkDate(v: unknown, fieldName: string, required: boolean, errs: string[]): string | undefined {
+  const s = str(v);
+  if (!s) {
+    if (required) errs.push(`${fieldName} is required`);
+    return undefined;
+  }
+  if (isNaN(new Date(s).getTime())) {
+    errs.push(`${fieldName} is not a valid date (got "${s}")`);
+    return undefined;
+  }
+  return s;
 }
 
 // ---- per-type validators ----
@@ -275,10 +292,47 @@ export function validateRadiologyRows(rows: Record<string, unknown>[]): Validate
   return { valid, errors };
 }
 
+export interface AssetRow {
+  asset_code?: string; asset_name: string; category: string;
+  location?: string; department?: string;
+  serial_number?: string; manufacturer?: string; model_number?: string;
+  invoice_number?: string;
+  acquisition_date: string; acquisition_cost: number;
+  warranty_expiry?: string;
+}
+
+export function validateAssetRows(rows: Record<string, unknown>[]): ValidateResult<AssetRow> {
+  const valid: AssetRow[] = [];
+  const errors: RowError[] = [];
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
+    const rowNum = i + 1;
+    const errs: string[] = [];
+    const asset_name = str(r.asset_name); if (!asset_name) errs.push('asset_name is required');
+    const category = str(r.category); if (!category) errs.push('category is required');
+    const costRaw = toNum(r.acquisition_cost, 'acquisition_cost');
+    if (typeof costRaw === 'string') errs.push(costRaw);
+    const acquisition_date = checkDate(r.acquisition_date, 'acquisition_date', true, errs);
+    const warranty_expiry = checkDate(r.warranty_expiry, 'warranty_expiry', false, errs);
+    if (errs.length > 0) { errors.push({ rowIndex: rowNum, reason: errs.join('; '), originalData: r }); continue; }
+    valid.push({
+      asset_code: optStr(r.asset_code),
+      asset_name, category,
+      location: optStr(r.location), department: optStr(r.department),
+      serial_number: optStr(r.serial_number), manufacturer: optStr(r.manufacturer), model_number: optStr(r.model_number),
+      invoice_number: optStr(r.invoice_number),
+      acquisition_date: acquisition_date as string,
+      acquisition_cost: costRaw as number,
+      warranty_expiry,
+    });
+  }
+  return { valid, errors };
+}
+
 export function validateMasterRows(
   type: MasterImportType,
   rows: Record<string, unknown>[],
-): ValidateResult<DoctorRow | ServiceRow | LabTestRow | PackageRow | MedicineRow | RadiologyRow> {
+): ValidateResult<DoctorRow | ServiceRow | LabTestRow | PackageRow | MedicineRow | RadiologyRow | AssetRow> {
   switch (type) {
     case 'doctor_master': return validateDoctorRows(rows);
     case 'service_master': return validateServiceRows(rows);
@@ -286,5 +340,6 @@ export function validateMasterRows(
     case 'package_master': return validatePackageRows(rows);
     case 'medicine_master': return validateMedicineRows(rows);
     case 'radiology_master': return validateRadiologyRows(rows);
+    case 'asset_master': return validateAssetRows(rows);
   }
 }

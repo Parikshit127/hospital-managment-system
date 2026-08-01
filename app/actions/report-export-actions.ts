@@ -14,6 +14,7 @@ import { generateExcelBuffer } from '@/lib/mis/exporter';
 import type { ColumnSpec } from '@/lib/mis/types';
 import { getIndentReport, type IndentReportFilters } from '@/app/actions/indent-report-actions';
 import { getFixedAssets } from '@/app/actions/asset-management-actions';
+import { getAssetDepreciationReport } from '@/app/actions/asset-register-actions';
 import { EDIT_CANCEL_ACTIONS } from '@/app/lib/audit-actions';
 
 function fmtDate(v: any) {
@@ -205,6 +206,57 @@ export async function exportAssetRegister(filters?: { status?: string; category_
             success: true,
             base64: buffer.toString('base64'),
             filename: `asset-register-${new Date().toISOString().slice(0, 10)}.xlsx`,
+        };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
+/** Category-wise depreciation / book value summary → .xlsx. */
+export async function exportAssetDepreciationReport(filters?: { category_id?: string }) {
+    try {
+        const { db, organizationId, session } = await requireTenantContext();
+
+        const res: any = await getAssetDepreciationReport(filters);
+        if (!res.success) return { success: false, error: res.error };
+
+        const rows = (res.data.rows ?? []).map((r: any) => ({
+            category: r.category,
+            count: r.count,
+            cost: r.cost,
+            accumulated_depreciation: r.accumulated_depreciation,
+            book_value: r.book_value,
+            percent_depreciated: r.percent_depreciated,
+        }));
+
+        const columns: ColumnSpec[] = [
+            { key: 'category', label: 'Category', type: 'string' },
+            { key: 'count', label: 'Asset Count', type: 'number', total: 'sum' },
+            { key: 'cost', label: 'Total Cost', type: 'currency', total: 'sum' },
+            { key: 'accumulated_depreciation', label: 'Accumulated Depreciation', type: 'currency', total: 'sum' },
+            { key: 'book_value', label: 'Book Value', type: 'currency', total: 'sum' },
+            { key: 'percent_depreciated', label: '% Depreciated', type: 'percent' },
+        ];
+
+        const totals = {
+            count: res.data.totals.count,
+            cost: res.data.totals.cost,
+            accumulated_depreciation: res.data.totals.accumulated_depreciation,
+            book_value: res.data.totals.book_value,
+        };
+
+        const buffer = await generateExcelBuffer(columns, rows, totals, {
+            hospital: await hospitalName(db, organizationId),
+            title: 'Asset Depreciation Report',
+            subtitle: 'Category-wise acquisition cost, accumulated depreciation and book value.',
+            filters: filters?.category_id ? 'Category: filtered' : 'Category: all',
+            generatedBy: session?.username,
+        });
+
+        return {
+            success: true,
+            base64: buffer.toString('base64'),
+            filename: `asset-depreciation-report-${new Date().toISOString().slice(0, 10)}.xlsx`,
         };
     } catch (error: any) {
         return { success: false, error: error.message };

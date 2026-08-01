@@ -511,6 +511,7 @@ export async function recordAndAllocateReceipt(input: {
 // ─────────────────────────────────────────────────────────────────────────────
 export async function listInsuranceReceipts(filters?: {
   payer_type?: string; provider_id?: number; corporate_id?: string; status?: string; from?: string; to?: string;
+  search?: string;
 }) {
   const { db, organizationId } = await requireTenantContext();
   const where: any = { organizationId };
@@ -522,6 +523,18 @@ export async function listInsuranceReceipts(filters?: {
     where.receipt_date = {};
     if (filters.from) where.receipt_date.gte = new Date(filters.from);
     if (filters.to) where.receipt_date.lte = new Date(filters.to);
+  }
+  // Matches receipt #, UTR/cheque ref, or any patient the receipt is allocated
+  // to — a biller usually knows one of those three, not the payer's name.
+  if (filters?.search) {
+    const q = filters.search.trim();
+    if (q) {
+      where.OR = [
+        { receipt_number: { contains: q, mode: 'insensitive' } },
+        { reference_number: { contains: q, mode: 'insensitive' } },
+        { allocations: { some: { invoice: { patient: { full_name: { contains: q, mode: 'insensitive' } } } } } },
+      ];
+    }
   }
   const receipts = await db.insuranceReceipt.findMany({
     where,

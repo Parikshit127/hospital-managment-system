@@ -14,6 +14,7 @@ import {
 import { getAdmittedPatients } from '@/app/actions/discharge-actions';
 import { saveMedicalNote, getMedicalNotesForAdmission } from '@/app/actions/doctor-actions';
 import { useToast } from '@/app/components/ui/Toast';
+import VoiceRecorder from '@/app/doctor/components/VoiceRecorder';
 
 const NOTE_TYPES = ['Progress Note', 'Diagnosis', 'Treatment Plan', 'Observation', 'Follow-up', 'General'];
 
@@ -86,6 +87,10 @@ export default function DoctorMedicalNotesPage() {
         } finally {
             setSaving(false);
         }
+    };
+
+    const handleVoiceTranscription = (text: string) => {
+        setDetails(prev => (prev.trim() ? prev.trim() + ' ' + text : text));
     };
 
     const filtered = patients.filter(p => {
@@ -172,13 +177,16 @@ export default function DoctorMedicalNotesPage() {
                                         </select>
                                     </div>
                                     <div>
-                                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">Note</label>
+                                        <div className="flex items-center justify-between mb-1">
+                                            <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Note</label>
+                                            <VoiceRecorder onTranscription={handleVoiceTranscription} disabled={saving} />
+                                        </div>
                                         <textarea
                                             value={details}
                                             onChange={e => setDetails(e.target.value)}
                                             rows={3}
                                             maxLength={4000}
-                                            placeholder="Write the medical note…"
+                                            placeholder="Write the medical note, or tap Voice to dictate…"
                                             className="w-full p-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-teal-500/20 focus:border-teal-400 outline-none resize-none"
                                         />
                                     </div>

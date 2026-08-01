@@ -25,6 +25,7 @@ const TYPE_LABELS: Record<ImportType, string> = {
     package_master: 'Package Master',
     medicine_master: 'Medicine Master',
     radiology_master: 'Radiology/Imaging Master',
+    asset_master: 'Asset Register',
 };
 
 export default function StepResults({ jobId, importType, onStartOver }: Props) {

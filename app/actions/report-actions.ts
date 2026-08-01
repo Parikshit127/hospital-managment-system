@@ -161,7 +161,7 @@ export async function getCollectionsReport(filters: { from: string; to: string; 
         // across all tenders regardless of the payments method filter.
         const depositRows = await db.patientDeposit.findMany({
             where: { created_at: { gte: fromDate, lte: toDate } },
-            select: { id: true, deposit_number: true, patient_id: true, amount: true, payment_method: true, admission_id: true, collected_by: true, created_at: true },
+            select: { id: true, deposit_number: true, patient_id: true, amount: true, payment_method: true, admission_id: true, collected_by: true, created_at: true, refunded_amount: true },
         });
 
         // Resolve patient names for deposits
@@ -199,10 +199,14 @@ export async function getCollectionsReport(filters: { from: string; to: string; 
             p.deposit_is_ipd = src ? !!src.admission_id : null;
         }
 
+        // Net each deposit by what's already been refunded back to the patient —
+        // a refunded deposit is no longer money the hospital holds and must not
+        // keep inflating "collected this period" totals.
         const depositsCollectedMap = enrichedDeposits.reduce((acc: any, d: any) => {
             const method = canonicalTender(d.payment_method);
-            acc[method] = (acc[method] || 0) + Number(d.amount);
-            acc.total = (acc.total || 0) + Number(d.amount);
+            const net = Number(d.amount) - Number(d.refunded_amount || 0);
+            acc[method] = (acc[method] || 0) + net;
+            acc.total = (acc.total || 0) + net;
             return acc;
         }, {});
 
@@ -228,7 +232,7 @@ export async function getCollectionsReport(filters: { from: string; to: string; 
                     if (filters.method === 'others') { if (['Cash', 'UPI'].includes(m)) continue; }
                     else if (m !== canonicalTender(filters.method)) continue;
                 }
-                received[m] = (received[m] || 0) + Number(d.amount);
+                received[m] = (received[m] || 0) + (Number(d.amount) - Number(d.refunded_amount || 0));
             }
         }
         const receivedTotal = Object.values(received).reduce((s, v) => s + v, 0);

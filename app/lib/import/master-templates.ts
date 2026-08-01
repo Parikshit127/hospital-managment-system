@@ -40,6 +40,14 @@ const SAMPLE_ROWS: Record<MasterImportType, Record<string, string>> = {
     hsn_sac_code: '9993', description: 'Chest X-ray, posteroanterior view',
     turnaround_time: '30 min', requires_prescription: 'false', is_available: 'true',
   },
+  asset_master: {
+    asset_code: '', asset_name: 'Dell Latitude 5420 — Reception', category: 'IT Equipment',
+    location: 'Reception desk', department: 'Front Office',
+    serial_number: 'SN-8842091', manufacturer: 'Dell', model_number: 'Latitude 5420',
+    invoice_number: 'INV-3321',
+    acquisition_date: '2026-04-01', acquisition_cost: '55000',
+    warranty_expiry: '2029-04-01',
+  },
 };
 
 function triggerDownload(buffer: ArrayBuffer, fileName: string) {

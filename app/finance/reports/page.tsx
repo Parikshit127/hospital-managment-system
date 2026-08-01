@@ -364,6 +364,29 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
                     counter: 'MAIN CASH COUNTER',
                     department: 'Advance'
                 });
+
+                // Deposit refunds live only as a running total on the deposit row
+                // (refunded_amount) — mirror the PDF route's netting so a refunded
+                // deposit doesn't still read as pure collection in the export.
+                const refundedAmt = Number(d.refunded_amount || 0);
+                if (refundedAmt > 0) {
+                    itemsList.push({
+                        srNo: sr++,
+                        type: 'Refund',
+                        receiptNo: d.deposit_number,
+                        invoiceNo: '-',
+                        patientName,
+                        mrn: patientId,
+                        mode,
+                        date: dateStr,
+                        time: timeStr,
+                        amount: refundedAmt,
+                        cashier: cashierName,
+                        cashierUsername: cashierUser,
+                        counter: 'MAIN CASH COUNTER',
+                        department: 'Advance'
+                    });
+                }
             });
 
             // Process refunds table

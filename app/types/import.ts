@@ -10,7 +10,8 @@ export type ImportType =
   | 'lab_test_master'
   | 'package_master'
   | 'medicine_master'
-  | 'radiology_master';
+  | 'radiology_master'
+  | 'asset_master';
 
 export type ImportJobStatus =
     | 'uploaded'

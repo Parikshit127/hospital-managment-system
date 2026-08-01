@@ -504,6 +504,7 @@ export function OutstandingAging({ providers = [] }: { providers?: any[] }) {
 // INSURANCE RECEIPTS
 // ─────────────────────────────────────────────────────────────────────────────
 export function InsuranceReceipts({ providers }: { providers: any[] }) {
+  const hospital = useHospital();
   const [summary, setSummary] = useState<any[]>([]);
   const [receipts, setReceipts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -524,16 +525,88 @@ export function InsuranceReceipts({ providers }: { providers: any[] }) {
   const [payerSearch, setPayerSearch] = useState('');
   const [onlyPending, setOnlyPending] = useState(false);
 
+  // Recent Receipts table filters — receipt #, ref no, or a patient name, plus
+  // status and a receipt-date range. Mirrors the Bill-Wise Sanction filter bar.
+  const [rSearch, setRSearch] = useState('');
+  const [rDebouncedSearch, setRDebouncedSearch] = useState('');
+  const [rStatus, setRStatus] = useState('');
+  const [rFrom, setRFrom] = useState('');
+  const [rTo, setRTo] = useState('');
+
+  useEffect(() => {
+    const t = setTimeout(() => setRDebouncedSearch(rSearch.trim()), 350);
+    return () => clearTimeout(t);
+  }, [rSearch]);
+
   const load = useCallback(() => {
     setLoading(true);
     Promise.all([
       getInsuranceReceiptSummary(),
-      listInsuranceReceipts({ payer_type: 'tpa_insurance', provider_id: providerId ? Number(providerId) : undefined }),
+      listInsuranceReceipts({
+        payer_type: 'tpa_insurance',
+        provider_id: providerId ? Number(providerId) : undefined,
+        search: rDebouncedSearch || undefined,
+        status: rStatus || undefined,
+        from: rFrom || undefined,
+        to: rTo || undefined,
+      }),
     ])
       .then(([s, r]: any[]) => { if (s?.success) setSummary(s.data); if (r?.success) setReceipts(r.data); })
       .finally(() => setLoading(false));
-  }, [providerId]);
+  }, [providerId, rDebouncedSearch, rStatus, rFrom, rTo]);
   useEffect(() => { load(); }, [load]);
+
+  const receiptPayerLabel = providerId ? (providers.find((p: any) => String(p.id) === providerId)?.provider_name || 'Payer') : 'All payers';
+  const RECEIPT_COLS: ExportCol[] = [
+    { header: 'Receipt #', val: (r) => r.receipt_number || '', width: 20, nowrap: true },
+    { header: 'Date', val: (r) => r.receipt_date ? new Date(r.receipt_date).toLocaleDateString('en-GB') : '', width: 14, nowrap: true },
+    { header: 'Payer', val: (r) => r.provider?.provider_name || r.corporate?.company_name || '', width: 32 },
+    { header: 'Patient(s)', val: (r) => (r.patients || []).join(', '), width: 28 },
+    { header: 'Ref No', val: (r) => r.reference_number || '', width: 20, nowrap: true },
+    { header: 'Received', val: (r) => Number(r.total_amount || 0), num: true, width: 15 },
+    { header: 'Claim', val: (r) => Number(r.claim_amount || 0), num: true, width: 15 },
+    { header: 'Sanctioned', val: (r) => Number(r.sanctioned_amount || 0), num: true, width: 16 },
+    { header: 'TDS', val: (r) => Number(r.tds_total || 0), num: true, width: 13 },
+    { header: 'Svc Chg', val: (r) => Number(r.service_charge || 0), num: true, width: 13 },
+    { header: 'Disallowed', val: (r) => Math.max(0, Number(r.claim_amount || 0) - Number(r.sanctioned_amount || 0)), num: true, width: 15 },
+    { header: 'Status', val: (r) => r.status || '', width: 16, nowrap: true },
+  ];
+  const RECEIPT_ALIGN = RECEIPT_COLS.map((c) => (c.num ? 'right' : 'left')) as ('left' | 'right')[];
+  const receiptMetaLines = [
+    `Payer: ${receiptPayerLabel}`,
+    rFrom || rTo ? `Period: ${rFrom || '…'} to ${rTo || '…'}` : 'Period: All dates',
+    rStatus ? `Status: ${rStatus}` : 'Status: all',
+    `${receipts.length} receipt(s)`,
+  ];
+  const receiptTotalsRow = () => receipts.length ? [
+    'TOTAL', '', '', '', '',
+    receipts.reduce((t: number, r: any) => t + Number(r.total_amount || 0), 0),
+    receipts.reduce((t: number, r: any) => t + Number(r.claim_amount || 0), 0),
+    receipts.reduce((t: number, r: any) => t + Number(r.sanctioned_amount || 0), 0),
+    receipts.reduce((t: number, r: any) => t + Number(r.tds_total || 0), 0),
+    receipts.reduce((t: number, r: any) => t + Number(r.service_charge || 0), 0),
+    receipts.reduce((t: number, r: any) => t + Math.max(0, Number(r.claim_amount || 0) - Number(r.sanctioned_amount || 0)), 0),
+    '',
+  ] : undefined;
+  const receiptPrintRows = () => receipts.map((r: any) => RECEIPT_COLS.map((c) => (c.num ? fmt(c.val(r) as number) : c.val(r))));
+  const receiptPrintTotals = () => { const t = receiptTotalsRow(); return t && t.map((v, i) => (RECEIPT_COLS[i]?.num ? fmt(v as number) : v)); };
+
+  const handleReceiptPrint = () => printTable({
+    title: 'Insurance Receipts',
+    subtitle: receiptPayerLabel,
+    meta: receiptMetaLines.slice(1),
+    headers: RECEIPT_COLS.map((c) => c.header), align: RECEIPT_ALIGN,
+    nowrap: RECEIPT_COLS.map((c) => !!c.nowrap),
+    rows: receiptPrintRows(), footer: receiptPrintTotals(), hospital,
+  });
+  const handleReceiptExcel = () => downloadXlsx({
+    filename: `Insurance-Receipts-${new Date().toISOString().slice(0, 10)}.xlsx`,
+    sheetName: 'Insurance Receipts',
+    title: 'Insurance Receipts',
+    hospital: hospital?.name,
+    meta: receiptMetaLines,
+    cols: RECEIPT_COLS, rows: receipts, totals: receiptTotalsRow(),
+  });
 
   if (loading) return <Spinner />;
 
@@ -617,12 +690,33 @@ export function InsuranceReceipts({ providers }: { providers: any[] }) {
       </div>
 
       <div>
-        <div className="flex items-center gap-3 mb-2">
-          <h3 className="text-sm font-black text-gray-700">Recent Receipts</h3>
-          <select value={providerId} onChange={(e) => setProviderId(e.target.value)} className="ml-auto rounded-md border border-gray-300 px-2 py-1.5 text-sm">
+        <div className="flex flex-wrap items-center gap-2 mb-2">
+          <h3 className="text-sm font-black text-gray-700 mr-1">Recent Receipts</h3>
+          <select value={providerId} onChange={(e) => setProviderId(e.target.value)} className="rounded-md border border-gray-300 px-2 py-1.5 text-sm">
             <option value="">All payers</option>
             {providers.map((p: any) => <option key={p.id} value={p.id}>{p.provider_name}</option>)}
           </select>
+          <select value={rStatus} onChange={(e) => setRStatus(e.target.value)} className="rounded-md border border-gray-300 px-2 py-1.5 text-sm">
+            <option value="">All statuses</option>
+            {['Open', 'PartiallyAllocated', 'Allocated', 'Reversed'].map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+          <input placeholder="Receipt #, ref no, patient…" value={rSearch} onChange={(e) => setRSearch(e.target.value)} className="rounded-md border border-gray-300 px-2 py-1.5 text-sm w-52" />
+          <input type="date" value={rFrom} onChange={(e) => setRFrom(e.target.value)} className="rounded-md border border-gray-300 px-2 py-1.5 text-sm" />
+          <span className="text-xs text-gray-400">to</span>
+          <input type="date" value={rTo} onChange={(e) => setRTo(e.target.value)} className="rounded-md border border-gray-300 px-2 py-1.5 text-sm" />
+          {(providerId || rStatus || rSearch || rFrom || rTo) && (
+            <button onClick={() => { setProviderId(''); setRStatus(''); setRSearch(''); setRFrom(''); setRTo(''); }}
+              className="text-xs font-bold text-gray-400 hover:text-gray-700 underline">Clear</button>
+          )}
+          <div className="ml-auto flex items-center gap-2">
+            <span className="text-xs font-bold text-gray-400">{receipts.length} receipt(s)</span>
+            <button onClick={handleReceiptExcel} disabled={loading || receipts.length === 0} className="flex items-center gap-1.5 rounded-lg border border-gray-300 px-2.5 py-1.5 text-xs font-bold text-gray-600 hover:bg-gray-50 disabled:opacity-40">
+              <Download className="h-3.5 w-3.5" /> Excel
+            </button>
+            <button onClick={handleReceiptPrint} disabled={loading || receipts.length === 0} className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-blue-700 disabled:opacity-40">
+              <Printer className="h-3.5 w-3.5" /> Print
+            </button>
+          </div>
         </div>
         <div className="max-h-[60vh] overflow-auto rounded-2xl border border-gray-200 bg-white shadow-sm">
           <table className="min-w-full text-sm">

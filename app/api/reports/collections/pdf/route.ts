@@ -298,6 +298,33 @@ export async function GET(req: NextRequest) {
                 counter: 'MAIN CASH COUNTER',
                 department: 'Advance'
             });
+
+            // Deposit refunds live only as a running total on the deposit row
+            // (status/refunded_amount) — there's no separate Refund record like
+            // payments have. Emit a matching Refund line here so a fully (or
+            // partially) refunded deposit nets to zero instead of still showing
+            // as pure collection, mirroring how payments.status === 'Reversed'
+            // is handled above.
+            const refundedAmt = Number(d.refunded_amount || 0);
+            if (refundedAmt > 0) {
+                itemsList.push({
+                    srNo: sr++,
+                    type: 'Refund',
+                    receiptNo: d.deposit_number,
+                    invoiceNo: '-',
+                    patientName,
+                    mrn: patientId,
+                    doctorName: '-',
+                    mode,
+                    date: dateStr,
+                    time: timeStr,
+                    amount: refundedAmt,
+                    cashier: cashierName,
+                    cashierUsername: cashierUser,
+                    counter: 'MAIN CASH COUNTER',
+                    department: 'Advance'
+                });
+            }
         });
 
         // Process refunds table

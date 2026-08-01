@@ -13,6 +13,9 @@ import {
 import {
   createMedicine, updateMedicine,
 } from './medicine-master-actions';
+import {
+  createAssetFromImportRow, updateAssetFromImportRow,
+} from './asset-register-actions';
 import type { MasterImportType } from '@/app/lib/import/master-validators';
 import { MASTER_IMPORT_MAX_ROWS } from '@/app/lib/import/master-validators';
 
@@ -37,6 +40,7 @@ const UPSERT_CONFIG: Record<MasterImportType, { model: string; key: string; wher
   package_master: { model: 'ipdPackage', key: 'package_code' },
   medicine_master: { model: 'pharmacy_medicine_master', key: 'brand_name' },
   radiology_master: { model: 'radiology_imaging', key: 'procedure_code' },
+  asset_master: { model: 'fixedAsset', key: 'asset_code' },
 };
 
 async function createRow(type: MasterImportType, row: Record<string, unknown>): Promise<{ success: boolean; error?: string }> {
@@ -52,6 +56,7 @@ async function createRow(type: MasterImportType, row: Record<string, unknown>): 
     case 'package_master': return createPackage({ ...(row as any), inclusions: [] });
     case 'medicine_master': return createMedicine(row);
     case 'radiology_master': return createRadiologyImaging(row);
+    case 'asset_master': return createAssetFromImportRow(row);
     default: throw new Error(`Unknown import type: ${type}`);
   }
 }
@@ -70,6 +75,7 @@ async function updateRow(type: MasterImportType, id: any, row: Record<string, un
     case 'package_master': return updatePackage(id, row);
     case 'medicine_master': return updateMedicine(id, row);
     case 'radiology_master': return updateRadiologyImaging(id, row);
+    case 'asset_master': return updateAssetFromImportRow(id, row);
     default: throw new Error(`Unknown import type: ${type}`);
   }
 }

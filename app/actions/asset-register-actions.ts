@@ -152,6 +152,119 @@ export async function addAsset(input: {
     }
 }
 
+/** Case-insensitive category name -> id, for import rows that carry a category name, not an id. */
+async function resolveCategoryId(organizationId: string, categoryName: string) {
+    const categories: any = await getAssetCategories(organizationId, { is_active: true });
+    const name = categoryName.trim().toLowerCase();
+    const match = (categories.categories ?? []).find((c: any) => c.category_name.trim().toLowerCase() === name);
+    return match ?? null;
+}
+
+/**
+ * Bulk-import row -> new asset. Used only by the generic master-data importer
+ * (master-import-actions.ts), which resolves whether to create or update by
+ * looking up `asset_code` before calling this. Category comes in as a name
+ * (what an import sheet can reasonably contain), not the id `addAsset` wants.
+ */
+export async function createAssetFromImportRow(row: Record<string, unknown>) {
+    try {
+        const { organizationId } = await requireTenantContext();
+        const categoryName = String(row.category ?? '').trim();
+        const category = categoryName ? await resolveCategoryId(organizationId, categoryName) : null;
+        if (!category) {
+            return { success: false, error: `Category "${categoryName}" not found — check spelling or add it in Asset Categories first.` };
+        }
+        return addAsset({
+            asset_code: row.asset_code ? String(row.asset_code) : undefined,
+            asset_name: String(row.asset_name ?? ''),
+            category_id: category.id,
+            location: row.location ? String(row.location) : undefined,
+            department: row.department ? String(row.department) : undefined,
+            acquisition_date: String(row.acquisition_date ?? ''),
+            acquisition_cost: Number(row.acquisition_cost ?? 0),
+            serial_number: row.serial_number ? String(row.serial_number) : undefined,
+            manufacturer: row.manufacturer ? String(row.manufacturer) : undefined,
+            model_number: row.model_number ? String(row.model_number) : undefined,
+            invoice_number: row.invoice_number ? String(row.invoice_number) : undefined,
+            warranty_expiry: row.warranty_expiry ? String(row.warranty_expiry) : undefined,
+        });
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Bulk-import row -> update an existing asset (matched on asset_code).
+ * Only touches the fields `updateFixedAsset` actually supports — descriptive
+ * and location fields. Category, cost, acquisition date and invoice number
+ * are set once at creation and deliberately left alone here: changing them
+ * on an asset that may already have accumulated depreciation needs the
+ * dedicated lifecycle actions (or a fresh row), not a silent bulk overwrite.
+ */
+export async function updateAssetFromImportRow(id: string, row: Record<string, unknown>) {
+    try {
+        await requireTenantContext();
+        const res: any = await updateFixedAsset(id, {
+            asset_name: row.asset_name ? String(row.asset_name) : undefined,
+            location: row.location ? String(row.location) : undefined,
+            department: row.department ? String(row.department) : undefined,
+            serial_number: row.serial_number ? String(row.serial_number) : undefined,
+            manufacturer: row.manufacturer ? String(row.manufacturer) : undefined,
+            model_number: row.model_number ? String(row.model_number) : undefined,
+            warranty_expiry: row.warranty_expiry ? new Date(String(row.warranty_expiry)) : undefined,
+        });
+        if (!res.success) return { success: false, error: res.error };
+        return { success: true, data: serialize(res.asset) };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Category-wise depreciation / book value summary. Reuses the same
+ * `getFixedAssets` data the register table already fetches — no new query
+ * shape, just a different aggregation.
+ */
+export async function getAssetDepreciationReport(filters?: { category_id?: string }) {
+    try {
+        const { organizationId } = await requireTenantContext();
+        const res: any = await getFixedAssets(organizationId, filters);
+        if (!res.success) return { success: false, error: res.error };
+
+        const assets = serialize(res.assets) as any[];
+        const byCategory = new Map<string, { category: string; count: number; cost: number; accumulated_depreciation: number; book_value: number }>();
+        for (const a of assets) {
+            const name = a.category?.category_name ?? 'Uncategorised';
+            const row = byCategory.get(name) ?? { category: name, count: 0, cost: 0, accumulated_depreciation: 0, book_value: 0 };
+            row.count += 1;
+            row.cost += Number(a.acquisition_cost || 0);
+            row.accumulated_depreciation += Number(a.accumulated_depreciation || 0);
+            row.book_value += Number(a.book_value || 0);
+            byCategory.set(name, row);
+        }
+        const rows = Array.from(byCategory.values())
+            .sort((a, b) => a.category.localeCompare(b.category))
+            .map(r => ({ ...r, percent_depreciated: r.cost > 0 ? (r.accumulated_depreciation / r.cost) * 100 : 0 }));
+
+        const totals = rows.reduce((acc, r) => ({
+            count: acc.count + r.count,
+            cost: acc.cost + r.cost,
+            accumulated_depreciation: acc.accumulated_depreciation + r.accumulated_depreciation,
+            book_value: acc.book_value + r.book_value,
+        }), { count: 0, cost: 0, accumulated_depreciation: 0, book_value: 0 });
+
+        return {
+            success: true,
+            data: {
+                rows,
+                totals: { ...totals, percent_depreciated: totals.cost > 0 ? (totals.accumulated_depreciation / totals.cost) * 100 : 0 },
+            },
+        };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
 export async function editAsset(id: string, data: any) {
     try {
         await requireTenantContext();
