@@ -2298,6 +2298,7 @@ export async function cancelAdmission(admissionId: string, reason: string, cance
 
     const admission = await db.admissions.findUnique({
       where: { admission_id: admissionId },
+      include: { patient: { select: { full_name: true } } },
     });
 
     if (!admission) return { success: false, error: 'Admission not found' };
@@ -2375,14 +2376,20 @@ export async function cancelAdmission(admissionId: string, reason: string, cance
         data: { status: 'Cancelled' },
       });
 
-      // 4. Audit log
+      // 4. Audit log — stamp WHO cancelled it (user) and WHOSE admission (patient),
+      // so the Edit/Cancel audit report can answer "who cancelled this admission".
       await tx.system_audit_logs.create({
         data: {
           action: forceCancel ? 'FORCE_CANCEL_ADMISSION' : 'CANCEL_ADMISSION',
           module: 'ipd',
           entity_type: 'admission',
           entity_id: admissionId,
+          user_id: session.id,
+          username: cancelledBy,
+          role: session.role,
           details: JSON.stringify({
+            patient: admission.patient?.full_name,
+            patient_id: admission.patient_id,
             reason: cancellationReason,
             bed_id: admission.bed_id,
             force: !!forceCancel,
