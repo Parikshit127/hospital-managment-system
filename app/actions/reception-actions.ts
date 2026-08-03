@@ -124,26 +124,28 @@ export async function getRegisteredPatients(options?: {
         // precedence; otherwise fall back to the relative dateRange preset.
         if (options?.fromDate || options?.toDate) {
             const range: Record<string, Date> = {};
-            if (options.fromDate) {
-                const f = new Date(options.fromDate);
-                if (!isNaN(f.getTime())) range.gte = new Date(f.setHours(0, 0, 0, 0));
+            // Interpret the picked YYYY-MM-DD as an IST calendar day (India has no DST),
+            // not the server's UTC-local midnight — setHours on a UTC box mapped the
+            // date to 05:30 IST, so a whole day's early registrations were missed.
+            if (options.fromDate && /^\d{4}-\d{2}-\d{2}$/.test(options.fromDate)) {
+                range.gte = new Date(`${options.fromDate}T00:00:00+05:30`);
             }
-            if (options.toDate) {
-                const t = new Date(options.toDate);
-                if (!isNaN(t.getTime())) range.lte = new Date(t.setHours(23, 59, 59, 999));
+            if (options.toDate && /^\d{4}-\d{2}-\d{2}$/.test(options.toDate)) {
+                range.lte = new Date(`${options.toDate}T23:59:59.999+05:30`);
             }
             if (Object.keys(range).length) where.created_at = range;
         } else if (options?.dateRange && options.dateRange !== 'all') {
-            const now = new Date();
-            let from: Date;
+            // Anchor to the org's IST calendar day (same helper master billing uses),
+            // not the server's UTC midnight — that's the whole point of "today".
+            const { start: todayStart, end: todayEnd } = getTodayRange();
+            const DAY = 24 * 60 * 60 * 1000;
             if (options.dateRange === 'today') {
-                from = new Date(now.setHours(0, 0, 0, 0));
+                where.created_at = { gte: todayStart, lte: todayEnd };
             } else if (options.dateRange === 'week') {
-                from = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+                where.created_at = { gte: new Date(todayStart.getTime() - 6 * DAY), lte: todayEnd };
             } else {
-                from = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+                where.created_at = { gte: new Date(todayStart.getTime() - 29 * DAY), lte: todayEnd };
             }
-            where.created_at = { gte: from };
         }
 
         // Doctor filter — match patients who have an appointment or invoice with this doctor
