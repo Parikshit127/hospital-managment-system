@@ -348,7 +348,17 @@ export default async function PharmacyInvoiceViewPage({ params, searchParams }: 
                     </div>
                 </div>
 
-                <div className="gstin-bar">GSTIN : {pharmacy.gstin || ''}</div>
+                <div className="gstin-bar">
+                    GSTIN : {pharmacy.gstin || ''}
+                    {(pharmacy.drugLicenseForm20 || pharmacy.drugLicenseForm21) && (
+                        <>
+                            &nbsp;&nbsp;|&nbsp;&nbsp;Drug Lic. No. :
+                            {pharmacy.drugLicenseForm20 && ` 20/${pharmacy.drugLicenseForm20}`}
+                            {pharmacy.drugLicenseForm20 && pharmacy.drugLicenseForm21 && ','}
+                            {pharmacy.drugLicenseForm21 && ` 21/${pharmacy.drugLicenseForm21}`}
+                        </>
+                    )}
+                </div>
 
                 {/* GST Invoice Title */}
                 <div className="inv-title">GST INVOICE</div>

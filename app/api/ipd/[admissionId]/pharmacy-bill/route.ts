@@ -128,7 +128,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ admi
     <div>
       <div class="nm">${esc(branding.name)}</div>
       ${branding.division ? `<div class="sub">${esc(branding.division)}</div>` : ''}
-      <div class="addr">${esc(branding.address)}${branding.phone ? `<br>Phone: ${esc(branding.phone)}` : ''}${branding.gstin ? ` · GSTIN: ${esc(branding.gstin)}` : ''}</div>
+      <div class="addr">${esc(branding.address)}${branding.phone ? `<br>Phone: ${esc(branding.phone)}` : ''}${branding.gstin ? ` · GSTIN: ${esc(branding.gstin)}` : ''}${(branding.drugLicenseForm20 || branding.drugLicenseForm21) ? ` · Drug Lic. No.: ${[branding.drugLicenseForm20 && `20/${branding.drugLicenseForm20}`, branding.drugLicenseForm21 && `21/${branding.drugLicenseForm21}`].filter(Boolean).map(esc).join(', ')}` : ''}</div>
     </div>
     <div style="text-align:right;">
       <span class="badge">PHARMACY BILL</span>
