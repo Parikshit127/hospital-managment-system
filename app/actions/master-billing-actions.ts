@@ -143,6 +143,7 @@ export interface MasterBillingFilter {
   invoice_type?: string; // OPD | IPD | LAB | PHARMACY
   department?: string;
   corporate_id?: string;
+  doctor_name?: string;
   date_from?: string;
   date_to?: string;
   risk_level?: "low" | "medium" | "high";
@@ -165,6 +166,20 @@ export async function getMasterBillingGrid(filter: MasterBillingFilter = {}) {
     if (filter.patient_type) where.billing_patient_type = filter.patient_type;
     if (filter.invoice_type) where.invoice_type = filter.invoice_type;
     if (filter.corporate_id) where.corporate_id = filter.corporate_id;
+    if (filter.doctor_name && filter.doctor_name.trim()) {
+      // A separate `AND` entry (not merged into the `search` OR-block below) so
+      // the doctor filter and the free-text search can be applied together.
+      const dq = filter.doctor_name.trim();
+      where.AND = [
+        ...(where.AND || []),
+        {
+          OR: [
+            { doctor_name: { contains: dq, mode: "insensitive" } },
+            { admission: { doctor_name: { contains: dq, mode: "insensitive" } } },
+          ],
+        },
+      ];
+    }
     if (filter.date_from || filter.date_to) {
       where.created_at = {};
       // The date strings are IST calendar days (the UI builds them from the user's

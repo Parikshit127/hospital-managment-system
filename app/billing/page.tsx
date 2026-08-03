@@ -227,7 +227,8 @@ export function MasterBillingContent({ shell = "app" }: { shell?: "app" | "admin
   const clearFilters = () => setFilter({ page: 1, limit: 25 });
   const hasActiveFilters = Boolean(
     filter.search || filter.invoice_status || filter.payment_status ||
-    filter.patient_type || filter.invoice_type || filter.date_from || filter.date_to
+    filter.patient_type || filter.invoice_type || filter.doctor_name ||
+    filter.date_from || filter.date_to
   );
 
   // Export the FULL filtered result set (all pages, respecting every active
@@ -335,8 +336,18 @@ export function MasterBillingContent({ shell = "app" }: { shell?: "app" | "admin
                     onChange={(v) => updateFilter({ invoice_type: v || undefined })}
                   />
                   <ThDateFilter filter={filter} setFilter={updateFilter} />
-                  <ThSearchFilter value={filter.search ?? ""} onChange={(v) => updateFilter({ search: v })} />
-                  <Th>Doctor</Th>
+                  <ThSearchFilter
+                    label="Patient"
+                    value={filter.search ?? ""}
+                    onChange={(v) => updateFilter({ search: v })}
+                    placeholder="Search name / phone…"
+                  />
+                  <ThSearchFilter
+                    label="Doctor"
+                    value={filter.doctor_name ?? ""}
+                    onChange={(v) => updateFilter({ doctor_name: v || undefined })}
+                    placeholder="Search doctor…"
+                  />
                   <ThFilter
                     label="Payer"
                     value={filter.patient_type ?? ""}
@@ -670,18 +681,29 @@ function ThFilter({
   );
 }
 
-// Patient-column header search — matches name / phone / invoice # / doctor
-// (the server already searches all of those for one `search` term).
-function ThSearchFilter({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+// Column-header text search, shared by Patient (name / phone / invoice # /
+// doctor — the server already searches all of those for one `search` term)
+// and Doctor (a dedicated `doctor_name` filter, AND'd with the rest).
+function ThSearchFilter({
+  label,
+  value,
+  onChange,
+  placeholder = "Search…",
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+}) {
   return (
     <th className="px-2.5 py-2 align-top text-left">
       <div className="flex flex-col gap-1 items-start">
-        <span className="whitespace-nowrap">Patient</span>
+        <span className="whitespace-nowrap">{label}</span>
         <input
           type="text"
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          placeholder="Search name / phone…"
+          placeholder={placeholder}
           className={`normal-case text-[10px] font-semibold rounded px-1.5 py-0.5 border w-28 ${
             value ? "border-blue-300 bg-blue-50 text-blue-700" : "border-gray-200 bg-white text-gray-500"
           }`}
