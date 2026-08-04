@@ -124,26 +124,41 @@ export const pharmacyOpItemDetailReport: ReportDefinition = {
   requiredPermission: 'mis_reports.pharmacy.view',
   queryFn: async (filters: ValidatedFilters, orgId: string) => {
     const { date_start, date_end } = filters;
+    // Outpatient pharmacy SALES are recorded as Pharmacy invoices (counter/walk-in
+    // sales via generateInvoice, plus OPD dispense) — NOT as pharmacy_orders. The
+    // old query read pharmacy_orders and so missed every counter sale, understating
+    // the numbers. Source from invoice_items of non-IPD Pharmacy invoices instead.
+    // Item line description is stored as "MedName (Batch: XXX)".
     const rows = await prisma.$queryRaw<any[]>`
-      SELECT 
-        DATE(po.created_at) as "issue_date",
-        po.id::text as "order_id",
-        p.full_name as "patient_name",
-        poi.medicine_name as "item_name",
-        poi.batch_id as "batch",
-        poi.quantity_dispensed as "quantity",
-        poi.unit_price as "unit_price",
-        poi.total_price as "total_price"
-      FROM "pharmacy_order_items" poi
-      JOIN "pharmacy_orders" po ON poi.order_id = po.id
-      LEFT JOIN "OPD_REG" p ON po.patient_id = p.patient_id
-      WHERE po."organizationId" = ${orgId}
-        AND po.is_ipd_linked = false
-        AND po.created_at >= ${toStartOfDay(date_start)}
-        AND po.created_at <= ${toEndOfDay(date_end)}
-      ORDER BY po.created_at DESC
+      SELECT
+        DATE(inv.created_at) as "issue_date",
+        inv.id::text as "order_id",
+        COALESCE(p.full_name, NULLIF(inv.notes, ''), 'Walk-in') as "patient_name",
+        TRIM(SPLIT_PART(ii.description, ' (Batch:', 1)) as "item_name",
+        NULLIF(TRIM(REPLACE(SPLIT_PART(ii.description, '(Batch:', 2), ')', '')), '') as "batch",
+        ii.quantity as "quantity",
+        ii.unit_price as "unit_price",
+        ii.total_price as "total_price"
+      FROM "invoice_items" ii
+      JOIN "invoices" inv ON ii.invoice_id = inv.id
+      LEFT JOIN "OPD_REG" p ON inv.patient_id = p.patient_id
+      WHERE inv."organizationId" = ${orgId}
+        AND inv.invoice_type IN ('Pharmacy', 'PHARMACY')
+        AND inv.admission_id IS NULL
+        AND inv.status <> 'Cancelled'
+        AND inv.created_at >= ${toStartOfDay(date_start)}
+        AND inv.created_at <= ${toEndOfDay(date_end)}
+      ORDER BY inv.created_at DESC
     `;
-    return { rows, totals: {} };
+    return {
+      rows: rows.map(r => ({
+        ...r,
+        quantity: Number(r.quantity || 0),
+        unit_price: Number(r.unit_price || 0),
+        total_price: Number(r.total_price || 0),
+      })),
+      totals: {},
+    };
   },
 };
 
@@ -167,25 +182,35 @@ export const pharmacyOpSummaryDetailReport: ReportDefinition = {
   requiredPermission: 'mis_reports.pharmacy.view',
   queryFn: async (filters: ValidatedFilters, orgId: string) => {
     const { date_start, date_end } = filters;
+    // Same fix as OP Item Detail: outpatient pharmacy sales are Pharmacy invoices,
+    // not pharmacy_orders. One row per non-IPD Pharmacy invoice.
     const rows = await prisma.$queryRaw<any[]>`
-      SELECT 
-        DATE(po.created_at) as "issue_date",
-        po.id::text as "order_id",
-        p.full_name as "patient_name",
-        COALESCE(doc.name, 'Unassigned') as "doctor_name",
-        po.status as "status",
-        po.total_amount as "total_amount",
-        po.items_dispensed as "items_dispensed"
-      FROM "pharmacy_orders" po
-      LEFT JOIN "OPD_REG" p ON po.patient_id = p.patient_id
-      LEFT JOIN "users" doc ON po.doctor_id = doc.id
-      WHERE po."organizationId" = ${orgId}
-        AND po.is_ipd_linked = false
-        AND po.created_at >= ${toStartOfDay(date_start)}
-        AND po.created_at <= ${toEndOfDay(date_end)}
-      ORDER BY po.created_at DESC
+      SELECT
+        DATE(inv.created_at) as "issue_date",
+        inv.id::text as "order_id",
+        COALESCE(p.full_name, NULLIF(inv.notes, ''), 'Walk-in') as "patient_name",
+        COALESCE(inv.doctor_name, 'Self') as "doctor_name",
+        inv.status as "status",
+        (SELECT COUNT(*) FROM "invoice_items" ii WHERE ii.invoice_id = inv.id)::int as "items_dispensed",
+        inv.net_amount as "total_amount"
+      FROM "invoices" inv
+      LEFT JOIN "OPD_REG" p ON inv.patient_id = p.patient_id
+      WHERE inv."organizationId" = ${orgId}
+        AND inv.invoice_type IN ('Pharmacy', 'PHARMACY')
+        AND inv.admission_id IS NULL
+        AND inv.status <> 'Cancelled'
+        AND inv.created_at >= ${toStartOfDay(date_start)}
+        AND inv.created_at <= ${toEndOfDay(date_end)}
+      ORDER BY inv.created_at DESC
     `;
-    return { rows, totals: {} };
+    return {
+      rows: rows.map(r => ({
+        ...r,
+        items_dispensed: Number(r.items_dispensed || 0),
+        total_amount: Number(r.total_amount || 0),
+      })),
+      totals: {},
+    };
   },
 };
 
