@@ -950,69 +950,32 @@ export const pharmacyOpSummaryReport: ReportDefinition = {
     const { date_start, date_end } = filters;
     const start = toStartOfDay(date_start);
     const end   = toEndOfDay(date_end);
-    const rangeDays = Math.ceil((end.getTime() - start.getTime()) / 86_400_000);
 
-    // ── Phase E3 Optimisation ────────────────────────────────────────────────
-    // > 7 days  → rollup table (mis_daily_pharmacy_rollups, order_type='OP')
-    //             The rollup also stores return_amount and net_amount — these are
-    //             surfaced as bonus columns in the long-range view.
-    // ≤ 7 days  → live pharmacy_orders table (real-time accuracy)
-    if (rangeDays > 7) {
-      const rows = await prisma.$queryRaw<any[]>`
-        SELECT
-          r.report_date   AS "sale_date",
-          r.order_count   AS "total_orders",
-          NULL            AS "items_dispensed",
-          r.total_amount  AS "total_amount",
-          r.return_amount AS "return_amount",
-          r.net_amount    AS "net_amount"
-        FROM "mis_daily_pharmacy_rollups" r
-        WHERE r."organizationId" = ${orgId}
-          AND r.order_type = 'OP'
-          AND r.report_date >= ${start}
-          AND r.report_date <= ${end}
-        ORDER BY r.report_date DESC
-      `;
-
-      if (rows.length > 0) {
-        const totals = rows.reduce((acc, r) => {
-          acc.total_orders   += Number(r.total_orders   || 0);
-          acc.total_amount   += Number(r.total_amount   || 0);
-          acc.return_amount  += Number(r.return_amount  || 0);
-          acc.net_amount     += Number(r.net_amount     || 0);
-          return acc;
-        }, { total_orders: 0, items_dispensed: 0, total_amount: 0, return_amount: 0, net_amount: 0 });
-
-        return {
-          rows: rows.map(r => ({
-            ...r,
-            total_orders:   Number(r.total_orders   || 0),
-            items_dispensed: null, // not available at rollup granularity
-            total_amount:   Number(r.total_amount   || 0),
-            return_amount:  Number(r.return_amount  || 0),
-            net_amount:     Number(r.net_amount     || 0),
-          })),
-          totals,
-        };
-      }
-    }
-
-    // ── Live path (≤ 7 days) ─────────────────────────────────────────────────
+    // Outpatient sales are Pharmacy invoices, not pharmacy_orders. The daily rollup
+    // table is built from pharmacy_orders too, so it's stale for counter sales —
+    // read invoices live for every range. total_orders = invoice count; items =
+    // total line quantities; amount = invoice net_amount.
     const rows = await prisma.$queryRaw<any[]>`
       SELECT
-        DATE(po.created_at)       AS "sale_date",
-        COUNT(po.id)              AS "total_orders",
-        SUM(po.items_dispensed)   AS "items_dispensed",
-        SUM(po.total_amount)      AS "total_amount",
-        0                         AS "return_amount",
-        SUM(po.total_amount)      AS "net_amount"
-      FROM "pharmacy_orders" po
-      WHERE po."organizationId" = ${orgId}
-        AND po.is_ipd_linked = false
-        AND po.created_at >= ${start}
-        AND po.created_at <= ${end}
-      GROUP BY DATE(po.created_at)
-      ORDER BY DATE(po.created_at) DESC
+        DATE(inv.created_at) AS "sale_date",
+        COUNT(inv.id)::int   AS "total_orders",
+        COALESCE(SUM((
+          SELECT COALESCE(SUM(ii.quantity), 0)
+          FROM "invoice_items" ii
+          WHERE ii.invoice_id = inv.id
+        )), 0)::int          AS "items_dispensed",
+        COALESCE(SUM(inv.net_amount), 0)  AS "total_amount",
+        0                                 AS "return_amount",
+        COALESCE(SUM(inv.net_amount), 0)  AS "net_amount"
+      FROM "invoices" inv
+      WHERE inv."organizationId" = ${orgId}
+        AND inv.invoice_type IN ('Pharmacy', 'PHARMACY')
+        AND inv.admission_id IS NULL
+        AND inv.status <> 'Cancelled'
+        AND inv.created_at >= ${start}
+        AND inv.created_at <= ${end}
+      GROUP BY DATE(inv.created_at)
+      ORDER BY DATE(inv.created_at) DESC
     `;
 
     const totals = rows.reduce((acc, r) => {
@@ -1060,27 +1023,31 @@ export const pharmacyOpSaleDetailReport: ReportDefinition = {
   requiredPermission: 'mis_reports.pharmacy.view',
   queryFn: async (filters: ValidatedFilters, orgId: string) => {
     const { date_start, date_end } = filters;
+    // Outpatient sales are Pharmacy invoices, not pharmacy_orders (see OP Item
+    // Detail). One row per invoice line; item name/batch parsed from the line
+    // description "MedName (Batch: XXX)".
     const rows = await prisma.$queryRaw<any[]>`
       SELECT
-        DATE(po.created_at)                        AS "sale_date",
-        po.id::text                                AS "order_id",
-        COALESCE(p.full_name, '—')                 AS "patient_name",
-        COALESCE(doc.name, 'Unassigned')           AS "doctor_name",
-        poi.medicine_name                          AS "item_name",
-        COALESCE(poi.batch_id, '—')               AS "batch_id",
-        COALESCE(poi.quantity_dispensed, 0)        AS "quantity",
-        COALESCE(poi.unit_price, 0)               AS "unit_price",
-        COALESCE(poi.tax_amount, 0)               AS "tax_amount",
-        COALESCE(poi.total_price, 0)              AS "total_price"
-      FROM "pharmacy_order_items" poi
-      JOIN  "pharmacy_orders" po  ON poi.order_id  = po.id
-      LEFT JOIN "OPD_REG"     p   ON po.patient_id = p.patient_id
-      LEFT JOIN "users"       doc ON po.doctor_id  = doc.id
-      WHERE po."organizationId" = ${orgId}
-        AND po.is_ipd_linked = false
-        AND po.created_at >= ${toStartOfDay(date_start)}
-        AND po.created_at <= ${toEndOfDay(date_end)}
-      ORDER BY po.created_at DESC, poi.id ASC
+        DATE(inv.created_at)                                                                       AS "sale_date",
+        inv.id::text                                                                               AS "order_id",
+        COALESCE(p.full_name, NULLIF(inv.notes, ''), 'Walk-in')                                    AS "patient_name",
+        COALESCE(inv.doctor_name, 'Self')                                                          AS "doctor_name",
+        TRIM(SPLIT_PART(ii.description, ' (Batch:', 1))                                             AS "item_name",
+        COALESCE(NULLIF(TRIM(REPLACE(SPLIT_PART(ii.description, '(Batch:', 2), ')', '')), ''), '—') AS "batch_id",
+        COALESCE(ii.quantity, 0)                                                                   AS "quantity",
+        COALESCE(ii.unit_price, 0)                                                                 AS "unit_price",
+        COALESCE(ii.tax_amount, 0)                                                                 AS "tax_amount",
+        COALESCE(ii.total_price, 0)                                                                AS "total_price"
+      FROM "invoice_items" ii
+      JOIN "invoices" inv ON ii.invoice_id = inv.id
+      LEFT JOIN "OPD_REG" p ON inv.patient_id = p.patient_id
+      WHERE inv."organizationId" = ${orgId}
+        AND inv.invoice_type IN ('Pharmacy', 'PHARMACY')
+        AND inv.admission_id IS NULL
+        AND inv.status <> 'Cancelled'
+        AND inv.created_at >= ${toStartOfDay(date_start)}
+        AND inv.created_at <= ${toEndOfDay(date_end)}
+      ORDER BY inv.created_at DESC, ii.id ASC
     `;
 
     const totals = rows.reduce((acc, r) => {
