@@ -184,14 +184,20 @@ export default async function PharmacyInvoiceViewPage({ params, searchParams }: 
     const totalTax   = lineData.reduce((s, l) => s + l.taxAmt, 0);
     const totalCgst  = totalTax / 2;
     const totalSgst  = totalTax / 2;
-    const grandTotal = subtotal + totalTax;
     const roundOff   = 0; // no rounding applied
 
+    // Discounts: line-level (already netted into `subtotal` via net_price) plus any
+    // bill-level discount. Both are now surfaced on the printed bill and reflected in
+    // the grand total — previously the bill showed the full pre-discount amount with
+    // no discount line, so patients never saw the concession they were given.
     const lineDiscount = items.reduce((s: number, i: any) => s + Number(i.discount || 0), 0);
     const billDiscount = isIpd ? 0 : Math.max(0, Math.max(
         Number((invoice as any).bill_discount || 0),
         Number((invoice as any).total_discount || 0) - lineDiscount,
     ));
+    const grossSubtotal = subtotal + lineDiscount;     // pre-discount subtotal
+    const totalDiscount = lineDiscount + billDiscount; // full concession, shown on the bill
+    const grandTotal = subtotal + totalTax - billDiscount;
 
     const totalIpdNet = Number((invoice as any).net_amount || 0);
     const ipdPaidRatio = isIpd
@@ -436,7 +442,10 @@ export default async function PharmacyInvoiceViewPage({ params, searchParams }: 
                     </div>
 
                     <div className="totals-col">
-                        <div className="row"><span>SUB TOTAL</span><span>{subtotal.toFixed(2)}</span></div>
+                        <div className="row"><span>SUB TOTAL</span><span>{grossSubtotal.toFixed(2)}</span></div>
+                        {totalDiscount > 0 && (
+                            <div className="row"><span>DISCOUNT</span><span>- {totalDiscount.toFixed(2)}</span></div>
+                        )}
                         <div className="row"><span>ROUND OFF</span><span>{roundOff.toFixed(2)}</span></div>
                         {lineData.map((l, i) => (
                             l.sgstAmt > 0 ? (
