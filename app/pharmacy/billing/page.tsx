@@ -426,9 +426,10 @@ export default function PharmacyPage() {
     const cgst = totalTax / 2;
     const sgst = totalTax / 2;
     const grandTotal = subtotal + totalTax;
-    // Optional discount applies to walk-in / OTC only; clamped to [0, grandTotal].
-    // Walk-in / OTC only: percentage discount (clamped 0–100%) → ₹ off the bill.
-    const discountPct = isWalkIn ? Math.min(Math.max(0, Number(discount) || 0), 100) : 0;
+    // Discount (percentage, clamped 0–100% → ₹ off the bill) is allowed on any
+    // counter sale — walk-in/OTC AND registered patients ("patient ke according").
+    // Only Hospital Internal Use (a stock transfer, not a sale) is excluded.
+    const discountPct = isHospitalUse ? 0 : Math.min(Math.max(0, Number(discount) || 0), 100);
     const discountAmt = grandTotal * discountPct / 100;
     const payableTotal = Math.max(0, grandTotal - discountAmt);
 
@@ -1508,7 +1509,7 @@ export default function PharmacyPage() {
                                                             </div>
                                                         </>
                                                     )}
-                                                    {isWalkIn && (
+                                                    {!isHospitalUse && (
                                                         <div className="flex justify-between items-center pt-1">
                                                             <span className="text-gray-500">Discount (%)</span>
                                                             <div className="flex items-center gap-1">
