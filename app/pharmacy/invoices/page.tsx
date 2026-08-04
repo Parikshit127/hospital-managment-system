@@ -175,10 +175,17 @@ export default function PharmacyInvoicesPage() {
 
     // KPI summary
     const summary = useMemo(() => {
+        const isIpd = (inv: any) => inv.source === 'IPD-PHARMACY' || inv.source === 'IPD-PKG-PHARMACY';
         const totalBills = filtered.length;
+        // Gross Amount = every pharmacy bill (counter + IPD).
         const grossAmount = filtered.reduce((s, inv) => s + Number(inv.net_amount || 0), 0);
-        const balanceDue = filtered.reduce((s, inv) => s + Number(inv.balance_due || 0), 0);
-        const receipts = grossAmount - balanceDue;
+        // Receipts (collected) and Balance Due (owed) reflect COUNTER sales only.
+        // IPD pharmacy charges are billed to and settled through the patient's IPD
+        // bill — not the pharmacy counter — so IPD counts toward Gross only, never
+        // toward pharmacy Receipts or Balance Due.
+        const counter = filtered.filter(inv => !isIpd(inv));
+        const receipts = counter.reduce((s, inv) => s + (Number(inv.net_amount || 0) - Number(inv.balance_due || 0)), 0);
+        const balanceDue = counter.reduce((s, inv) => s + Number(inv.balance_due || 0), 0);
         return { totalBills, grossAmount, receipts, balanceDue };
     }, [filtered]);
 
