@@ -568,7 +568,7 @@ export function InsuranceReceipts({ providers }: { providers: any[] }) {
     { header: 'Sanctioned', val: (r) => Number(r.sanctioned_amount || 0), num: true, width: 16 },
     { header: 'TDS', val: (r) => Number(r.tds_total || 0), num: true, width: 13 },
     { header: 'Svc Chg', val: (r) => Number(r.service_charge || 0), num: true, width: 13 },
-    { header: 'Disallowed', val: (r) => Math.max(0, Number(r.claim_amount || 0) - Number(r.sanctioned_amount || 0)), num: true, width: 15 },
+    { header: 'Disallowed', val: (r) => Number(r.disallowed_total ?? Math.max(0, Number(r.claim_amount || 0) - Number(r.sanctioned_amount || 0))), num: true, width: 15 },
     { header: 'Status', val: (r) => r.status || '', width: 16, nowrap: true },
   ];
   const RECEIPT_ALIGN = RECEIPT_COLS.map((c) => (c.num ? 'right' : 'left')) as ('left' | 'right')[];
@@ -585,7 +585,7 @@ export function InsuranceReceipts({ providers }: { providers: any[] }) {
     receipts.reduce((t: number, r: any) => t + Number(r.sanctioned_amount || 0), 0),
     receipts.reduce((t: number, r: any) => t + Number(r.tds_total || 0), 0),
     receipts.reduce((t: number, r: any) => t + Number(r.service_charge || 0), 0),
-    receipts.reduce((t: number, r: any) => t + Math.max(0, Number(r.claim_amount || 0) - Number(r.sanctioned_amount || 0)), 0),
+    receipts.reduce((t: number, r: any) => t + Number(r.disallowed_total ?? Math.max(0, Number(r.claim_amount || 0) - Number(r.sanctioned_amount || 0))), 0),
     '',
   ] : undefined;
   const receiptPrintRows = () => receipts.map((r: any) => RECEIPT_COLS.map((c) => (c.num ? fmt(c.val(r) as number) : c.val(r))));
@@ -739,7 +739,7 @@ export function InsuranceReceipts({ providers }: { providers: any[] }) {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {receipts.map((r: any) => {
-                const disallowed = Math.max(0, Number(r.claim_amount || 0) - Number(r.sanctioned_amount || 0));
+                const disallowed = Number(r.disallowed_total ?? Math.max(0, Number(r.claim_amount || 0) - Number(r.sanctioned_amount || 0)));
                 const unmapped = Number(r.unmapped_amount || 0);
                 return (
                 <tr key={r.id} className="hover:bg-slate-50">
@@ -1026,7 +1026,11 @@ export function NewReceiptModal({ providers, onClose, onSaved, defaultProviderId
       instrument: form.instrument, reference_number: form.reference_number,
       receipt_date: form.receipt_date,
       total_amount: receiptTotal,
-      claim_amount: totalBill, sanctioned_amount: totalBill, tds_amount: totalTds, service_charge: 0,
+      // Claim = full bill; Sanctioned = what the payer approved = bill − disallowed.
+      // Sending both as totalBill made claim−sanctioned = 0, so the Recent Receipts
+      // "Disallowed" column always read "—". (Invariant holds: totalBill − totalDisallowed
+      // = totalReceived, and sanctioned − tds = totalCash = receiptTotal.)
+      claim_amount: totalBill, sanctioned_amount: round2(totalBill - totalDisallowed), tds_amount: totalTds, service_charge: 0,
       remarks: form.remarks,
       settle_gross: true,
       lines: payload,

@@ -546,7 +546,9 @@ export async function listInsuranceReceipts(filters?: {
       // patient's bill — surface which patient(s) it's allocated to on the list
       // rather than only the payer name.
       allocations: {
-        select: { invoice: { select: { patient_id: true, patient: { select: { full_name: true } } } } },
+        // disallowed_amount is authoritative per line; older receipts have a wrong
+        // header sanctioned_amount, so the true disallowed total is summed from here.
+        select: { disallowed_amount: true, invoice: { select: { patient_id: true, patient: { select: { full_name: true } } } } },
       },
     },
     orderBy: { receipt_date: 'desc' },
@@ -554,13 +556,15 @@ export async function listInsuranceReceipts(filters?: {
   });
   const data = receipts.map((r: any) => {
     const seen = new Map<string, string>();
+    let disallowedTotal = 0;
     for (const a of r.allocations) {
+      disallowedTotal += Number(a.disallowed_amount || 0);
       if (a.invoice?.patient_id && !seen.has(a.invoice.patient_id)) {
         seen.set(a.invoice.patient_id, a.invoice.patient?.full_name || a.invoice.patient_id);
       }
     }
     const { allocations, ...rest } = r;
-    return { ...rest, patients: Array.from(seen.values()) };
+    return { ...rest, patients: Array.from(seen.values()), disallowed_total: round2(disallowedTotal) };
   });
   return { success: true, data: serialize(data) };
 }
