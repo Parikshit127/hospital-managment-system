@@ -521,9 +521,14 @@ export async function submitInsuranceClaim(data: {
             return { success: false, error: 'Policy has expired' };
         }
 
-        const remainingLimit = Number(policy.remaining_limit || 0);
-        if (data.claimed_amount > remainingLimit) {
-            return { success: false, error: `Claimed amount exceeds remaining coverage limit of ${remainingLimit}` };
+        // A null coverage/remaining limit means the policy has NO cap (unlimited) —
+        // not a zero cap. Only enforce the limit when one was actually set; a real
+        // 0 (a cap that has been fully consumed) still correctly blocks the claim.
+        if (policy.remaining_limit != null) {
+            const remainingLimit = Number(policy.remaining_limit);
+            if (data.claimed_amount > remainingLimit) {
+                return { success: false, error: `Claimed amount exceeds remaining coverage limit of ${remainingLimit}` };
+            }
         }
 
         // Defense in depth: a claim may never exceed the invoice net. For package
@@ -1021,7 +1026,10 @@ export async function autoSubmitClaim(invoiceId: number) {
         });
         if (!policy) return { success: false, error: 'No active insurance policy found for this patient' };
 
-        const claimAmount = Math.min(Number(invoice.net_amount), Number(policy.remaining_limit || 0));
+        // null remaining_limit = uncapped policy → claim the full invoice net.
+        // A real 0 means the cap is used up, so claimAmount stays 0 and we stop below.
+        const cap = policy.remaining_limit != null ? Number(policy.remaining_limit) : Number(invoice.net_amount);
+        const claimAmount = Math.min(Number(invoice.net_amount), cap);
         if (claimAmount <= 0) return { success: false, error: 'No remaining coverage available' };
 
         return await submitInsuranceClaim({
