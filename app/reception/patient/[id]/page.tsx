@@ -1262,7 +1262,7 @@ export default function PatientProfilePage() {
 function CollectPaymentModal({ invoice, registeredPan, registeredPanName, onClose, onSuccess }: {
     invoice: any; registeredPan?: string | null; registeredPanName?: string | null; onClose: () => void; onSuccess: () => void;
 }) {
-    const balanceDue = Number(invoice.balance_due);
+    const balanceDue = Math.round(Number(invoice.balance_due) * 100) / 100;
     const [amount, setAmount] = useState(balanceDue.toString());
     const [method, setMethod] = useState('Cash');
     const [reference, setReference] = useState('');
