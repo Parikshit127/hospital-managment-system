@@ -63,12 +63,47 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ admi
             ? new Date(Math.max(...postings.map((p: any) => new Date(p.posted_at).getTime())))
             : new Date();
 
+        // A medicine bill must carry the batch's expiry. It's stamped on the linked
+        // invoice line at dispense time; for lines posted before that column existed
+        // we fall back to looking the batch up in current stock.
+        const itemIds = postings.map((p: any) => p.invoice_item_id).filter(Boolean);
+        const linkedItems = itemIds.length > 0
+            ? await prisma.invoice_items.findMany({
+                where: { id: { in: itemIds }, organizationId },
+                select: { id: true, batch_no: true, expiry_date: true },
+            })
+            : [];
+        const itemById = new Map(linkedItems.map((i: any) => [i.id, i]));
+
+        const legacyBatchNos = Array.from(new Set(
+            postings
+                .filter((p: any) => !itemById.get(p.invoice_item_id)?.expiry_date)
+                .map((p: any) => (itemById.get(p.invoice_item_id)?.batch_no || parseDesc(p.description).batch || '').trim())
+                .filter((b: string) => b && b.toUpperCase() !== 'N/A'),
+        )) as string[];
+        const legacyBatches = legacyBatchNos.length > 0
+            ? await prisma.pharmacy_batch_inventory.findMany({
+                where: { batch_no: { in: legacyBatchNos }, medicine: { organizationId } },
+                select: { batch_no: true, expiry_date: true },
+            })
+            : [];
+        const expiryByBatch = new Map<string, Date>();
+        for (const b of legacyBatches) {
+            const key = (b.batch_no || '').toLowerCase().trim();
+            if (key && !expiryByBatch.has(key)) expiryByBatch.set(key, b.expiry_date);
+        }
+        const fmtExp = (d: Date | null | undefined) =>
+            d ? new Date(d).toLocaleDateString('en-GB', { month: '2-digit', year: '2-digit' }) : '—';
+
         const lines = postings.map((p: any, idx: number) => {
-            const { name, batch } = parseDesc(p.description);
+            const parsed = parseDesc(p.description);
+            const linked: any = itemById.get(p.invoice_item_id);
+            const batch = linked?.batch_no || parsed.batch;
+            const expiry = linked?.expiry_date || expiryByBatch.get(String(batch).toLowerCase().trim()) || null;
             const qty = Number(p.quantity || 1);
             const rate = Number(p.unit_price || 0) || (qty ? Number(p.amount || 0) / qty : 0);
             const amount = Number(p.amount || 0);
-            return { idx: idx + 1, name, batch, qty, rate, amount };
+            return { idx: idx + 1, name: parsed.name, batch, expiry: fmtExp(expiry), qty, rate, amount };
         });
         const total = lines.reduce((s, l) => s + l.amount, 0);
 
@@ -80,6 +115,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ admi
                 <td class="c">${l.idx}</td>
                 <td>${esc(l.name)}</td>
                 <td class="c">${esc(l.batch)}</td>
+                <td class="c">${esc(l.expiry)}</td>
                 <td class="c">${l.qty}</td>
                 <td class="r">${money(l.rate)}</td>
                 <td class="r b">${money(l.amount)}</td>
@@ -146,9 +182,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ admi
 
   ${lines.length === 0 ? '<p style="text-align:center;color:#9ca3af;padding:30px;">No pharmacy items for this bill.</p>' : `
   <table>
-    <thead><tr><th>Sr</th><th>Medicine</th><th>Batch</th><th>Qty</th><th>Rate</th><th>Amount</th></tr></thead>
+    <thead><tr><th>Sr</th><th>Medicine</th><th>Batch</th><th>Exp.</th><th>Qty</th><th>Rate</th><th>Amount</th></tr></thead>
     <tbody>${rows}</tbody>
-    <tfoot><tr><td colspan="5" class="r">Total</td><td class="r">₹${money(total)}</td></tr></tfoot>
+    <tfoot><tr><td colspan="6" class="r">Total</td><td class="r">₹${money(total)}</td></tr></tfoot>
   </table>`}
 
   <p style="font-size:9px;color:#9ca3af;margin-top:18px;text-align:center;">Computer-generated pharmacy bill — no signature required.</p>

@@ -1832,9 +1832,10 @@ export default function PharmacyPage() {
             {/* PRINT-ONLY FULL PAGE — GST Invoice matching Avise Hospital format */}
             {invoiceResult && (() => {
                 // ── helpers ──────────────────────────────────────────────────
-                const fmtExp = (iso: string | null) => {
+                const fmtExp = (iso: string | Date | null | undefined) => {
                     if (!iso) return '';
                     const d = new Date(iso);
+                    if (isNaN(d.getTime())) return '';
                     const m = String(d.getMonth() + 1).padStart(2, '0');
                     const y = String(d.getFullYear()).slice(2);
                     return `${m}/${y}`;

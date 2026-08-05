@@ -150,19 +150,23 @@ export default async function PharmacyInvoiceViewPage({ params, searchParams }: 
 
     const headerDoctor = rawDoctorName ? formatDoctorName(rawDoctorName) : '';
 
-    // Expiry (and MRP) are NOT stored on invoice_items — they live on the dispensed
-    // batch (pharmacy_batch_inventory). Parse the batch no + medicine from each line
-    // description ("MedName (Batch: XXX)") and look the batch up so the bill's EXP
-    // column is populated instead of always printing blank.
+    // Lines dispensed from now on carry their own batch_no / expiry_date / mrp.
+    // Bills raised BEFORE those columns existed only have the batch number smuggled
+    // into the description ("MedName (Batch: XXX)"), so for those we parse it back
+    // out and look the batch up in pharmacy_batch_inventory — otherwise the EXP.
+    // column on every historical bill stays blank.
     const parseLineParts = (desc: any) => {
-        const text = splitLineDoctor(desc).text;
+        const text = splitLineDoctor(desc).text.replace(/^Pharmacy:\s*/i, '');
         const bm = text.match(/\(Batch[:\s]+([^)]+)\)/i);
         const batch = bm ? bm[1].trim() : '';
-        const name = text.replace(/\s*\(Batch[^)]*\)/i, '').replace(/\s*×\s*\d+$/, '').trim();
+        // Drop the trailing "× 2" multiplier. A bare "x" needs leading whitespace to
+        // count, so pack-style names ("Betadine 10x5") keep their strength.
+        const name = text.replace(/\s*\(Batch[^)]*\)/i, '').replace(/(?:\s*×|\s+x)\s*[\d.]+\s*$/i, '').trim();
         return { batch, name };
     };
     const billBatchNos = Array.from(new Set(
         items
+            .filter((i: any) => !i.expiry_date) // stored lines need no lookup
             .map((i: any) => (i.batch_no || parseLineParts(i.description).batch || '').trim())
             .filter((b: string) => b && b.toUpperCase() !== 'N/A'),
     )) as string[];
@@ -192,17 +196,16 @@ export default async function PharmacyInvoiceViewPage({ params, searchParams }: 
         const sgstAmt   = taxAmt / 2;
         const amount    = netPrice; // pre-tax net (rate*qty - discount)
 
-        // Parse batch / product name from the line description ("MedName (Batch: XXX)").
-        const desc      = splitLineDoctor(item.description).text;
-        const batchMatch = desc.match(/\(Batch[:\s]+([^)]+)\)/i);
-        const batchNo   = item.batch_no || (batchMatch ? batchMatch[1].trim() : '');
+        // Batch / product name: stored on the line when available, else parsed back
+        // out of the description ("MedName (Batch: XXX)") for pre-existing bills.
+        const parsed    = parseLineParts(item.description);
+        const batchNo   = item.batch_no || parsed.batch;
         const pack      = item.pack_size || item.pack || '—';
         const hsn       = item.hsn_sac_code || '3004';
-        // Product name: strip batch info from description
-        const productName = desc.replace(/\s*\(Batch[^)]*\)/i, '').replace(/\s*×\s*\d+$/, '').trim()
-            || item.description?.replace(/\s*\(Batch[^)]*\)/i, '').trim() || '-';
+        const productName = parsed.name || String(item.description || '-');
 
-        // Expiry / MRP: prefer any stored value, else the dispensed batch's data.
+        // Expiry / MRP: prefer the value stamped on the line at dispense time,
+        // else fall back to the dispensed batch's current data.
         const batchInfo = batchMap.get(`${productName.toLowerCase().trim()}::${String(batchNo).toLowerCase().trim()}`)
             || batchMap.get(String(batchNo).toLowerCase().trim());
         const expirySrc = item.expiry_date || batchInfo?.expiry || null;

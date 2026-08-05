@@ -505,6 +505,15 @@ export async function postChargeToIpdBill(data: {
     service_category?: string;
     posted_by?: string;
     posted_at?: Date;
+    /**
+     * Pharmacy dispenses: the batch this line was filled from. Stored on the
+     * invoice line so the printed bill can show BATCH / EXP. / MRP without
+     * re-deriving them from live stock (which changes, and is gone once the
+     * batch is exhausted).
+     */
+    batch_no?: string | null;
+    expiry_date?: Date | null;
+    mrp?: number | null;
     /** Doctor who rendered this specific service — required when the selected service's requires_rendered_by is set. */
     rendered_by_doctor_id?: string;
     /**
@@ -701,6 +710,9 @@ export async function postChargeToIpdBill(data: {
                 ref_id: refId,
                 organizationId,
                 rendered_by_doctor_id: renderedByDoctorId,
+                batch_no: data.batch_no || null,
+                expiry_date: data.expiry_date || null,
+                mrp: data.mrp ?? null,
                 ...(data.posted_at ? { created_at: data.posted_at } : {}),
             },
         });

@@ -457,9 +457,12 @@ export async function generateInvoice(
                     tax_rate: taxRate,
                     tax_amount: taxAmount,
                     hsn_sac_code: batch.medicine.hsn_sac_code || '3004',
-                    mrp: Number(batch.medicine.mrp) || unitPrice,
+                    // Batch MRP is the printed pack price for THIS strip; the medicine
+                    // master value is only a fallback for batches loaded without one.
+                    mrp: Number(batch.mrp) || Number(batch.medicine.mrp) || unitPrice,
                     batch_no: batch.batch_no,
                     batch_id: batch.id,
+                    expiry_date: batch.expiry_date,
                     batch_cost: batchCost,
                 });
 
@@ -531,6 +534,7 @@ export async function generateInvoice(
                     mrp: Number(medicine.mrp) || unitPrice,
                     batch_no: 'N/A',
                     batch_id: null,
+                    expiry_date: null, // catalog-only sale — no physical batch, so no expiry
                     batch_cost: 0,
                 });
             }
@@ -590,6 +594,9 @@ export async function generateInvoice(
                         hsn_sac_code: item.hsn_sac_code,
                         service_category: 'Pharmacy',
                         posted_at: dispensedAt,
+                        batch_no: item.batch_no,
+                        expiry_date: item.expiry_date,
+                        mrp: item.mrp,
                     });
                     if (!chargeResult?.success) {
                         chargeFailures.push(`${item.medicine_name}: ${chargeResult?.error || 'failed to post charge'}`);
@@ -695,6 +702,9 @@ export async function generateInvoice(
                     tax_amount: item.tax_amount,
                     hsn_sac_code: item.hsn_sac_code,
                     service_category: 'Pharmacy',
+                    batch_no: item.batch_no,
+                    expiry_date: item.expiry_date,
+                    mrp: item.mrp,
                     organizationId,
                 }
             });
@@ -1293,6 +1303,8 @@ export async function dispenseMedicine(orderId: number, dispensedItems: any[]) {
                     hsn_sac_code: batch.medicine.hsn_sac_code || '3004',
                     batch_no: item.batch_no,
                     batch_id: batch.id,
+                    expiry_date: batch.expiry_date,
+                    mrp: Number(batch.mrp) || Number(batch.medicine.mrp) || unitPrice,
                     batch_cost: batchCost,
                 });
 
@@ -1441,6 +1453,9 @@ export async function dispenseMedicine(orderId: number, dispensedItems: any[]) {
                     tax_rate: detail.tax_rate,
                     hsn_sac_code: detail.hsn_sac_code,
                     service_category: 'Pharmacy',
+                    batch_no: detail.batch_no,
+                    expiry_date: detail.expiry_date,
+                    mrp: detail.mrp,
                 });
                 if (!chargeResult?.success) {
                     chargeFailures.push(`${detail.medicine_name}: ${chargeResult?.error || 'failed to post charge'}`);
@@ -1530,6 +1545,9 @@ export async function dispenseMedicine(orderId: number, dispensedItems: any[]) {
                         tax_amount: detail.tax_amount,
                         hsn_sac_code: detail.hsn_sac_code,
                         service_category: 'Pharmacy',
+                        batch_no: detail.batch_no,
+                        expiry_date: detail.expiry_date,
+                        mrp: detail.mrp,
                         organizationId,
                     }
                 });

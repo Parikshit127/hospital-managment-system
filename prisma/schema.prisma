@@ -1279,6 +1279,13 @@ model invoice_items {
   tax_amount       Decimal      @default(0)
   hsn_sac_code     String?
   service_category String?
+  // Pharmacy lines: the batch actually dispensed. Captured here (rather than
+  // read back off pharmacy_batch_inventory at print time) so the bill keeps
+  // showing the correct batch / expiry / MRP even after that batch is sold out,
+  // re-priced or purged.
+  batch_no         String?
+  expiry_date      DateTime?
+  mrp              Decimal?
   rendered_by_doctor_id String? // User.id — doctor who performed this specific line item (commission attribution)
   organizationId   String
   created_at       DateTime     @default(now())
