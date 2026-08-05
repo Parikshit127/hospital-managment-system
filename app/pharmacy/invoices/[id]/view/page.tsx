@@ -150,12 +150,40 @@ export default async function PharmacyInvoiceViewPage({ params, searchParams }: 
 
     const headerDoctor = rawDoctorName ? formatDoctorName(rawDoctorName) : '';
 
+    // Expiry (and MRP) are NOT stored on invoice_items — they live on the dispensed
+    // batch (pharmacy_batch_inventory). Parse the batch no + medicine from each line
+    // description ("MedName (Batch: XXX)") and look the batch up so the bill's EXP
+    // column is populated instead of always printing blank.
+    const parseLineParts = (desc: any) => {
+        const text = splitLineDoctor(desc).text;
+        const bm = text.match(/\(Batch[:\s]+([^)]+)\)/i);
+        const batch = bm ? bm[1].trim() : '';
+        const name = text.replace(/\s*\(Batch[^)]*\)/i, '').replace(/\s*×\s*\d+$/, '').trim();
+        return { batch, name };
+    };
+    const billBatchNos = Array.from(new Set(
+        items
+            .map((i: any) => (i.batch_no || parseLineParts(i.description).batch || '').trim())
+            .filter((b: string) => b && b.toUpperCase() !== 'N/A'),
+    )) as string[];
+    const batchRows = billBatchNos.length > 0 ? await prisma.pharmacy_batch_inventory.findMany({
+        where: { batch_no: { in: billBatchNos }, medicine: { organizationId: session.organization_id } },
+        select: { batch_no: true, expiry_date: true, mrp: true, medicine: { select: { brand_name: true } } },
+    }) : [];
+    const batchMap = new Map<string, { expiry: Date | null; mrp: number | null }>();
+    for (const b of batchRows) {
+        const brand = (b.medicine?.brand_name || '').toLowerCase().trim();
+        const bn = (b.batch_no || '').toLowerCase().trim();
+        const info = { expiry: b.expiry_date, mrp: b.mrp != null ? Number(b.mrp) : null };
+        batchMap.set(`${brand}::${bn}`, info);      // precise: medicine + batch
+        if (!batchMap.has(bn)) batchMap.set(bn, info); // fallback: batch only
+    }
+
     // Per-line CGST/SGST — derive from tax_rate on each item
     const lineData = items.map((item: any) => {
         const qty       = Number(item.quantity || 0);
         const rate      = Number(item.unit_price || 0);
         const taxRate   = Number(item.tax_rate || 0);
-        const mrp       = Number(item.mrp || rate);
         const netPrice  = Number(item.net_price || qty * rate);
         const taxAmt    = Number(item.tax_amount || 0);
         const cgstRate  = taxRate / 2;
@@ -164,18 +192,24 @@ export default async function PharmacyInvoiceViewPage({ params, searchParams }: 
         const sgstAmt   = taxAmt / 2;
         const amount    = netPrice; // pre-tax net (rate*qty - discount)
 
-        // Parse batch / expiry from description or ref fields
+        // Parse batch / product name from the line description ("MedName (Batch: XXX)").
         const desc      = splitLineDoctor(item.description).text;
         const batchMatch = desc.match(/\(Batch[:\s]+([^)]+)\)/i);
-        const batchNo   = item.batch_no || (batchMatch ? batchMatch[1] : '');
-        const expiry    = item.expiry_date
-            ? new Date(item.expiry_date).toLocaleDateString('en-GB', { month: '2-digit', year: '2-digit' })
-            : '';
+        const batchNo   = item.batch_no || (batchMatch ? batchMatch[1].trim() : '');
         const pack      = item.pack_size || item.pack || '—';
         const hsn       = item.hsn_sac_code || '3004';
         // Product name: strip batch info from description
         const productName = desc.replace(/\s*\(Batch[^)]*\)/i, '').replace(/\s*×\s*\d+$/, '').trim()
             || item.description?.replace(/\s*\(Batch[^)]*\)/i, '').trim() || '-';
+
+        // Expiry / MRP: prefer any stored value, else the dispensed batch's data.
+        const batchInfo = batchMap.get(`${productName.toLowerCase().trim()}::${String(batchNo).toLowerCase().trim()}`)
+            || batchMap.get(String(batchNo).toLowerCase().trim());
+        const expirySrc = item.expiry_date || batchInfo?.expiry || null;
+        const expiry    = expirySrc
+            ? new Date(expirySrc).toLocaleDateString('en-GB', { month: '2-digit', year: '2-digit' })
+            : '';
+        const mrp       = Number(item.mrp || batchInfo?.mrp || rate);
 
         return { productName, pack, hsn, batchNo, expiry, qty, mrp, rate, sgstRate, cgstRate, sgstAmt, cgstAmt, taxRate, amount, taxAmt };
     });
