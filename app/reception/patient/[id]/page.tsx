@@ -1283,7 +1283,7 @@ function CollectPaymentModal({ invoice, registeredPan, registeredPanName, onClos
     }, []);
 
     const numAmount = Number(amount) || 0;
-    const isValid = numAmount > 0 && numAmount <= balanceDue;
+    const isValid = numAmount > 0;
     const isCash = method === 'Cash';
     const cashBlocked = isCash && numAmount > thresholds.cash_limit;
     const panRequired = isCash && numAmount >= thresholds.pan_threshold && !cashBlocked;
@@ -1427,11 +1427,11 @@ function CollectPaymentModal({ invoice, registeredPan, registeredPanName, onClos
                             <div className="relative mt-1">
                                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm font-bold">₹</span>
                                 <input type="number" value={amount} onChange={e => setAmount(e.target.value)}
-                                    min={1} max={balanceDue} step="0.01" autoFocus
+                                    min={1} step="0.01" autoFocus
                                     className="w-full pl-8 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm font-mono font-bold focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none" />
                             </div>
-                            {numAmount > balanceDue && (
-                                <p className="text-[11px] text-rose-500 mt-1">Amount cannot exceed balance of ₹{fmtMoney(balanceDue)}</p>
+                            {numAmount > balanceDue && balanceDue > 0 && (
+                                <p className="text-[11px] text-amber-600 mt-1">Excess ₹{fmtMoney(numAmount - balanceDue)} will be auto-applied to this patient's other outstanding bills.</p>
                             )}
                             <button onClick={() => setAmount(balanceDue.toString())}
                                 className="text-[11px] text-blue-600 hover:text-blue-800 font-bold mt-1">

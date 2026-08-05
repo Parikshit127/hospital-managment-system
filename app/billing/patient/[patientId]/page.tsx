@@ -1429,7 +1429,7 @@ function CollectPaymentModal({
   }, []);
 
   const numAmount = Number(amount) || 0;
-  const isValid = numAmount > 0 && numAmount <= balanceDue;
+  const isValid = numAmount > 0;
 
   // Cash compliance (mirrors server-side rules; the server remains the source of truth)
   const isCash = method === "Cash";
@@ -1622,14 +1622,13 @@ function CollectPaymentModal({
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   min={1}
-                  max={balanceDue}
                   step="0.01"
                   className="w-full pl-8 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm font-mono font-bold focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 outline-none"
                   autoFocus
                 />
               </div>
-              {numAmount > balanceDue && (
-                <p className="text-[11px] text-rose-500 mt-1">Amount cannot exceed balance of ₹{fmtMoney(balanceDue)}</p>
+              {numAmount > balanceDue && balanceDue > 0 && (
+                <p className="text-[11px] text-amber-600 mt-1">Excess ₹{fmtMoney(numAmount - balanceDue)} will be auto-applied to this patient's other outstanding bills.</p>
               )}
               <button
                 onClick={() => setAmount(balanceDue.toString())}
