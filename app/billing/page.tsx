@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { createPortal } from "react-dom";
 import { DateField } from '@/app/components/ui/DateField';
 import Link from "next/link";
@@ -177,7 +178,15 @@ export function MasterBillingContent({ shell = "app" }: { shell?: "app" | "admin
     totalPages: number;
   } | null>(null);
   const [kpis, setKpis] = useState<any>(null);
-  const [filter, setFilter] = useState<MasterBillingFilter>({ page: 1, limit: 25 });
+  // Deep link support, e.g. /billing?status=Draft from the reception dashboard's
+  // "unfinalised bills" prompt. Seeded into the initial state rather than applied
+  // in an effect so the first fetch is already filtered — no unfiltered flash and
+  // no wasted round trip.
+  const searchParams = useSearchParams();
+  const [filter, setFilter] = useState<MasterBillingFilter>(() => {
+    const status = searchParams?.get("status") || undefined;
+    return { page: 1, limit: 25, ...(status ? { invoice_status: status } : {}) };
+  });
   const [loading, setLoading] = useState(true);
   const [searchOpen, setSearchOpen] = useState(false);
   const [cancelTarget, setCancelTarget] = useState<any | null>(null);
@@ -588,7 +597,12 @@ export function MasterBillingContent({ shell = "app" }: { shell?: "app" | "admin
 }
 
 export default function MasterBillingPage() {
-  return <MasterBillingContent />;
+  // MasterBillingContent reads the query string, so it needs a Suspense boundary.
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center min-h-[400px]"><Loader2 className="h-8 w-8 animate-spin text-orange-500" /></div>}>
+      <MasterBillingContent />
+    </Suspense>
+  );
 }
 
 // ── sub-components ────────────────────────────────────────────────────────
