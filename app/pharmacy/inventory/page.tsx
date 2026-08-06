@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { DateField } from '@/app/components/ui/DateField';
 import { AppShell } from '@/app/components/layout/AppShell';
 import { Package, Search, Plus, X, SlidersHorizontal, Pencil } from 'lucide-react';
-import { getInventoryPage, getInventoryCategories, addInventoryBatch, adjustStock, updateBatchDetails } from '@/app/actions/pharmacy-actions';
+import { getInventoryPage, getInventoryCategories, addInventoryBatch, adjustStock, updateBatchDetails, updateMedicineProduct } from '@/app/actions/pharmacy-actions';
 import { useDebouncedValue } from '@/app/lib/hooks/useDebouncedValue';
 import { useToast } from '@/app/components/ui/Toast';
 
@@ -44,7 +44,7 @@ export default function PharmacyInventoryPage() {
 
     // Modal: Add Bulk Stock
     const [modalOpen, setModalOpen] = useState(false);
-    const [form, setForm] = useState({ brand_name: '', generic_name: '', batch_no: '', stock: '', price: '', cost_price: '', expiry: '', rack: '', hsn_sac_code: '' });
+    const [form, setForm] = useState({ brand_name: '', generic_name: '', batch_no: '', stock: '', price: '', cost_price: '', expiry: '', rack: '', hsn_sac_code: '', pack: '' });
 
     // Modal: Adjust Stock
     const [adjustRow, setAdjustRow] = useState<any>(null);
@@ -79,17 +79,25 @@ export default function PharmacyInventoryPage() {
 
     // Modal: Edit Batch
     const [editRow, setEditRow] = useState<any>(null);
-    const [editForm, setEditForm] = useState({ batch_no: '', expiry: '', rack: '', mrp: '', cost_price: '' });
+    const [editForm, setEditForm] = useState({
+        batch_no: '', expiry: '', rack: '', mrp: '', cost_price: '',
+        // Product-level (medicine master), not batch. Pack in particular had no
+        // editor anywhere, so a medicine could never be given one and its bills
+        // printed "—" in the PACK column forever.
+        pack: '', hsn_sac_code: '',
+    });
     const [editing, setEditing] = useState(false);
 
     function openEditModal(row: any) {
         setEditRow(row);
         setEditForm({
-            batch_no: row.batch_no,
+            batch_no: row._catalog ? '' : row.batch_no,
             expiry: row.expiry_date ? new Date(row.expiry_date).toISOString().slice(0, 10) : '',
             rack: row.rack_location || '',
             mrp: row.mrp != null ? String(row.mrp) : '',
             cost_price: row.cost_price != null ? String(row.cost_price) : '',
+            pack: row.medicine?.pack || '',
+            hsn_sac_code: row.medicine?.hsn_sac_code || '',
         });
     }
 
@@ -98,6 +106,25 @@ export default function PharmacyInventoryPage() {
         if (!editRow) return;
         setEditing(true);
         try {
+            // Product fields live on the medicine master and apply to every batch,
+            // so they save even for an out-of-stock row that has no batch at all.
+            const prodRes = await updateMedicineProduct({
+                medicine_id: editRow.medicine_id,
+                pack: editForm.pack,
+                hsn_sac_code: editForm.hsn_sac_code,
+            });
+            if (!prodRes.success) {
+                toast.error(prodRes.error || 'Failed to update medicine');
+                return;
+            }
+
+            if (editRow._catalog || !editRow.id) {
+                toast.success('Medicine updated');
+                setEditRow(null);
+                loadInventory();
+                return;
+            }
+
             const res = await updateBatchDetails({
                 batch_id: editRow.id,
                 batch_no: editForm.batch_no,
@@ -176,6 +203,7 @@ export default function PharmacyInventoryPage() {
             expiry: new Date(form.expiry),
             rack: form.rack,
             hsn_sac_code: form.hsn_sac_code || undefined,
+            pack: form.pack || undefined,
         };
         const res = await addInventoryBatch(payload);
         if (res.success) {
@@ -192,7 +220,7 @@ export default function PharmacyInventoryPage() {
             onRefresh={() => loadInventory()}
             refreshing={refreshing}
             headerActions={
-                <button onClick={() => { setForm({ brand_name: '', generic_name: '', batch_no: '', stock: '', price: '', cost_price: '', expiry: '', rack: '', hsn_sac_code: '' }); setModalOpen(true); }} className="flex items-center gap-2 bg-gradient-to-r from-teal-500 to-emerald-600 hover:from-teal-600 hover:to-emerald-700 text-white font-bold py-2 px-4 rounded-xl shadow-sm transition-all text-sm">
+                <button onClick={() => { setForm({ brand_name: '', generic_name: '', batch_no: '', stock: '', price: '', cost_price: '', expiry: '', rack: '', hsn_sac_code: '', pack: '' }); setModalOpen(true); }} className="flex items-center gap-2 bg-gradient-to-r from-teal-500 to-emerald-600 hover:from-teal-600 hover:to-emerald-700 text-white font-bold py-2 px-4 rounded-xl shadow-sm transition-all text-sm">
                     <Plus className="h-4 w-4" /> Add Bulk Stock
                 </button>
             }
@@ -287,8 +315,12 @@ export default function PharmacyInventoryPage() {
                                     <td className="px-4 py-3 text-sm text-right text-gray-700">{row.mrp ? formatCurrency(row.mrp) : '—'}</td>
                                     <td className="px-4 py-3 text-sm text-gray-600">{row.rack_location || '—'}</td>
                                     <td className="px-4 py-3 text-right">
-                                        {!row._catalog && (
-                                            <div className="flex items-center justify-end gap-1">
+                                        <div className="flex items-center justify-end gap-1">
+                                            {/* Adjust needs a batch; Edit does not — pack and HSN are
+                                                product fields, and an out-of-stock medicine still has
+                                                to be able to get them. Hiding Edit on catalogue rows
+                                                left no way to set pack at all. */}
+                                            {!row._catalog && (
                                                 <button
                                                     onClick={() => { setAdjustRow(row); setAdjustQty(''); setAdjustReason(''); }}
                                                     className="p-1.5 hover:bg-amber-50 rounded-lg"
@@ -296,15 +328,15 @@ export default function PharmacyInventoryPage() {
                                                 >
                                                     <SlidersHorizontal className="h-3.5 w-3.5 text-amber-500" />
                                                 </button>
-                                                <button
-                                                    onClick={() => openEditModal(row)}
-                                                    className="p-1.5 hover:bg-blue-50 rounded-lg"
-                                                    title="Edit Batch"
-                                                >
-                                                    <Pencil className="h-3.5 w-3.5 text-blue-500" />
-                                                </button>
-                                            </div>
-                                        )}
+                                            )}
+                                            <button
+                                                onClick={() => openEditModal(row)}
+                                                className="p-1.5 hover:bg-blue-50 rounded-lg"
+                                                title={row._catalog ? 'Edit Pack / HSN' : 'Edit Batch, Pack & HSN'}
+                                            >
+                                                <Pencil className="h-3.5 w-3.5 text-blue-500" />
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                             ))}
@@ -354,6 +386,12 @@ export default function PharmacyInventoryPage() {
                                     onChange={e => setForm({ ...form, hsn_sac_code: e.target.value })}
                                 />
                             </div>
+                            <input
+                                placeholder="Pack (e.g. 10*25) — printed in the bill's PACK column"
+                                className="w-full p-2 border rounded-lg text-sm"
+                                value={form.pack}
+                                onChange={e => setForm({ ...form, pack: e.target.value.slice(0, 32) })}
+                            />
                             <p className="text-[11px] text-gray-400 -mt-1">
                                 Cost price drives the Stock Value figure — leave it blank and this batch counts as ₹0.
                             </p>
@@ -396,17 +434,52 @@ export default function PharmacyInventoryPage() {
                 <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
                     <form onSubmit={handleEditBatch} className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-2xl">
                         <div className="p-4 border-b bg-gray-50 flex justify-between">
-                            <h3 className="font-bold">Edit Batch &mdash; {editRow.medicine.brand_name}</h3>
+                            <h3 className="font-bold">
+                                {editRow._catalog ? 'Edit Medicine' : 'Edit Batch'} &mdash; {editRow.medicine.brand_name}
+                            </h3>
                             <button type="button" onClick={() => setEditRow(null)}>&times;</button>
                         </div>
                         <div className="p-6 space-y-4">
-                            <input required placeholder="Batch No" className="w-full p-2 border rounded-lg text-sm" value={editForm.batch_no} onChange={e => setEditForm({ ...editForm, batch_no: e.target.value })} />
-                            <DateField required className="w-full p-2 border rounded-lg text-sm text-gray-500" value={editForm.expiry} onChange={e => setEditForm({ ...editForm, expiry: e.target.value })} />
-                            <input placeholder="Rack Location" className="w-full p-2 border rounded-lg text-sm" value={editForm.rack} onChange={e => setEditForm({ ...editForm, rack: e.target.value })} />
-                            <div className="grid grid-cols-2 gap-4">
-                                <input type="number" placeholder="MRP" className="w-full p-2 border rounded-lg text-sm" value={editForm.mrp} onChange={e => setEditForm({ ...editForm, mrp: e.target.value })} />
-                                <input type="number" placeholder="Cost Price" className="w-full p-2 border rounded-lg text-sm" value={editForm.cost_price} onChange={e => setEditForm({ ...editForm, cost_price: e.target.value })} />
+                            {/* Product-level — printed on every bill for this medicine,
+                                regardless of batch, so always editable. */}
+                            <div>
+                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider mb-2">Product details (all batches)</p>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <input
+                                        placeholder="Pack (e.g. 10*25)"
+                                        title="Printed in the PACK column on every bill"
+                                        className="w-full p-2 border rounded-lg text-sm"
+                                        value={editForm.pack}
+                                        onChange={e => setEditForm({ ...editForm, pack: e.target.value })}
+                                    />
+                                    <input
+                                        placeholder="HSN / SAC"
+                                        className="w-full p-2 border rounded-lg text-sm"
+                                        value={editForm.hsn_sac_code}
+                                        onChange={e => setEditForm({ ...editForm, hsn_sac_code: e.target.value })}
+                                    />
+                                </div>
                             </div>
+
+                            {editRow._catalog ? (
+                                <p className="text-[11px] text-gray-400">
+                                    This medicine has no stock, so there is no batch to edit. Use <strong>Add Bulk Stock</strong> to receive some.
+                                </p>
+                            ) : (
+                                <div>
+                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider mb-2">This batch only</p>
+                                    <div className="space-y-4">
+                                        <input required placeholder="Batch No" className="w-full p-2 border rounded-lg text-sm" value={editForm.batch_no} onChange={e => setEditForm({ ...editForm, batch_no: e.target.value })} />
+                                        <DateField required className="w-full p-2 border rounded-lg text-sm text-gray-500" value={editForm.expiry} onChange={e => setEditForm({ ...editForm, expiry: e.target.value })} />
+                                        <input placeholder="Rack Location" className="w-full p-2 border rounded-lg text-sm" value={editForm.rack} onChange={e => setEditForm({ ...editForm, rack: e.target.value })} />
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <input type="number" placeholder="MRP" className="w-full p-2 border rounded-lg text-sm" value={editForm.mrp} onChange={e => setEditForm({ ...editForm, mrp: e.target.value })} />
+                                            <input type="number" placeholder="Cost Price" className="w-full p-2 border rounded-lg text-sm" value={editForm.cost_price} onChange={e => setEditForm({ ...editForm, cost_price: e.target.value })} />
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
                             <button type="submit" disabled={editing} className="w-full bg-blue-600 text-white font-bold p-2 rounded-lg disabled:opacity-50">
                                 {editing ? 'Saving...' : 'Save Changes'}
                             </button>

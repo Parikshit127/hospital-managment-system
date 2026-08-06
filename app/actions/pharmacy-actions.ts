@@ -322,6 +322,76 @@ export async function getInventoryCategories() {
     }
 }
 
+/**
+ * Edit PRODUCT-level fields on the medicine master.
+ *
+ * Pack size and HSN belong to the product, not to a batch — but the only editor
+ * on the inventory screen was updateBatchDetails, which writes batch columns and
+ * is hidden entirely on out-of-stock rows (they are synthetic catalogue rows with
+ * no batch). The result was that a medicine with no stock could never be given a
+ * pack size, so its bills printed "—" in the PACK column forever.
+ */
+export async function updateMedicineProduct(data: {
+    medicine_id: number;
+    pack?: string;
+    hsn_sac_code?: string;
+    generic_name?: string;
+    category?: string;
+    min_threshold?: number;
+}) {
+    const denied = await denyUnlessPharmacyRole(PHARMACY_OPERATE_ROLES);
+    if (denied) return denied;
+
+    try {
+        const { db, organizationId } = await requireTenantContext();
+
+        const medicine = await db.pharmacy_medicine_master.findFirst({
+            where: { id: data.medicine_id, organizationId },
+            select: { id: true, brand_name: true },
+        });
+        if (!medicine) return { success: false, error: 'Medicine not found' };
+
+        // Normalise the same way addInventoryBatch does so the two entry points
+        // can't store the field in two different shapes.
+        const pack = data.pack?.trim().slice(0, 32);
+        const hsn = data.hsn_sac_code?.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12);
+
+        // A blank submission clears the field on purpose here (unlike
+        // addInventoryBatch, where blank means "not supplied"): this IS the editor,
+        // so the user must be able to remove a wrong value.
+        const updateData: Record<string, unknown> = {};
+        if (data.pack !== undefined) updateData.pack = pack || null;
+        if (data.hsn_sac_code !== undefined) updateData.hsn_sac_code = hsn || null;
+        if (data.generic_name !== undefined) updateData.generic_name = data.generic_name.trim() || null;
+        if (data.category !== undefined) updateData.category = data.category.trim() || null;
+        if (data.min_threshold !== undefined && Number.isFinite(Number(data.min_threshold))) {
+            updateData.min_threshold = Math.max(0, Math.floor(Number(data.min_threshold)));
+        }
+        if (Object.keys(updateData).length === 0) return { success: true };
+
+        await db.pharmacy_medicine_master.updateMany({
+            where: { id: data.medicine_id, organizationId },
+            data: updateData,
+        });
+
+        await logAudit({
+            action: 'PHARMACY_MEDICINE_UPDATED',
+            module: 'Pharmacy',
+            entity_type: 'pharmacy_medicine_master',
+            entity_id: String(data.medicine_id),
+            details: JSON.stringify({ brand_name: medicine.brand_name, ...updateData }),
+        });
+
+        invalidatePharmacyTags(['catalog', 'stock']);
+        revalidatePath('/pharmacy/inventory');
+        revalidatePath('/pharmacy/billing');
+        return { success: true };
+    } catch (error: unknown) {
+        console.error('Update Medicine Product Error:', error);
+        return { success: false, error: (error as Error)?.message || 'Failed to update medicine' };
+    }
+}
+
 export async function updateBatchDetails(data: {
     batch_id: number;
     batch_no?: string;
