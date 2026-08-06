@@ -56,6 +56,25 @@ export function fmtIstTime(date: Date | string | null | undefined): string {
     });
 }
 
+/**
+ * YYYY-MM-DD for the IST calendar day — the same shape `<input type="date">`
+ * produces, so a timestamp can be compared against a picked date.
+ *
+ * Use this instead of `toISOString().slice(0, 10)`, which buckets by UTC: an
+ * admission at 02:00 IST is 20:30 UTC the day before, so it files under the
+ * previous day and disappears from a filter on its real date.
+ */
+export function istDayKey(date: Date | string | null | undefined): string | null {
+    const d = toDate(date);
+    if (!d) return null;
+    return new Intl.DateTimeFormat('en-CA', {
+        timeZone: IST,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+    }).format(d);
+}
+
 function toDate(date: Date | string | null | undefined): Date | null {
     if (!date) return null;
     const d = typeof date === 'string' ? new Date(date) : date;

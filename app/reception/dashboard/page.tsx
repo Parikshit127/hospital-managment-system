@@ -21,6 +21,7 @@ import {
 } from '@/app/actions/reception-actions';
 import { finalizePatientLatestDraft } from '@/app/actions/finance-actions';
 import { getIPDAdmissions, cancelAdmission } from '@/app/actions/ipd-actions';
+import { istDayKey, IST } from '@/app/lib/ist';
 import { getDoctorsForDropdown } from '@/app/actions/admin-actions';
 
 // ─── helpers ──────────────────────────────────────────────────────────────
@@ -246,6 +247,11 @@ export default function ReceptionDashboard() {
     // ── IPD admission date range filter ──
     const [ipdDateFrom, setIpdDateFrom] = useState('');
     const [ipdDateTo, setIpdDateTo] = useState('');
+    // Which date the From/To range applies to. Billing and discharge paperwork are
+    // driven by the discharge date, so the Discharged tab defaults to it; every other
+    // tab defaults to admission date (an admitted patient has no discharge date yet).
+    // Both remain switchable — e.g. "who was admitted in July" while viewing discharges.
+    const [ipdDateBasis, setIpdDateBasis] = useState<'admission' | 'discharge'>('admission');
 
     const setColFilter = (col: string, value: string) => {
         setIpdColFilters(prev => {
@@ -256,6 +262,8 @@ export default function ReceptionDashboard() {
     };
     const clearAllColFilters = () => { setIpdColFilters({}); setOpenColFilter(null); setIpdDateFrom(''); setIpdDateTo(''); };
     const activeColFilterCount = Object.keys(ipdColFilters).length + (ipdDateFrom ? 1 : 0) + (ipdDateTo ? 1 : 0);
+    // The admission/discharge toggle only means something once a range is picked.
+    const ipdDateActive = !!(ipdDateFrom || ipdDateTo);
 
     // ── Tab ── (honours ?tab=ipd|arrivals from redirects)
     const [activeTab, setActiveTab] = useState<'opd' | 'ipd' | 'arrivals'>(() => {
@@ -309,6 +317,12 @@ export default function ReceptionDashboard() {
         }
         setIpdLoading(false);
         ipdLoaded.current = true;
+    }, [ipdStatusFilter]);
+
+    // Switching status tab re-points the date range at the date that tab is about.
+    // The user can still flip it back by hand afterwards.
+    useEffect(() => {
+        setIpdDateBasis(ipdStatusFilter === 'Discharged' ? 'discharge' : 'admission');
     }, [ipdStatusFilter]);
 
     useEffect(() => { loadData(); }, [loadData]);
@@ -477,12 +491,16 @@ export default function ReceptionDashboard() {
             if (!cellVal.includes(filterVal.toLowerCase())) return false;
         }
 
-        // Admission date range filter (day-level, both bounds inclusive)
+        // Date range filter (day-level, both bounds inclusive), applied to whichever
+        // date the user picked as the basis. Bucketed on the IST calendar day — a
+        // toISOString() day key is UTC, so a 02:00 IST admission/discharge fell into
+        // the previous day and vanished from a filter on its actual date.
         if (ipdDateFrom || ipdDateTo) {
-            if (!a.admission_date) return false;
-            const admissionDay = new Date(a.admission_date).toISOString().slice(0, 10);
-            if (ipdDateFrom && admissionDay < ipdDateFrom) return false;
-            if (ipdDateTo && admissionDay > ipdDateTo) return false;
+            const basisDate = ipdDateBasis === 'discharge' ? a.discharge_date : a.admission_date;
+            const day = istDayKey(basisDate);
+            if (!day) return false;
+            if (ipdDateFrom && day < ipdDateFrom) return false;
+            if (ipdDateTo && day > ipdDateTo) return false;
         }
 
         return true;
@@ -1073,7 +1091,53 @@ export default function ReceptionDashboard() {
                             onChange={e => setIpdDateTo(e.target.value)}
                             className="px-2 py-2 bg-white border border-gray-200 rounded-xl text-xs text-gray-600 focus:outline-none focus:border-emerald-400"
                         />
+                        {/* Which date the From/To range applies to. Quieter than the status
+                            pills on purpose — this qualifies the dates, it isn't a second tab
+                            bar. It is disabled until a date is actually picked: on its own it
+                            has nothing to act on, and a live-looking control that changes
+                            nothing reads as broken. */}
+                        <span className={`text-[10px] font-semibold uppercase ml-1 ${ipdDateActive ? 'text-gray-400' : 'text-gray-300'}`}>By</span>
+                        <div
+                            className={`flex items-center gap-0.5 border rounded-xl p-0.5 transition-colors ${
+                                ipdDateActive ? 'bg-white border-gray-200' : 'bg-gray-50 border-gray-100'
+                            }`}
+                            title={ipdDateActive ? undefined : 'Pick a From / To date first — this chooses which date the range filters on'}
+                        >
+                            {(['admission', 'discharge'] as const).map(b => (
+                                <button
+                                    key={b}
+                                    type="button"
+                                    disabled={!ipdDateActive}
+                                    onClick={() => setIpdDateBasis(b)}
+                                    aria-pressed={ipdDateBasis === b}
+                                    title={
+                                        !ipdDateActive ? 'Pick a From / To date first'
+                                        : b === 'admission' ? 'Filter the date range on date of admission'
+                                        : 'Filter the date range on date of discharge'
+                                    }
+                                    className={`px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide rounded-lg transition-colors disabled:cursor-not-allowed ${
+                                        !ipdDateActive
+                                            ? (ipdDateBasis === b ? 'text-gray-400' : 'text-gray-300')
+                                            : ipdDateBasis === b
+                                                ? 'bg-emerald-50 text-emerald-700'
+                                                : 'text-gray-400 hover:text-gray-700 hover:bg-gray-50'
+                                    }`}
+                                >
+                                    {b}
+                                </button>
+                            ))}
+                        </div>
                     </div>
+
+                    {/* An admitted patient normally has no discharge date, so this pairing
+                        usually returns nothing. Explain the empty table instead of leaving
+                        the user to guess — but only when it IS empty, since a re-admitted
+                        patient can legitimately carry a discharge date from a past stay. */}
+                    {ipdDateBasis === 'discharge' && ipdStatusFilter === 'Admitted' && (ipdDateFrom || ipdDateTo) && ipdFiltered.length === 0 && (
+                        <p className="w-full text-[11px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5">
+                            Admitted patients don&apos;t have a discharge date yet — switch to <b>Discharged</b>, or filter by <b>Admission</b>.
+                        </p>
+                    )}
 
                     {activeColFilterCount > 0 && (
                         <button
