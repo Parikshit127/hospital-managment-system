@@ -2,8 +2,9 @@
 
 import React, { useEffect, useState } from 'react';
 import { AppShell } from '@/app/components/layout/AppShell';
-import { FileText, Search, Filter, Eye, CheckCircle2, Phone } from 'lucide-react';
-import { getInvoices, approveInvoice } from '@/app/actions/finance-actions';
+import { FileText, Search, Filter, Eye, CheckCircle2, Phone, Pencil } from 'lucide-react';
+import { getInvoices, approveInvoice, getMyRole } from '@/app/actions/finance-actions';
+import { EditInvoiceModal } from '@/app/components/finance/EditInvoiceModal';
 import { parseWalkinNote } from '@/app/lib/walkin-note';
 import Link from 'next/link';
 
@@ -14,6 +15,14 @@ export default function InvoicesPage() {
     const [statusFilter, setStatusFilter] = useState('');
     // OPD/IPD drill-down from the reception revenue card (?rev=opd|ipd|total).
     const [revFilter, setRevFilter] = useState<'opd' | 'ipd' | ''>('');
+    // This registry had no Edit at all — only Approve (drafts) and View — so a
+    // finalized bill could not be corrected from the one screen that lists every
+    // bill. Same rule the modal and the server enforce.
+    const [editingInvoiceId, setEditingInvoiceId] = useState<number | null>(null);
+    const [myRole, setMyRole] = useState<string | null>(null);
+    const canEditPaid = ['admin', 'finance', 'superadmin'].includes(myRole || '');
+
+    useEffect(() => { getMyRole().then((r) => setMyRole(r.role)); }, []);
     useEffect(() => {
         const r = new URLSearchParams(window.location.search).get('rev');
         if (r === 'opd' || r === 'ipd') setRevFilter(r);
@@ -181,6 +190,18 @@ export default function InvoicesPage() {
                                                 <Eye className="h-3.5 w-3.5" /> View
                                             </Link>
                                         )}
+                                        {/* Unpaid: anyone here. Paid or finalized: Admin/Finance,
+                                            matching EditInvoiceModal and unlockInvoice. */}
+                                        {inv._editable && inv.status !== 'Cancelled'
+                                            && (Number(inv.paid_amount ?? 0) === 0 || canEditPaid) && (
+                                            <button
+                                                onClick={() => setEditingInvoiceId(Number(inv.id))}
+                                                title={inv.status === 'Final' ? 'Edit finalized bill (Admin/Finance)' : 'Edit invoice'}
+                                                className="inline-flex items-center gap-1 text-[11px] text-amber-700 hover:text-white font-black bg-amber-50 hover:bg-amber-600 px-2.5 py-1.5 rounded-lg transition-all shadow-sm active:scale-95"
+                                            >
+                                                <Pencil className="h-3.5 w-3.5" /> Edit
+                                            </button>
+                                        )}
                                     </td>
                                 </tr>
                             ))}
@@ -195,6 +216,15 @@ export default function InvoicesPage() {
                     </table>
                 </div>
             </div>
+
+            {editingInvoiceId !== null && (
+                <EditInvoiceModal
+                    invoiceId={editingInvoiceId}
+                    isOpen
+                    onClose={() => setEditingInvoiceId(null)}
+                    onSaved={() => { setEditingInvoiceId(null); loadData(); }}
+                />
+            )}
         </AppShell>
     );
 }

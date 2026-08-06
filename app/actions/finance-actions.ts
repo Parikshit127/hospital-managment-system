@@ -649,10 +649,23 @@ export async function getInvoices(filters?: {
                 invoice_type: inv.invoice_type,
                 net_amount: inv.net_amount,
                 balance_due: inv.balance_due,
+                // Needed to decide who may edit: an untouched bill is editable by
+                // anyone on the screen, one with money against it only by
+                // Admin/Finance. Deriving it from balance_due vs net_amount was a
+                // proxy that a discount or write-off would quietly break.
+                paid_amount: inv.paid_amount,
                 status: inv.status,
                 created_at: inv.created_at,
                 admission_id: inv.admission_id || null,
                 source: inv.invoice_type,
+                // Only these rows are real `invoices` records. The LAB and
+                // PHARMACY entries below are synthesised from lab_orders and the
+                // pharmacy ledger, so their ids do not address an invoice and
+                // must never be handed to the invoice editor. Flag the real ones
+                // rather than have the UI guess from `source`, where a genuine
+                // 'Pharmacy' invoice and a synthetic 'PHARMACY' row differ only
+                // by letter case.
+                _editable: true,
             })),
             ...labOrders.map((lab: any) => {
                 const p = patientMap.get(lab.patient_id);
