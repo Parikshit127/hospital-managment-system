@@ -95,6 +95,14 @@ function dispensableBatchWhere(medicineId: number) {
     };
 }
 
+/** Minimal batch shape the dispensability checks need. */
+type BatchStockRow = {
+    batch_no: string;
+    current_stock: number;
+    expiry_date: Date;
+    is_quarantined: boolean;
+};
+
 /** Human-readable reason a specific batch may not be dispensed, or null if it may. */
 function batchDispenseBlocker(batch: { expiry_date: Date; is_quarantined: boolean }): string | null {
     if (batch.is_quarantined) return 'is quarantined';
@@ -516,17 +524,17 @@ export async function generateInvoice(
             // with no stock deduction, no movement row and no warning. Refuse, and
             // say which of the three it was.
             if (!batch) {
-                const stockRows = await db.pharmacy_batch_inventory.findMany({
+                const stockRows: BatchStockRow[] = await db.pharmacy_batch_inventory.findMany({
                     where: { medicine_id: item.medicine_id, ...(item.batch_no ? { batch_no: item.batch_no } : {}) },
                     select: { batch_no: true, current_stock: true, expiry_date: true, is_quarantined: true },
                 });
                 if (stockRows.length > 0) {
                     const name = ownedMedicine.brand_name;
                     const dispensable = stockRows
-                        .filter((b: any) => !batchDispenseBlocker(b))
-                        .reduce((s: number, b: any) => s + b.current_stock, 0);
+                        .filter(b => !batchDispenseBlocker(b))
+                        .reduce((sum, b) => sum + b.current_stock, 0);
                     if (dispensable === 0) {
-                        const why = stockRows.map((b: any) => batchDispenseBlocker(b)).find(Boolean) || 'is out of stock';
+                        const why = stockRows.map(b => batchDispenseBlocker(b)).find(Boolean) || 'is out of stock';
                         return { success: false, error: `Cannot sell ${name}: every batch in stock ${why}. Write it off under Returns, or receive fresh stock first.` };
                     }
                     return {
@@ -604,12 +612,18 @@ export async function generateInvoice(
                             batch_no: batch.batch_no,
                             batch_id: batch.id,
                             patient_id: !['WALKIN', 'HOSPITAL'].includes(patientId) ? patientId : null,
+                            // A narcotic issue has to name the patient it went to
+                            // and the doctor who prescribed it — an inspector reads
+                            // exactly these columns. They were left null on every
+                            // auto-generated entry.
+                            patient_name: walkInName || null,
+                            prescriber_name: options.doctorName || null,
                             quantity_in: 0,
                             quantity_out: item.quantity,
                             balance: (lastEntry?.balance || 0) - item.quantity,
                             transaction_type: 'OUT',
                             source_type: 'DISPENSE',
-                            notes: `Counter sale dispense`,
+                            notes: `Counter sale dispense — issued by ${session?.name || session?.username || 'unknown'}`,
                         }
                     });
                 }
@@ -1086,7 +1100,8 @@ export async function getPharmacyQueue() {
         const estPriceMap = new Map<string, number>();
         // Keyed by both id and lower-cased name so a line resolves whichever way
         // it is identified, and name matching is no longer case-sensitive.
-        const keysFor = (med: any) => [`id:${med.id}`, `name:${String(med.brand_name).toLowerCase().trim()}`];
+        const keysFor = (med: { id: number; brand_name: string }) =>
+            [`id:${med.id}`, `name:${String(med.brand_name).toLowerCase().trim()}`];
         for (const med of medicines) {
             const batches = med.batches as any[];
             const totalStock = batches.reduce((sum: number, b: any) => sum + b.current_stock, 0);
@@ -1101,7 +1116,7 @@ export async function getPharmacyQueue() {
                 if (est > 0) estPriceMap.set(k, est);
             }
         }
-        const lookupKeys = (item: any) => [
+        const lookupKeys = (item: { medicine_id?: number | null; medicine_name?: string | null }) => [
             ...(item.medicine_id ? [`id:${item.medicine_id}`] : []),
             `name:${String(item.medicine_name || '').toLowerCase().trim()}`,
         ];
@@ -1468,7 +1483,7 @@ const cachedDashboardStats = (organizationId: string) => unstable_cache(
             pendingOrders: pendingOrdersCount,
             lowStockAlerts: Number(lowStockRows[0]?.count ?? 0),
             expiringBatches: expiringBatchesCount,
-            todayRevenue: Number((todayRevenue as any[])[0]?.revenue ?? 0),
+            todayRevenue: Number((todayRevenue as Array<{ revenue: number }>)[0]?.revenue ?? 0),
         };
     },
     ['pharmacy:dashboard-stats', organizationId],
@@ -1497,7 +1512,7 @@ export async function dispenseMedicine(orderId: number, dispensedItems: any[]) {
     if (denied) return denied;
 
     try {
-        const { db, organizationId } = await requireTenantContext();
+        const { db, organizationId, session } = await requireTenantContext();
 
         // Gate on bill status BEFORE touching inventory. Without this, a closed/locked
         // IPD bill causes postChargeToIpdBill to fail silently *after* stock has already
@@ -1514,6 +1529,36 @@ export async function dispenseMedicine(orderId: number, dispensedItems: any[]) {
             select: { admission_id: true },
         }) : null;
         const preTargetAdmissionId = preOrder.admission_id || preActiveAdmission?.admission_id;
+
+        // Narcotic register columns (prescriber, patient, who raised the indent)
+        // are read verbatim by a drug inspector. Resolve them once here rather
+        // than leaving every auto-generated entry null.
+        const narcoticOrderMeta: {
+            doctor_id: string | null; doctor_name: string | null;
+            patient_name: string | null; requested_by_name: string | null;
+        } = { doctor_id: null, doctor_name: null, patient_name: null, requested_by_name: null };
+        {
+            const orderMeta = await db.pharmacy_orders.findUnique({
+                where: { id: orderId },
+                select: { doctor_id: true, requested_by_name: true },
+            });
+            narcoticOrderMeta.doctor_id = orderMeta?.doctor_id || null;
+            narcoticOrderMeta.requested_by_name = orderMeta?.requested_by_name || null;
+            if (orderMeta?.doctor_id) {
+                const doc = await db.user.findFirst({
+                    where: { id: orderMeta.doctor_id, organizationId },
+                    select: { name: true },
+                });
+                narcoticOrderMeta.doctor_name = doc?.name || null;
+            }
+            if (preOrder.patient_id) {
+                const pt = await db.oPD_REG.findUnique({
+                    where: { patient_id: preOrder.patient_id },
+                    select: { full_name: true },
+                });
+                narcoticOrderMeta.patient_name = pt?.full_name || null;
+            }
+        }
         const preIsIpdPatient = !!(preOrder.is_ipd_linked || preOrder.admission_id || preActiveAdmission);
 
         if (preIsIpdPatient && preTargetAdmissionId) {
@@ -1653,12 +1698,18 @@ export async function dispenseMedicine(orderId: number, dispensedItems: any[]) {
                             medicine_id: batch.medicine.id,
                             batch_no: item.batch_no,
                             batch_id: batch.id,
+                            patient_id: preOrder.patient_id || null,
+                            prescriber_id: narcoticOrderMeta.doctor_id || null,
+                            prescriber_name: narcoticOrderMeta.doctor_name || null,
+                            patient_name: narcoticOrderMeta.patient_name || null,
+                            witness_name: narcoticOrderMeta.requested_by_name || null,
                             quantity_in: 0,
                             quantity_out: item.quantity,
                             balance: (lastEntry?.balance || 0) - item.quantity,
                             transaction_type: 'OUT',
                             source_type: 'DISPENSE',
                             source_id: String(orderId),
+                            notes: `Issued by ${session?.name || session?.username || 'unknown'}`,
                         }
                     });
                 }
@@ -4161,7 +4212,7 @@ export async function getPharmacyAnalytics() {
             return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
         };
         const revenueByDayMap = new Map<string, number>();
-        for (const row of revenueByDayRows as any[]) {
+        for (const row of revenueByDayRows as Array<{ day: Date; revenue: number }>) {
             revenueByDayMap.set(dayKeyOf(new Date(row.day)), Number(row.revenue) || 0);
         }
         const revenue30d = Array.from(revenueByDayMap.values()).reduce((s, v) => s + v, 0);
@@ -4467,11 +4518,12 @@ export async function getPharmacyRevenueReport(filters?: {
                 take: 20000,
             })
             : [];
-        const cogs = movementRows.reduce((s: number, m: any) => {
+        type MovementRow = { quantity_out: number | null; quantity_in: number | null; unit_cost: number | null };
+        const cogs = (movementRows as MovementRow[]).reduce((sum: number, m) => {
             const cost = Number(m.unit_cost) || 0;
             // A patient return puts stock (and its cost) back — net it off, or
             // margin is understated for every bill that was partly returned.
-            return s + cost * ((m.quantity_out || 0) - (m.quantity_in || 0));
+            return sum + cost * ((m.quantity_out || 0) - (m.quantity_in || 0));
         }, 0);
         const marginMeasurable = channel === 'all';
 

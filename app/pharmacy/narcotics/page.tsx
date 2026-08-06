@@ -60,6 +60,8 @@ export default function NarcoticsRegisterPage() {
     }, 0);
 
     return () => window.clearTimeout(timer);
+    // Mount-only initial load; the filter and period handlers refetch explicitly.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function handleFilterChange(val: string) {

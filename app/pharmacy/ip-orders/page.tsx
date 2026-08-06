@@ -183,7 +183,7 @@ export default function IPMedicationOrdersPage() {
           parts.push(`${skipped} skipped — will remain pending`);
         // Handed over but not chargeable — the pharmacist has to raise these
         // manually, so this must never be silent.
-        const unbilled = (res as any).unbilled as string[] | undefined;
+        const unbilled = (res as { unbilled?: string[] }).unbilled;
         if (unbilled && unbilled.length > 0) {
           toast.error(`NOT BILLED — add manually: ${unbilled.join(', ')}`, 12000);
         }

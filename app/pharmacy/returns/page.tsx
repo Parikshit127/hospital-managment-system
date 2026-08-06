@@ -32,7 +32,7 @@ export default function ReturnsPage() {
     // modes, so damage was filed as expiry and supplier returns were unreachable.
     const [returnType, setReturnType] = useState<'Patient' | 'Expired' | 'damage_writeoff' | 'supplier_return'>('Expired');
     const [vendorId, setVendorId] = useState('');
-    const [vendors, setVendors] = useState<any[]>([]);
+    const [vendors, setVendors] = useState<{ id: number; name: string }[]>([]);
     const [medicines, setMedicines] = useState<any[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [saving, setSaving] = useState(false);
@@ -55,7 +55,9 @@ export default function ReturnsPage() {
 
     useEffect(() => {
         if (returnType !== 'supplier_return' || vendors.length > 0) return;
-        getSuppliers().then(r => { if (r.success) setVendors(r.data || []); });
+        getSuppliers().then(r => {
+            if (r.success) setVendors((r.data || []).map((v: { id: number; name: string }) => ({ id: v.id, name: v.name })));
+        });
     }, [returnType, vendors.length]);
 
     useEffect(() => {
@@ -192,7 +194,7 @@ export default function ReturnsPage() {
                             className="w-full p-2.5 border border-gray-300 rounded-lg text-sm"
                         >
                             <option value="">Select supplier…</option>
-                            {vendors.map((v: any) => (
+                            {vendors.map((v) => (
                                 <option key={v.id} value={v.id}>{v.name}</option>
                             ))}
                         </select>
