@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { AppShell } from '@/app/components/layout/AppShell';
 import { RotateCcw, AlertTriangle, CheckCircle, Search, FileText, IndianRupee, User } from 'lucide-react';
-import { processReturn, searchMedicine, searchReturnableInvoices } from '@/app/actions/pharmacy-actions';
+import { processReturn, searchMedicine, searchReturnableInvoices, getSuppliers } from '@/app/actions/pharmacy-actions';
 
 interface ReturnForm {
     medicine_id: string;
@@ -27,7 +27,12 @@ interface ReturnContext {
 }
 
 export default function ReturnsPage() {
-    const [returnType, setReturnType] = useState<'Patient' | 'Expired'>('Expired');
+    // processReturn has always supported damage_writeoff and supplier_return —
+    // including vendor-payable GL posting — but the screen only ever offered two
+    // modes, so damage was filed as expiry and supplier returns were unreachable.
+    const [returnType, setReturnType] = useState<'Patient' | 'Expired' | 'damage_writeoff' | 'supplier_return'>('Expired');
+    const [vendorId, setVendorId] = useState('');
+    const [vendors, setVendors] = useState<any[]>([]);
     const [medicines, setMedicines] = useState<any[]>([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [saving, setSaving] = useState(false);
@@ -47,6 +52,11 @@ export default function ReturnsPage() {
         reason: '',
         invoice_id: '',
     });
+
+    useEffect(() => {
+        if (returnType !== 'supplier_return' || vendors.length > 0) return;
+        getSuppliers().then(r => { if (r.success) setVendors(r.data || []); });
+    }, [returnType, vendors.length]);
 
     useEffect(() => {
         const fetchMeds = async () => {
@@ -101,6 +111,21 @@ export default function ReturnsPage() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+
+        // The form used to submit blanks straight through: an empty medicine
+        // became medicine_id 0 and surfaced a raw foreign-key error, and an empty
+        // quantity became a zero-quantity return.
+        if (!form.medicine_id) return alert('Search and select a medicine first.');
+        const qty = Number(form.quantity);
+        if (!Number.isFinite(qty) || qty <= 0) return alert('Enter a quantity greater than zero.');
+        if (!form.reason.trim()) return alert('Enter a reason for this return.');
+        if (returnType !== 'Patient' && !form.batch_id) {
+            return alert('Select the batch — a write-off or supplier return must name the physical lot.');
+        }
+        if (returnType === 'supplier_return' && !vendorId) {
+            return alert('Select the supplier this stock is going back to.');
+        }
+
         setSaving(true);
         setResult(null);
 
@@ -108,9 +133,10 @@ export default function ReturnsPage() {
             return_type: returnType,
             medicine_id: Number(form.medicine_id),
             batch_id: form.batch_id || undefined,
-            quantity: Number(form.quantity),
+            quantity: qty,
             reason: form.reason,
             invoice_id: form.invoice_id ? Number(form.invoice_id) : undefined,
+            vendor_id: returnType === 'supplier_return' && vendorId ? Number(vendorId) : undefined,
             // For IPD, deduct from the specific dispensing bill's day.
             bill_date: returnContext?.bill_date || undefined,
         });
@@ -130,20 +156,51 @@ export default function ReturnsPage() {
         <AppShell pageTitle="Pharmacy Returns & Expiry" pageIcon={<RotateCcw className="h-5 w-5" />}>
             <div className="max-w-3xl mx-auto">
                 {/* Mode Switcher */}
-                <div className="bg-white p-1.5 rounded-xl border border-gray-200 mb-6 flex gap-1.5">
+                <div className="bg-white p-1.5 rounded-xl border border-gray-200 mb-6 grid grid-cols-2 md:grid-cols-4 gap-1.5">
                     <button
                         onClick={() => { setReturnType('Expired'); setResult(null); handleClearPatient(); }}
-                        className={`flex-1 py-3 rounded-lg font-bold text-sm transition-all flex justify-center items-center gap-2 ${returnType === 'Expired' ? 'bg-red-50 text-red-700 border border-red-200' : 'text-gray-500 hover:bg-gray-50'}`}
+                        className={`py-3 rounded-lg font-bold text-xs transition-all flex justify-center items-center gap-1.5 ${returnType === 'Expired' ? 'bg-red-50 text-red-700 border border-red-200' : 'text-gray-500 hover:bg-gray-50'}`}
                     >
-                        <AlertTriangle className="h-4 w-4" /> Expired Stock / Damage
+                        <AlertTriangle className="h-4 w-4" /> Expired Stock
+                    </button>
+                    <button
+                        onClick={() => { setReturnType('damage_writeoff'); setResult(null); handleClearPatient(); }}
+                        className={`py-3 rounded-lg font-bold text-xs transition-all flex justify-center items-center gap-1.5 ${returnType === 'damage_writeoff' ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'text-gray-500 hover:bg-gray-50'}`}
+                    >
+                        <AlertTriangle className="h-4 w-4" /> Damage
+                    </button>
+                    <button
+                        onClick={() => { setReturnType('supplier_return'); setResult(null); handleClearPatient(); }}
+                        className={`py-3 rounded-lg font-bold text-xs transition-all flex justify-center items-center gap-1.5 ${returnType === 'supplier_return' ? 'bg-sky-50 text-sky-700 border border-sky-200' : 'text-gray-500 hover:bg-gray-50'}`}
+                    >
+                        <RotateCcw className="h-4 w-4" /> To Supplier
                     </button>
                     <button
                         onClick={() => { setReturnType('Patient'); setResult(null); }}
-                        className={`flex-1 py-3 rounded-lg font-bold text-sm transition-all flex justify-center items-center gap-2 ${returnType === 'Patient' ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' : 'text-gray-500 hover:bg-gray-50'}`}
+                        className={`py-3 rounded-lg font-bold text-xs transition-all flex justify-center items-center gap-1.5 ${returnType === 'Patient' ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' : 'text-gray-500 hover:bg-gray-50'}`}
                     >
-                        <RotateCcw className="h-4 w-4" /> Patient Returns
+                        <RotateCcw className="h-4 w-4" /> Patient Return
                     </button>
                 </div>
+
+                {returnType === 'supplier_return' && (
+                    <div className="bg-white border border-gray-200 rounded-xl p-4 mb-4">
+                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">Supplier</label>
+                        <select
+                            value={vendorId}
+                            onChange={e => setVendorId(e.target.value)}
+                            className="w-full p-2.5 border border-gray-300 rounded-lg text-sm"
+                        >
+                            <option value="">Select supplier…</option>
+                            {vendors.map((v: any) => (
+                                <option key={v.id} value={v.id}>{v.name}</option>
+                            ))}
+                        </select>
+                        <p className="text-[11px] text-gray-400 mt-1.5">
+                            Stock is deducted and the vendor payable is reduced in the ledger.
+                        </p>
+                    </div>
+                )}
 
                 {/* Success Result */}
                 {result && (

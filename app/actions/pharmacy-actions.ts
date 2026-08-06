@@ -3150,8 +3150,29 @@ export async function processReturn(data: {
     try {
         const { db, organizationId, session } = await requireTenantContext();
 
+        // The Returns screen submits raw form values, so a blank medicine or
+        // quantity used to arrive as 0 and hit a foreign-key error instead of a
+        // message. Validate before opening a transaction.
+        const quantity = Math.floor(Number(data.quantity));
+        if (!Number.isFinite(quantity) || quantity <= 0) {
+            return { success: false, error: 'Enter a return quantity greater than zero.' };
+        }
+        const ownedMedicine = await db.pharmacy_medicine_master.findFirst({
+            where: { id: Number(data.medicine_id), organizationId },
+            select: { id: true, brand_name: true },
+        });
+        if (!ownedMedicine) {
+            return { success: false, error: 'Select a medicine from this hospital\'s catalogue.' };
+        }
+        if (!data.reason?.trim()) {
+            return { success: false, error: 'A reason is required for every return.' };
+        }
+
         let creditNoteId: number | null = null;
         let refundAmount = 0;
+        // Unit price the refund was actually computed from, carried out of the
+        // transaction so the credit-note line ties to its own total.
+        let refundUnitPrice = 0;
 
         await db.$transaction(async (tx: any) => {
             const medicine = await tx.pharmacy_medicine_master.findUnique({
@@ -3166,8 +3187,28 @@ export async function processReturn(data: {
                     where: { batch_no: data.batch_id, medicine_id: data.medicine_id }
                 });
             }
-            const unitPrice = Number(batchRecord?.mrp) || Number(medicine?.mrp) || Number(medicine?.selling_price) || Number(medicine?.price_per_unit) || 0;
+            // Refund at the price the patient was ACTUALLY charged on the original
+            // bill, not today's MRP. MRP moves; refunding the current one hands back
+            // more or less than was paid. Falls back to the batch/master price only
+            // when the original line can't be found (no invoice supplied).
+            let billedUnitPrice: number | null = null;
+            if (data.invoice_id) {
+                const soldLine = await tx.invoice_items.findFirst({
+                    where: {
+                        invoice_id: data.invoice_id,
+                        organizationId,
+                        description: { contains: medicine?.brand_name || '', mode: 'insensitive' },
+                        quantity: { gt: 0 },
+                    },
+                    orderBy: { created_at: 'desc' },
+                    select: { unit_price: true },
+                });
+                if (soldLine && Number(soldLine.unit_price) > 0) billedUnitPrice = Number(soldLine.unit_price);
+            }
+            const unitPrice = billedUnitPrice
+                ?? (Number(batchRecord?.mrp) || Number(medicine?.mrp) || Number(medicine?.selling_price) || Number(medicine?.price_per_unit) || 0);
             const batchCost = Number(batchRecord?.actual_cost || batchRecord?.cost_price || unitPrice);
+            refundUnitPrice = unitPrice;
 
             // Determine movement type and stock action
             let movementType: string;
@@ -3176,39 +3217,92 @@ export async function processReturn(data: {
             if (data.return_type === 'Patient' || data.return_type === 'patient_return') {
                 movementType = 'PATIENT_RETURN';
                 returnTypeNormalized = 'patient_return';
-                refundAmount = (unitPrice * data.quantity) + (unitPrice * data.quantity * taxRate / 100);
 
-                // Restock sealed items
+                // Never refund (or restock) more than was dispensed on this bill.
+                // nurse-actions' indent return already enforced this; the pharmacy
+                // Returns screen did not, so the same strip could be returned over
+                // and over, inflating both stock and the refund.
+                if (data.invoice_id) {
+                    const [soldAgg, priorAgg] = await Promise.all([
+                        tx.invoice_items.aggregate({
+                            _sum: { quantity: true },
+                            where: {
+                                invoice_id: data.invoice_id,
+                                organizationId,
+                                description: { contains: medicine?.brand_name || '', mode: 'insensitive' },
+                                quantity: { gt: 0 },
+                            },
+                        }),
+                        tx.pharmacyReturn.aggregate({
+                            _sum: { quantity: true },
+                            where: {
+                                return_type: 'patient_return',
+                                medicine_id: data.medicine_id,
+                                original_invoice_id: data.invoice_id,
+                                organizationId,
+                            },
+                        }),
+                    ]);
+                    const sold = Number(soldAgg._sum.quantity || 0);
+                    const alreadyReturned = Number(priorAgg._sum.quantity || 0);
+                    const returnable = sold - alreadyReturned;
+                    if (sold > 0 && quantity > returnable) {
+                        throw new Error(
+                            `Cannot return ${quantity} — this bill has ${sold} dispensed and ${alreadyReturned} already returned, so at most ${Math.max(0, returnable)} can be returned.`,
+                        );
+                    }
+                }
+
+                refundAmount = (unitPrice * quantity) + (unitPrice * quantity * taxRate / 100);
+
+                // Restock sealed items — but never back onto an expired or
+                // quarantined batch, which would put unusable stock back on the
+                // shelf and inflate stock value.
                 if (batchRecord) {
-                    const updated = await tx.pharmacy_batch_inventory.update({
-                        where: { id: batchRecord.id },
-                        data: { current_stock: { increment: data.quantity } }
-                    });
-                    await tx.pharmacyInventoryMovement.create({
-                        data: {
-                            organizationId, medicine_id: data.medicine_id, batch_id: batchRecord.id,
-                            movement_type: 'PATIENT_RETURN', quantity_in: data.quantity, unit_cost: batchCost,
-                            balance_after: updated.current_stock, source_type: 'RETURN', reason: data.reason,
-                        }
-                    });
+                    const blocker = batchDispenseBlocker(batchRecord);
+                    if (blocker) {
+                        await tx.pharmacyInventoryMovement.create({
+                            data: {
+                                organizationId, medicine_id: data.medicine_id, batch_id: batchRecord.id,
+                                movement_type: 'PATIENT_RETURN', quantity_in: 0, unit_cost: batchCost,
+                                balance_after: batchRecord.current_stock, source_type: 'RETURN',
+                                reason: `${data.reason} — NOT restocked, batch ${blocker}`,
+                            }
+                        });
+                    } else {
+                        const updated = await tx.pharmacy_batch_inventory.update({
+                            where: { id: batchRecord.id },
+                            data: { current_stock: { increment: quantity } }
+                        });
+                        await tx.pharmacyInventoryMovement.create({
+                            data: {
+                                organizationId, medicine_id: data.medicine_id, batch_id: batchRecord.id,
+                                movement_type: 'PATIENT_RETURN', quantity_in: quantity, unit_cost: batchCost,
+                                balance_after: updated.current_stock, source_type: 'RETURN', reason: data.reason,
+                            }
+                        });
+                    }
                 }
             } else if (data.return_type === 'supplier_return') {
                 movementType = 'SUPPLIER_RETURN';
-                refundAmount = batchCost * data.quantity;
+                refundAmount = batchCost * quantity;
 
                 // Deduct stock
-                if (batchRecord) {
-                    if (batchRecord.current_stock < data.quantity) {
-                        throw new Error(`Insufficient stock for supplier return: have ${batchRecord.current_stock}, need ${data.quantity}`);
+                if (!batchRecord) {
+                    throw new Error('Select the batch being returned to the supplier.');
+                }
+                {
+                    if (batchRecord.current_stock < quantity) {
+                        throw new Error(`Insufficient stock for supplier return: have ${batchRecord.current_stock}, need ${quantity}`);
                     }
                     const updated = await tx.pharmacy_batch_inventory.update({
                         where: { id: batchRecord.id },
-                        data: { current_stock: { decrement: data.quantity } }
+                        data: { current_stock: { decrement: quantity } }
                     });
                     await tx.pharmacyInventoryMovement.create({
                         data: {
                             organizationId, medicine_id: data.medicine_id, batch_id: batchRecord.id,
-                            movement_type: 'SUPPLIER_RETURN', quantity_out: data.quantity, unit_cost: batchCost,
+                            movement_type: 'SUPPLIER_RETURN', quantity_out: quantity, unit_cost: batchCost,
                             balance_after: updated.current_stock, source_type: 'RETURN', reason: data.reason,
                         }
                     });
@@ -3217,20 +3311,26 @@ export async function processReturn(data: {
                 // Expired / damage_writeoff
                 movementType = 'EXPIRY_WRITEOFF';
                 returnTypeNormalized = data.return_type === 'Expired' ? 'expired_stock' : 'damage_writeoff';
-                refundAmount = batchCost * data.quantity;
+                refundAmount = batchCost * quantity;
 
-                if (batchRecord) {
-                    if (batchRecord.current_stock < data.quantity) {
-                        throw new Error(`Insufficient stock for write-off: have ${batchRecord.current_stock}, need ${data.quantity}`);
+                // Without a batch nothing is decremented, yet the GL write-off
+                // below still posted — inventory and ledger drifted apart every
+                // time. A write-off has to name the lot being destroyed.
+                if (!batchRecord) {
+                    throw new Error('Select the batch being written off — a write-off must identify the physical lot.');
+                }
+                {
+                    if (batchRecord.current_stock < quantity) {
+                        throw new Error(`Insufficient stock for write-off: have ${batchRecord.current_stock}, need ${quantity}`);
                     }
                     const updated = await tx.pharmacy_batch_inventory.update({
                         where: { id: batchRecord.id },
-                        data: { current_stock: { decrement: data.quantity } }
+                        data: { current_stock: { decrement: quantity } }
                     });
                     await tx.pharmacyInventoryMovement.create({
                         data: {
                             organizationId, medicine_id: data.medicine_id, batch_id: batchRecord.id,
-                            movement_type: 'EXPIRY_WRITEOFF', quantity_out: data.quantity, unit_cost: batchCost,
+                            movement_type: 'EXPIRY_WRITEOFF', quantity_out: quantity, unit_cost: batchCost,
                             balance_after: updated.current_stock, source_type: 'RETURN', reason: data.reason,
                         }
                     });
@@ -3243,7 +3343,7 @@ export async function processReturn(data: {
                     medicine_id: data.medicine_id,
                     batch_id: data.batch_id,
                     batch_record_id: batchRecord?.id || null,
-                    quantity: data.quantity,
+                    quantity,
                     unit_cost: batchCost,
                     reason: data.reason,
                     vendor_id: data.vendor_id || null,
@@ -3271,9 +3371,9 @@ export async function processReturn(data: {
                         medicine_id: medicine.id,
                         batch_no: data.batch_id,
                         batch_id: batchRecord?.id,
-                        quantity_in: isStockIn ? data.quantity : 0,
-                        quantity_out: isStockIn ? 0 : data.quantity,
-                        balance: (lastEntry?.balance || 0) + (isStockIn ? data.quantity : -data.quantity),
+                        quantity_in: isStockIn ? quantity : 0,
+                        quantity_out: isStockIn ? 0 : quantity,
+                        balance: (lastEntry?.balance || 0) + (isStockIn ? quantity : -quantity),
                         transaction_type: isStockIn ? 'IN' : 'OUT',
                         source_type: movementType,
                         notes: `${returnTypeNormalized}: ${data.reason}`,
@@ -3301,8 +3401,8 @@ export async function processReturn(data: {
                         invoice_id: data.invoice_id,
                         department: 'Pharmacy',
                         service_category: 'Pharmacy',
-                        description: `Return: ${medicine?.brand_name || 'Medicine'} x${data.quantity}`,
-                        quantity: data.quantity,
+                        description: `Return: ${medicine?.brand_name || 'Medicine'} x${quantity}`,
+                        quantity,
                         unit_price: 0,
                         total_price: 0,
                         discount: 0,
@@ -3329,12 +3429,15 @@ export async function processReturn(data: {
 
                 const cnResult = await createCreditNote({
                     original_invoice_id: data.invoice_id,
-                    reason: `Pharmacy return: ${medicine?.brand_name || 'Medicine'} x${data.quantity} — ${data.reason}`,
+                    reason: `Pharmacy return: ${medicine?.brand_name || 'Medicine'} x${quantity} — ${data.reason}`,
                     items: JSON.stringify([{
                         medicine_id: data.medicine_id,
                         medicine_name: medicine?.brand_name,
-                        quantity: data.quantity,
-                        unit_price: Number(medicine?.selling_price) || 0,
+                        quantity,
+                        // Must be the price the refund was computed from. Reading
+                        // selling_price here meant qty x unit_price did not equal
+                        // the credit note's own total.
+                        unit_price: refundUnitPrice,
                         amount: refundAmount,
                     }]),
                     total_amount: refundAmount,
@@ -3343,6 +3446,9 @@ export async function processReturn(data: {
 
                 if (cnResult.success) creditNoteId = cnResult.data?.id;
 
+                // paid_amount is deliberately NOT reduced: that money really was
+                // collected, and lowering it would understate the day's takings.
+                // The over-collection is represented by the credit note above.
                 const newNetAmount = Number(invoice.net_amount) - refundAmount;
                 const newBalanceDue = newNetAmount - Number(invoice.paid_amount);
                 await db.invoices.update({
@@ -3374,7 +3480,7 @@ export async function processReturn(data: {
                 action: 'PHARMACY_EXPIRY_WRITEOFF',
                 module: 'Pharmacy',
                 entity_type: 'pharmacy_return',
-                details: JSON.stringify({ medicine_id: data.medicine_id, quantity: data.quantity, write_off_value: refundAmount, batch: data.batch_id }),
+                details: JSON.stringify({ medicine_id: data.medicine_id, quantity, write_off_value: refundAmount, batch: data.batch_id }),
             });
         }
 
