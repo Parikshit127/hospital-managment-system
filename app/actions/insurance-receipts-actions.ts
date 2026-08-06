@@ -159,6 +159,181 @@ export async function createInsuranceReceipt(input: {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// EDIT a recorded receipt
+// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * Amend a receipt in place, so a typo doesn't force a reverse-and-re-record.
+ *
+ * How much may be amended depends on whether money has already been pushed onto
+ * bills, because that is what decides whether an edit stays self-contained:
+ *
+ *  - Nothing allocated yet (Open, no allocations): the receipt is just a record
+ *    of a bank credit. EVERY field is editable, amounts included — no invoice
+ *    balance, payment row or journal entry depends on it yet.
+ *
+ *  - Already allocated (Partially/fully): the received total and TDS are now
+ *    baked into invoice.paid_amount, invoice.tpa_settled_amount, payments rows
+ *    and posted GL. Editing them in place here would move the receipt without
+ *    moving any of that, leaving the ledger quietly out of balance — so those
+ *    stay locked and the caller is pointed at Reverse, which unwinds all of it
+ *    properly. Descriptive fields (UTR, instrument, date, remarks, and the
+ *    settlement-advice breakdown) are still freely editable, since nothing
+ *    downstream is computed from them.
+ *
+ *  - Reversed receipts are void records and are not editable at all.
+ */
+export async function updateInsuranceReceipt(input: {
+  receipt_id: number;
+  instrument?: string;
+  reference_number?: string;
+  receipt_date?: string;
+  remarks?: string;
+  // Settlement-advice breakdown — descriptive, safe to edit at any stage.
+  claim_amount?: number;
+  sanctioned_amount?: number;
+  service_charge?: number;
+  // Financial — only while the receipt is still unallocated.
+  total_amount?: number;
+  tds_amount?: number;
+  provider_id?: number;
+  corporate_id?: string;
+}) {
+  try {
+    const { db, session, organizationId } = await requireTenantContext();
+
+    // Editing a receipt moves money on the books. Same bar as unlocking a bill.
+    if (!['admin', 'finance'].includes(session?.role)) {
+      return { success: false, error: 'Only Admin or Finance can edit a receipt.' };
+    }
+
+    const receipt = await db.insuranceReceipt.findFirst({
+      where: { id: input.receipt_id, organizationId },
+      include: { allocations: { select: { id: true } } },
+    });
+    if (!receipt) return { success: false, error: 'Receipt not found' };
+    if (receipt.status === 'Reversed') {
+      return { success: false, error: 'A reversed receipt is a void record and cannot be edited. Record a fresh receipt instead.' };
+    }
+
+    const isAllocated = receipt.allocations.length > 0 || Number(receipt.allocated_amount || 0) > 0;
+    const data: Record<string, unknown> = {};
+    const changed: Record<string, { from: unknown; to: unknown }> = {};
+    const track = (field: string, from: unknown, to: unknown) => {
+      data[field] = to;
+      changed[field] = { from, to };
+    };
+
+    // ── Descriptive fields — always editable ──────────────────────────────
+    if (input.instrument !== undefined && input.instrument !== receipt.instrument) {
+      track('instrument', receipt.instrument, input.instrument || 'NEFT');
+    }
+
+    if (input.reference_number !== undefined) {
+      const reference = input.reference_number.trim();
+      if (!reference) return { success: false, error: 'reference_number is required' };
+      if (reference !== receipt.reference_number) {
+        // Same guard as createInsuranceReceipt: one UTR must not be banked twice.
+        // Reversed receipts release their reference, so they are excluded.
+        const dup = await db.insuranceReceipt.findFirst({
+          where: {
+            organizationId,
+            reference_number: reference,
+            status: { not: 'Reversed' },
+            id: { not: receipt.id },
+          },
+          select: { receipt_number: true },
+        });
+        if (dup) return { success: false, error: `A receipt with reference '${reference}' already exists (${dup.receipt_number})` };
+        track('reference_number', receipt.reference_number, reference);
+      }
+    }
+
+    if (input.receipt_date !== undefined) {
+      const receiptDate = new Date(input.receipt_date);
+      if (isNaN(receiptDate.getTime())) return { success: false, error: 'Invalid receipt_date' };
+      if (receiptDate.getTime() !== new Date(receipt.receipt_date).getTime()) {
+        track('receipt_date', receipt.receipt_date, receiptDate);
+      }
+    }
+
+    if (input.remarks !== undefined && (input.remarks || null) !== receipt.remarks) {
+      track('remarks', receipt.remarks, input.remarks || null);
+    }
+
+    for (const field of ['claim_amount', 'sanctioned_amount', 'service_charge'] as const) {
+      const incoming = (input as Record<string, unknown>)[field];
+      if (incoming === undefined) continue;
+      const value = round2(Math.max(0, Number(incoming) || 0));
+      if (value !== round2(Number((receipt as Record<string, unknown>)[field] || 0))) {
+        track(field, Number((receipt as Record<string, unknown>)[field] || 0), value);
+      }
+    }
+
+    // ── Financial fields — only while nothing is allocated ────────────────
+    const wantsFinancialEdit =
+      (input.total_amount !== undefined && round2(Number(input.total_amount)) !== round2(Number(receipt.total_amount))) ||
+      (input.tds_amount !== undefined && round2(Number(input.tds_amount)) !== round2(Number(receipt.tds_total))) ||
+      (input.provider_id !== undefined && input.provider_id !== receipt.provider_id) ||
+      (input.corporate_id !== undefined && (input.corporate_id || null) !== receipt.corporate_id);
+
+    if (wantsFinancialEdit && isAllocated) {
+      return {
+        success: false,
+        error: 'This receipt is already mapped to bills, so the amount, TDS and payer cannot be changed here — the bills, payment entries and ledger were posted from those figures. Use Reverse to unwind it, then record the corrected receipt.',
+      };
+    }
+
+    if (wantsFinancialEdit) {
+      if (input.total_amount !== undefined) {
+        const total = round2(Number(input.total_amount));
+        if (!Number.isFinite(total) || total <= 0) return { success: false, error: 'total_amount must be greater than 0' };
+        track('total_amount', Number(receipt.total_amount), total);
+        // Nothing is allocated, so the whole receipt is still unmapped.
+        data.unmapped_amount = total;
+      }
+      if (input.tds_amount !== undefined) {
+        track('tds_total', Number(receipt.tds_total), round2(Math.max(0, Number(input.tds_amount) || 0)));
+      }
+      if (input.provider_id !== undefined && receipt.payer_type === 'tpa_insurance') {
+        if (!input.provider_id) return { success: false, error: 'provider_id required for TPA/insurance receipt' };
+        track('provider_id', receipt.provider_id, input.provider_id);
+      }
+      if (input.corporate_id !== undefined && receipt.payer_type === 'corporate') {
+        if (!input.corporate_id) return { success: false, error: 'corporate_id required for corporate receipt' };
+        track('corporate_id', receipt.corporate_id, input.corporate_id);
+      }
+    }
+
+    if (Object.keys(data).length === 0) return { success: true, data: serialize(receipt), unchanged: true };
+
+    const updated = await db.insuranceReceipt.update({ where: { id: receipt.id }, data });
+
+    await db.system_audit_logs.create({
+      data: {
+        user_id: session?.id, username: session?.username || session?.name, role: session?.role,
+        action: 'insurance_receipt_edited', module: 'finance', entity_type: 'insurance_receipt',
+        entity_id: String(receipt.id),
+        // Field-level before/after — the receipt row itself keeps no history, so
+        // without this the trail cannot say what the figures used to be.
+        details: JSON.stringify({
+          receipt_number: receipt.receipt_number,
+          was_allocated: isAllocated,
+          changes: changed,
+        }),
+        organizationId,
+      },
+    });
+
+    revalidatePath('/admin/finance/tpa-insurance');
+    revalidatePath('/billing');
+    return { success: true, data: serialize(updated) };
+  } catch (error: any) {
+    console.error('updateInsuranceReceipt error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // ALLOCATE RECEIPT across one or many bills
 // ─────────────────────────────────────────────────────────────────────────────
 export async function allocateReceipt(input: {

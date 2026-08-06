@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/app/components/ui/Toast';
 import { processPatientPayment, addPatientDues } from '@/app/actions/reception-actions';
-import { reversePayment, cancelInvoice, revertInvoice, searchPatientsForBilling } from '@/app/actions/finance-actions';
+import { reversePayment, cancelInvoice, revertInvoice, searchPatientsForBilling, getMyRole } from '@/app/actions/finance-actions';
 import { EditInvoiceModal } from '@/app/components/finance/EditInvoiceModal';
 import { RecordTpaPaymentModal } from '@/app/components/billing/RecordTpaPaymentModal';
 import { useRouter } from 'next/navigation';
@@ -117,6 +117,14 @@ export function BillingMasterDashboard({ role }: BillingMasterProps) {
     const [paymentModal, setPaymentModal] = useState<any>(null); // { invoice_id, patient_id, max_amount }
     const [duesModal, setDuesModal] = useState<string | null>(null); // patient_id
     const [editingInvoiceId, setEditingInvoiceId] = useState<number | null>(null);
+    // The `role` prop is a VIEW MODE ('admin' | 'reception' | 'opd'), not the
+    // signed-in user's role — this screen is only ever mounted as role="opd", so
+    // gating Edit on `role === 'admin'` meant nobody could ever edit a bill that
+    // had a payment against it. Ask the server who the user actually is.
+    const [myRole, setMyRole] = useState<string | null>(null);
+    const canEditPaid = ['admin', 'finance', 'superadmin'].includes(myRole || '');
+
+    useEffect(() => { getMyRole().then((r) => setMyRole(r.role)); }, []);
     const [tpaModalInvoice, setTpaModalInvoice] = useState<RowShape | null>(null);
     const [processLoading, setProcessLoading] = useState(false);
 
@@ -832,7 +840,10 @@ export function BillingMasterDashboard({ role }: BillingMasterProps) {
                                                                                                 Mark TPA Received
                                                                                             </button>
                                                                                         )}
-                                                                                        {inv.status !== 'Cancelled' && (Number(inv.paid_amount ?? 0) === 0 || role === 'admin') && (
+                                                                                        {/* Unpaid bills: anyone on this screen. Paid or finalized:
+                                                                                            Admin/Finance only — the same bar EditInvoiceModal and
+                                                                                            unlockInvoice enforce server-side. */}
+                                                                                        {inv.status !== 'Cancelled' && (Number(inv.paid_amount ?? 0) === 0 || canEditPaid) && (
                                                                                             <button
                                                                                                 onClick={() => setEditingInvoiceId(Number(inv.id))}
                                                                                                 className="px-2 py-1.5 bg-indigo-50 text-indigo-700 text-xs font-bold rounded-md hover:bg-indigo-100"

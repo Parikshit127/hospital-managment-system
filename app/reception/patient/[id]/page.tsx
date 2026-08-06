@@ -15,7 +15,7 @@ import Link from 'next/link';
 import { AppShell } from '@/app/components/layout/AppShell';
 import { getPatientDetail, updatePatientField, addPatientDues, getPatientExternalRecords, savePatientExternalRecord, deletePatientExternalRecord, archivePatient } from '@/app/actions/reception-actions';
 import { getPatientFinancialProfile } from '@/app/actions/master-billing-actions';
-import { recordPayment } from '@/app/actions/finance-actions';
+import { recordPayment, getMyRole } from '@/app/actions/finance-actions';
 import { getCashComplianceConfig } from '@/app/actions/cash-compliance-actions';
 import { CASH_COMPLIANCE_DEFAULTS, isValidPan, normalizePan, resolveRegisteredPan } from '@/app/lib/cash-compliance';
 import { useToast } from '@/app/components/ui/Toast';
@@ -225,6 +225,11 @@ export default function PatientProfilePage() {
     const [expandedInvoice, setExpandedInvoice] = useState<number | null>(null);
     const [payingInvoice, setPayingInvoice] = useState<any>(null);
     const [editingInvoiceId, setEditingInvoiceId] = useState<number | null>(null);
+    // Same bar the server enforces in EditInvoiceModal / unlockInvoice.
+    const [myRole, setMyRole] = useState<string | null>(null);
+    const canEditPaid = ['admin', 'finance', 'superadmin'].includes(myRole || '');
+
+    useEffect(() => { getMyRole().then((r) => setMyRole(r.role)); }, []);
 
     const [archiving, setArchiving] = useState(false);
 
@@ -1036,7 +1041,11 @@ export default function PatientProfilePage() {
 
                                                                 {/* Invoice Actions */}
                                                                 <div className="flex flex-wrap gap-1.5 pt-1">
-                                                                    {inv.status !== 'Cancelled' && Number(inv.paid_amount) === 0 && (
+                                                                    {/* A collected or finalized bill is still editable by
+                                                                        Admin/Finance — EditInvoiceModal and unlockInvoice both
+                                                                        allow it. Gating on paid_amount alone left no way to fix
+                                                                        one from here at all. */}
+                                                                    {inv.status !== 'Cancelled' && (Number(inv.paid_amount) === 0 || canEditPaid) && (
                                                                         <button onClick={(e) => { e.stopPropagation(); setEditingInvoiceId(Number(inv.id)); }}
                                                                             className="px-3 py-1.5 bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-bold rounded-lg hover:bg-indigo-100 flex items-center gap-1">
                                                                             <Pencil className="h-3 w-3" /> Edit Invoice

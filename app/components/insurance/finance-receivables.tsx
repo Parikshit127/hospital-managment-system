@@ -10,14 +10,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Inbox, Loader2, RefreshCw, IndianRupee, Clock, XCircle, FileWarning,
-  ArrowDownToLine, AlertTriangle, Plus, X, Printer, Download, Undo2, History,
+  ArrowDownToLine, AlertTriangle, Plus, X, Printer, Download, Undo2, History, Pencil,
 } from 'lucide-react';
 import { getTpaDeskDashboard, getInsuranceOutstanding, getBillWiseSanction, getPatientWiseOutstanding } from '@/app/actions/insurance-aging-actions';
 import { getHospitalBillingInfo } from '@/app/actions/admin-actions';
 import {
   getInsuranceReceiptSummary, listInsuranceReceipts,
   allocateReceipt, getPendingAdvices, recordAndAllocateReceipt, reverseInsuranceReceipt,
-  getInsuranceReceiptHistory, searchInvoicesForInsuranceReceipt,
+  getInsuranceReceiptHistory, searchInvoicesForInsuranceReceipt, updateInsuranceReceipt,
 } from '@/app/actions/insurance-receipts-actions';
 import { applyAvailableDepositToInvoice } from '@/app/actions/deposit-actions';
 
@@ -521,6 +521,7 @@ export function InsuranceReceipts({ providers }: { providers: any[] }) {
   // UI reached it, so a mistyped figure permanently settled the bill.
   const [reverseFor, setReverseFor] = useState<any>(null);
   const [historyFor, setHistoryFor] = useState<any>(null);
+  const [editFor, setEditFor] = useState<any>(null);
   const [providerId, setProviderId] = useState('');
   const [payerSearch, setPayerSearch] = useState('');
   const [onlyPending, setOnlyPending] = useState(false);
@@ -796,6 +797,13 @@ export function InsuranceReceipts({ providers }: { providers: any[] }) {
                         <History className="h-3.5 w-3.5" />
                       </button>
                       {r.status !== 'Reversed' && (
+                        <button onClick={() => setEditFor(r)}
+                          title="Edit this receipt"
+                          className="inline-flex items-center rounded-lg border border-gray-300 p-1.5 text-gray-500 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600">
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                      {r.status !== 'Reversed' && (
                         <button onClick={() => setReverseFor(r)} title="Reverse this receipt"
                           className="inline-flex items-center rounded-lg border border-gray-300 p-1.5 text-gray-400 hover:border-rose-300 hover:bg-rose-50 hover:text-rose-600">
                           <Undo2 className="h-3.5 w-3.5" />
@@ -823,6 +831,7 @@ export function InsuranceReceipts({ providers }: { providers: any[] }) {
       {allocFor && <AllocateModal payer={allocFor} onClose={() => setAllocFor(null)} onSaved={() => { setAllocFor(null); load(); }} />}
       {reverseFor && <ReverseReceiptModal receipt={reverseFor} onClose={() => setReverseFor(null)} onDone={() => { setReverseFor(null); load(); }} />}
       {historyFor && <ReceiptHistoryModal receipt={historyFor} onClose={() => setHistoryFor(null)} />}
+      {editFor && <EditReceiptModal receipt={editFor} providers={providers} onClose={() => setEditFor(null)} onDone={() => { setEditFor(null); load(); }} />}
     </div>
   );
 }
@@ -1302,6 +1311,161 @@ const ACTION_TONE: Record<string, string> = {
   insurance_receipt_allocated: 'bg-emerald-100 text-emerald-700',
   insurance_receipt_reversed: 'bg-rose-100 text-rose-700',
 };
+
+// Edit a recorded receipt. What is editable depends on whether the money has
+// already been mapped onto bills: an unmapped receipt is just a note of a bank
+// credit and can be corrected wholesale, but once it is allocated the amount,
+// TDS and payer are baked into invoice balances, payment rows and posted GL, so
+// those are read-only here and Reverse is the correct tool. The server enforces
+// the same rule — this only mirrors it so the reason is visible before saving.
+function EditReceiptModal({ receipt, providers, onClose, onDone }: {
+  receipt: Record<string, any>;
+  providers: { id: number; provider_name: string }[];
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const allocated = Number(receipt.allocated_amount || 0) > 0 || receipt.status === 'Allocated' || receipt.status === 'PartiallyAllocated';
+  const [form, setForm] = useState({
+    instrument: receipt.instrument || 'NEFT',
+    reference_number: receipt.reference_number || '',
+    receipt_date: receipt.receipt_date ? new Date(receipt.receipt_date).toISOString().slice(0, 10) : '',
+    remarks: receipt.remarks || '',
+    claim_amount: String(Number(receipt.claim_amount || 0) || ''),
+    sanctioned_amount: String(Number(receipt.sanctioned_amount || 0) || ''),
+    service_charge: String(Number(receipt.service_charge || 0) || ''),
+    total_amount: String(Number(receipt.total_amount || 0) || ''),
+    tds_amount: String(Number(receipt.tds_total || 0) || ''),
+    provider_id: receipt.provider_id ? String(receipt.provider_id) : '',
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  async function save() {
+    setSaving(true);
+    setError('');
+    try {
+      const res = await updateInsuranceReceipt({
+        receipt_id: receipt.id,
+        instrument: form.instrument,
+        reference_number: form.reference_number,
+        receipt_date: form.receipt_date,
+        remarks: form.remarks,
+        claim_amount: form.claim_amount === '' ? 0 : Number(form.claim_amount),
+        sanctioned_amount: form.sanctioned_amount === '' ? 0 : Number(form.sanctioned_amount),
+        service_charge: form.service_charge === '' ? 0 : Number(form.service_charge),
+        // Only sent when they can actually be applied, so an untouched allocated
+        // receipt never trips the server's "already mapped" refusal.
+        ...(allocated ? {} : {
+          total_amount: form.total_amount === '' ? undefined : Number(form.total_amount),
+          tds_amount: form.tds_amount === '' ? 0 : Number(form.tds_amount),
+          ...(receipt.payer_type === 'tpa_insurance' && form.provider_id ? { provider_id: Number(form.provider_id) } : {}),
+        }),
+      });
+      if (res.success) onDone();
+      else setError(('error' in res && res.error) || 'Could not save the changes');
+    } catch (e) {
+      setError((e as Error)?.message || 'Could not save the changes');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const field = "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm";
+  const label = "mb-1 block text-[11px] font-bold uppercase tracking-wide text-gray-500";
+
+  return (
+    <Modal title={`Edit receipt ${receipt.receipt_number}`} onClose={onClose} wide>
+      {allocated && (
+        <div className="mb-4 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+          <p className="text-xs font-semibold text-amber-800">
+            This receipt is already mapped to bills. Reference, date, instrument, remarks and the
+            settlement-advice breakdown can be corrected here. To change the received amount, TDS or
+            payer, use <strong>Reverse</strong> first &mdash; that unwinds the bills, payment entries
+            and ledger together.
+          </p>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div>
+          <label className={label}>Reference / UTR</label>
+          <input className={field} value={form.reference_number}
+            onChange={(e) => setForm({ ...form, reference_number: e.target.value })} />
+        </div>
+        <div>
+          <label className={label}>Instrument</label>
+          <select className={field} value={form.instrument}
+            onChange={(e) => setForm({ ...form, instrument: e.target.value })}>
+            {['NEFT', 'RTGS', 'Cheque', 'UPI', 'Other'].map((i) => <option key={i} value={i}>{i}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className={label}>Receipt date</label>
+          <input type="date" className={field} value={form.receipt_date}
+            onChange={(e) => setForm({ ...form, receipt_date: e.target.value })} />
+        </div>
+        {receipt.payer_type === 'tpa_insurance' && (
+          <div>
+            <label className={label}>Payer{allocated && ' (locked)'}</label>
+            <select className={field} value={form.provider_id} disabled={allocated}
+              onChange={(e) => setForm({ ...form, provider_id: e.target.value })}>
+              <option value="">Select payer…</option>
+              {(providers || []).map((p) => (
+                <option key={p.id} value={p.id}>{p.provider_name}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        <div>
+          <label className={label}>Claim amount</label>
+          <input type="number" step="0.01" className={field} value={form.claim_amount}
+            onChange={(e) => setForm({ ...form, claim_amount: e.target.value })} />
+        </div>
+        <div>
+          <label className={label}>Sanctioned amount</label>
+          <input type="number" step="0.01" className={field} value={form.sanctioned_amount}
+            onChange={(e) => setForm({ ...form, sanctioned_amount: e.target.value })} />
+        </div>
+        <div>
+          <label className={label}>Service charge</label>
+          <input type="number" step="0.01" className={field} value={form.service_charge}
+            onChange={(e) => setForm({ ...form, service_charge: e.target.value })} />
+        </div>
+        <div>
+          <label className={label}>TDS{allocated && ' (locked)'}</label>
+          <input type="number" step="0.01" className={field} value={form.tds_amount} disabled={allocated}
+            onChange={(e) => setForm({ ...form, tds_amount: e.target.value })} />
+        </div>
+        <div>
+          <label className={label}>Received amount{allocated && ' (locked)'}</label>
+          <input type="number" step="0.01" className={field} value={form.total_amount} disabled={allocated}
+            onChange={(e) => setForm({ ...form, total_amount: e.target.value })} />
+        </div>
+        <div className="sm:col-span-2">
+          <label className={label}>Remarks</label>
+          <input className={field} value={form.remarks}
+            onChange={(e) => setForm({ ...form, remarks: e.target.value })} />
+        </div>
+      </div>
+
+      <p className="mt-3 text-[11px] text-gray-400">
+        Every change is recorded field-by-field in this receipt&rsquo;s History.
+      </p>
+
+      {error && <p className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">{error}</p>}
+
+      <div className="mt-5 flex justify-end gap-2">
+        <button onClick={onClose} className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-bold">Cancel</button>
+        <button onClick={save} disabled={saving}
+          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-50">
+          {saving ? 'Saving…' : 'Save changes'}
+        </button>
+      </div>
+    </Modal>
+  );
+}
 
 function ReceiptHistoryModal({ receipt, onClose }: any) {
   const [data, setData] = useState<any>(null);
