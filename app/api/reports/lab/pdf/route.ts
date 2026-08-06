@@ -3,8 +3,25 @@ import { prisma } from '@/backend/db';
 import { resolveRouteAuth } from '@/app/lib/route-auth';
 import { verifySignedReportToken } from '@/app/lib/signed-url';
 import { getBillBranding, inlineHeaderHtml, type BillBranding } from '@/app/lib/bill-branding';
+import { computeLabFlag, parseLeadingNumber, rangeText } from '@/app/lib/lab/flag';
 
 const ALLOWED_STAFF_ROLES = ['admin', 'doctor', 'lab_technician', 'receptionist', 'finance', 'ipd_manager', 'nurse'];
+
+// Reference range for this test + the patient's prior results (for the trend).
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function fetchReportExtras(order: any, organizationId: string) {
+    const testInfo = await prisma.lab_test_inventory.findFirst({
+        where: { test_name: order.test_type, organizationId },
+        select: { normal_range_min: true, normal_range_max: true, critical_value_low: true, critical_value_high: true, unit: true },
+    });
+    const history = await prisma.lab_orders.findMany({
+        where: { patient_id: order.patient_id, test_type: order.test_type, status: 'Completed', organizationId, barcode: { not: order.barcode } },
+        select: { result_value: true, created_at: true },
+        orderBy: { created_at: 'desc' },
+        take: 5,
+    });
+    return { testInfo, history };
+}
 
 export async function GET(req: NextRequest) {
     try {
@@ -33,7 +50,8 @@ export async function GET(req: NextRequest) {
             });
 
             const branding = await getBillBranding(verified.organizationId);
-            return renderLabReport(order, patient, verified.barcode, branding);
+            const extras = await fetchReportExtras(order, verified.organizationId);
+            return renderLabReport(order, patient, verified.barcode, branding, extras.testInfo, extras.history);
         }
 
         // Standard auth-based access (staff + patient portal)
@@ -72,7 +90,8 @@ export async function GET(req: NextRequest) {
         });
 
         const branding = await getBillBranding(auth.context.organizationId);
-        return renderLabReport(order, patient, barcode, branding);
+        const extras = await fetchReportExtras(order, auth.context.organizationId);
+        return renderLabReport(order, patient, barcode, branding, extras.testInfo, extras.history);
     } catch (error) {
         console.error('Lab PDF Error:', error);
         return NextResponse.json({ error: 'Failed to generate report' }, { status: 500 });
@@ -80,11 +99,19 @@ export async function GET(req: NextRequest) {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function renderLabReport(order: any, patient: any, barcode: string, branding: BillBranding): NextResponse {
+function renderLabReport(order: any, patient: any, barcode: string, branding: BillBranding, testInfo?: any, history?: any[]): NextResponse {
     const patientName = patient?.full_name || 'Unknown';
     const orderDate = order.created_at
         ? new Date(order.created_at).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric' })
         : 'N/A';
+
+    // Reference range + auto-flag for the result value
+    const refText = testInfo ? rangeText(testInfo) : null;
+    const numericResult = parseLeadingNumber(order.result_value);
+    const flag = numericResult != null && testInfo ? computeLabFlag(numericResult, testInfo) : null;
+    const flagColor = flag
+        ? (flag.level === 'critical' ? '#b91c1c' : flag.level === 'high' ? '#b45309' : flag.level === 'low' ? '#1d4ed8' : '#065f46')
+        : '#6b7280';
 
     const html = `<!DOCTYPE html>
 <html>
@@ -158,7 +185,11 @@ function renderLabReport(order: any, patient: any, barcode: string, branding: Bi
     ${order.result_value ? `
     <div class="result-box">
         <h3>Test Result</h3>
-        <div class="result-value">${order.result_value}</div>
+        <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;">
+            <div class="result-value">${order.result_value}</div>
+            ${flag ? `<span style="display:inline-block;padding:2px 10px;border-radius:12px;font-size:11px;font-weight:800;background:${flagColor}1a;color:${flagColor};border:1px solid ${flagColor}55;">${flag.label}</span>` : ''}
+        </div>
+        ${refText ? `<p style="font-size:11px;color:#6b7280;margin-top:8px;">Reference range: <b style="color:#374151;">${refText}</b></p>` : ''}
     </div>
     ` : `
     <div style="text-align:center;padding:24px;color:#9ca3af;">
@@ -167,8 +198,33 @@ function renderLabReport(order: any, patient: any, barcode: string, branding: Bi
     </div>
     `}
 
+    ${history && history.length ? `
+    <div style="margin-top:20px;">
+        <h3 style="font-size:10px;font-weight:800;color:#6b7280;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Previous Results — ${order.test_type}</h3>
+        <table style="width:100%;border-collapse:collapse;font-size:11px;">
+            <thead><tr style="text-align:left;color:#9ca3af;">
+                <th style="padding:4px 8px;border-bottom:1px solid #e5e7eb;">Date</th>
+                <th style="padding:4px 8px;border-bottom:1px solid #e5e7eb;">Result</th>
+            </tr></thead>
+            <tbody>
+            ${history.map((h: any) => `<tr>
+                <td style="padding:4px 8px;border-bottom:1px solid #f3f4f6;color:#6b7280;">${h.created_at ? new Date(h.created_at).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric' }) : ''}</td>
+                <td style="padding:4px 8px;border-bottom:1px solid #f3f4f6;color:#374151;font-weight:600;">${h.result_value || '-'}</td>
+            </tr>`).join('')}
+            </tbody>
+        </table>
+    </div>
+    ` : ''}
+
     <div class="footer">
-        <p>This is a computer-generated report. No signature required.</p>
+        ${order.result_value ? `
+        <div style="display:flex;justify-content:flex-end;margin-bottom:12px;">
+            <div style="border-top:1px solid #9ca3af;width:180px;text-align:center;padding-top:4px;">
+                <p style="font-size:10px;font-weight:700;color:#374151;">Verified by: ${order.assigned_technician_id || 'Pathology Department'}</p>
+                <p style="font-size:9px;color:#9ca3af;">${branding.hospitalName}</p>
+            </div>
+        </div>` : ''}
+        <p style="font-size:9px;color:#9ca3af;">Reference ranges may vary by method and laboratory. Please correlate clinically.</p>
         <p style="margin-top:4px;">Generated on ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</p>
     </div>
 </body>

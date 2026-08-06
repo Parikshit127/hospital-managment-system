@@ -28,7 +28,8 @@ export default function LabPage() {
     const [orders, setOrders] = useState<LabOrder[]>([]);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<'Pending' | 'Completed'>('Pending');
-    const [stats, setStats] = useState({ pendingCount: 0, completedToday: 0 });
+    const [stats, setStats] = useState({ pendingCount: 0, completedToday: 0, criticalCount: 0 });
+    const [search, setSearch] = useState('');
 
     // Modal State
     const [selectedOrder, setSelectedOrder] = useState<LabOrder | null>(null);
@@ -90,6 +91,14 @@ export default function LabPage() {
         );
     };
 
+    const q = search.trim().toLowerCase();
+    const displayedOrders = q
+        ? orders.filter(o =>
+            String(o.order_id).toLowerCase().includes(q) ||
+            (o.patient_name || '').toLowerCase().includes(q) ||
+            (o.test_type || '').toLowerCase().includes(q))
+        : orders;
+
     return (
         <AppShell pageTitle="Lab Worklist" pageIcon={<FlaskConical className="h-5 w-5" />} onRefresh={loadData} refreshing={loading}>
 
@@ -131,16 +140,16 @@ export default function LabPage() {
                         </div>
                     </div>
 
-                    <div className="group relative bg-white border border-gray-200 shadow-sm rounded-2xl p-5 hover:border-rose-500/20 transition-all overflow-hidden opacity-60">
+                    <div className="group relative bg-white border border-gray-200 shadow-sm rounded-2xl p-5 hover:border-rose-500/20 transition-all overflow-hidden">
                         <div className="flex items-center justify-between mb-3">
-                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em]">Urgent Requests</span>
+                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em]">Urgent / Critical</span>
                             <div className="p-1.5 bg-rose-500/10 rounded-lg">
                                 <Zap className="h-3.5 w-3.5 text-rose-400" />
                             </div>
                         </div>
-                        <p className="text-3xl font-black text-gray-500 tracking-tight">0</p>
-                        <div className="flex items-center gap-1 mt-2 text-xs font-bold text-gray-400">
-                            <CheckCircle className="h-3 w-3" /> Normal Load
+                        <p className={`text-3xl font-black tracking-tight ${stats.criticalCount > 0 ? 'text-rose-600' : 'text-gray-900'}`}>{stats.criticalCount}</p>
+                        <div className={`flex items-center gap-1 mt-2 text-xs font-bold ${stats.criticalCount > 0 ? 'text-rose-500' : 'text-gray-400'}`}>
+                            {stats.criticalCount > 0 ? <><AlertTriangle className="h-3 w-3" /> Needs review</> : <><CheckCircle className="h-3 w-3" /> Normal Load</>}
                         </div>
                     </div>
                 </div>
@@ -163,7 +172,12 @@ export default function LabPage() {
                     </div>
                     <div className="relative hidden md:block mr-2">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300 h-4 w-4" />
-                        <input className="bg-white border border-gray-300 rounded-xl pl-9 pr-4 py-2 text-sm focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500/30 w-64 outline-none transition-all placeholder:text-gray-400 font-medium text-gray-900" placeholder="Search orders..." />
+                        <input
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            className="bg-white border border-gray-300 rounded-xl pl-9 pr-4 py-2 text-sm focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500/30 w-64 outline-none transition-all placeholder:text-gray-400 font-medium text-gray-900"
+                            placeholder="Search orders..."
+                        />
                     </div>
                 </div>
 
@@ -193,7 +207,7 @@ export default function LabPage() {
                                             </tr>
                                         ))}
                                     </>
-                                ) : orders.length === 0 ? (
+                                ) : displayedOrders.length === 0 ? (
                                     <tr>
                                         <td colSpan={activeTab === 'Completed' ? 7 : 6} className="text-center py-20">
                                             <div className="flex flex-col items-center justify-center">
@@ -206,7 +220,7 @@ export default function LabPage() {
                                         </td>
                                     </tr>
                                 ) : (
-                                    orders.map((order) => (
+                                    displayedOrders.map((order) => (
                                         <tr key={order.order_id} className="hover:bg-gray-50 transition-colors group">
                                             <td className="px-6 py-5 pl-8 text-sm font-bold text-gray-700 font-mono">#{String(order.order_id).slice(0, 8)}</td>
                                             <td className="px-6 py-5">
@@ -291,7 +305,7 @@ export default function LabPage() {
                             </div>
 
                             <div>
-                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] mb-2 ml-1">Result Value / File</label>
+                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] mb-2 ml-1">Result Value</label>
                                 <div className="relative group">
                                     <FileText className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300 group-focus-within:text-teal-400 transition-colors h-4 w-4" />
                                     <input

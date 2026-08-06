@@ -15,21 +15,27 @@ import {
 type LabTest = {
     id: number;
     test_name: string;
+    test_code: string | null;
     price: number;
     category: string | null;
     sample_type: string | null;
     unit: string | null;
     normal_range_min: number | null;
     normal_range_max: number | null;
+    critical_value_low: number | null;
+    critical_value_high: number | null;
     tax_rate: number | null;
+    turnaround_time: string | null;
+    hsn_sac_code: string | null;
     is_available: boolean;
     requires_prescription: boolean;
 };
 
 const EMPTY_FORM = {
-    test_name: '', price: '', category: '', sample_type: '',
+    test_name: '', test_code: '', price: '', category: '', sample_type: '',
     unit: '', normal_range_min: '', normal_range_max: '',
-    tax_rate: '0', requires_prescription: false,
+    critical_value_low: '', critical_value_high: '',
+    tax_rate: '0', turnaround_time: '', hsn_sac_code: '', requires_prescription: false,
 };
 
 const CATEGORIES = ['Haematology', 'Biochemistry', 'Microbiology', 'Serology', 'Urine', 'Radiology', 'Pathology', 'Other'];
@@ -68,11 +74,14 @@ export default function TestCatalogPage() {
     const openEdit = (t: LabTest) => {
         setEditingId(t.id);
         setForm({
-            test_name: t.test_name, price: String(t.price),
+            test_name: t.test_name, test_code: t.test_code || '', price: String(t.price),
             category: t.category || '', sample_type: t.sample_type || '',
             unit: t.unit || '', normal_range_min: t.normal_range_min != null ? String(t.normal_range_min) : '',
             normal_range_max: t.normal_range_max != null ? String(t.normal_range_max) : '',
-            tax_rate: String(t.tax_rate ?? 0), requires_prescription: t.requires_prescription,
+            critical_value_low: t.critical_value_low != null ? String(t.critical_value_low) : '',
+            critical_value_high: t.critical_value_high != null ? String(t.critical_value_high) : '',
+            tax_rate: String(t.tax_rate ?? 0), turnaround_time: t.turnaround_time || '',
+            hsn_sac_code: t.hsn_sac_code || '', requires_prescription: t.requires_prescription,
         });
         setModalOpen(true);
     };
@@ -83,13 +92,18 @@ export default function TestCatalogPage() {
         setSaving(true);
         const payload = {
             test_name: form.test_name.trim(),
+            test_code: form.test_code || undefined,
             price: parseFloat(form.price),
             category: form.category || undefined,
             sample_type: form.sample_type || undefined,
             unit: form.unit || undefined,
             normal_range_min: form.normal_range_min ? parseFloat(form.normal_range_min) : undefined,
             normal_range_max: form.normal_range_max ? parseFloat(form.normal_range_max) : undefined,
+            critical_value_low: form.critical_value_low ? parseFloat(form.critical_value_low) : undefined,
+            critical_value_high: form.critical_value_high ? parseFloat(form.critical_value_high) : undefined,
             tax_rate: parseFloat(form.tax_rate) || 0,
+            turnaround_time: form.turnaround_time || undefined,
+            hsn_sac_code: form.hsn_sac_code || undefined,
             requires_prescription: form.requires_prescription,
         };
         const res = editingId
@@ -123,7 +137,7 @@ export default function TestCatalogPage() {
 
     return (
         <AppShell
-            pageTitle="Test Catalog & Panels"
+            pageTitle="Test Catalog"
             pageIcon={<FlaskConical className="h-5 w-5" />}
             onRefresh={load}
             refreshing={loading}
@@ -301,6 +315,32 @@ export default function TestCatalogPage() {
                                 <div>
                                     <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Normal Range Max</label>
                                     <input type="number" step="any" value={form.normal_range_max} onChange={e => setForm({ ...form, normal_range_max: e.target.value })}
+                                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Test Code</label>
+                                    <input value={form.test_code} onChange={e => setForm({ ...form, test_code: e.target.value })}
+                                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Turnaround Time</label>
+                                    <input value={form.turnaround_time} onChange={e => setForm({ ...form, turnaround_time: e.target.value })}
+                                        placeholder="e.g. 24 hrs"
+                                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Critical Value Low</label>
+                                    <input type="number" step="any" value={form.critical_value_low} onChange={e => setForm({ ...form, critical_value_low: e.target.value })}
+                                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Critical Value High</label>
+                                    <input type="number" step="any" value={form.critical_value_high} onChange={e => setForm({ ...form, critical_value_high: e.target.value })}
+                                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
+                                </div>
+                                <div className="col-span-2">
+                                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">HSN / SAC Code</label>
+                                    <input value={form.hsn_sac_code} onChange={e => setForm({ ...form, hsn_sac_code: e.target.value })}
                                         className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" />
                                 </div>
                             </div>

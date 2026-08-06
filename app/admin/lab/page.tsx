@@ -162,8 +162,8 @@ export default function AdminLabHub() {
                                 <FlaskConical className="h-6 w-6 text-blue-500" />
                             </div>
                             <div>
-                                <h3 className="text-sm font-bold text-gray-900">Test Catalog & Panels</h3>
-                                <p className="text-xs text-gray-400 mt-0.5">Manage lab tests, panels, pricing & reference ranges</p>
+                                <h3 className="text-sm font-bold text-gray-900">Test Catalog</h3>
+                                <p className="text-xs text-gray-400 mt-0.5">Manage lab tests, pricing & reference ranges</p>
                             </div>
                         </div>
                         <ChevronRight className="h-5 w-5 text-gray-300 group-hover:text-blue-500 transition-colors" />

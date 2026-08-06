@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { AppShell } from '@/app/components/layout/AppShell';
-import { FileText, Clock, BarChart } from 'lucide-react';
+import { FileText, Clock, BarChart, Download, Printer } from 'lucide-react';
 import { getLabTATReport } from '@/app/actions/lab-actions';
 import {
     Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, BarElement
@@ -24,6 +24,18 @@ export default function LabReportsPage() {
     };
 
     useEffect(() => { loadData(); }, [days]);
+
+    const exportCSV = () => {
+        const rows: (string | number)[][] = [['Test Name', 'Volume'], ...((report?.testCounts || []).map((t: any) => [t.test, t.count]))];
+        const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `lab-report-last-${days}-days.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+    };
 
     const chartOptions = { responsive: true, plugins: { legend: { position: 'bottom' as const } } };
 
@@ -49,10 +61,18 @@ export default function LabReportsPage() {
             onRefresh={loadData}
             refreshing={refreshing}
             headerActions={
-                <select value={days} onChange={e => setDays(Number(e.target.value))} className="bg-white border border-gray-200 text-sm font-bold text-gray-700 py-1.5 px-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500/20">
-                    <option value={7}>Last 7 Days</option>
-                    <option value={30}>Last 30 Days</option>
-                </select>
+                <div className="flex items-center gap-2">
+                    <select value={days} onChange={e => setDays(Number(e.target.value))} className="bg-white border border-gray-200 text-sm font-bold text-gray-700 py-1.5 px-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500/20">
+                        <option value={7}>Last 7 Days</option>
+                        <option value={30}>Last 30 Days</option>
+                    </select>
+                    <button onClick={exportCSV} disabled={!report?.testCounts?.length} className="inline-flex items-center gap-1.5 bg-white border border-gray-200 text-sm font-bold text-gray-700 py-1.5 px-3 rounded-lg hover:bg-gray-50 disabled:opacity-50">
+                        <Download className="h-4 w-4" /> Export CSV
+                    </button>
+                    <button onClick={() => window.print()} className="inline-flex items-center gap-1.5 bg-white border border-gray-200 text-sm font-bold text-gray-700 py-1.5 px-3 rounded-lg hover:bg-gray-50">
+                        <Printer className="h-4 w-4" /> Print
+                    </button>
+                </div>
             }
         >
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">

@@ -85,6 +85,9 @@ import {
   BookOpen,
   Landmark,
   TrendingUp,
+  Layers,
+  PhoneCall,
+  Cpu,
 } from "lucide-react";
 
 interface NavItem {
@@ -238,8 +241,11 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
         { label: "Dashboard", href: "/lab/dashboard", icon: LayoutDashboard },
         { label: "Worklist", href: "/lab/worklist", icon: ClipboardCheck },
         { label: "Lab Orders", href: "/lab/technician", icon: FlaskConical },
+        { label: "Panels", href: "/lab/panels", icon: Layers },
+        { label: "Analyzer", href: "/lab/analyzer", icon: Cpu },
         { label: "Inventory", href: "/lab/inventory", icon: Package },
         { label: "Reports", href: "/lab/reports", icon: BarChart3 },
+        { label: "Critical Log", href: "/lab/critical-log", icon: PhoneCall },
         { label: "MIS Reports", href: "/lab/mis-reports", icon: FileSpreadsheet },
       ],
     },

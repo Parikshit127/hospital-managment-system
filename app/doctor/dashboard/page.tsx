@@ -51,6 +51,7 @@ import { getWardsWithBeds } from "@/app/actions/ipd-actions";
 import { dischargePatient } from "@/app/actions/discharge-actions";
 import { registerPatient } from "@/app/actions/register-patient";
 import { getPatientTriageData } from "@/app/actions/triage-actions";
+import { getTestCatalog } from "@/app/actions/lab-actions";
 import {
     getPendingCallRequests,
     respondToVideoCall,
@@ -112,8 +113,19 @@ export default function DoctorDashboard() {
   const [prescriptionData, setPrescriptionData] = useState<PrescriptionData | null>(null);
 
   const [selectedTest, setSelectedTest] = useState("");
+  const [labCatalog, setLabCatalog] = useState<{ test_name: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Load the lab test catalog so the "Order Test" dropdown reflects real,
+  // orderable tests (test_type then matches a catalog test_name — enabling the
+  // reference range, auto-flag, and formatted report).
+  useEffect(() => {
+    (async () => {
+      const res = await getTestCatalog();
+      if (res.success) setLabCatalog((res.data as any[]).filter((t) => t.is_available !== false));
+    })();
+  }, []);
   const [searchTerm, setSearchTerm] = useState("");
   const [history, setHistory] = useState<any[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
@@ -2173,32 +2185,13 @@ export default function DoctorDashboard() {
                           className={`flex-1 ${inputCls}`}
                         >
                           <option value="" className="bg-white text-gray-900">
-                            Select Test Type...
+                            {labCatalog.length ? "Select Test Type..." : "No tests in catalog — add them in Lab → Test Catalog"}
                           </option>
-                          <option
-                            value="Complete Blood Count (CBC)"
-                            className="bg-white text-gray-900"
-                          >
-                            Complete Blood Count (CBC)
-                          </option>
-                          <option
-                            value="Lipid Profile"
-                            className="bg-white text-gray-900"
-                          >
-                            Lipid Profile
-                          </option>
-                          <option
-                            value="Dengue NS1 Antigen"
-                            className="bg-white text-gray-900"
-                          >
-                            Dengue NS1 Antigen
-                          </option>
-                          <option
-                            value="Liver Function Test"
-                            className="bg-white text-gray-900"
-                          >
-                            Liver Function Test
-                          </option>
+                          {labCatalog.map((t) => (
+                            <option key={t.test_name} value={t.test_name} className="bg-white text-gray-900">
+                              {t.test_name}
+                            </option>
+                          ))}
                         </select>
                         <button
                           onClick={handleOrderLab}
