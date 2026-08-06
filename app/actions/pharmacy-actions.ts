@@ -577,6 +577,11 @@ export async function generateInvoice(
                     // Batch MRP is the printed pack price for THIS strip; the medicine
                     // master value is only a fallback for batches loaded without one.
                     mrp: Number(batch.mrp) || Number(batch.medicine.mrp) || unitPrice,
+                    // Pack size is a product attribute, so it has to travel on the
+                    // returned line for the counter print's PACK column. Same gap
+                    // expiry_date had: the print reads item.pack, but this payload
+                    // never carried it, so PACK printed "—" on every counter bill.
+                    pack: batch.medicine.pack || null,
                     batch_no: batch.batch_no,
                     batch_id: batch.id,
                     expiry_date: batch.expiry_date,
@@ -655,6 +660,7 @@ export async function generateInvoice(
                     tax_amount: taxAmount,
                     hsn_sac_code: medicine.hsn_sac_code || '3004',
                     mrp: Number(medicine.mrp) || unitPrice,
+                    pack: medicine.pack || null,
                     batch_no: 'N/A',
                     batch_id: null,
                     expiry_date: null, // catalog-only sale — no physical batch, so no expiry

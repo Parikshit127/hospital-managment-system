@@ -190,8 +190,14 @@ export default async function PharmacyInvoiceViewPage({ params, searchParams }: 
     const billProductNames = Array.from(new Set(
         items.map((i: any) => parseLineParts(i.description).name).filter(Boolean),
     )) as string[];
+    // Matched case-insensitively: `brand_name IN (...)` is case-sensitive in
+    // Postgres, so a line description that differs from the master by so much as
+    // one letter's case returned no row and printed "—".
     const packRows = billProductNames.length > 0 ? await prisma.pharmacy_medicine_master.findMany({
-        where: { brand_name: { in: billProductNames }, organizationId: session.organization_id },
+        where: {
+            organizationId: session.organization_id,
+            OR: billProductNames.map((n) => ({ brand_name: { equals: n, mode: 'insensitive' as const } })),
+        },
         select: { brand_name: true, pack: true },
     }) : [];
     const packMap = new Map<string, string>();

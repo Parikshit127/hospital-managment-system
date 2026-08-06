@@ -101,8 +101,13 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ admi
             postings.map((p: any) => parseDesc(p.description).name).filter(Boolean),
         )) as string[];
         const packRows = productNames.length > 0
+            // Case-insensitive for the same reason as the counter bill: an exact
+            // `IN (...)` misses on any casing difference and prints "—".
             ? await prisma.pharmacy_medicine_master.findMany({
-                where: { brand_name: { in: productNames }, organizationId },
+                where: {
+                    organizationId,
+                    OR: productNames.map((n) => ({ brand_name: { equals: n, mode: 'insensitive' as const } })),
+                },
                 select: { brand_name: true, pack: true },
             })
             : [];
