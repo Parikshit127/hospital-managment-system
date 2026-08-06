@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
 
     if (search) {
         invoices = invoices.filter(inv =>
-            inv.invoice_number.toLowerCase().includes(search) ||
+            String(inv.invoice_number ?? '').toLowerCase().includes(search) ||
             (inv.vendor?.vendor_name || '').toLowerCase().includes(search) ||
             (inv.po?.po_number || '').toLowerCase().includes(search)
         );

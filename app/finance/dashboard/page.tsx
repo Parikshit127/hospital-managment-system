@@ -132,7 +132,9 @@ export default function FinanceDashboard() {
     const filteredInvoices = invoices.filter(inv => {
         if (!searchQuery) return true;
         const q = searchQuery.toLowerCase();
-        return inv.invoice_number.toLowerCase().includes(q) || inv.patient?.full_name?.toLowerCase().includes(q) || inv.patient_id.toLowerCase().includes(q);
+        // invoice_number and patient_id can both be null on historical rows.
+        const hay = (v: unknown) => String(v ?? '').toLowerCase();
+        return hay(inv.invoice_number).includes(q) || hay(inv.patient?.full_name).includes(q) || hay(inv.patient_id).includes(q);
     });
 
     const kpiCards = [

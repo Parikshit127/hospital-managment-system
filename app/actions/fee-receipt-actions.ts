@@ -397,12 +397,15 @@ export async function listFeeReceipts(filter: ListFeeReceiptsFilter = {}) {
                 if (filter.payment_method && r.payment_method !== filter.payment_method) return false;
                 if (filter.search?.trim()) {
                     const q = filter.search.trim().toLowerCase();
+                    // Only receipt_number was guarded; the rest are all nullable
+                    // too, so one row without an invoice number threw here.
+                    const hay = (v: unknown) => String(v ?? '').toLowerCase();
                     return (
-                        r.invoice_number.toLowerCase().includes(q) ||
-                        r.patient_id.toLowerCase().includes(q) ||
-                        r.patient_name.toLowerCase().includes(q) ||
-                        r.patient_phone.toLowerCase().includes(q) ||
-                        (r.receipt_number || "").toLowerCase().includes(q)
+                        hay(r.invoice_number).includes(q) ||
+                        hay(r.patient_id).includes(q) ||
+                        hay(r.patient_name).includes(q) ||
+                        hay(r.patient_phone).includes(q) ||
+                        hay(r.receipt_number).includes(q)
                     );
                 }
                 return true;

@@ -56,11 +56,18 @@ export default function InvoicesPage() {
     const filtered = invoices.filter(inv => {
         const walkinName = inv.patient_id === 'WALKIN' ? parseWalkinNote(inv.notes).name : '';
         const walkinContact = inv.patient_id === 'WALKIN' ? parseWalkinNote(inv.notes).contact : '';
-        const matchesSearch = inv.invoice_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            inv.patient?.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            walkinName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            inv.patient?.phone?.includes(searchTerm) ||
-            walkinContact.includes(searchTerm);
+        // invoices.invoice_number is nullable (historical rows), and the LAB rows
+        // in this union take theirs from lab_orders.barcode — so a single row with
+        // no number used to crash the whole page with
+        // "Cannot read properties of null (reading 'toLowerCase')".
+        const q = searchTerm.toLowerCase();
+        const hay = (v: unknown) => String(v ?? '').toLowerCase();
+        const matchesSearch = !searchTerm
+            || hay(inv.invoice_number).includes(q)
+            || hay(inv.patient?.full_name).includes(q)
+            || hay(walkinName).includes(q)
+            || hay(inv.patient?.phone).includes(q)
+            || hay(walkinContact).includes(q);
         // OPD = everything that isn't IPD (matches the reception revenue card split).
         const matchesRev = !revFilter
             || (revFilter === 'ipd' ? inv.source === 'IPD' : inv.source !== 'IPD');

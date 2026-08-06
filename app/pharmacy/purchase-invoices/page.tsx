@@ -223,7 +223,7 @@ export default function PurchaseInvoicesPage() {
             if (q) {
                 const vendorName = (inv.vendor?.vendor_name || '').toLowerCase();
                 const poNumber = (inv.po?.po_number || '').toLowerCase();
-                if (!inv.invoice_number.toLowerCase().includes(q) && !vendorName.includes(q) && !poNumber.includes(q)) return false;
+                if (!String(inv.invoice_number ?? '').toLowerCase().includes(q) && !vendorName.includes(q) && !poNumber.includes(q)) return false;
             }
             const invDate = new Date(inv.invoice_date);
             if (dateFrom && invDate < new Date(dateFrom + 'T00:00:00')) return false;
