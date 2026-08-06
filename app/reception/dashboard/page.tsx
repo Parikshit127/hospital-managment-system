@@ -79,7 +79,7 @@ function getOpdColValue(p: any, colKey: string): string {
     }
     if (colKey === 'registered') {
         if (!p.created_at) return '';
-        return new Date(p.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' });
+        return new Date(p.created_at).toLocaleDateString('en-IN', { timeZone: IST, day: '2-digit', month: 'short', year: '2-digit' });
     }
     return '';
 }
@@ -97,6 +97,8 @@ export default function ReceptionDashboard() {
     const [search, setSearch] = useState('');
     const [department, setDepartment] = useState('');
     const [dateRange, setDateRange] = useState<'today' | 'week' | 'month' | 'all'>('all');
+    // Worklist filter: of the patients seen in the selected period, who still has no bill?
+    const [billedStatus, setBilledStatus] = useState<'' | 'billed' | 'unbilled'>('');
     const [paymentType, setPaymentType] = useState('');
     const [fromDate, setFromDate] = useState('');
     const [toDate, setToDate] = useState('');
@@ -277,7 +279,7 @@ export default function ReceptionDashboard() {
         setLoading(true);
         try {
             const [patientsRes, statsRes, revRes] = await Promise.all([
-                getRegisteredPatients({ search, department, page, limit: 25, dateRange, paymentType, fromDate, toDate, doctorId: doctorFilter || undefined }),
+                getRegisteredPatients({ search, department, page, limit: 25, dateRange, paymentType, fromDate, toDate, doctorId: doctorFilter || undefined, billedStatus: billedStatus || undefined }),
                 getReceptionStats(),
                 getReceptionRevenueToday(),
             ]);
@@ -292,7 +294,7 @@ export default function ReceptionDashboard() {
             console.error('Reception load error:', err);
         }
         setLoading(false);
-    }, [search, department, page, dateRange, paymentType, fromDate, toDate, doctorFilter]);
+    }, [search, department, page, dateRange, paymentType, fromDate, toDate, doctorFilter, billedStatus]);
 
     // ── Expected arrivals loading ──
     const loadArrivals = useCallback(async () => {
@@ -408,7 +410,8 @@ export default function ReceptionDashboard() {
         Gender: p.gender ?? '',
         Phone: p.phone ?? '',
         Department: p.department ?? '',
-        Registered: p.created_at ? new Date(p.created_at).toLocaleDateString('en-GB') : '',
+        Registered: p.created_at ? new Date(p.created_at).toLocaleDateString('en-GB', { timeZone: IST }) : '',
+        Billed: p.billedInRange ? 'Yes' : 'No',
         Status: p.lastAppointmentStatus ?? '',
         'Balance (₹)': Number(p.totalBalance || 0),
     })), 'opd-patients.xlsx');
@@ -584,6 +587,13 @@ export default function ReceptionDashboard() {
                             <div className="p-1.5 bg-orange-50 rounded-lg"><UserPlus className="h-3.5 w-3.5 text-orange-500" /></div>
                         </div>
                         <p className="text-2xl font-black text-gray-900">{stats?.todayRegistrations || 0}</p>
+                        {/* Registrations that went straight to a bed are hidden from the OPD
+                            list below, which is why the two numbers differ. Say so here. */}
+                        {stats?.admittedToday > 0 && (
+                            <p className="text-[10px] font-semibold text-gray-400 mt-0.5">
+                                <span className="text-blue-600">{stats.admittedToday}</span> admitted to IPD · {Math.max(0, (stats.todayRegistrations || 0) - stats.admittedToday)} in OPD
+                            </p>
+                        )}
                     </div>
                     <div className="bg-white border border-gray-200 shadow-sm rounded-2xl p-4">
                         <div className="flex items-center justify-between mb-2">
@@ -609,6 +619,22 @@ export default function ReceptionDashboard() {
                         <p className="text-[10px] font-semibold text-gray-400 mt-0.5">Collected: <span className="text-emerald-600">{formatMoney(revenueCollected)}</span> · billed</p>
                     </Link>
                 </div>
+
+                {/* Unfinalised bills — money that was never collected because a bill was
+                    left half-written. A task, not a KPI, so it only appears when there is
+                    one, rather than sitting on the dashboard as a permanent zero. */}
+                {stats?.draftCount > 0 && (
+                    <Link
+                        href="/billing?status=Draft"
+                        className="flex items-center justify-between gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 hover:bg-amber-100 transition-colors group"
+                    >
+                        <span className="flex items-center gap-2 text-xs font-bold text-amber-800">
+                            <FileText className="h-3.5 w-3.5 shrink-0" />
+                            {stats.draftCount} unfinalised bill{stats.draftCount !== 1 ? 's' : ''} · {formatMoney(stats.draftValue)} not collected
+                        </span>
+                        <span className="text-[10px] font-bold text-amber-700 uppercase tracking-wide group-hover:underline whitespace-nowrap">Review in billing →</span>
+                    </Link>
+                )}
 
 
 
@@ -680,15 +706,32 @@ export default function ReceptionDashboard() {
                         <option value="Dermatology">Dermatology</option>
                         <option value="Pulmonology">Pulmonology</option>
                     </select>
+                    {/* Says "Seen" because the range now covers anyone registered, billed
+                        or scheduled in the period — not just that period's registrations. */}
                     <select
                         value={dateRange}
                         onChange={e => { setDateRange(e.target.value as any); setPage(1); }}
+                        title="Patients seen in this period — registered, billed or scheduled"
                         className="px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs text-gray-700 hover:bg-gray-50 focus:outline-none focus:border-orange-400 transition-colors shadow-sm cursor-pointer"
                     >
-                        <option value="all">All Time</option>
-                        <option value="today">Today</option>
-                        <option value="week">This Week</option>
-                        <option value="month">This Month</option>
+                        <option value="all">Seen: All Time</option>
+                        <option value="today">Seen: Today</option>
+                        <option value="week">Seen: This Week</option>
+                        <option value="month">Seen: This Month</option>
+                    </select>
+                    <select
+                        value={billedStatus}
+                        onChange={e => { setBilledStatus(e.target.value as any); setPage(1); }}
+                        title="Whether this visit has been billed in the selected period"
+                        className={`px-3 py-2 border rounded-xl text-xs transition-colors shadow-sm cursor-pointer focus:outline-none focus:border-orange-400 ${
+                            billedStatus === 'unbilled'
+                                ? 'bg-amber-50 border-amber-300 text-amber-800 font-bold'
+                                : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
+                        }`}
+                    >
+                        <option value="">All Billing</option>
+                        <option value="unbilled">Not billed</option>
+                        <option value="billed">Billed</option>
                     </select>
                     <select
                         value={paymentType}
@@ -768,6 +811,7 @@ export default function ReceptionDashboard() {
                                         { label: 'Category', key: 'category', type: 'filter' },
                                         { label: 'Doctor', key: 'doctor', type: 'filter' },
                                         { label: 'Registered', key: 'registered', type: 'filter' },
+                                        { label: 'Billing', key: '', type: 'plain' },
                                         { label: 'Balance', key: '', type: 'plain' },
                                         { label: 'Actions', key: '', type: 'plain' },
                                     ] as { label: string; key: string; type: string }[]).map(col => (
@@ -957,7 +1001,14 @@ export default function ReceptionDashboard() {
                                         </td>
                                         <td className="px-4 py-3 text-gray-600 text-xs">{patient.doctorName || '-'}</td>
                                         <td className="px-4 py-3 text-gray-400 text-xs">
-                                            {new Date(patient.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' })}
+                                            {new Date(patient.created_at).toLocaleDateString('en-IN', { timeZone: IST, day: '2-digit', month: 'short', year: '2-digit' })}
+                                        </td>
+                                        <td className="px-4 py-3">
+                                            {patient.billedInRange ? (
+                                                <span className="inline-flex items-center px-2 py-0.5 text-[10px] font-bold rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">Billed</span>
+                                            ) : (
+                                                <span className="inline-flex items-center px-2 py-0.5 text-[10px] font-bold rounded-full bg-amber-50 text-amber-700 border border-amber-200" title="No OPD bill in the selected period">Not billed</span>
+                                            )}
                                         </td>
                                         <td className="px-4 py-3">
                                             {patient.totalBalance > 0 ? (

@@ -66,9 +66,11 @@ export async function getRegisteredPatients(options?: {
     limit?: number;
     dateRange?: 'today' | 'week' | 'month' | 'all';
     paymentType?: string; // cash | corporate | tpa_insurance
-    fromDate?: string;     // YYYY-MM-DD (registration date, inclusive)
-    toDate?: string;       // YYYY-MM-DD (registration date, inclusive)
+    fromDate?: string;     // YYYY-MM-DD (inclusive)
+    toDate?: string;       // YYYY-MM-DD (inclusive)
     doctorId?: string;
+    /** Worklist filter: was this visit billed within the selected period? */
+    billedStatus?: 'billed' | 'unbilled';
 }) {
     try {
         const { db } = await requireTenantContext();
@@ -120,33 +122,59 @@ export async function getRegisteredPatients(options?: {
             where.patient_type = options.paymentType;
         }
 
-        // Date filter — an explicit From/To range (on registration date) takes
-        // precedence; otherwise fall back to the relative dateRange preset.
+        // Date filter — an explicit From/To range takes precedence; otherwise fall
+        // back to the relative dateRange preset. Both are anchored to the IST calendar
+        // day (India has no DST): setHours on a UTC box mapped the date to 05:30 IST,
+        // so a whole day's early activity was missed.
+        let activeRange: { gte?: Date; lte?: Date } | null = null;
         if (options?.fromDate || options?.toDate) {
-            const range: Record<string, Date> = {};
-            // Interpret the picked YYYY-MM-DD as an IST calendar day (India has no DST),
-            // not the server's UTC-local midnight — setHours on a UTC box mapped the
-            // date to 05:30 IST, so a whole day's early registrations were missed.
+            const range: { gte?: Date; lte?: Date } = {};
             if (options.fromDate && /^\d{4}-\d{2}-\d{2}$/.test(options.fromDate)) {
                 range.gte = new Date(`${options.fromDate}T00:00:00+05:30`);
             }
             if (options.toDate && /^\d{4}-\d{2}-\d{2}$/.test(options.toDate)) {
                 range.lte = new Date(`${options.toDate}T23:59:59.999+05:30`);
             }
-            if (Object.keys(range).length) where.created_at = range;
+            if (Object.keys(range).length) activeRange = range;
         } else if (options?.dateRange && options.dateRange !== 'all') {
-            // Anchor to the org's IST calendar day (same helper master billing uses),
-            // not the server's UTC midnight — that's the whole point of "today".
             const { start: todayStart, end: todayEnd } = getTodayRange();
             const DAY = 24 * 60 * 60 * 1000;
             if (options.dateRange === 'today') {
-                where.created_at = { gte: todayStart, lte: todayEnd };
+                activeRange = { gte: todayStart, lte: todayEnd };
             } else if (options.dateRange === 'week') {
-                where.created_at = { gte: new Date(todayStart.getTime() - 6 * DAY), lte: todayEnd };
+                activeRange = { gte: new Date(todayStart.getTime() - 6 * DAY), lte: todayEnd };
             } else {
-                where.created_at = { gte: new Date(todayStart.getTime() - 29 * DAY), lte: todayEnd };
+                activeRange = { gte: new Date(todayStart.getTime() - 29 * DAY), lte: todayEnd };
             }
         }
+
+        // The range means "was seen in OPD during this period", NOT "registered during
+        // this period". Filtering on created_at alone hid every returning patient: on a
+        // sample day 19 patients had OPD activity but only 13 had registered that day,
+        // so a third of the day's actual footfall never appeared in the list — while
+        // their bills did show up in Master Billing, which is what made the two screens
+        // look like they disagreed.
+        const seenInRange = activeRange
+            ? {
+                OR: [
+                    { created_at: activeRange },
+                    { invoices: { some: { invoice_type: { in: ['OPD', 'OPD_FEE'] }, created_at: activeRange } } },
+                    { appointments: { some: { appointment_date: activeRange } } },
+                ],
+            }
+            : null;
+
+        // Billed / not-billed worklist filter, scoped to the same period so the question
+        // is "did today's visit get billed?" rather than "has this patient ever paid?".
+        const billedMatch = {
+            invoice_type: { in: ['OPD', 'OPD_FEE'] },
+            status: { not: 'Cancelled' },
+            ...(activeRange ? { created_at: activeRange } : {}),
+        };
+        const billedFilter =
+            options?.billedStatus === 'billed' ? { invoices: { some: billedMatch } }
+            : options?.billedStatus === 'unbilled' ? { invoices: { none: billedMatch } }
+            : null;
 
         // Doctor filter — match patients who have an appointment or invoice with this doctor
         if (options?.doctorId) {
@@ -183,14 +211,13 @@ export async function getRegisteredPatients(options?: {
                 { invoices: { some: { invoice_type: { in: ['OPD', 'OPD_FEE'] } } } },
             ],
         };
+        // Everything that needs its own OR-block goes through AND — Prisma allows only
+        // one top-level OR, and the free-text search already owns it.
+        const andClauses = [opdVisibility, seenInRange, billedFilter].filter(Boolean) as any[];
         if (where.AND) {
-            if (Array.isArray(where.AND)) {
-                (where.AND as any[]).push(opdVisibility);
-            } else {
-                where.AND = [where.AND as any, opdVisibility];
-            }
+            where.AND = Array.isArray(where.AND) ? [...(where.AND as any[]), ...andClauses] : [where.AND as any, ...andClauses];
         } else {
-            where.AND = [opdVisibility];
+            where.AND = andClauses;
         }
 
         const [data, total] = await Promise.all([
@@ -216,15 +243,24 @@ export async function getRegisteredPatients(options?: {
         ]);
 
         const patientIds = data.map((p: any) => p.patient_id);
-        const [balances, draftRows] = await Promise.all([
+        const [balances, draftRows, billedRows] = await Promise.all([
             getPatientBalances(patientIds),
             db.invoices.groupBy({
                 by: ['patient_id'],
                 where: { patient_id: { in: patientIds }, status: 'Draft' },
                 _count: { _all: true },
             }),
+            // One grouped query for the whole page rather than an include per row —
+            // a nested include costs a round trip per relation per level (~126ms each
+            // against the pooler), which would dominate this page's load.
+            db.invoices.groupBy({
+                by: ['patient_id'],
+                where: { patient_id: { in: patientIds }, ...billedMatch },
+                _count: { _all: true },
+            }),
         ]);
         const draftSet = new Set((draftRows as any[]).map(r => r.patient_id));
+        const billedSet = new Set((billedRows as any[]).map(r => r.patient_id));
 
         return {
             success: true,
@@ -236,6 +272,7 @@ export async function getRegisteredPatients(options?: {
                 doctorId: p.appointments[0]?.doctor_id || p.invoices?.[0]?.doctor_id || null,
                 totalBalance: balances[p.patient_id]?.totalBalance || 0,
                 hasDraftBill: draftSet.has(p.patient_id),
+                billedInRange: billedSet.has(p.patient_id),
             })),
             total,
             totalPages: Math.ceil(total / limit),
@@ -257,7 +294,7 @@ export async function getReceptionStats() {
         const tz = await getOrgTimezone();
         const { start: todayStart, end: todayEnd } = getTodayRange(tz);
 
-        const [todayRegistrations, appointmentsByStatus, totalPatients] = await Promise.all([
+        const [todayRegistrations, appointmentsByStatus, totalPatients, admittedToday, draftAgg] = await Promise.all([
             db.oPD_REG.count({
                 where: { created_at: { gte: todayStart, lte: todayEnd } },
             }),
@@ -267,6 +304,19 @@ export async function getReceptionStats() {
                 _count: { _all: true },
             }),
             db.oPD_REG.count(),
+            // How many of today's registrations were admitted straight to IPD. They're
+            // hidden from the OPD list on purpose, which is why the registrations count
+            // and the visible row count differ — surface the reason on the card.
+            db.admissions.count({
+                where: { patient: { created_at: { gte: todayStart, lte: todayEnd } } },
+            }),
+            // Unfinalised bills: real money that was never collected because someone
+            // left a bill half-written. Not time-boxed — an old draft is the worst kind.
+            db.invoices.aggregate({
+                where: { status: 'Draft' },
+                _count: { _all: true },
+                _sum: { net_amount: true },
+            }),
         ]);
 
         const pendingStatuses = new Set(['Pending', 'Scheduled', 'Checked In']);
@@ -281,7 +331,12 @@ export async function getReceptionStats() {
 
         return {
             success: true,
-            data: { todayRegistrations, todayAppointments, pendingAppointments, completedToday, totalPatients },
+            data: {
+                todayRegistrations, todayAppointments, pendingAppointments, completedToday, totalPatients,
+                admittedToday,
+                draftCount: draftAgg._count._all || 0,
+                draftValue: Number(draftAgg._sum.net_amount || 0),
+            },
         };
     } catch (error) {
         console.error('Reception Stats Error:', error);
