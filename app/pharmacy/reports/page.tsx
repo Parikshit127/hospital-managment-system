@@ -128,7 +128,7 @@ export default function PharmacyReportsPage() {
                 { Metric: 'OPD Bills Count', Value: rev.byChannel.opd.billCount },
                 { Metric: 'Counter Sales Revenue', Value: rev.byChannel.counter.revenue },
                 { Metric: 'Counter Bills Count', Value: rev.byChannel.counter.billCount },
-                { Metric: 'Gross Margin %', Value: `${rev.grossMarginPct}%` },
+                { Metric: 'Gross Margin %', Value: rev.grossMarginPct == null ? 'n/a (channel filter applied)' : `${rev.grossMarginPct}%` },
                 { Metric: 'COGS', Value: rev.cogs },
                 { Metric: 'Expiry Write-off Value', Value: data?.expiryWriteOffValue || 0 },
                 { Metric: 'Expired Batches Count', Value: data?.expiredCount || 0 },
@@ -203,7 +203,7 @@ export default function PharmacyReportsPage() {
             xml += `    <OpdBills>${rev.byChannel.opd.billCount}</OpdBills>\n`;
             xml += `    <CounterRevenue>${rev.byChannel.counter.revenue}</CounterRevenue>\n`;
             xml += `    <CounterBills>${rev.byChannel.counter.billCount}</CounterBills>\n`;
-            xml += `    <GrossMarginPct>${rev.grossMarginPct}</GrossMarginPct>\n`;
+            xml += `    <GrossMarginPct>${rev.grossMarginPct ?? ''}</GrossMarginPct>\n`;
             xml += `    <Cogs>${rev.cogs}</Cogs>\n`;
             xml += `    <ExpiryWriteOffValue>${data?.expiryWriteOffValue || 0}</ExpiryWriteOffValue>\n`;
             xml += `    <TotalStockValue>${data?.totalStockValue || 0}</TotalStockValue>\n`;
@@ -459,14 +459,29 @@ export default function PharmacyReportsPage() {
                         </div>
                     </div>
 
+                    {rev.truncated && (
+                        <div className="mb-4 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                            <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+                            <p className="text-xs font-semibold text-amber-800">{rev.truncatedNote}</p>
+                        </div>
+                    )}
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                         <div className="bg-white border border-gray-200 rounded-2xl p-5">
                             <div className="flex items-center gap-2 mb-2">
                                 <TrendingUp className="h-4 w-4 text-violet-500" />
                                 <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Gross Margin</span>
                             </div>
-                            <p className="text-2xl font-black text-gray-900">{rev.grossMarginPct}%</p>
-                            <p className="text-xs text-gray-400 mt-1">COGS {inr(rev.cogs)}</p>
+                            {rev.grossMarginPct == null ? (
+                                <>
+                                    <p className="text-2xl font-black text-gray-300">&mdash;</p>
+                                    <p className="text-xs text-gray-400 mt-1">Not measurable per channel &mdash; clear the channel filter</p>
+                                </>
+                            ) : (
+                                <>
+                                    <p className="text-2xl font-black text-gray-900">{rev.grossMarginPct}%</p>
+                                    <p className="text-xs text-gray-400 mt-1">COGS {inr(rev.cogs)}</p>
+                                </>
+                            )}
                         </div>
                         <div className="bg-white border border-gray-200 rounded-2xl p-5">
                             <div className="flex items-center gap-2 mb-2">

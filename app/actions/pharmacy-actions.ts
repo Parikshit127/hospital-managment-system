@@ -1419,14 +1419,38 @@ const cachedDashboardStats = (organizationId: string) => unstable_cache(
             db.pharmacy_orders.count({ where: { status: 'Pending' } }),
             db.pharmacy_batch_inventory.count({
                 where: {
-                    expiry_date: { lte: thirtyDaysFromNow },
+                    // Two fixes: pharmacy_batch_inventory is not tenant-scoped
+                    // (no organizationId column) so this counted EVERY hospital's
+                    // batches; and with no lower bound it counted already-expired
+                    // stock as "expiring soon", which is a different problem the
+                    // pharmacist needs to act on differently.
+                    medicine: { organizationId },
+                    expiry_date: { gt: new Date(), lte: thirtyDaysFromNow },
                     current_stock: { gt: 0 }
                 }
             }),
-            db.pharmacy_orders.aggregate({
-                _sum: { total_amount: true },
-                where: { status: 'Completed', created_at: { gte: today } }
-            }),
+            // Counter sales never create a pharmacy_orders row, so this figure
+            // excluded most of the day's takings. Read billed revenue from
+            // invoices, exactly as getPharmacyAnalytics and the reports page do.
+            db.$queryRaw<Array<{ revenue: number }>>`
+                SELECT COALESCE(SUM(r.revenue), 0)::float AS revenue FROM (
+                    SELECT COALESCE(i.net_amount, 0)::float AS revenue
+                    FROM "invoices" i
+                    WHERE i."organizationId" = ${organizationId}
+                      AND i.invoice_type IN ('Pharmacy', 'PHARMACY')
+                      AND i.status <> 'Cancelled'
+                      AND i.created_at >= ${today}
+                    UNION ALL
+                    SELECT (COALESCE(it.net_price, 0) + COALESCE(it.tax_amount, 0))::float AS revenue
+                    FROM "invoice_items" it
+                    JOIN "invoices" i2 ON i2.id = it.invoice_id
+                    WHERE it."organizationId" = ${organizationId}
+                      AND it.service_category = 'Pharmacy'
+                      AND i2.invoice_type = 'IPD'
+                      AND i2.status <> 'Cancelled'
+                      AND it.created_at >= ${today}
+                ) r
+            `,
             db.$queryRaw<Array<{ count: bigint }>>`
                 SELECT COUNT(*)::bigint AS count FROM (
                     SELECT m.id
@@ -1444,7 +1468,7 @@ const cachedDashboardStats = (organizationId: string) => unstable_cache(
             pendingOrders: pendingOrdersCount,
             lowStockAlerts: Number(lowStockRows[0]?.count ?? 0),
             expiringBatches: expiringBatchesCount,
-            todayRevenue: Number(todayRevenue._sum.total_amount) || 0,
+            todayRevenue: Number((todayRevenue as any[])[0]?.revenue ?? 0),
         };
     },
     ['pharmacy:dashboard-stats', organizationId],
@@ -3988,8 +4012,8 @@ export async function getPharmacyAnalytics() {
             expirySummaryRows,
             lowStockListRows,
             topMoversRows,
+            revenueByDayRows,
             completedOrders30d,
-            completedOrdersToday,
             pendingCount,
             returns30d,
             purchaseOrders30d,
@@ -4001,7 +4025,11 @@ export async function getPharmacyAnalytics() {
                     SELECT m.id,
                            m.min_threshold,
                            COALESCE(SUM(b.current_stock), 0) AS total_stock,
-                           COALESCE(SUM(b.current_stock * COALESCE(NULLIF(m.selling_price, 0), m.price_per_unit, 0)), 0)::float AS stock_value
+                           -- Valued at COST, matching getInventoryPage's summary.
+                           -- This used to value at selling price, so the Inventory
+                           -- screen and this dashboard showed different rupees for
+                           -- the same shelf.
+                           COALESCE(SUM(b.current_stock * COALESCE(b.cost_price, b.actual_cost, 0)), 0)::float AS stock_value
                     FROM "pharmacy_medicine_master" m
                     LEFT JOIN "pharmacy_batch_inventory" b ON b.medicine_id = m.id
                     WHERE m."organizationId" = ${organizationId} AND m.is_active = true
@@ -4027,7 +4055,7 @@ export async function getPharmacyAnalytics() {
                     COUNT(*) FILTER (WHERE b.expiry_date > ${exp60} AND b.expiry_date <= ${ninetyDays})::bigint AS expiring90_count,
                     COALESCE(SUM(
                         CASE WHEN b.expiry_date < ${now}
-                             THEN b.current_stock * COALESCE(NULLIF(m.selling_price, 0), m.price_per_unit, 0)
+                             THEN b.current_stock * COALESCE(b.cost_price, b.actual_cost, 0)
                              ELSE 0 END
                     ), 0)::float AS writeoff_value
                 FROM "pharmacy_batch_inventory" b
@@ -4064,13 +4092,41 @@ export async function getPharmacyAnalytics() {
                 ORDER BY qty DESC
                 LIMIT 10
             `,
+            // Revenue MUST come from invoices, not pharmacy_orders. Counter and
+            // walk-in sales never create a pharmacy_orders row — generateInvoice
+            // writes the invoice directly — so sourcing revenue from orders
+            // silently excluded the bulk of the pharmacy's takings and left this
+            // dashboard permanently disagreeing with /pharmacy/reports, which
+            // already reads invoices (see getPharmacyRevenueReport).
+            //
+            // Counter/OPD = standalone Pharmacy invoices; IPD = pharmacy lines on
+            // an IPD bill. Same definition the revenue report uses.
+            db.$queryRaw<Array<{ day: Date; revenue: number }>>`
+                SELECT d.day, SUM(d.revenue)::float AS revenue FROM (
+                    SELECT DATE_TRUNC('day', i.created_at) AS day,
+                           COALESCE(i.net_amount, 0)::float AS revenue
+                    FROM "invoices" i
+                    WHERE i."organizationId" = ${organizationId}
+                      AND i.invoice_type IN ('Pharmacy', 'PHARMACY')
+                      AND i.status <> 'Cancelled'
+                      AND i.created_at >= ${thirtyDaysAgo}
+                    UNION ALL
+                    SELECT DATE_TRUNC('day', it.created_at) AS day,
+                           (COALESCE(it.net_price, 0) + COALESCE(it.tax_amount, 0))::float AS revenue
+                    FROM "invoice_items" it
+                    JOIN "invoices" i2 ON i2.id = it.invoice_id
+                    WHERE it."organizationId" = ${organizationId}
+                      AND it.service_category = 'Pharmacy'
+                      AND i2.invoice_type = 'IPD'
+                      AND i2.status <> 'Cancelled'
+                      AND it.created_at >= ${thirtyDaysAgo}
+                ) d
+                GROUP BY d.day
+                ORDER BY d.day ASC
+            `,
             db.pharmacy_orders.findMany({
                 where: { status: 'Completed', created_at: { gte: thirtyDaysAgo } },
                 select: { id: true, total_amount: true, created_at: true },
-            }),
-            db.pharmacy_orders.findMany({
-                where: { status: 'Completed', created_at: { gte: today } },
-                select: { id: true, total_amount: true },
             }),
             db.pharmacy_orders.count({ where: { status: 'Pending' } }),
             db.pharmacyReturn.findMany({
@@ -4099,12 +4155,22 @@ export async function getPharmacyAnalytics() {
             `,
         ]);
 
-        // -- Revenue metrics --
-        const todayRevenue = completedOrdersToday.reduce((sum: number, o: any) => sum + Number(o.total_amount), 0);
-        const revenue30d = completedOrders30d.reduce((sum: number, o: any) => sum + Number(o.total_amount), 0);
+        // -- Revenue metrics (billed revenue, all channels) --
+        const dayKeyOf = (d: Date) => {
+            const x = new Date(d);
+            return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
+        };
+        const revenueByDayMap = new Map<string, number>();
+        for (const row of revenueByDayRows as any[]) {
+            revenueByDayMap.set(dayKeyOf(new Date(row.day)), Number(row.revenue) || 0);
+        }
+        const revenue30d = Array.from(revenueByDayMap.values()).reduce((s, v) => s + v, 0);
+        const todayRevenue = revenueByDayMap.get(dayKeyOf(today)) || 0;
         const avgDailyRevenue = revenue30d / 30;
 
-        // -- Revenue by day (last 7 days) — derived from completedOrders30d.
+        // -- Revenue by day (last 7 days) --
+        // Order counts still come from pharmacy_orders (they genuinely measure
+        // dispensed orders); the rupee figures come from invoices.
         const revenueByDay: { date: string; revenue: number; orders: number }[] = [];
         for (let i = 6; i >= 0; i--) {
             const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
@@ -4116,7 +4182,7 @@ export async function getPharmacyAnalytics() {
             });
             revenueByDay.push({
                 date: dayStart.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric' }),
-                revenue: dayOrders.reduce((s: number, o: any) => s + Number(o.total_amount), 0),
+                revenue: revenueByDayMap.get(dayKeyOf(dayStart)) || 0,
                 orders: dayOrders.length,
             });
         }
@@ -4207,6 +4273,11 @@ export async function getPharmacyAnalytics() {
 //   OPD     = invoices invoice_type='Pharmacy' AND patient_id != 'WALKIN'
 //   IPD     = invoice_items service_category='Pharmacy' on invoice_type='IPD' bills
 
+// Row caps for the revenue report. Exposed via `truncated` in the payload so a
+// capped result is never mistaken for a complete one.
+const REPORT_INVOICE_CAP = 5000;
+const REPORT_ITEM_CAP = 10000;
+
 // Strip "Pharmacy: " prefix and "(Batch ...)" suffix to recover the medicine name
 function extractMedicineName(desc: string): string {
     const raw = desc || '';
@@ -4242,7 +4313,7 @@ export async function getPharmacyRevenueReport(filters?: {
         const dateRange = { gte: fromDate, lte: toDate };
 
         // a. Counter + OPD — standalone Pharmacy invoices
-        const pharmacyInvoices = await db.invoices.findMany({
+        const pharmacyInvoicesRaw = await db.invoices.findMany({
             where: {
                 invoice_type: 'Pharmacy',
                 status: { not: 'Cancelled' },
@@ -4255,11 +4326,11 @@ export async function getPharmacyRevenueReport(filters?: {
                 patient: { select: { full_name: true } },
                 items: { select: { description: true, quantity: true, net_price: true, tax_amount: true } },
             },
-            take: 5000,
+            take: REPORT_INVOICE_CAP + 1, // +1 so we can detect that the cap was hit
         });
 
         // b. IPD pharmacy — line items off IPD bills
-        const ipdItems = await db.invoice_items.findMany({
+        const ipdItemsRaw = await db.invoice_items.findMany({
             where: {
                 service_category: 'Pharmacy',
                 created_at: dateRange,
@@ -4278,8 +4349,15 @@ export async function getPharmacyRevenueReport(filters?: {
                     },
                 },
             },
-            take: 10000,
+            take: REPORT_ITEM_CAP + 1,
         });
+
+        // A capped report that says nothing about being capped reads as complete.
+        // Track it and hand the flag back so the screen can warn.
+        const truncated =
+            pharmacyInvoicesRaw.length > REPORT_INVOICE_CAP || ipdItemsRaw.length > REPORT_ITEM_CAP;
+        const pharmacyInvoices = pharmacyInvoicesRaw.slice(0, REPORT_INVOICE_CAP);
+        const ipdItems = ipdItemsRaw.slice(0, REPORT_ITEM_CAP);
 
         // -- Aggregation accumulators --
         const channels = {
@@ -4372,17 +4450,30 @@ export async function getPharmacyRevenueReport(filters?: {
         }
 
         // -- Corrected gross margin from DISPENSE movement ledger --
-        const dispenseMoves = await db.pharmacyInventoryMovement.findMany({
-            where: { movement_type: 'DISPENSE', created_at: dateRange },
-            select: { quantity_out: true, unit_cost: true },
-            take: 20000,
-        });
-        const cogs = dispenseMoves.reduce((s: number, m: any) => s + (Number(m.unit_cost) || 0) * (m.quantity_out || 0), 0);
-
         // -- Apply channel filter to outputs --
         const activeChannels: ('counter' | 'opd' | 'ipd')[] =
             channel === 'all' ? ['counter', 'opd', 'ipd'] : [channel];
         const totalRevenue = activeChannels.reduce((s, c) => s + channels[c].revenue, 0);
+
+        // -- Gross margin from the DISPENSE movement ledger, net of returns --
+        // The movement ledger has no channel dimension, so COGS can only be
+        // measured for the whole pharmacy. Reporting whole-pharmacy COGS against
+        // one channel's revenue produced a meaningless margin (often negative),
+        // so margin is only computed when no channel filter is applied.
+        const movementRows = channel === 'all'
+            ? await db.pharmacyInventoryMovement.findMany({
+                where: { movement_type: { in: ['DISPENSE', 'PATIENT_RETURN'] }, created_at: dateRange },
+                select: { quantity_out: true, quantity_in: true, unit_cost: true, movement_type: true },
+                take: 20000,
+            })
+            : [];
+        const cogs = movementRows.reduce((s: number, m: any) => {
+            const cost = Number(m.unit_cost) || 0;
+            // A patient return puts stock (and its cost) back — net it off, or
+            // margin is understated for every bill that was partly returned.
+            return s + cost * ((m.quantity_out || 0) - (m.quantity_in || 0));
+        }, 0);
+        const marginMeasurable = channel === 'all';
 
         // revenueByDay across the range (cap 62 buckets)
         const revenueByDay: { date: string; counter: number; opd: number; ipd: number; revenue: number }[] = [];
@@ -4414,7 +4505,9 @@ export async function getPharmacyRevenueReport(filters?: {
             .slice(0, 500);
 
         const pct = (v: number) => (totalRevenue > 0 ? Math.round((v / totalRevenue) * 1000) / 10 : 0);
-        const grossMarginPct = totalRevenue > 0 ? Math.round(((totalRevenue - cogs) / totalRevenue) * 1000) / 10 : 0;
+        const grossMarginPct = (marginMeasurable && totalRevenue > 0)
+            ? Math.round(((totalRevenue - cogs) / totalRevenue) * 1000) / 10
+            : null;
 
         return {
             success: true,
@@ -4424,6 +4517,13 @@ export async function getPharmacyRevenueReport(filters?: {
                 totalRevenue,
                 cogs: Math.round(cogs),
                 grossMarginPct,
+                // null when a channel filter is on — COGS is not channel-attributable.
+                marginMeasurable,
+                // true when the row caps were hit and figures are partial.
+                truncated,
+                truncatedNote: truncated
+                    ? 'Showing the first ' + REPORT_INVOICE_CAP.toLocaleString('en-IN') + ' bills / ' + REPORT_ITEM_CAP.toLocaleString('en-IN') + ' IPD lines for this range. Narrow the dates for complete figures.'
+                    : null,
                 byChannel: {
                     counter: { ...channels.counter, pct: pct(channels.counter.revenue) },
                     opd: { ...channels.opd, pct: pct(channels.opd.revenue) },
