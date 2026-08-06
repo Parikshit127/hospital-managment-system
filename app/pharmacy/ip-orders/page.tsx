@@ -181,8 +181,14 @@ export default function IPMedicationOrdersPage() {
           parts.push(`${overrides} item(s) from physical stock`);
         if (skipped && skipped > 0)
           parts.push(`${skipped} skipped — will remain pending`);
+        // Handed over but not chargeable — the pharmacist has to raise these
+        // manually, so this must never be silent.
+        const unbilled = (res as any).unbilled as string[] | undefined;
+        if (unbilled && unbilled.length > 0) {
+          toast.error(`NOT BILLED — add manually: ${unbilled.join(', ')}`, 12000);
+        }
         if (parts.length > 0) toast.warning(parts.join(' · '), 8000);
-        else toast.success('All medicines dispensed successfully');
+        else if (!unbilled?.length) toast.success('All medicines dispensed successfully');
         closeDispensePanel(order.id);
         await loadOrders();
       } else {

@@ -929,19 +929,26 @@ export async function processDoctorOrder(orderId: number, paymentMethod: string 
                 return { success: false, error: `Medicine ${item.medicine_name} is out of stock` };
             }
 
-            // Simple allocation: take from first batch that has enough, or split?
-            // For now, take from the earliest expiring batch.
-            const batch = batches[0];
-            if (batch.current_stock < item.quantity_requested) {
-                return { success: false, error: `Insufficient stock for ${item.medicine_name}` };
+            // Allocate FEFO ACROSS batches. Taking only batches[0] and erroring
+            // when it alone couldn't cover the line rejected orders that the shelf
+            // could actually fill — 6 + 6 in two batches failed a request for 10.
+            let need = item.quantity_requested;
+            for (const b of batches) {
+                if (need <= 0) break;
+                const take = Math.min(need, b.current_stock);
+                if (take <= 0) continue;
+                dispenseItems.push({
+                    order_item_id: item.id,
+                    medicine_id: medicineId,
+                    batch_no: b.batch_no,
+                    quantity: take,
+                });
+                need -= take;
             }
-
-            dispenseItems.push({
-                order_item_id: item.id,
-                medicine_id: medicineId,
-                batch_no: batch.batch_no,
-                quantity: item.quantity_requested
-            });
+            if (need > 0) {
+                const available = item.quantity_requested - need;
+                return { success: false, error: `Insufficient stock for ${item.medicine_name} — ${available} of ${item.quantity_requested} available` };
+            }
         }
 
         // 3. Call dispenseMedicine (Atomic)
@@ -980,9 +987,16 @@ export async function getPharmacyQueue() {
         // 'Dispensing'` and was therefore unreachable code. Found in production with
         // 16 indents for one admission stranded this way.
         //
+        // 'Partial' was the same bug one step later: dispenseMedicine sets it when
+        // only part of an indent could be supplied, and both ip-orders/page.tsx
+        // (isDispensable) and dispenseIndentManual are written to handle it — but
+        // leaving it out here dropped the order off the queue the moment it went
+        // partial, so the shortfall could never be dispensed and that code was
+        // unreachable.
+        //
         // 'Completed'/'Dispensed' stay out on purpose — that work is genuinely done.
         const orders = await db.pharmacy_orders.findMany({
-            where: { status: { in: ['Pending', 'Ordered', 'Verified', 'Dispensing', 'Processed'] } },
+            where: { status: { in: ['Pending', 'Ordered', 'Verified', 'Dispensing', 'Processed', 'Partial'] } },
             orderBy: { created_at: 'desc' },
             include: { items: true },
             take: 100, // most recent 100 outstanding orders
@@ -1015,15 +1029,29 @@ export async function getPharmacyQueue() {
             wardByAdmission.set(a.admission_id, `${wardName}${bed}`.trim() || '—');
         }
 
-        // Collect all medicine names from order items to check stock
+        // Resolve stock by medicine_id where the order item has one, falling back
+        // to the name only when it doesn't. Matching purely on an exact
+        // brand_name IN (...) meant any case or whitespace drift between the order
+        // item and the master reported "Out of Stock" for a fully stocked
+        // medicine — which then fed ip-orders' initDispenseState and pre-filled
+        // the dispense quantity as 0 on every line.
+        const allMedicineIds = Array.from(new Set(
+            orders.flatMap((o: any) => o.items.map((i: any) => i.medicine_id).filter(Boolean))
+        )) as number[];
         const allMedicineNames = Array.from(new Set(
-            orders.flatMap((o: any) => o.items.map((i: any) => i.medicine_name))
+            orders.flatMap((o: any) => o.items.filter((i: any) => !i.medicine_id).map((i: any) => i.medicine_name))
         ));
 
         // Fetch stock info for all medicines in these orders
-        const medicines = allMedicineNames.length > 0 ? await db.pharmacy_medicine_master.findMany({
-            where: { brand_name: { in: allMedicineNames as string[] } },
+        const medicines = (allMedicineIds.length > 0 || allMedicineNames.length > 0) ? await db.pharmacy_medicine_master.findMany({
+            where: {
+                OR: [
+                    ...(allMedicineIds.length > 0 ? [{ id: { in: allMedicineIds } }] : []),
+                    ...(allMedicineNames.length > 0 ? [{ brand_name: { in: allMedicineNames as string[] } }] : []),
+                ],
+            },
             select: {
+                id: true,
                 brand_name: true,
                 min_threshold: true,
                 selling_price: true,
@@ -1047,23 +1075,33 @@ export async function getPharmacyQueue() {
         // dispense time). Same precedence dispenseMedicine uses: earliest-expiry
         // batch MRP → selling_price → price_per_unit.
         const estPriceMap = new Map<string, number>();
+        // Keyed by both id and lower-cased name so a line resolves whichever way
+        // it is identified, and name matching is no longer case-sensitive.
+        const keysFor = (med: any) => [`id:${med.id}`, `name:${String(med.brand_name).toLowerCase().trim()}`];
         for (const med of medicines) {
             const batches = med.batches as any[];
             const totalStock = batches.reduce((sum: number, b: any) => sum + b.current_stock, 0);
-            stockMap.set(med.brand_name, {
+            const entry = {
                 totalStock,
-                status: totalStock === 0 ? 'Out of Stock' : totalStock <= med.min_threshold ? 'Low Stock' : 'In Stock',
-            });
+                status: (totalStock === 0 ? 'Out of Stock' : totalStock <= med.min_threshold ? 'Low Stock' : 'In Stock') as 'In Stock' | 'Low Stock' | 'Out of Stock',
+            };
             const batchMrp = Number(batches.find((b: any) => Number(b.mrp) > 0)?.mrp || 0);
             const est = batchMrp || Number(med.selling_price) || Number(med.price_per_unit) || 0;
-            if (est > 0) estPriceMap.set(med.brand_name, est);
+            for (const k of keysFor(med)) {
+                stockMap.set(k, entry);
+                if (est > 0) estPriceMap.set(k, est);
+            }
         }
+        const lookupKeys = (item: any) => [
+            ...(item.medicine_id ? [`id:${item.medicine_id}`] : []),
+            `name:${String(item.medicine_name || '').toLowerCase().trim()}`,
+        ];
 
         const ordersWithPatient = orders.map((order: any) => {
             const itemsWithStock = order.items.map((item: any) => ({
                 ...item,
-                stock: stockMap.get(item.medicine_name) || { totalStock: 0, status: 'Out of Stock' },
-                est_price: estPriceMap.get(item.medicine_name) ?? null,
+                stock: lookupKeys(item).map(k => stockMap.get(k)).find(Boolean) || { totalStock: 0, status: 'Out of Stock' },
+                est_price: lookupKeys(item).map(k => estPriceMap.get(k)).find(v => v != null) ?? null,
             }));
             const hasOutOfStock = itemsWithStock.some((i: any) => i.stock.status === 'Out of Stock');
             const hasLowStock = itemsWithStock.some((i: any) => i.stock.status === 'Low Stock');
@@ -2054,20 +2092,40 @@ export async function dispenseIndentManual(
         // update the order item status. No inventory movement (physical stock
         // reconciliation is done by the pharmacist separately).
         const overrideShortages: { medicine_name: string; requested: number; dispensed: number }[] = [];
+        // Overrides that were physically handed over but could not be charged.
+        // Reported back to the pharmacist instead of vanishing.
+        const unbilledOverrides: string[] = [];
 
         if (overrideItems.length > 0) {
             for (const ov of overrideItems) {
                 const orderItem = itemMap.get(ov.order_item_id) as any;
                 const requested = orderItem?.quantity_requested ?? ov.qty_override;
 
-                // Get medicine price for billing
+                // Price the override the same way every other dispense path does:
+                // batch MRP first (even a zero-stock batch still carries the price
+                // this lot sells at), then the medicine master. The old order
+                // skipped `mrp` entirely and read selling_price/price_per_unit —
+                // both of which are commonly 0 for medicines stocked through
+                // addInventoryBatch, which writes the price onto the BATCH. That
+                // produced unitPrice 0, which then failed the `unitPrice > 0` guard
+                // below and billed the patient nothing at all.
                 let unitPrice = 0;
+                let taxRate = 0;
                 if (ov.medicine_id) {
-                    const med = await db.pharmacy_medicine_master.findUnique({ where: { id: ov.medicine_id } });
-                    unitPrice = Number(med?.selling_price || med?.price_per_unit || 0);
+                    const [med, priciestBatch] = await Promise.all([
+                        db.pharmacy_medicine_master.findUnique({ where: { id: ov.medicine_id } }),
+                        db.pharmacy_batch_inventory.findFirst({
+                            where: { medicine_id: ov.medicine_id, mrp: { gt: 0 } },
+                            orderBy: { expiry_date: 'desc' },
+                            select: { mrp: true },
+                        }),
+                    ]);
+                    unitPrice = Number(priciestBatch?.mrp) || Number(med?.mrp) || Number(med?.selling_price) || Number(med?.price_per_unit) || 0;
+                    // IPD bills are GST-nil (composite supply), so tax only applies
+                    // on the counter/OPD invoice below.
+                    taxRate = isIpdPatient ? 0 : (Number(med?.gst_percent) || Number(med?.tax_rate) || 0);
                 }
                 const totalCharge = unitPrice * ov.qty_override;
-                const taxRate = 0; // no batch → use 0, reconcile later
 
                 // Mark order item as dispensed (or partial if override qty < requested)
                 const alreadyDispensed = dispensedItems
@@ -2085,22 +2143,76 @@ export async function dispenseIndentManual(
                     },
                 });
 
-                // Post charge to IPD bill for the override qty
-                if (isIpdPatient && targetAdmissionId && unitPrice > 0) {
-                    const chargeResult = await postChargeToIpdBill({
-                        admission_id: targetAdmissionId,
-                        source_module: 'pharmacy',
-                        source_ref_id: `PHARM-${orderId}-OVR-${ov.order_item_id}`,
-                        description: `Pharmacy (Manual Override): ${ov.medicine_name} x${ov.qty_override}`,
-                        quantity: ov.qty_override,
-                        unit_price: unitPrice,
-                        tax_rate: taxRate,
-                        hsn_sac_code: '3004',
-                        service_category: 'Pharmacy',
-                    });
-                    if (!chargeResult?.success) {
-                        console.error(`Override charge failed for ${ov.medicine_name}:`, chargeResult?.error);
+                // Bill the override. IPD goes to the admission's bill; OPD/counter
+                // orders used to fall off a cliff here — the line was marked
+                // Dispensed and the patient was never charged for it at all.
+                if (unitPrice > 0) {
+                    if (isIpdPatient && targetAdmissionId) {
+                        const chargeResult = await postChargeToIpdBill({
+                            admission_id: targetAdmissionId,
+                            source_module: 'pharmacy',
+                            source_ref_id: `PHARM-${orderId}-OVR-${ov.order_item_id}`,
+                            description: `Pharmacy (Manual Override): ${ov.medicine_name} x${ov.qty_override}`,
+                            quantity: ov.qty_override,
+                            unit_price: unitPrice,
+                            tax_rate: taxRate,
+                            hsn_sac_code: '3004',
+                            service_category: 'Pharmacy',
+                        });
+                        if (!chargeResult?.success) {
+                            console.error(`Override charge failed for ${ov.medicine_name}:`, chargeResult?.error);
+                            unbilledOverrides.push(`${ov.medicine_name} × ${ov.qty_override}`);
+                        }
+                    } else {
+                        // dispenseMedicine created (and linked) the OPD invoice for
+                        // the stock-backed part of this indent — append the override
+                        // to it and move the totals.
+                        const linked = await db.pharmacy_orders.findUnique({
+                            where: { id: orderId },
+                            select: { invoice_id: true },
+                        });
+                        const invoiceId = linked?.invoice_id;
+                        const invoice = invoiceId
+                            ? await db.invoices.findUnique({ where: { id: invoiceId } })
+                            : null;
+                        if (!invoice) {
+                            unbilledOverrides.push(`${ov.medicine_name} × ${ov.qty_override}`);
+                        } else {
+                            const taxAmount = totalCharge * taxRate / 100;
+                            await db.invoice_items.create({
+                                data: {
+                                    invoice_id: invoice.id,
+                                    department: 'Pharmacy',
+                                    service_category: 'Pharmacy',
+                                    description: `Pharmacy (Manual Override): ${ov.medicine_name} x${ov.qty_override}`,
+                                    quantity: ov.qty_override,
+                                    unit_price: unitPrice,
+                                    total_price: totalCharge,
+                                    discount: 0,
+                                    net_price: totalCharge,
+                                    tax_rate: taxRate,
+                                    tax_amount: taxAmount,
+                                    hsn_sac_code: '3004',
+                                    organizationId,
+                                },
+                            });
+                            await db.invoices.update({
+                                where: { id: invoice.id },
+                                data: {
+                                    total_amount: Number(invoice.total_amount) + totalCharge,
+                                    total_tax: Number(invoice.total_tax) + taxAmount,
+                                    cgst_amount: Number(invoice.cgst_amount) + taxAmount / 2,
+                                    sgst_amount: Number(invoice.sgst_amount) + taxAmount / 2,
+                                    net_amount: Number(invoice.net_amount) + totalCharge + taxAmount,
+                                    balance_due: Number(invoice.balance_due) + totalCharge + taxAmount,
+                                },
+                            });
+                        }
                     }
+                } else {
+                    // No price anywhere — dispensing it free would be silent revenue
+                    // loss, so surface it rather than swallowing it.
+                    unbilledOverrides.push(`${ov.medicine_name} × ${ov.qty_override} (no price on file)`);
                 }
 
                 if (totalDispensed < requested) {
@@ -2174,6 +2286,7 @@ export async function dispenseIndentManual(
             partial: allShortages.length > 0 || skippedCount > 0,
             overrides: overrideCount,
             skipped: skippedCount,
+            unbilled: unbilledOverrides,
         };
     } catch (error: any) {
         console.error('dispenseIndentManual error:', error);
