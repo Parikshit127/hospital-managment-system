@@ -613,17 +613,15 @@ export default function NursePatientsPage() {
 
                             {/* ═══════ PHARMACY INDENT TAB ═══════ */}
                             {activeTab === 'pharmacy' && (
-                                <div className="space-y-5">
+                                <div className="space-y-3">
                                     {selectedPatient.status === 'Admitted' ? (
                                         <>
-                                            <div className="bg-gradient-to-br from-orange-50 to-amber-50 border border-orange-100 rounded-2xl p-5">
-                                                <h4 className="text-xs font-black text-orange-700 uppercase tracking-wider mb-3 flex items-center gap-2">
-                                                    <Package className="h-3.5 w-3.5" /> Search & Add Medicines
-                                                </h4>
-
+                                            {/* Search card — heading dropped and padding tightened; the
+                                                input's own placeholder already says what this does. */}
+                                            <div className="bg-gradient-to-br from-orange-50 to-amber-50 border border-orange-100 rounded-xl p-2.5">
                                                 {/* Medicine Search */}
                                                 <div ref={medSearchRef} className="relative">
-                                                    <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-3 py-2 focus-within:border-orange-400 focus-within:ring-2 focus-within:ring-orange-400/20 transition-all">
+                                                    <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-1.5 focus-within:border-orange-400 focus-within:ring-2 focus-within:ring-orange-400/20 transition-all">
                                                         <Search className="h-4 w-4 text-gray-400 shrink-0" />
                                                         <input
                                                             type="text"
@@ -655,14 +653,14 @@ export default function NursePatientsPage() {
 
                                             {/* Indent Lines */}
                                             {indentLines.length > 0 && (
-                                                <div className="space-y-3">
-                                                    <h4 className="text-xs font-black text-gray-500 uppercase tracking-wider flex items-center gap-2">
-                                                        <FlaskConical className="h-3.5 w-3.5 text-orange-400" /> Medicine Request List
+                                                <div className="space-y-2">
+                                                    <h4 className="text-[10px] font-black text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
+                                                        <FlaskConical className="h-3 w-3 text-orange-400" /> Medicine Request List
                                                     </h4>
                                                     {indentLines.map((line, idx) => (
                                                         <div
                                                             key={idx}
-                                                            className={`bg-white border rounded-xl p-4 transition-all ${
+                                                            className={`bg-white border rounded-lg p-2.5 transition-all ${
                                                                 line.stockChecked && line.stockAvailable === 0
                                                                     ? 'border-red-200 bg-red-50/30'
                                                                     : line.stockChecked && line.stockAvailable < line.quantityRequested
@@ -686,7 +684,7 @@ export default function NursePatientsPage() {
                                                                     </button>
                                                                 </div>
                                                             </div>
-                                                            <div className="mt-3 grid grid-cols-2 gap-3">
+                                                            <div className="mt-2 grid grid-cols-2 gap-2">
                                                                 <div>
                                                                     <label className={labelCls}>Quantity Required</label>
                                                                     <input
@@ -774,9 +772,9 @@ export default function NursePatientsPage() {
                                             )}
 
                                             {indentLines.length === 0 && !indentSuccess && (
-                                                <div className="bg-gray-50 border border-dashed border-gray-200 rounded-xl p-10 text-center text-gray-400">
-                                                    <Package className="h-8 w-8 mx-auto mb-2 text-gray-300" />
-                                                    <p className="text-sm font-medium">Search and add medicines above to create a pharmacy request.</p>
+                                                <div className="bg-gray-50 border border-dashed border-gray-200 rounded-lg px-3 py-2 flex items-center justify-center gap-2 text-gray-400">
+                                                    <Package className="h-3.5 w-3.5 text-gray-300 shrink-0" />
+                                                    <p className="text-xs font-medium">Search and add medicines above to create a pharmacy request.</p>
                                                 </div>
                                             )}
 
@@ -795,9 +793,9 @@ export default function NursePatientsPage() {
                                     )}
 
                                     {/* ── Indent History ── */}
-                                    <div className="mt-4">
-                                        <h4 className="text-xs font-black text-gray-500 uppercase tracking-wider flex items-center gap-2 mb-3">
-                                            <ClipboardList className="h-3.5 w-3.5 text-gray-400" /> Indent History
+                                    <div className="mt-2">
+                                        <h4 className="text-[10px] font-black text-gray-500 uppercase tracking-wider flex items-center gap-1.5 mb-1.5">
+                                            <ClipboardList className="h-3 w-3 text-gray-400" /> Indent History
                                         </h4>
                                         {loadingHistory ? (
                                             <div className="flex items-center gap-2 text-xs text-gray-400 py-4 justify-center">
@@ -806,10 +804,10 @@ export default function NursePatientsPage() {
                                         ) : indentHistory.length === 0 ? (
                                             <p className="text-xs text-gray-400 italic py-2">No indents placed yet for this patient.</p>
                                         ) : (
-                                            <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                                            <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
                                                 {indentHistory.map((order: any) => (
-                                                    <div key={order.id} className="border border-gray-200 rounded-xl p-3 bg-gray-50/50">
-                                                        <div className="flex items-center justify-between mb-2">
+                                                    <div key={order.id} className="border border-gray-200 rounded-lg p-2 bg-gray-50/50">
+                                                        <div className="flex items-center justify-between mb-1.5">
                                                             <div className="flex items-center gap-2">
                                                                 <span className="text-[10px] font-mono font-bold text-gray-500">{order.indent_number || `#${order.id}`}</span>
                                                                 <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${

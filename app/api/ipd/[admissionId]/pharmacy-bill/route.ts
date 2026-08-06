@@ -95,6 +95,22 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ admi
         const fmtExp = (d: Date | null | undefined) =>
             d ? new Date(d).toLocaleDateString('en-GB', { month: '2-digit', year: '2-digit' }) : '—';
 
+        // Pack size is a product attribute on the medicine master (see the PACK
+        // column on the counter-sale bill), so it's resolved by medicine name.
+        const productNames = Array.from(new Set(
+            postings.map((p: any) => parseDesc(p.description).name).filter(Boolean),
+        )) as string[];
+        const packRows = productNames.length > 0
+            ? await prisma.pharmacy_medicine_master.findMany({
+                where: { brand_name: { in: productNames }, organizationId },
+                select: { brand_name: true, pack: true },
+            })
+            : [];
+        const packByName = new Map<string, string>();
+        for (const m of packRows) {
+            if (m.pack && m.pack.trim()) packByName.set(m.brand_name.toLowerCase().trim(), m.pack.trim());
+        }
+
         const lines = postings.map((p: any, idx: number) => {
             const parsed = parseDesc(p.description);
             const linked: any = itemById.get(p.invoice_item_id);
@@ -103,7 +119,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ admi
             const qty = Number(p.quantity || 1);
             const rate = Number(p.unit_price || 0) || (qty ? Number(p.amount || 0) / qty : 0);
             const amount = Number(p.amount || 0);
-            return { idx: idx + 1, name: parsed.name, batch, expiry: fmtExp(expiry), qty, rate, amount };
+            const pack = packByName.get(String(parsed.name).toLowerCase().trim()) || '—';
+            return { idx: idx + 1, name: parsed.name, pack, batch, expiry: fmtExp(expiry), qty, rate, amount };
         });
         const total = lines.reduce((s, l) => s + l.amount, 0);
 
@@ -114,6 +131,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ admi
             <tr>
                 <td class="c">${l.idx}</td>
                 <td>${esc(l.name)}</td>
+                <td class="c">${esc(l.pack)}</td>
                 <td class="c">${esc(l.batch)}</td>
                 <td class="c">${esc(l.expiry)}</td>
                 <td class="c">${l.qty}</td>
@@ -182,7 +200,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ admi
 
   ${lines.length === 0 ? '<p style="text-align:center;color:#9ca3af;padding:30px;">No pharmacy items for this bill.</p>' : `
   <table>
-    <thead><tr><th>Sr</th><th>Medicine</th><th>Batch</th><th>Exp.</th><th>Qty</th><th>Rate</th><th>Amount</th></tr></thead>
+    <thead><tr><th>Sr</th><th>Medicine</th><th>Pack</th><th>Batch</th><th>Exp.</th><th>Qty</th><th>Rate</th><th>Amount</th></tr></thead>
     <tbody>${rows}</tbody>
     <tfoot><tr><td colspan="6" class="r">Total</td><td class="r">₹${money(total)}</td></tr></tfoot>
   </table>`}

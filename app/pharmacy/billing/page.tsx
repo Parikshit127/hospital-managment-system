@@ -103,6 +103,7 @@ export default function PharmacyPage() {
     const [isHospitalUse, setIsHospitalUse] = useState(false);
     const [walkInName, setWalkInName] = useState('');
     const [walkInContact, setWalkInContact] = useState('');
+    const [walkInAddress, setWalkInAddress] = useState('');
     // Optional bill-level discount (₹) for walk-in / OTC sales.
     const [discount, setDiscount] = useState('');
 
@@ -130,7 +131,8 @@ export default function PharmacyPage() {
         price: '',
         expiry: '',
         rack: '',
-        hsn_sac_code: ''
+        hsn_sac_code: '',
+        pack: ''
     });
 
     // ── Direct Stock Correction / Adjustment state ──
@@ -457,6 +459,7 @@ export default function PharmacyPage() {
             const res = await generateInvoice(resolvedPatientId, payload, {
                 walkInName: isHospitalUse ? 'Hospital Internal Use' : (isWalkIn ? walkInName : undefined),
                 walkInContact: isWalkIn ? walkInContact : undefined,
+                walkInAddress: isWalkIn ? walkInAddress : undefined,
                 billDateTime: billDateTime || undefined,
                 doctorId: doctorId || undefined,
                 doctorName: doctorName || undefined,
@@ -486,6 +489,7 @@ export default function PharmacyPage() {
         setSelectedPatient(null);
         setWalkInName('');
         setWalkInContact('');
+        setWalkInAddress('');
         setDiscount('');
         setBillDateTime('');
         setDoctorId('');
@@ -521,13 +525,14 @@ export default function PharmacyPage() {
                 price: Number(invForm.price),
                 expiry: new Date(invForm.expiry),
                 rack: invForm.rack,
-                hsn_sac_code: invForm.hsn_sac_code || undefined
+                hsn_sac_code: invForm.hsn_sac_code || undefined,
+                pack: invForm.pack || undefined
             };
             const res = await addInventoryBatch(payload);
             if (res.success) {
                 setShowInventoryModal(false);
                 loadInventory();
-                setInvForm({ isNewMedicine: false, medicine_id: '', brand_name: '', generic_name: '', batch_no: '', stock: '', price: '', expiry: '', rack: '', hsn_sac_code: '' });
+                setInvForm({ isNewMedicine: false, medicine_id: '', brand_name: '', generic_name: '', batch_no: '', stock: '', price: '', expiry: '', rack: '', hsn_sac_code: '', pack: '' });
             } else {
                 alert('Error: ' + res.error);
             }
@@ -1119,6 +1124,7 @@ export default function PharmacyPage() {
                                                         clearPatient();
                                                         setWalkInName('');
                                                         setWalkInContact('');
+                                                        setWalkInAddress('');
                                                         setDiscount('');
                                                     }}
                                                     className={`text-[10px] font-bold px-3 py-1.5 rounded-md transition-all ${
@@ -1159,11 +1165,11 @@ export default function PharmacyPage() {
                                         ) : isWalkIn ? (
                                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
                                                 <div className="relative">
-                                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-amber-400" />
+                                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
                                                     <input
                                                         value={walkInName}
                                                         onChange={e => setWalkInName(e.target.value)}
-                                                        className="w-full pl-9 pr-3 py-2.5 bg-amber-50 border border-amber-200 rounded-xl text-sm focus:ring-2 focus:ring-amber-400/30 focus:border-amber-300 outline-none font-medium text-amber-900 placeholder:text-amber-400"
+                                                        className="w-full pl-9 pr-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500/30 outline-none font-medium text-gray-900 placeholder:text-gray-400"
                                                         placeholder="Customer name (optional)"
                                                     />
                                                 </div>
@@ -1173,11 +1179,20 @@ export default function PharmacyPage() {
                                                         onChange={e => setWalkInContact(e.target.value.replace(/[^0-9+\-\s]/g, ''))}
                                                         inputMode="tel"
                                                         maxLength={15}
-                                                        className="w-full pl-3 pr-3 py-2.5 bg-amber-50 border border-amber-200 rounded-xl text-sm focus:ring-2 focus:ring-amber-400/30 focus:border-amber-300 outline-none font-medium text-amber-900 placeholder:text-amber-400"
+                                                        className="w-full pl-3 pr-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500/30 outline-none font-medium text-gray-900 placeholder:text-gray-400"
                                                         placeholder="Contact number (optional)"
                                                     />
                                                 </div>
-                                                <p className="text-[10px] font-bold text-amber-600 px-1 sm:col-span-2">Walk-in / OTC — no registration needed. Name &amp; contact appear on the bill.</p>
+                                                <div className="relative sm:col-span-2">
+                                                    <input
+                                                        value={walkInAddress}
+                                                        onChange={e => setWalkInAddress(e.target.value)}
+                                                        maxLength={200}
+                                                        className="w-full pl-3 pr-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500/30 outline-none font-medium text-gray-900 placeholder:text-gray-400"
+                                                        placeholder="Address (optional)"
+                                                    />
+                                                </div>
+                                                <p className="text-[10px] font-medium text-gray-500 px-1 sm:col-span-2">Walk-in / OTC — no registration needed. Name, contact &amp; address appear on the bill.</p>
                                             </div>
                                         ) : (
                                             <div className="relative">
@@ -1879,7 +1894,7 @@ export default function PharmacyPage() {
                 // GSTIN yet (e.g. Avise) therefore print a plain non-GST bill.
                 const hospitalGstin = pharmacyBranding?.gstin || '';
                 const patientName = isHospitalUse ? 'Hospital Internal Use' : (isWalkIn ? (walkInName || 'Walk-in / OTC') : (selectedPatient?.full_name || patientId));
-                const patientAddress = isWalkIn ? '' : (selectedPatient?.address || '');
+                const patientAddress = isWalkIn ? walkInAddress.trim() : (selectedPatient?.address || '');
 
                 // avg tax rate for GST note
                 const avgTaxRate = items.length > 0 ? (items.reduce((s: number, it: any) => s + (it.tax_rate || 0), 0) / items.length) : 0;
@@ -2123,6 +2138,24 @@ export default function PharmacyPage() {
                                     <p className="text-[10px] text-gray-400 ml-1">
                                         {invForm.isNewMedicine
                                             ? 'Optional · used for GST'
+                                            : 'Optional · applies to all batches of this medicine'}
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-5">
+                                <div className="space-y-1.5">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-[0.15em] ml-1">Pack Size</label>
+                                    <input
+                                        value={invForm.pack}
+                                        onChange={e => setInvForm({ ...invForm, pack: e.target.value.slice(0, 32) })}
+                                        maxLength={32}
+                                        className="w-full p-3.5 bg-white border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-orange-500/20 outline-none font-medium text-gray-900 placeholder:text-gray-400"
+                                        placeholder="e.g. 1x10, 100ML"
+                                    />
+                                    {/* Like HSN, pack size belongs to the medicine, not the batch. */}
+                                    <p className="text-[10px] text-gray-400 ml-1">
+                                        {invForm.isNewMedicine
+                                            ? 'Optional · printed on the pharmacy bill'
                                             : 'Optional · applies to all batches of this medicine'}
                                     </p>
                                 </div>

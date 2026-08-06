@@ -18,8 +18,25 @@ interface OrderItem {
   quantity_dispensed: number | null;
   status: string;
   unit_price: number | null;
+  total_price?: number | null;
+  /** Indicative rate from the medicine master / FEFO batch, for lines not yet dispensed. */
+  est_price?: number | null;
   available_batches?: { batch_no: string; stock: number; expiry: string }[];
   stock?: { totalStock: number; status: 'In Stock' | 'Low Stock' | 'Out of Stock' };
+}
+
+const rupee = (n: number) => n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+/**
+ * Rate and amount for one indent line. `unit_price` is only stamped at dispense
+ * time, so a pending line falls back to the indicative master/batch rate — the
+ * pharmacy indent has to show a value while the indent is still being actioned.
+ */
+function lineMoney(item: OrderItem) {
+  const rate = Number(item.unit_price ?? item.est_price ?? 0);
+  const qty = item.quantity_dispensed || item.quantity_requested;
+  const amount = item.unit_price != null && item.total_price != null ? Number(item.total_price) : rate * qty;
+  return { rate, amount, estimated: item.unit_price == null };
 }
 
 interface PharmacyOrder {
@@ -341,6 +358,8 @@ export default function IPMedicationOrdersPage() {
                                 {panelOpen && (
                                   <th className="text-center px-4 py-2 font-bold text-[10px] uppercase tracking-wider">Dispense Qty</th>
                                 )}
+                                <th className="text-right px-4 py-2 font-bold text-[10px] uppercase tracking-wider">Rate (₹)</th>
+                                <th className="text-right px-4 py-2 font-bold text-[10px] uppercase tracking-wider">Amount (₹)</th>
                                 <th className="text-left px-4 py-2 font-bold text-[10px] uppercase tracking-wider">Stock</th>
                               </tr>
                             </thead>
@@ -351,6 +370,7 @@ export default function IPMedicationOrdersPage() {
                                 const skipped = panelState?.lineSkip[item.id] ?? false;
                                 const qty = panelState?.lineQtys[item.id] ?? 0;
                                 const isOverride = panelOpen && !isAlreadyDone && !skipped && qty > stock;
+                                const money = lineMoney(item);
 
                                 return (
                                   <tr
@@ -419,6 +439,17 @@ export default function IPMedicationOrdersPage() {
                                         )}
                                       </td>
                                     )}
+                                    <td className="px-4 py-2 text-right text-gray-700 tabular-nums">
+                                      {money.rate > 0 ? rupee(money.rate) : <span className="text-gray-300">—</span>}
+                                    </td>
+                                    <td className="px-4 py-2 text-right font-bold text-gray-900 tabular-nums whitespace-nowrap">
+                                      {money.amount > 0 ? (
+                                        <>
+                                          {rupee(money.amount)}
+                                          {money.estimated && <span className="ml-1 text-[9px] font-bold uppercase text-gray-400">est</span>}
+                                        </>
+                                      ) : <span className="text-gray-300 font-normal">—</span>}
+                                    </td>
                                     <td className="px-4 py-2">
                                       <div className="flex items-center gap-2 flex-wrap">
                                         <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${STOCK_COLORS[item.stock?.status || 'Out of Stock']}`}>
@@ -440,6 +471,20 @@ export default function IPMedicationOrdersPage() {
                                 );
                               })}
                             </tbody>
+                            <tfoot className="bg-gray-50 border-t border-gray-200">
+                              <tr>
+                                <td
+                                  colSpan={panelOpen ? 4 : 2}
+                                  className="px-4 py-2 text-right text-[10px] font-black uppercase tracking-wider text-gray-500"
+                                >
+                                  Indent Total
+                                </td>
+                                <td className="px-4 py-2 text-right font-black text-gray-900 tabular-nums whitespace-nowrap" colSpan={2}>
+                                  ₹ {rupee(order.items.reduce((s, i) => s + lineMoney(i).amount, 0))}
+                                </td>
+                                <td />
+                              </tr>
+                            </tfoot>
                           </table>
                         </div>
 

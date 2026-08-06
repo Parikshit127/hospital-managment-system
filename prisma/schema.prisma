@@ -854,6 +854,10 @@ model pharmacy_medicine_master {
   is_narcotic            Boolean                       @default(false)
   manufacturer           String?
   hsn_sac_code           String?
+  // Pack size as printed on the strip/box ("10", "1x10", "100ML"). A property of
+  // the product, not of a batch — same reasoning as hsn_sac_code. The pharmacy
+  // bill's PACK column reads this.
+  pack                   String?
   drug_schedule          String?
   is_refrigerated        Boolean                       @default(false)
   min_threshold          Int                           @default(10)

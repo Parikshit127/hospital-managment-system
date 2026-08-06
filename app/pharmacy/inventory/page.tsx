@@ -251,6 +251,7 @@ export default function PharmacyInventoryPage() {
                                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Medicine</th>
                                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Category</th>
                                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">HSN</th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Pack</th>
                                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Batch No</th>
                                 <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Stock</th>
                                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Expiry</th>
@@ -271,6 +272,7 @@ export default function PharmacyInventoryPage() {
                                     </td>
                                     <td className="px-4 py-3 text-sm text-gray-600">{row.medicine.category || '—'}</td>
                                     <td className="px-4 py-3 text-sm font-mono text-gray-700">{row.medicine.hsn_sac_code || '—'}</td>
+                                    <td className="px-4 py-3 text-sm font-mono text-gray-700">{row.medicine.pack || '—'}</td>
                                     <td className="px-4 py-3 text-sm font-mono text-gray-700">{row._catalog ? '—' : row.batch_no}</td>
                                     <td className={`px-4 py-3 text-sm text-right font-black ${row._catalog ? 'text-red-500' : row.current_stock < row.medicine.min_threshold ? 'text-red-500' : 'text-emerald-600'}`}>
                                         {row._catalog ? 'Out of Stock' : row.current_stock}

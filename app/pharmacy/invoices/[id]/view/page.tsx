@@ -76,7 +76,7 @@ export default async function PharmacyInvoiceViewPage({ params, searchParams }: 
         ipdPatientFallback = adm?.patient || null;
     }
     const patientName = isWalkIn ? (walkin.name || 'WALK-IN / OTC') : (invoice.patient?.full_name || ipdPatientFallback?.full_name || 'Walk-in Patient');
-    const patientAddress = isWalkIn ? '' : ((invoice.patient as any)?.address || '');
+    const patientAddress = isWalkIn ? walkin.address : ((invoice.patient as any)?.address || '');
     const patientContact = (isWalkIn ? walkin.contact : (invoice.patient?.phone || ipdPatientFallback?.phone)) || '';
 
     const isIpd = invoice.invoice_type === 'IPD';
@@ -183,6 +183,22 @@ export default async function PharmacyInvoiceViewPage({ params, searchParams }: 
         if (!batchMap.has(bn)) batchMap.set(bn, info); // fallback: batch only
     }
 
+    // Pack size lives on the medicine master (a property of the product, like HSN),
+    // so it's looked up by product name rather than stamped on the line.
+    // ponytail: a later rename of the medicine loses the pack on old bills; stamp it
+    // on invoice_items like batch/expiry/mrp if that ever matters.
+    const billProductNames = Array.from(new Set(
+        items.map((i: any) => parseLineParts(i.description).name).filter(Boolean),
+    )) as string[];
+    const packRows = billProductNames.length > 0 ? await prisma.pharmacy_medicine_master.findMany({
+        where: { brand_name: { in: billProductNames }, organizationId: session.organization_id },
+        select: { brand_name: true, pack: true },
+    }) : [];
+    const packMap = new Map<string, string>();
+    for (const m of packRows) {
+        if (m.pack && m.pack.trim()) packMap.set(m.brand_name.toLowerCase().trim(), m.pack.trim());
+    }
+
     // Per-line CGST/SGST — derive from tax_rate on each item
     const lineData = items.map((item: any) => {
         const qty       = Number(item.quantity || 0);
@@ -200,9 +216,9 @@ export default async function PharmacyInvoiceViewPage({ params, searchParams }: 
         // out of the description ("MedName (Batch: XXX)") for pre-existing bills.
         const parsed    = parseLineParts(item.description);
         const batchNo   = item.batch_no || parsed.batch;
-        const pack      = item.pack_size || item.pack || '—';
         const hsn       = item.hsn_sac_code || '3004';
         const productName = parsed.name || String(item.description || '-');
+        const pack      = packMap.get(productName.toLowerCase().trim()) || '—';
 
         // Expiry / MRP: prefer the value stamped on the line at dispense time,
         // else fall back to the dispensed batch's current data.

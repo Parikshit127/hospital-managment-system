@@ -121,6 +121,7 @@ export async function getInventoryPage(opts?: {
                 gst_percent: true,
                 tax_rate: true,
                 hsn_sac_code: true,
+                pack: true,
                 is_active: true,
                 batches: {
                     where: { current_stock: { gt: 0 } },
@@ -163,6 +164,7 @@ export async function getInventoryPage(opts?: {
                 gst_percent: med.gst_percent,
                 tax_rate: med.tax_rate,
                 hsn_sac_code: med.hsn_sac_code,
+                pack: med.pack,
                 is_active: med.is_active,
             };
 
@@ -367,7 +369,7 @@ export async function getInventoryForPO() {
 export async function generateInvoice(
     patientId: string,
     items: any[],
-    optionsOrWalkInName?: string | { walkInName?: string; walkInContact?: string; billDateTime?: string; doctorId?: string; doctorName?: string; paymentMethod?: string; discount?: number; discountPct?: number }
+    optionsOrWalkInName?: string | { walkInName?: string; walkInContact?: string; walkInAddress?: string; billDateTime?: string; doctorId?: string; doctorName?: string; paymentMethod?: string; discount?: number; discountPct?: number }
 ) {
     try {
         const { db, organizationId, session } = await requireTenantContext();
@@ -387,11 +389,11 @@ export async function generateInvoice(
         // takes priority; a flat ₹ amount (discount) is kept as a fallback.
         const billDiscountPct = Math.min(Math.max(0, Number((options as any).discountPct) || 0), 100);
         const flatDiscount = Math.max(0, Number((options as any).discount) || 0);
-        // For walk-in/OTC sales the patient name and optional contact (if the
-        // cashier entered them) are stored on the invoice itself, since all
-        // walk-ins share one OPD_REG record.
+        // For walk-in/OTC sales the customer's name and optional contact/address
+        // (if the cashier entered them) are stored on the invoice itself, since
+        // all walk-ins share one OPD_REG record.
         const walkInLabel = patientId === 'WALKIN'
-            ? buildWalkinNote(walkInName, (options as any).walkInContact)
+            ? buildWalkinNote(walkInName, (options as any).walkInContact, (options as any).walkInAddress)
             : undefined;
 
         // Validate optional backdated bill date.
@@ -920,23 +922,39 @@ export async function getPharmacyQueue() {
             select: {
                 brand_name: true,
                 min_threshold: true,
-                batches: { where: { current_stock: { gt: 0 } }, select: { current_stock: true } }
+                selling_price: true,
+                price_per_unit: true,
+                batches: {
+                    where: { current_stock: { gt: 0 } },
+                    select: { current_stock: true, mrp: true },
+                    orderBy: { expiry_date: 'asc' },   // FEFO — same batch dispenseMedicine will price from
+                },
             },
         }) : [];
 
         const stockMap = new Map<string, { totalStock: number; status: 'In Stock' | 'Low Stock' | 'Out of Stock' }>();
+        // Indicative rate for an indent line that hasn't been dispensed yet, so the
+        // pharmacist sees a value BEFORE dispensing (unit_price is only written at
+        // dispense time). Same precedence dispenseMedicine uses: earliest-expiry
+        // batch MRP → selling_price → price_per_unit.
+        const estPriceMap = new Map<string, number>();
         for (const med of medicines) {
-            const totalStock = (med.batches as any[]).reduce((sum: number, b: any) => sum + b.current_stock, 0);
+            const batches = med.batches as any[];
+            const totalStock = batches.reduce((sum: number, b: any) => sum + b.current_stock, 0);
             stockMap.set(med.brand_name, {
                 totalStock,
                 status: totalStock === 0 ? 'Out of Stock' : totalStock <= med.min_threshold ? 'Low Stock' : 'In Stock',
             });
+            const batchMrp = Number(batches.find((b: any) => Number(b.mrp) > 0)?.mrp || 0);
+            const est = batchMrp || Number(med.selling_price) || Number(med.price_per_unit) || 0;
+            if (est > 0) estPriceMap.set(med.brand_name, est);
         }
 
         const ordersWithPatient = orders.map((order: any) => {
             const itemsWithStock = order.items.map((item: any) => ({
                 ...item,
                 stock: stockMap.get(item.medicine_name) || { totalStock: 0, status: 'Out of Stock' },
+                est_price: estPriceMap.get(item.medicine_name) ?? null,
             }));
             const hasOutOfStock = itemsWithStock.some((i: any) => i.stock.status === 'Out of Stock');
             const hasLowStock = itemsWithStock.some((i: any) => i.stock.status === 'Low Stock');
@@ -1030,7 +1048,10 @@ export async function addInventoryBatch(data: {
     rack: string,
     // HSN/SAC for GST. Lives on pharmacy_medicine_master (a property of the
     // product), not on the batch — so this writes through to the medicine.
-    hsn_sac_code?: string
+    hsn_sac_code?: string,
+    // Pack size ("10", "1x10", "100ML"). Same deal as HSN — product-level, written
+    // through to the medicine master, and printed in the bill's PACK column.
+    pack?: string
 }) {
     try {
         const { db, organizationId } = await requireTenantContext();
@@ -1039,6 +1060,7 @@ export async function addInventoryBatch(data: {
         // action is callable directly. Empty string -> undefined so we never
         // blank out an existing code with a blank submission.
         const hsn = data.hsn_sac_code?.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12) || undefined;
+        const pack = data.pack?.trim().slice(0, 32) || undefined;
 
         let medicineId = data.medicine_id;
 
@@ -1063,6 +1085,7 @@ export async function addInventoryBatch(data: {
                         selling_price: data.price,
                         price_per_unit: data.price,
                         hsn_sac_code: hsn ?? null,
+                        pack: pack ?? null,
                         organizationId,
                     }
                 });
@@ -1076,10 +1099,11 @@ export async function addInventoryBatch(data: {
         // 13k medicines currently carry an HSN, and this form is where pharmacy
         // staff actually work, so let them fill it in as stock arrives. Guarded on
         // `hsn` being truthy so a blank field never wipes an existing code.
-        if (hsn) {
+        // Same for pack size — blank never wipes an existing value.
+        if (hsn || pack) {
             await db.pharmacy_medicine_master.updateMany({
                 where: { id: medicineId, organizationId },
-                data: { hsn_sac_code: hsn },
+                data: { ...(hsn ? { hsn_sac_code: hsn } : {}), ...(pack ? { pack } : {}) },
             });
         }
 
@@ -4208,6 +4232,17 @@ export async function postPurchaseInvoice(invoiceId: number) {
                         rack_location: 'PURCHASE-INVOICE',
                     },
                 });
+
+                // Carry the supplier's pack size onto the product so the sale bill
+                // can print it. It's captured per purchase line but is a property
+                // of the medicine — without this it never leaves the buying side.
+                const linePack = (line.pack || poItem?.pack || '').trim();
+                if (linePack) {
+                    await tx.pharmacy_medicine_master.updateMany({
+                        where: { id: line.medicine_id, organizationId },
+                        data: { pack: linePack.slice(0, 32) },
+                    });
+                }
 
                 // Record inventory movement
                 await tx.pharmacyInventoryMovement.create({
