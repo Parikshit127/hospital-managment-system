@@ -1,6 +1,14 @@
 'use server';
 
 import { requireTenantContext } from '@/backend/tenant';
+import {
+    denyUnlessPharmacyRole,
+    PHARMACY_CATALOG_ROLES,
+    PHARMACY_OPERATE_ROLES,
+    PHARMACY_PROCUREMENT_ROLES,
+    PHARMACY_PO_APPROVE_ROLES,
+    PHARMACY_RETURN_ROLES,
+} from '@/app/lib/pharmacy-access';
 import { getTenantPrisma } from '@/backend/db';
 import { buildWalkinNote, parseWalkinNote } from '@/app/lib/walkin-note';
 import { revalidatePath, updateTag, unstable_cache } from 'next/cache';
@@ -84,6 +92,9 @@ export async function getInventoryPage(opts?: {
     expiringWithinDays?: number;
     includeSummary?: boolean;
 }) {
+    const denied = await denyUnlessPharmacyRole(PHARMACY_CATALOG_ROLES);
+    if (denied) return denied;
+
     try {
         const { db, organizationId } = await requireTenantContext();
         const search = (opts?.search ?? '').trim();
@@ -245,6 +256,9 @@ export async function getInventoryPage(opts?: {
 }
 
 export async function getInventoryCategories() {
+    const denied = await denyUnlessPharmacyRole(PHARMACY_CATALOG_ROLES);
+    if (denied) return denied;
+
     try {
         const { db } = await requireTenantContext();
         const rows = await db.pharmacy_medicine_master.findMany({
@@ -268,6 +282,9 @@ export async function updateBatchDetails(data: {
     mrp?: number;
     cost_price?: number;
 }) {
+    const denied = await denyUnlessPharmacyRole(PHARMACY_OPERATE_ROLES);
+    if (denied) return denied;
+
     try {
         const { db, organizationId } = await requireTenantContext();
 
@@ -308,7 +325,11 @@ export async function updateBatchDetails(data: {
     }
 }
 
-/** @deprecated Use getInventoryPage with a search string. Kept for callers not yet migrated. */
+/**
+ * @deprecated Use getInventoryPage with a search string. Kept for callers not yet migrated.
+ * No role guard of its own on purpose — it is a pure delegation, so it inherits
+ * getInventoryPage's PHARMACY_CATALOG_ROLES check.
+ */
 export async function getInventory() {
     return getInventoryPage({ limit: 100 });
 }
@@ -321,6 +342,9 @@ export async function getInventory() {
 // medicine (not per batch) with the total in-stock quantity and reorder
 // threshold so the PO UI can flag low stock correctly.
 export async function getInventoryForPO() {
+    const denied = await denyUnlessPharmacyRole(PHARMACY_PROCUREMENT_ROLES);
+    if (denied) return denied;
+
     try {
         const { db } = await requireTenantContext();
 
@@ -371,6 +395,9 @@ export async function generateInvoice(
     items: any[],
     optionsOrWalkInName?: string | { walkInName?: string; walkInContact?: string; walkInAddress?: string; billDateTime?: string; doctorId?: string; doctorName?: string; paymentMethod?: string; discount?: number; discountPct?: number }
 ) {
+    const denied = await denyUnlessPharmacyRole(PHARMACY_OPERATE_ROLES);
+    if (denied) return denied;
+
     try {
         const { db, organizationId, session } = await requireTenantContext();
         const rawOptions = typeof optionsOrWalkInName === 'string'
@@ -793,6 +820,9 @@ export async function generateInvoice(
 }
 
 export async function processDoctorOrder(orderId: number, paymentMethod: string = 'Cash') {
+    const denied = await denyUnlessPharmacyRole(PHARMACY_OPERATE_ROLES);
+    if (denied) return denied;
+
     try {
         const { db } = await requireTenantContext();
 
@@ -862,6 +892,9 @@ export async function processDoctorOrder(orderId: number, paymentMethod: string 
 }
 
 export async function getPharmacyQueue() {
+    const denied = await denyUnlessPharmacyRole(PHARMACY_OPERATE_ROLES);
+    if (denied) return denied;
+
     try {
         const { db } = await requireTenantContext();
 
@@ -976,6 +1009,9 @@ export async function getPharmacyQueue() {
 }
 
 export async function markOrderAsPaid(orderId: number, paymentMethod: string = 'Cash') {
+    const denied = await denyUnlessPharmacyRole(PHARMACY_OPERATE_ROLES);
+    if (denied) return denied;
+
     try {
         const { db, organizationId, session } = await requireTenantContext();
 
@@ -1053,6 +1089,9 @@ export async function addInventoryBatch(data: {
     // through to the medicine master, and printed in the bill's PACK column.
     pack?: string
 }) {
+    const denied = await denyUnlessPharmacyRole(PHARMACY_OPERATE_ROLES);
+    if (denied) return denied;
+
     try {
         const { db, organizationId } = await requireTenantContext();
 
@@ -1138,6 +1177,9 @@ export async function addInventoryBatch(data: {
 
 // Check drug interactions for a list of medicine names
 export async function checkInteractions(drugNames: string[]) {
+    const denied = await denyUnlessPharmacyRole(PHARMACY_CATALOG_ROLES);
+    if (denied) return denied;
+
     try {
         const result = await checkDrugInteractions(drugNames);
         if (result.hasInteractions) {
@@ -1215,6 +1257,9 @@ const cachedDashboardStats = (organizationId: string) => unstable_cache(
 )();
 
 export async function getPharmacyDashboardStats() {
+    const denied = await denyUnlessPharmacyRole(PHARMACY_OPERATE_ROLES);
+    if (denied) return denied;
+
     try {
         const { organizationId } = await requireTenantContext();
         const data = await cachedDashboardStats(organizationId);
@@ -1226,6 +1271,9 @@ export async function getPharmacyDashboardStats() {
 }
 
 export async function dispenseMedicine(orderId: number, dispensedItems: any[]) {
+    const denied = await denyUnlessPharmacyRole(PHARMACY_OPERATE_ROLES);
+    if (denied) return denied;
+
     try {
         const { db, organizationId } = await requireTenantContext();
 
@@ -1661,6 +1709,9 @@ export async function dispenseMedicine(orderId: number, dispensedItems: any[]) {
  * 'Partial', and notifies nursing staff of the exact shortage.
  */
 export async function dispenseIndentWithShortages(orderId: number) {
+    const denied = await denyUnlessPharmacyRole(PHARMACY_OPERATE_ROLES);
+    if (denied) return denied;
+
     try {
         const { db } = await requireTenantContext();
 
@@ -1730,6 +1781,9 @@ export async function dispenseIndentManual(
     orderId: number,
     lines: { order_item_id: number; qty_to_dispense: number }[]
 ) {
+    const denied = await denyUnlessPharmacyRole(PHARMACY_OPERATE_ROLES);
+    if (denied) return denied;
+
     try {
         const { db, organizationId } = await requireTenantContext();
 
@@ -1976,6 +2030,9 @@ export async function searchMedicine(
         includeEmptyBatches?: boolean;
     }
 ) {
+    const denied = await denyUnlessPharmacyRole(PHARMACY_CATALOG_ROLES);
+    if (denied) return denied;
+
     try {
         const { db } = await requireTenantContext();
 
@@ -2055,6 +2112,9 @@ export async function searchMedicine(
 }
 
 export async function getLowStockAlerts() {
+    const denied = await denyUnlessPharmacyRole(PHARMACY_CATALOG_ROLES);
+    if (denied) return denied;
+
     try {
         const { db, organizationId } = await requireTenantContext();
         // Raw queries bypass the tenant $extends middleware — bind organizationId explicitly.
@@ -2088,6 +2148,9 @@ export async function getLowStockAlerts() {
 }
 
 export async function getExpiringBatches(days: number = 30) {
+    const denied = await denyUnlessPharmacyRole(PHARMACY_CATALOG_ROLES);
+    if (denied) return denied;
+
     try {
         const { db } = await requireTenantContext();
         const futureDate = new Date();
@@ -2111,6 +2174,9 @@ export async function getExpiringBatches(days: number = 30) {
 // ── Pharmacy Vendors (unified with finance Vendor master) ──
 
 export async function getSuppliers() {
+    const denied = await denyUnlessPharmacyRole(PHARMACY_PROCUREMENT_ROLES);
+    if (denied) return denied;
+
     try {
         const { db } = await requireTenantContext();
         // Fetch from unified Vendor table, filtered to pharmacy suppliers
@@ -2148,6 +2214,9 @@ export async function createSupplier(data: {
     drug_license_expiry?: string;
     pharmacy_payment_terms?: number;
 }) {
+    const denied = await denyUnlessPharmacyRole(PHARMACY_PROCUREMENT_ROLES);
+    if (denied) return denied;
+
     try {
         const { db, organizationId } = await requireTenantContext();
         // Generate vendor_code from name
@@ -2188,6 +2257,9 @@ export async function updateSupplier(id: number, data: {
     pharmacy_payment_terms?: number;
     is_active?: boolean;
 }) {
+    const denied = await denyUnlessPharmacyRole(PHARMACY_PROCUREMENT_ROLES);
+    if (denied) return denied;
+
     try {
         const { db } = await requireTenantContext();
         const updateData: any = {};
@@ -2230,6 +2302,9 @@ export async function createPurchaseOrder(
     }[],
     options?: { vendor_id?: number; notes?: string; submit?: boolean }
 ) {
+    const denied = await denyUnlessPharmacyRole(PHARMACY_PROCUREMENT_ROLES);
+    if (denied) return denied;
+
     try {
         const { db, organizationId } = await requireTenantContext();
 
@@ -2358,6 +2433,9 @@ export async function quickCreateMedicineForPO(input: {
     purchase_price?: number;
     selling_price?: number;
 }) {
+    const denied = await denyUnlessPharmacyRole(PHARMACY_PROCUREMENT_ROLES);
+    if (denied) return denied;
+
     try {
         const { db, organizationId } = await requireTenantContext();
         const brand = (input.brand_name || '').trim();
@@ -2418,6 +2496,9 @@ export async function updatePurchaseOrder(
     }[],
     options?: { vendor_id?: number; notes?: string }
 ) {
+    const denied = await denyUnlessPharmacyRole(PHARMACY_PROCUREMENT_ROLES);
+    if (denied) return denied;
+
     try {
         const { db, organizationId } = await requireTenantContext();
 
@@ -2518,6 +2599,9 @@ export async function updatePurchaseOrder(
 }
 
 export async function submitPurchaseOrder(poId: number) {
+    const denied = await denyUnlessPharmacyRole(PHARMACY_PROCUREMENT_ROLES);
+    if (denied) return denied;
+
     try {
         const { db } = await requireTenantContext();
         const po = await db.purchaseOrder.findUnique({ where: { id: poId } });
@@ -2549,6 +2633,9 @@ export async function submitPurchaseOrder(poId: number) {
 }
 
 export async function approvePurchaseOrder(poId: number, userId: string, approve: boolean, reason?: string) {
+    const denied = await denyUnlessPharmacyRole(PHARMACY_PO_APPROVE_ROLES);
+    if (denied) return denied;
+
     try {
         const { db } = await requireTenantContext();
         const po = await db.purchaseOrder.findUnique({ where: { id: poId } });
@@ -2586,6 +2673,9 @@ export async function receivePurchaseOrder(
         rack_location?: string;
     }[]
 ) {
+    const denied = await denyUnlessPharmacyRole(PHARMACY_PROCUREMENT_ROLES);
+    if (denied) return denied;
+
     try {
         const { db, organizationId } = await requireTenantContext();
 
@@ -2738,6 +2828,9 @@ export async function receivePurchaseOrder(
 }
 
 export async function getPurchaseOrders() {
+    const denied = await denyUnlessPharmacyRole(PHARMACY_PROCUREMENT_ROLES);
+    if (denied) return denied;
+
     try {
         const { db } = await requireTenantContext();
         const pos = await db.purchaseOrder.findMany({
@@ -2772,6 +2865,9 @@ export async function processReturn(data: {
     po_id?: number,         // for supplier returns
     purchase_invoice_id?: number, // for supplier returns
 }) {
+    const denied = await denyUnlessPharmacyRole(PHARMACY_RETURN_ROLES);
+    if (denied) return denied;
+
     try {
         const { db, organizationId, session } = await requireTenantContext();
 
@@ -3034,6 +3130,9 @@ export async function processReturn(data: {
 //   (a credit note will be created against it).
 // - If neither exists, returns data: null (stock is restocked only).
 export async function getReturnInvoiceForPatient(patientId: string) {
+    const denied = await denyUnlessPharmacyRole(PHARMACY_RETURN_ROLES);
+    if (denied) return denied;
+
     try {
         const { db } = await requireTenantContext();
 
@@ -3101,6 +3200,9 @@ export async function getReturnInvoiceForPatient(patientId: string) {
 // counter bills (incl. walk-in/OTC whose customer name lives in `notes`) and IPD
 // bills, by invoice number, registered patient name/phone/ID, or walk-in name.
 export async function searchReturnableInvoices(query: string) {
+    const denied = await denyUnlessPharmacyRole(PHARMACY_OPERATE_ROLES);
+    if (denied) return denied;
+
     try {
         const { db } = await requireTenantContext();
         const q = (query || '').trim();
@@ -3194,6 +3296,9 @@ export async function searchReturnableInvoices(query: string) {
 
 
 export async function getPharmacyOrderDetails(orderId: number) {
+    const denied = await denyUnlessPharmacyRole(PHARMACY_OPERATE_ROLES);
+    if (denied) return denied;
+
     try {
         const { db } = await requireTenantContext();
 
@@ -3241,6 +3346,9 @@ export async function getPharmacyOrderDetails(orderId: number) {
 // ========================================
 
 export async function verifyPharmacyOrder(orderId: number, notes?: string) {
+    const denied = await denyUnlessPharmacyRole(PHARMACY_OPERATE_ROLES);
+    if (denied) return denied;
+
     try {
         const { db } = await requireTenantContext();
 
@@ -3272,6 +3380,9 @@ export async function verifyPharmacyOrder(orderId: number, notes?: string) {
 }
 
 export async function getNarcoticRegister(drugName?: string) {
+    const denied = await denyUnlessPharmacyRole(PHARMACY_OPERATE_ROLES);
+    if (denied) return denied;
+
     try {
         const { db, organizationId } = await requireTenantContext();
 
@@ -3307,6 +3418,9 @@ export async function addNarcoticEntry(data: {
     transaction_type: string;
     notes?: string;
 }) {
+    const denied = await denyUnlessPharmacyRole(PHARMACY_OPERATE_ROLES);
+    if (denied) return denied;
+
     try {
         const { db, organizationId } = await requireTenantContext();
 
@@ -3354,6 +3468,9 @@ export async function addNarcoticEntry(data: {
 }
 
 export async function generatePullSheet(wardId?: string) {
+    const denied = await denyUnlessPharmacyRole(PHARMACY_OPERATE_ROLES);
+    if (denied) return denied;
+
     try {
         const { db, organizationId } = await requireTenantContext();
 
@@ -3382,6 +3499,9 @@ export async function generatePullSheet(wardId?: string) {
 }
 
 export async function getGenericAlternatives(genericName: string) {
+    const denied = await denyUnlessPharmacyRole(PHARMACY_CATALOG_ROLES);
+    if (denied) return denied;
+
     try {
         const { db } = await requireTenantContext();
 
@@ -3414,6 +3534,9 @@ export async function getGenericAlternatives(genericName: string) {
 }
 
 export async function getPharmacyAnalytics() {
+    const denied = await denyUnlessPharmacyRole(PHARMACY_OPERATE_ROLES);
+    if (denied) return denied;
+
     try {
         const { db, organizationId } = await requireTenantContext();
 
@@ -3664,6 +3787,9 @@ export async function getPharmacyRevenueReport(filters?: {
     doctor?: string;
     search?: string;
 }) {
+    const denied = await denyUnlessPharmacyRole(PHARMACY_OPERATE_ROLES);
+    if (denied) return denied;
+
     try {
         const { db } = await requireTenantContext();
 
@@ -3893,6 +4019,9 @@ export async function getInventoryMovements(filters?: {
     to?: string;
     limit?: number;
 }) {
+    const denied = await denyUnlessPharmacyRole(PHARMACY_OPERATE_ROLES);
+    if (denied) return denied;
+
     try {
         const { db } = await requireTenantContext();
         const where: any = {};
@@ -3948,6 +4077,9 @@ export async function createPurchaseInvoice(data: {
         mrp?: number;
     }>;
 }) {
+    const denied = await denyUnlessPharmacyRole(PHARMACY_PROCUREMENT_ROLES);
+    if (denied) return denied;
+
     try {
         const { db, organizationId } = await requireTenantContext();
 
@@ -4037,6 +4169,9 @@ export async function createPurchaseInvoice(data: {
 }
 
 export async function matchPurchaseInvoice(invoiceId: number) {
+    const denied = await denyUnlessPharmacyRole(PHARMACY_PROCUREMENT_ROLES);
+    if (denied) return denied;
+
     try {
         const { db } = await requireTenantContext();
 
@@ -4125,6 +4260,9 @@ function parsePoExpiry(raw: any): Date | null {
 }
 
 export async function postPurchaseInvoice(invoiceId: number) {
+    const denied = await denyUnlessPharmacyRole(PHARMACY_PROCUREMENT_ROLES);
+    if (denied) return denied;
+
     try {
         const { db, organizationId } = await requireTenantContext();
 
@@ -4289,6 +4427,9 @@ export async function recordSupplierPayment(data: {
     payment_method: string;
     payment_reference?: string;
 }) {
+    const denied = await denyUnlessPharmacyRole(PHARMACY_PROCUREMENT_ROLES);
+    if (denied) return denied;
+
     try {
         const { db } = await requireTenantContext();
 
@@ -4350,6 +4491,9 @@ export async function recordSupplierPayment(data: {
 }
 
 export async function getPurchaseInvoices(filters?: { status?: string; vendor_id?: number }) {
+    const denied = await denyUnlessPharmacyRole(PHARMACY_PROCUREMENT_ROLES);
+    if (denied) return denied;
+
     try {
         const { db } = await requireTenantContext();
         const where: any = {};
@@ -4382,6 +4526,9 @@ export async function adjustStock(data: {
     target_stock_qty?: number; // direct target stock count (e.g. 50)
     reason: string;
 }) {
+    const denied = await denyUnlessPharmacyRole(PHARMACY_OPERATE_ROLES);
+    if (denied) return denied;
+
     try {
         const { db, organizationId, session } = await requireTenantContext();
 

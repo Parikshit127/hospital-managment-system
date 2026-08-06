@@ -5,6 +5,10 @@ import { prisma } from '@/backend/db';
 
 const DEFAULT_ORG = 'org-avani-default';
 
+// NOTE: the pharmacy actions below are role-gated (see app/lib/pharmacy-access.ts).
+// They already required a staff session via requireTenantContext(); they now also
+// require that session's role to be admin or pharmacist. Run this smoke test while
+// signed in as one of those, otherwise steps 5–7 report an access-denied error.
 export async function GET(request: NextRequest) {
     if (process.env.NODE_ENV === 'production') {
         return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 });
