@@ -73,6 +73,37 @@ async function postPharmacyJournal(db: any, organizationId: string, data: {
 
 // Invoice and receipt number generation now uses sequential generator from @/app/lib/sequence-generator
 
+/**
+ * The only batches a patient may legally be given: in stock, not quarantined,
+ * and NOT past expiry.
+ *
+ * Expiry is the clause that kept getting left out. The counter-sale path
+ * filtered on it but every IPD indent allocator did not — and because they all
+ * sort FEFO (`expiry_date: 'asc'`), an expired batch wasn't merely allowed, it
+ * was the FIRST one picked. Anything that selects stock to hand over must build
+ * its `where` from this helper so the three conditions can't drift apart again.
+ *
+ * `new Date()` is evaluated per call on purpose — a module-level constant would
+ * freeze "now" at server start and slowly begin admitting expired stock.
+ */
+function dispensableBatchWhere(medicineId: number) {
+    return {
+        medicine_id: medicineId,
+        current_stock: { gt: 0 },
+        is_quarantined: false,
+        expiry_date: { gt: new Date() },
+    };
+}
+
+/** Human-readable reason a specific batch may not be dispensed, or null if it may. */
+function batchDispenseBlocker(batch: { expiry_date: Date; is_quarantined: boolean }): string | null {
+    if (batch.is_quarantined) return 'is quarantined';
+    if (new Date(batch.expiry_date) <= new Date()) {
+        return `expired on ${new Date(batch.expiry_date).toLocaleDateString('en-GB')}`;
+    }
+    return null;
+}
+
 // Server-paginated, server-searched inventory query.
 // Returns a flat list of "batch-like" rows for billing UI compatibility:
 // - one row per (medicine, batch) for medicines that have in-stock batches
@@ -850,7 +881,7 @@ export async function processDoctorOrder(orderId: number, paymentMethod: string 
             }
 
             const batches = await db.pharmacy_batch_inventory.findMany({
-                where: { medicine_id: medicineId, current_stock: { gt: 0 } },
+                where: dispensableBatchWhere(medicineId),
                 orderBy: { expiry_date: 'asc' }
             });
 
@@ -958,7 +989,12 @@ export async function getPharmacyQueue() {
                 selling_price: true,
                 price_per_unit: true,
                 batches: {
-                    where: { current_stock: { gt: 0 } },
+                    // Must match what the allocators will actually hand out
+                    // (dispensableBatchWhere). Counting expired stock here made the
+                    // ward screen show more than could be dispensed, and the
+                    // pharmacist's typed quantity then overflowed into a manual
+                    // override — charged to the patient with no stock deducted.
+                    where: { current_stock: { gt: 0 }, is_quarantined: false, expiry_date: { gt: new Date() } },
                     select: { current_stock: true, mrp: true },
                     orderBy: { expiry_date: 'asc' },   // FEFO — same batch dispenseMedicine will price from
                 },
@@ -1349,6 +1385,16 @@ export async function dispenseMedicine(orderId: number, dispensedItems: any[]) {
                     throw new Error(`Insufficient stock for batch ${item.batch_no} of ${batch?.medicine?.brand_name || 'requested medicine'}`);
                 }
 
+                // Last line of defence before stock moves. The callers above now
+                // allocate only from dispensableBatchWhere(), but this function is
+                // also reachable with a caller-supplied batch_no (the dispense
+                // screen posts one per line), so an expired or quarantined batch
+                // must be refused by name here rather than quietly handed over.
+                const blocker = batchDispenseBlocker(batch);
+                if (blocker) {
+                    throw new Error(`Cannot dispense ${batch.medicine.brand_name}: batch ${batch.batch_no} ${blocker}. Pick another batch or write it off under Returns.`);
+                }
+
                 const updatedBatch = await tx.pharmacy_batch_inventory.update({
                     where: { id: batch.id },
                     data: { current_stock: { decrement: item.quantity } }
@@ -1733,7 +1779,7 @@ export async function dispenseIndentWithShortages(orderId: number) {
             if (!item.medicine_id) continue; // unresolved medicine -> reported as fully short
 
             const batches = await db.pharmacy_batch_inventory.findMany({
-                where: { medicine_id: item.medicine_id, current_stock: { gt: 0 }, is_quarantined: false },
+                where: dispensableBatchWhere(item.medicine_id),
                 orderBy: { expiry_date: 'asc' },
             });
 
@@ -1849,7 +1895,7 @@ export async function dispenseIndentManual(
             }
 
             const batches = await db.pharmacy_batch_inventory.findMany({
-                where: { medicine_id: orderItem.medicine_id, current_stock: { gt: 0 }, is_quarantined: false },
+                where: dispensableBatchWhere(orderItem.medicine_id),
                 orderBy: { expiry_date: 'asc' },
             });
 
@@ -3317,7 +3363,15 @@ export async function getPharmacyOrderDetails(orderId: number) {
         const medicineNames = order.items.map((i: any) => i.medicine_name);
         const medicines = await db.pharmacy_medicine_master.findMany({
             where: { brand_name: { in: medicineNames } },
-            include: { batches: { where: { current_stock: { gt: 0 } }, orderBy: { expiry_date: 'asc' } } },
+            // Only dispensable batches reach the screen — the batch dropdown and
+            // its FEFO default are built straight off this list, so offering an
+            // expired batch here is what put one in front of the pharmacist.
+            include: {
+                batches: {
+                    where: { current_stock: { gt: 0 }, is_quarantined: false, expiry_date: { gt: new Date() } },
+                    orderBy: { expiry_date: 'asc' },
+                },
+            },
         });
 
         const itemsWithStock = order.items.map((item: any) => {
@@ -4532,8 +4586,21 @@ export async function adjustStock(data: {
     try {
         const { db, organizationId, session } = await requireTenantContext();
 
-        const batch = await db.pharmacy_batch_inventory.findUnique({ where: { id: data.batch_id } });
-        if (!batch) return { success: false, error: 'Batch not found' };
+        // pharmacy_batch_inventory has no organizationId column and so is absent
+        // from TENANT_SCOPED_MODELS — the $extends auto-scoping does NOT cover it.
+        // Ownership has to be proven through the parent medicine, exactly as
+        // updateBatchDetails does; without this a crafted batch_id edits another
+        // hospital's stock. `medicine_id` is then taken from the batch rather than
+        // from the caller, so the movement ledger and narcotic register can't be
+        // written against an arbitrary medicine either.
+        const batch = await db.pharmacy_batch_inventory.findUnique({
+            where: { id: data.batch_id },
+            include: { medicine: { select: { organizationId: true } } },
+        });
+        if (!batch || batch.medicine.organizationId !== organizationId) {
+            return { success: false, error: 'Batch not found' };
+        }
+        const medicineId = batch.medicine_id;
 
         let adjQty = data.adjustment_qty ?? 0;
         if (data.target_stock_qty !== undefined) {
@@ -4551,7 +4618,7 @@ export async function adjustStock(data: {
         await db.pharmacyInventoryMovement.create({
             data: {
                 organizationId,
-                medicine_id: data.medicine_id,
+                medicine_id: medicineId,
                 batch_id: data.batch_id,
                 movement_type: 'ADJUSTMENT',
                 quantity_in: adjQty > 0 ? adjQty : 0,
@@ -4565,7 +4632,7 @@ export async function adjustStock(data: {
         });
 
         // Narcotic register for controlled drugs
-        const medicine = await db.pharmacy_medicine_master.findUnique({ where: { id: data.medicine_id } });
+        const medicine = await db.pharmacy_medicine_master.findUnique({ where: { id: medicineId } });
         if (medicine && (medicine.is_narcotic || ['H', 'H1', 'X', 'NDPS'].includes(medicine.drug_schedule || ''))) {
             const lastEntry = await db.narcoticRegister.findFirst({
                 where: { organizationId, drug_name: medicine.brand_name },

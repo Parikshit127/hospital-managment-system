@@ -75,8 +75,13 @@ export default function DispensePage() {
             // line while following standard dispensing practice; they can still change it.
             setDispenseList(res.data.items.map((it: any) => {
                 const batches = it.available_batches || [];
+                // FEFO picks the earliest expiry, so an expired batch would sort
+                // to the front and become the default. getPharmacyOrderDetails
+                // already excludes those; this keeps the default honest even if a
+                // stale payload slips one through.
+                const now = Date.now();
                 const fefoBatch = [...batches]
-                    .filter((b: any) => (Number(b.stock) || 0) > 0)
+                    .filter((b: any) => (Number(b.stock) || 0) > 0 && new Date(b.expiry).getTime() > now)
                     .sort((a: any, b: any) => new Date(a.expiry).getTime() - new Date(b.expiry).getTime())[0];
                 return {
                     id: it.id,
