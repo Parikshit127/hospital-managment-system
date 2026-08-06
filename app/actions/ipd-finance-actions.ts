@@ -2033,6 +2033,113 @@ export async function getChargePostingLog(admissionId?: string, date?: Date) {
 }
 
 // ============================================
+// POST-DISCHARGE TPA APPROVAL
+// ============================================
+
+/**
+ * Record (or correct) the TPA/insurer APPROVED amount on a bill that is already
+ * discharged and/or locked — WITHOUT reopening it. The insurer's sanctioned share
+ * is a receivable/claim fact, not a charge edit, so this is intentionally NOT gated
+ * by the bill lock or discharge status (that lock only protects the charge LINES).
+ * This is the post-discharge counterpart to the TPA block inside settleAndDischarge,
+ * and keeps identical semantics so both paths behave the same:
+ *   - the approved amount stays OUTSTANDING (a TPA receivable), never auto-paid;
+ *   - the bill is flagged tpa_insurance (from the 'cash' default) so it shows on the
+ *     TPA dashboards; the provider is resolved from the patient's active policy;
+ *   - the linked claim row is advanced to Approved.
+ * Money already received from the TPA is protected — the approval can't be set below it.
+ */
+export async function recordTpaApprovedAmount(input: {
+    invoice_id?: number;
+    admission_id?: string;
+    tpa_approved_amount: number;
+}) {
+    try {
+        const { db, session, organizationId } = await requireTenantContext();
+        if (!input.invoice_id && !input.admission_id) {
+            return { success: false, error: 'invoice_id or admission_id is required' };
+        }
+        const tpaApproved = Math.max(0, Number(input.tpa_approved_amount) || 0);
+
+        const invoice = input.invoice_id
+            ? await db.invoices.findUnique({ where: { id: input.invoice_id } })
+            : await db.invoices.findFirst({
+                where: { admission_id: input.admission_id, status: { not: 'Cancelled' } },
+                orderBy: { created_at: 'desc' },
+            });
+        if (!invoice || invoice.organizationId !== organizationId) {
+            return { success: false, error: 'No active invoice found for this bill' };
+        }
+
+        // Never let a correction drop the approval below what the TPA already paid.
+        const alreadySettled = Number(invoice.tpa_settled_amount || 0);
+        if (tpaApproved < alreadySettled) {
+            return {
+                success: false,
+                error: `Approved amount cannot be less than ₹${alreadySettled.toLocaleString('en-IN')} already received from the TPA.`,
+            };
+        }
+
+        // Resolve the payer from the patient's active policy if the bill has none,
+        // so it groups under the right TPA rather than "Unmapped / Unknown".
+        let resolvedProviderId: number | undefined;
+        if (invoice.tpa_provider_id == null) {
+            const policy = await db.insurance_policies.findFirst({
+                where: { patient_id: invoice.patient_id, status: 'Active' },
+                orderBy: { created_at: 'desc' },
+                select: { provider_id: true },
+            });
+            resolvedProviderId = policy?.provider_id ?? undefined;
+        }
+
+        await db.invoices.update({
+            where: { id: invoice.id },
+            data: {
+                tpa_payable: tpaApproved,
+                tpa_claim_status: 'approved',
+                tpa_approved_amount: tpaApproved,
+                tpa_approved_at: new Date(),
+                ...(invoice.billing_patient_type === 'cash' ? { billing_patient_type: 'tpa_insurance' } : {}),
+                ...(resolvedProviderId != null ? { tpa_provider_id: resolvedProviderId } : {}),
+            },
+        });
+
+        await syncClaimToInvoiceTpa(db, {
+            id: invoice.id,
+            tpa_claim_status: 'approved',
+            tpa_approved_amount: tpaApproved,
+            tpa_settled_amount: alreadySettled,
+        });
+
+        await db.system_audit_logs.create({
+            data: {
+                action: 'tpa_claim_approved',
+                module: 'finance',
+                entity_type: 'invoice',
+                entity_id: String(invoice.id),
+                user_id: session?.id,
+                username: session?.username,
+                role: session?.role,
+                details: JSON.stringify({
+                    invoice_id: invoice.id,
+                    tpa_approved_amount: tpaApproved,
+                    tpa_provider_id: resolvedProviderId ?? invoice.tpa_provider_id,
+                    post_discharge: true,
+                    was_locked: !!invoice.is_locked,
+                    by: session?.username,
+                }),
+                organizationId,
+            },
+        });
+
+        return { success: true, data: { invoice_id: invoice.id, tpa_approved_amount: tpaApproved } };
+    } catch (error: any) {
+        console.error('recordTpaApprovedAmount error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+// ============================================
 // DISCHARGE SETTLEMENT
 // ============================================
 

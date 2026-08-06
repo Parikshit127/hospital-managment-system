@@ -9,6 +9,7 @@ import {
     addPatientPolicy,
     updatePatientPolicy,
 } from '@/app/actions/insurance-actions';
+import { recordTpaApprovedAmount } from '@/app/actions/ipd-finance-actions';
 import { RecordTpaPaymentModal } from '@/app/components/billing/RecordTpaPaymentModal';
 import { isSemiDischarged } from '@/app/lib/admission-status';
 
@@ -160,6 +161,28 @@ export function TpaProfilePanel({ patientId, patientName, patientType }: PanelPr
     const [providers, setProviders] = useState<Provider[]>([]);
     // null = form closed; 'new' = adding; a Policy = editing that policy.
     const [editing, setEditing] = useState<'new' | Policy | null>(null);
+    // Inline "enter / update TPA approved amount" editor — keyed by invoice id.
+    // Lets a biller record the insurer's sanctioned amount AFTER discharge, on a
+    // locked bill, without reopening it.
+    const [editApprovedId, setEditApprovedId] = useState<number | null>(null);
+    const [approvedInput, setApprovedInput] = useState('');
+    const [savingApproved, setSavingApproved] = useState(false);
+
+    const startEditApproved = (invId: number, approved: number) => {
+        setEditApprovedId(invId);
+        setApprovedInput(approved ? String(approved) : '');
+    };
+    const cancelEditApproved = () => { setEditApprovedId(null); setApprovedInput(''); };
+    const saveApproved = async (invId: number) => {
+        const amt = Number(approvedInput);
+        if (!(amt >= 0) || Number.isNaN(amt)) { setError('Enter a valid approved amount'); return; }
+        setSavingApproved(true);
+        setError(null);
+        const res = await recordTpaApprovedAmount({ invoice_id: invId, tpa_approved_amount: amt });
+        setSavingApproved(false);
+        if (res.success) { cancelEditApproved(); void load(); }
+        else setError(res.error || 'Failed to record approved amount');
+    };
 
     useEffect(() => {
         getInsuranceProviders().then(r => { if (r.success) setProviders((r.data as Provider[]) || []); });
@@ -280,7 +303,45 @@ export function TpaProfilePanel({ patientId, patientName, patientType }: PanelPr
                                                             {isSemiDischarged(inv.admission) && <SemiDischargedBadge />}
                                                         </div>
                                                     </td>
-                                                    <td className="py-2 pr-3 text-right text-gray-700">{inr(approved)}</td>
+                                                    <td className="py-2 pr-3 text-right text-gray-700">
+                                                        {editApprovedId === Number(inv.id) ? (
+                                                            <div className="flex items-center gap-1 justify-end">
+                                                                <input
+                                                                    type="number"
+                                                                    min={settled}
+                                                                    step="0.01"
+                                                                    autoFocus
+                                                                    value={approvedInput}
+                                                                    onChange={(e) => setApprovedInput(e.target.value)}
+                                                                    className="w-24 px-1.5 py-1 border rounded text-xs text-right"
+                                                                    placeholder="Approved ₹"
+                                                                />
+                                                                <button
+                                                                    onClick={() => saveApproved(Number(inv.id))}
+                                                                    disabled={savingApproved}
+                                                                    title="Save approved amount"
+                                                                    className="text-emerald-600 hover:text-emerald-800 disabled:opacity-40 text-sm font-bold"
+                                                                >{savingApproved ? '…' : '✓'}</button>
+                                                                <button
+                                                                    onClick={cancelEditApproved}
+                                                                    disabled={savingApproved}
+                                                                    title="Cancel"
+                                                                    className="text-gray-400 hover:text-gray-700 disabled:opacity-40 text-sm font-bold"
+                                                                >✕</button>
+                                                            </div>
+                                                        ) : (
+                                                            <span className="inline-flex items-center gap-1 justify-end">
+                                                                {inr(approved)}
+                                                                <button
+                                                                    onClick={() => startEditApproved(Number(inv.id), approved)}
+                                                                    title={approved > 0 ? 'Update TPA approved amount (no need to reopen the bill)' : 'Enter TPA approved amount (no need to reopen the bill)'}
+                                                                    className="text-gray-300 hover:text-purple-600 transition-colors"
+                                                                >
+                                                                    <Pencil className="h-3 w-3" />
+                                                                </button>
+                                                            </span>
+                                                        )}
+                                                    </td>
                                                     <td className="py-2 pr-3 text-right text-gray-700">{inr(settled)}</td>
                                                     <td className="py-2 pr-3 text-right font-semibold text-gray-900">{inr(outstanding)}</td>
                                                     <td className="py-2 pr-4 text-right">
