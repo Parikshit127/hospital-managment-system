@@ -44,7 +44,7 @@ export default function PharmacyInventoryPage() {
 
     // Modal: Add Bulk Stock
     const [modalOpen, setModalOpen] = useState(false);
-    const [form, setForm] = useState({ brand_name: '', generic_name: '', batch_no: '', stock: '', price: '', expiry: '', rack: '' });
+    const [form, setForm] = useState({ brand_name: '', generic_name: '', batch_no: '', stock: '', price: '', cost_price: '', expiry: '', rack: '', hsn_sac_code: '' });
 
     // Modal: Adjust Stock
     const [adjustRow, setAdjustRow] = useState<any>(null);
@@ -170,8 +170,12 @@ export default function PharmacyInventoryPage() {
             batch_no: form.batch_no,
             stock: Number(form.stock),
             price: Number(form.price),
+            // Inventory valuation sums cost_price — without it every manually
+            // added batch values at zero on the Stock Value KPI.
+            cost_price: form.cost_price ? Number(form.cost_price) : undefined,
             expiry: new Date(form.expiry),
-            rack: form.rack
+            rack: form.rack,
+            hsn_sac_code: form.hsn_sac_code || undefined,
         };
         const res = await addInventoryBatch(payload);
         if (res.success) {
@@ -188,7 +192,7 @@ export default function PharmacyInventoryPage() {
             onRefresh={() => loadInventory()}
             refreshing={refreshing}
             headerActions={
-                <button onClick={() => { setForm({ brand_name: '', generic_name: '', batch_no: '', stock: '', price: '', expiry: '', rack: '' }); setModalOpen(true); }} className="flex items-center gap-2 bg-gradient-to-r from-teal-500 to-emerald-600 hover:from-teal-600 hover:to-emerald-700 text-white font-bold py-2 px-4 rounded-xl shadow-sm transition-all text-sm">
+                <button onClick={() => { setForm({ brand_name: '', generic_name: '', batch_no: '', stock: '', price: '', cost_price: '', expiry: '', rack: '', hsn_sac_code: '' }); setModalOpen(true); }} className="flex items-center gap-2 bg-gradient-to-r from-teal-500 to-emerald-600 hover:from-teal-600 hover:to-emerald-700 text-white font-bold py-2 px-4 rounded-xl shadow-sm transition-all text-sm">
                     <Plus className="h-4 w-4" /> Add Bulk Stock
                 </button>
             }
@@ -330,9 +334,29 @@ export default function PharmacyInventoryPage() {
                                 <input required type="number" placeholder="Qty" className="w-full p-2 border rounded-lg text-sm" value={form.stock} onChange={e => setForm({ ...form, stock: e.target.value })} />
                             </div>
                             <div className="grid grid-cols-2 gap-4">
-                                <input required type="number" placeholder="Unit Price" className="w-full p-2 border rounded-lg text-sm" value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} />
+                                <input required type="number" placeholder="Selling Price (MRP)" className="w-full p-2 border rounded-lg text-sm" value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} />
                                 <DateField required className="w-full p-2 border rounded-lg text-sm text-gray-500" value={form.expiry} onChange={e => setForm({ ...form, expiry: e.target.value })} />
                             </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <input
+                                    type="number"
+                                    step="0.01"
+                                    placeholder="Cost Price (purchase)"
+                                    title="Purchase cost per unit — stock value is calculated from this"
+                                    className="w-full p-2 border rounded-lg text-sm"
+                                    value={form.cost_price}
+                                    onChange={e => setForm({ ...form, cost_price: e.target.value })}
+                                />
+                                <input
+                                    placeholder="HSN / SAC"
+                                    className="w-full p-2 border rounded-lg text-sm"
+                                    value={form.hsn_sac_code}
+                                    onChange={e => setForm({ ...form, hsn_sac_code: e.target.value })}
+                                />
+                            </div>
+                            <p className="text-[11px] text-gray-400 -mt-1">
+                                Cost price drives the Stock Value figure — leave it blank and this batch counts as ₹0.
+                            </p>
                             <button type="submit" className="w-full bg-orange-600 text-white font-bold p-2 rounded-lg">Save Item</button>
                         </div>
                     </form>

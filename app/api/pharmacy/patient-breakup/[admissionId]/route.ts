@@ -92,7 +92,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ adm
             pharmItems.map((it) => parseDesc(it.description).batch).filter((b) => b && !/^n\/?a$/i.test(b)) as string[]
         ));
         const batches = batchNos.length
-            ? await prisma.pharmacy_batch_inventory.findMany({ where: { batch_no: { in: batchNos } }, select: { batch_no: true, expiry_date: true } })
+            // Raw prisma + a model with no organizationId column: matching on
+            // batch_no alone could pick up another tenant's batch and print its
+            // expiry on this patient's breakup. Scope through the medicine.
+            ? await prisma.pharmacy_batch_inventory.findMany({ where: { batch_no: { in: batchNos }, medicine: { organizationId: orgId } }, select: { batch_no: true, expiry_date: true } })
             : [];
         const expiryMap = new Map<string, any>(batches.map((b: any) => [b.batch_no, b.expiry_date]));
 

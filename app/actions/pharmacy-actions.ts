@@ -478,6 +478,18 @@ export async function generateInvoice(
         // 1. Deduct stock & build line items with GST + FEFO + movement ledger
         let totalCogs = 0;
         for (const item of items) {
+            // medicine_id arrives straight from the client cart. Nothing else on
+            // this path checks it, and pharmacy_batch_inventory is not
+            // tenant-scoped, so an id belonging to another hospital would have
+            // dispensed THEIR stock. Prove ownership before touching any batch.
+            const ownedMedicine = await db.pharmacy_medicine_master.findFirst({
+                where: { id: item.medicine_id, organizationId },
+                select: { id: true, brand_name: true },
+            });
+            if (!ownedMedicine) {
+                return { success: false, error: 'One of the items is not in this hospital\'s medicine catalogue. Remove it and try again.' };
+            }
+
             // FEFO: select earliest non-expired batch if batch_no not specified
             const batchWhere: any = { medicine_id: item.medicine_id, current_stock: { gte: item.quantity }, expiry_date: { gt: new Date() }, is_quarantined: false };
             if (item.batch_no) batchWhere.batch_no = item.batch_no;
@@ -486,6 +498,34 @@ export async function generateInvoice(
                 include: { medicine: true },
                 orderBy: { expiry_date: 'asc' }, // FEFO
             });
+
+            // No dispensable batch. That is only legitimate when the medicine has
+            // NO stock rows at all (a catalogue-only item the pharmacist prices at
+            // the counter). If batches DO exist and merely fail the filter —
+            // expired, quarantined, or not enough in the one batch — the old code
+            // fell through to the catalogue branch below and billed the patient
+            // with no stock deduction, no movement row and no warning. Refuse, and
+            // say which of the three it was.
+            if (!batch) {
+                const stockRows = await db.pharmacy_batch_inventory.findMany({
+                    where: { medicine_id: item.medicine_id, ...(item.batch_no ? { batch_no: item.batch_no } : {}) },
+                    select: { batch_no: true, current_stock: true, expiry_date: true, is_quarantined: true },
+                });
+                if (stockRows.length > 0) {
+                    const name = ownedMedicine.brand_name;
+                    const dispensable = stockRows
+                        .filter((b: any) => !batchDispenseBlocker(b))
+                        .reduce((s: number, b: any) => s + b.current_stock, 0);
+                    if (dispensable === 0) {
+                        const why = stockRows.map((b: any) => batchDispenseBlocker(b)).find(Boolean) || 'is out of stock';
+                        return { success: false, error: `Cannot sell ${name}: every batch in stock ${why}. Write it off under Returns, or receive fresh stock first.` };
+                    }
+                    return {
+                        success: false,
+                        error: `Cannot sell ${item.quantity} × ${name} from a single batch — only ${dispensable} unit(s) are dispensable and they are split across batches. Add each batch to the cart separately.`,
+                    };
+                }
+            }
 
             if (batch && batch.current_stock >= item.quantity) {
                 const updatedBatch = await db.pharmacy_batch_inventory.update({
@@ -1123,13 +1163,26 @@ export async function addInventoryBatch(data: {
     hsn_sac_code?: string,
     // Pack size ("10", "1x10", "100ML"). Same deal as HSN — product-level, written
     // through to the medicine master, and printed in the bill's PACK column.
-    pack?: string
+    pack?: string,
+    // Purchase cost per unit. Inventory valuation (and therefore the Stock Value
+    // KPI) sums cost_price, so a batch added without one values at zero.
+    cost_price?: number
 }) {
     const denied = await denyUnlessPharmacyRole(PHARMACY_OPERATE_ROLES);
     if (denied) return denied;
 
     try {
-        const { db, organizationId } = await requireTenantContext();
+        const { db, organizationId, session } = await requireTenantContext();
+
+        // Stock that is already expired must never enter the shelf: it would be
+        // counted in stock value, offered in the billing picker, and (before the
+        // FEFO fix) sorted to the front of every allocator.
+        const expiry = new Date(data.expiry);
+        if (isNaN(expiry.getTime())) return { success: false, error: 'Enter a valid expiry date.' };
+        if (expiry <= new Date()) {
+            return { success: false, error: `Expiry ${expiry.toLocaleDateString('en-GB')} is in the past — this stock cannot be received.` };
+        }
+        if (!(Number(data.stock) > 0)) return { success: false, error: 'Enter a quantity greater than zero.' };
 
         // Normalise defensively: the client already uppercases/strips, but this
         // action is callable directly. Empty string -> undefined so we never
@@ -1182,27 +1235,89 @@ export async function addInventoryBatch(data: {
             });
         }
 
-        // Upsert the batch: if this batch_no already exists for the medicine,
-        // top up its stock instead of failing on the unique constraint.
-        await db.pharmacy_batch_inventory.upsert({
+        // Top up when this batch_no already exists for the medicine, rather than
+        // failing the unique constraint — but a batch number identifies ONE
+        // physical lot with ONE expiry, so a mismatched date is a data-entry
+        // mistake, not a top-up. Overwriting it (as this used to) silently
+        // re-dated stock already sitting on the shelf.
+        const existingBatch = await db.pharmacy_batch_inventory.findUnique({
+            where: { medicine_id_batch_no: { medicine_id: medicineId, batch_no: data.batch_no } },
+            select: { id: true, expiry_date: true, current_stock: true },
+        });
+        if (existingBatch) {
+            const sameDay = new Date(existingBatch.expiry_date).toDateString() === expiry.toDateString();
+            if (!sameDay) {
+                return {
+                    success: false,
+                    error: `Batch ${data.batch_no} already exists with expiry ${new Date(existingBatch.expiry_date).toLocaleDateString('en-GB')}. A batch number can only have one expiry — correct the date, or use a different batch number.`,
+                };
+            }
+        }
+
+        const batch = await db.pharmacy_batch_inventory.upsert({
             where: { medicine_id_batch_no: { medicine_id: medicineId, batch_no: data.batch_no } },
             create: {
                 medicine_id: medicineId,
                 batch_no: data.batch_no,
                 current_stock: data.stock,
-                expiry_date: data.expiry,
+                expiry_date: expiry,
                 rack_location: data.rack,
                 mrp: data.price,
+                ...(data.cost_price != null ? { cost_price: data.cost_price, actual_cost: data.cost_price } : {}),
             },
             update: {
                 current_stock: { increment: data.stock },
-                expiry_date: data.expiry,
                 rack_location: data.rack,
                 mrp: data.price,
+                ...(data.cost_price != null ? { cost_price: data.cost_price, actual_cost: data.cost_price } : {}),
             },
         });
 
+        // Manual receipts were invisible to the movement ledger (only GRN wrote to
+        // it), so the stock ledger never reconciled against actual shelf stock.
+        await db.pharmacyInventoryMovement.create({
+            data: {
+                organizationId,
+                medicine_id: medicineId,
+                batch_id: batch.id,
+                movement_type: 'PURCHASE',
+                quantity_in: data.stock,
+                unit_cost: Number(data.cost_price ?? 0),
+                balance_after: batch.current_stock,
+                source_type: 'MANUAL_ADD',
+                user_id: session?.id,
+                reason: 'Manual stock entry',
+            },
+        });
+
+        // Narcotics and Schedule H1/X drugs must hit the register on the way IN as
+        // well as out. receivePurchaseOrder already did this; this path did not, so
+        // stock added here made the running balance permanently understated.
+        const medicine = await db.pharmacy_medicine_master.findUnique({ where: { id: medicineId } });
+        if (medicine && (medicine.is_narcotic || ['H', 'H1', 'X', 'NDPS'].includes(medicine.drug_schedule || ''))) {
+            const lastEntry = await db.narcoticRegister.findFirst({
+                where: { organizationId, drug_name: medicine.brand_name },
+                orderBy: { created_at: 'desc' },
+            });
+            await db.narcoticRegister.create({
+                data: {
+                    organizationId,
+                    drug_name: medicine.brand_name,
+                    medicine_id: medicine.id,
+                    batch_no: data.batch_no,
+                    batch_id: batch.id,
+                    quantity_in: data.stock,
+                    quantity_out: 0,
+                    balance: (lastEntry?.balance || 0) + data.stock,
+                    transaction_type: 'IN',
+                    source_type: 'MANUAL_ADD',
+                    notes: 'Manual stock entry',
+                },
+            });
+        }
+
         revalidatePath('/pharmacy/billing');
+        revalidatePath('/pharmacy/inventory');
         invalidatePharmacyTags(['stock', 'catalog']);
         return { success: true };
     } catch (error) {
@@ -2198,12 +2313,17 @@ export async function getExpiringBatches(days: number = 30) {
     if (denied) return denied;
 
     try {
-        const { db } = await requireTenantContext();
+        const { db, organizationId } = await requireTenantContext();
         const futureDate = new Date();
         futureDate.setDate(futureDate.getDate() + days);
 
         const batches = await db.pharmacy_batch_inventory.findMany({
             where: {
+                // pharmacy_batch_inventory has no organizationId column, so it is
+                // absent from TENANT_SCOPED_MODELS and the $extends auto-scoping
+                // never applied here — this query was returning every tenant's
+                // batches. Scope through the parent medicine explicitly.
+                medicine: { organizationId },
                 current_stock: { gt: 0 },
                 expiry_date: { lte: futureDate }
             },

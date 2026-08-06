@@ -173,9 +173,12 @@ export async function deactivateMedicine(id: number) {
 // ---- List batches ----
 export async function listBatches(medicineId: number) {
   try {
-    const { db } = await requireTenantContext();
+    const { db, organizationId } = await requireTenantContext();
+    // medicineId comes from the client and pharmacy_batch_inventory is not
+    // tenant-scoped (no organizationId column), so without this join any
+    // hospital's batches were readable by guessing an id.
     const rows = await db.pharmacy_batch_inventory.findMany({
-      where: { medicine_id: medicineId },
+      where: { medicine_id: medicineId, medicine: { organizationId } },
       orderBy: { expiry_date: 'asc' },
     });
     return { success: true, data: serialize(rows) };

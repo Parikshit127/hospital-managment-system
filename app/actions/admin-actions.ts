@@ -392,19 +392,23 @@ export async function getAdminPatientList(options?: {
 // Get pharmacy inventory alerts (low stock + expiring)
 export async function getInventoryAlerts() {
   try {
-    const { db } = await requireTenantContext();
+    const { db, organizationId } = await requireTenantContext();
 
     const thirtyDaysFromNow = new Date();
     thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
 
+    // pharmacy_batch_inventory carries no organizationId column and so is not in
+    // TENANT_SCOPED_MODELS — the tenant $extends does NOT filter it. Both of these
+    // were listing every tenant's medicines on the admin dashboard. Scope through
+    // the parent medicine.
     const [lowStock, expiringSoon] = await Promise.all([
       db.pharmacy_batch_inventory.findMany({
-        where: { current_stock: { lte: 10 } },
+        where: { medicine: { organizationId }, current_stock: { lte: 10 } },
         include: { medicine: true },
         take: 10,
       }),
       db.pharmacy_batch_inventory.findMany({
-        where: { expiry_date: { lte: thirtyDaysFromNow } },
+        where: { medicine: { organizationId }, expiry_date: { lte: thirtyDaysFromNow } },
         include: { medicine: true },
         take: 10,
       }),
