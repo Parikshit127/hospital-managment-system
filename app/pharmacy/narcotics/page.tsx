@@ -26,6 +26,10 @@ export default function NarcoticsRegisterPage() {
   const [entries, setEntries] = useState<NarcoticEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterDrug, setFilterDrug] = useState('');
+  // Inspections ask for a specific period; without these the screen could only
+  // ever show the server's default 90-day window.
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -40,9 +44,12 @@ export default function NarcoticsRegisterPage() {
     notes: '',
   });
 
-  async function loadEntries(drug?: string) {
+  async function loadEntries(drug?: string, range?: { from?: string; to?: string }) {
     setLoading(true);
-    const res = await getNarcoticRegister(drug || undefined);
+    const res = await getNarcoticRegister(drug || undefined, {
+      from: range?.from ?? fromDate ?? undefined,
+      to: range?.to ?? toDate ?? undefined,
+    });
     if (res.success) setEntries(res.data as NarcoticEntry[]);
     setLoading(false);
   }
@@ -58,6 +65,15 @@ export default function NarcoticsRegisterPage() {
   function handleFilterChange(val: string) {
     setFilterDrug(val);
     loadEntries(val || undefined);
+  }
+
+  function handleRangeChange(next: { from?: string; to?: string }) {
+    if (next.from !== undefined) setFromDate(next.from);
+    if (next.to !== undefined) setToDate(next.to);
+    loadEntries(filterDrug || undefined, {
+      from: next.from ?? fromDate,
+      to: next.to ?? toDate,
+    });
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -122,7 +138,40 @@ export default function NarcoticsRegisterPage() {
             <option key={drug} value={drug}>{drug}</option>
           ))}
         </select>
+
+        {/* An NDPS register must be producible for any past period on demand.
+            Without a range the screen could only ever show the last 90 days. */}
+        <div className="flex items-center gap-2 sm:ml-auto">
+          <label className="text-sm text-gray-600 font-bold whitespace-nowrap">Period</label>
+          <input
+            type="date"
+            value={fromDate}
+            onChange={(e) => handleRangeChange({ from: e.target.value })}
+            className="bg-white border border-gray-200 text-gray-900 text-sm rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
+          />
+          <span className="text-gray-400 text-sm">to</span>
+          <input
+            type="date"
+            value={toDate}
+            onChange={(e) => handleRangeChange({ to: e.target.value })}
+            className="bg-white border border-gray-200 text-gray-900 text-sm rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
+          />
+          {(fromDate || toDate) && (
+            <button
+              type="button"
+              onClick={() => { setFromDate(''); setToDate(''); loadEntries(filterDrug || undefined, { from: '', to: '' }); }}
+              className="text-xs font-bold text-gray-500 hover:text-gray-800 px-2"
+            >
+              Clear
+            </button>
+          )}
+        </div>
       </div>
+      {!fromDate && !toDate && (
+        <p className="text-[11px] text-gray-400 mt-2 px-1">
+          Showing the last 90 days. Pick a period above to pull an older register.
+        </p>
+      )}
 
       {/* Table */}
       <div className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden">

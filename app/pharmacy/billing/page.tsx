@@ -36,6 +36,12 @@ type InventoryItem = {
 
 type CartItem = InventoryItem & { quantity: number };
 
+// batch_no is only unique per medicine (@@unique([medicine_id, batch_no])), and
+// short batch strings like "B1" or "01" repeat across products constantly. Keying
+// the cart on batch_id alone merged two different medicines into one line and made
+// Remove delete the wrong one. This composite key is the real identity of a line.
+const cartKey = (i: { medicine_id?: number | string; batch_id: string }) => `${i.medicine_id ?? ''}::${i.batch_id}`;
+
 const PAYMENT_METHODS = [
     { id: 'Cash', label: 'Cash', icon: Banknote },
     { id: 'Card', label: 'Card', icon: CreditCard },
@@ -373,10 +379,10 @@ export default function PharmacyPage() {
 
     const addToCart = (item: InventoryItem) => {
         setCart(prev => {
-            const existing = prev.find(i => i.batch_id === item.batch_id);
+            const existing = prev.find(i => cartKey(i) === cartKey(item));
             if (existing) {
                 if (existing.quantity < item.stock_count) {
-                    return prev.map(i => i.batch_id === item.batch_id ? { ...i, quantity: i.quantity + 1 } : i);
+                    return prev.map(i => cartKey(i) === cartKey(item) ? { ...i, quantity: i.quantity + 1 } : i);
                 }
                 return prev;
             }
@@ -384,9 +390,9 @@ export default function PharmacyPage() {
         });
     };
 
-    const updateQty = (batchId: string, delta: number) => {
+    const updateQty = (key: string, delta: number) => {
         setCart(prev => prev.map(item => {
-            if (item.batch_id === batchId) {
+            if (cartKey(item) === key) {
                 const newQty = item.quantity + delta;
                 if (newQty <= 0) return null;
                 if (!item.is_catalog && newQty > item.stock_count) return item;
@@ -396,27 +402,27 @@ export default function PharmacyPage() {
         }).filter(Boolean) as CartItem[]);
     };
 
-    const setQty = (batchId: string, raw: string) => {
+    const setQty = (key: string, raw: string) => {
         const parsed = parseInt(raw, 10);
         setCart(prev => prev.map(item => {
-            if (item.batch_id !== batchId) return item;
+            if (cartKey(item) !== key) return item;
             if (isNaN(parsed) || parsed <= 0) return { ...item, quantity: 1 };
             const next = !item.is_catalog ? Math.min(parsed, item.stock_count) : parsed;
             return { ...item, quantity: Math.max(1, next) };
         }));
     };
 
-    const updatePrice = (batchId: string, price: string) => {
+    const updatePrice = (key: string, price: string) => {
         const parsed = parseFloat(price);
         setCart(prev => prev.map(item =>
-            item.batch_id === batchId
+            cartKey(item) === key
                 ? { ...item, unit_price: isNaN(parsed) || parsed < 0 ? 0 : parsed }
                 : item
         ));
     };
 
-    const removeFromCart = (batchId: string) => {
-        setCart(prev => prev.filter(i => i.batch_id !== batchId));
+    const removeFromCart = (key: string) => {
+        setCart(prev => prev.filter(i => cartKey(i) !== key));
     };
 
     // GST calculations
@@ -1443,12 +1449,13 @@ export default function PharmacyPage() {
                                                         <p className="text-[11px] text-gray-300 mt-0.5">Add items from search</p>
                                                     </div>
                                                 ) : cart.map(item => {
+                                                    const key = cartKey(item);
                                                     const lineSubtotal = item.unit_price * item.quantity;
                                                     const itemTax = lineSubtotal * item.gst_percent / 100;
                                                     const mrpSavings = item.mrp > item.unit_price ? (item.mrp - item.unit_price) * item.quantity : 0;
                                                     const lowStockWarn = !item.is_catalog && item.quantity >= item.stock_count;
                                                     return (
-                                                        <div key={item.batch_id} className="p-2.5 bg-white rounded-xl border border-gray-200 hover:border-orange-300 hover:shadow-sm transition-all">
+                                                        <div key={key} className="p-2.5 bg-white rounded-xl border border-gray-200 hover:border-orange-300 hover:shadow-sm transition-all">
                                                             <div className="flex justify-between items-start gap-2 mb-2">
                                                                 <div className="flex-1 min-w-0">
                                                                     <h4 className="text-[13px] font-bold text-gray-800 leading-tight truncate" title={item.medicine_name}>{item.medicine_name}</h4>
@@ -1462,21 +1469,21 @@ export default function PharmacyPage() {
                                                                         )}
                                                                     </div>
                                                                 </div>
-                                                                <button onClick={() => removeFromCart(item.batch_id)} className="text-gray-300 hover:text-rose-500 p-1 hover:bg-rose-50 rounded transition-colors shrink-0">
+                                                                <button onClick={() => removeFromCart(key)} className="text-gray-300 hover:text-rose-500 p-1 hover:bg-rose-50 rounded transition-colors shrink-0">
                                                                     <Trash2 className="h-3.5 w-3.5" />
                                                                 </button>
                                                             </div>
                                                             <div className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-1.5 items-center">
                                                                 <div className="flex items-center bg-gray-50 rounded-lg border border-gray-200 p-0.5">
-                                                                    <button onClick={() => updateQty(item.batch_id, -1)} className="h-6 w-6 flex items-center justify-center hover:bg-white rounded text-gray-600 transition-colors"><Minus className="h-3 w-3" /></button>
+                                                                    <button onClick={() => updateQty(key, -1)} className="h-6 w-6 flex items-center justify-center hover:bg-white rounded text-gray-600 transition-colors"><Minus className="h-3 w-3" /></button>
                                                                     <input
                                                                         type="number"
                                                                         min="1"
                                                                         value={item.quantity}
-                                                                        onChange={e => setQty(item.batch_id, e.target.value)}
+                                                                        onChange={e => setQty(key, e.target.value)}
                                                                         className="w-10 text-center text-xs font-bold text-gray-800 bg-transparent border-0 focus:outline-none focus:ring-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                                                     />
-                                                                    <button onClick={() => updateQty(item.batch_id, 1)} disabled={!item.is_catalog && item.quantity >= item.stock_count} className="h-6 w-6 flex items-center justify-center hover:bg-white rounded text-gray-600 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"><Plus className="h-3 w-3" /></button>
+                                                                    <button onClick={() => updateQty(key, 1)} disabled={!item.is_catalog && item.quantity >= item.stock_count} className="h-6 w-6 flex items-center justify-center hover:bg-white rounded text-gray-600 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"><Plus className="h-3 w-3" /></button>
                                                                 </div>
                                                                 <div className="flex items-center gap-1 justify-end">
                                                                     <span className="text-[10px] text-gray-400">×</span>
@@ -1486,7 +1493,7 @@ export default function PharmacyPage() {
                                                                         min="0"
                                                                         step="0.01"
                                                                         value={item.unit_price}
-                                                                        onChange={e => updatePrice(item.batch_id, e.target.value)}
+                                                                        onChange={e => updatePrice(key, e.target.value)}
                                                                         className="w-20 px-2 py-1 text-xs font-bold text-right text-gray-700 bg-gray-50 border border-gray-200 rounded-lg focus:bg-white focus:ring-1 focus:ring-orange-400 focus:border-orange-400 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                                                     />
                                                                 </div>

@@ -145,12 +145,21 @@ export async function getInventoryPage(opts?: {
             }
         }
         if (opts?.category) medWhere.category = opts.category;
-        if (opts?.cursor) medWhere.id = { gt: opts.cursor };
+        // Keyset pagination has to use the SAME column as the sort. Paging on
+        // `id > cursor` while ordering by brand_name skipped and repeated rows on
+        // every "Load more". Prisma's cursor+skip does this correctly against the
+        // ordered result set.
+        const cursorArgs = opts?.cursor
+            ? { cursor: { id: opts.cursor }, skip: 1 }
+            : {};
 
         const medicines = await db.pharmacy_medicine_master.findMany({
             where: medWhere,
-            orderBy: { brand_name: 'asc' },
+            // Tie-break on id: brand_name is not unique enough on its own for a
+            // stable cursor (duplicate names would loop).
+            orderBy: [{ brand_name: 'asc' }, { id: 'asc' }],
             take: limit,
+            ...cursorArgs,
             select: {
                 id: true,
                 brand_name: true,
@@ -2334,7 +2343,8 @@ export async function searchMedicine(
                 }));
             }
         }
-        if (opts.cursor) where.id = { gt: opts.cursor };
+        // Same keyset rule as getInventoryPage — cursor must follow the sort key.
+        const cursorArgs = opts.cursor ? { cursor: { id: opts.cursor }, skip: 1 } : {};
 
         const baseSelect = {
             id: true,
@@ -2355,8 +2365,9 @@ export async function searchMedicine(
 
         const meds = await db.pharmacy_medicine_master.findMany({
             where,
-            orderBy: { brand_name: 'asc' },
+            orderBy: [{ brand_name: 'asc' }, { id: 'asc' }],
             take: limit,
+            ...cursorArgs,
             ...(includeBatches
                 ? {
                     include: {
@@ -2586,6 +2597,26 @@ export async function createPurchaseOrder(
 
     try {
         const { db, organizationId } = await requireTenantContext();
+
+        // Drugs & Cosmetics Rules: you may not buy scheduled medicines from a
+        // supplier whose drug licence has lapsed. The suppliers screen showed an
+        // "Expired" badge but nothing stopped a PO being raised against them.
+        const licenceCheckVendorId = options?.vendor_id ?? supplier_id;
+        if (licenceCheckVendorId) {
+            const v = await db.vendor.findFirst({
+                where: { id: licenceCheckVendorId },
+                select: { vendor_name: true, drug_license_expiry: true, is_active: true },
+            });
+            if (v && v.is_active === false) {
+                return { success: false, error: `${v.vendor_name} is marked inactive — reactivate the supplier before raising a purchase order.` };
+            }
+            if (v?.drug_license_expiry && new Date(v.drug_license_expiry) < new Date()) {
+                return {
+                    success: false,
+                    error: `${v.vendor_name}'s drug licence expired on ${new Date(v.drug_license_expiry).toLocaleDateString('en-GB')}. Update the licence on the Suppliers screen before purchasing from them.`,
+                };
+            }
+        }
 
         // Per-line amount is GST auto-calculated from rate, qty, discount and CGST/SGST:
         //   taxable = qty * rate * (1 - discount/100)
@@ -3772,25 +3803,37 @@ export async function verifyPharmacyOrder(orderId: number, notes?: string) {
     }
 }
 
-export async function getNarcoticRegister(drugName?: string) {
+export async function getNarcoticRegister(drugName?: string, range?: { from?: string; to?: string }) {
     const denied = await denyUnlessPharmacyRole(PHARMACY_OPERATE_ROLES);
     if (denied) return denied;
 
     try {
         const { db, organizationId } = await requireTenantContext();
 
-        // Default to last 90 days to keep result set manageable
-        const ninetyDaysAgo = new Date();
-        ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+        // An NDPS / Schedule H1 register has to be producible for a drug
+        // inspector years after the fact. Hard-coding "last 90 days" with no way
+        // to override it meant last year's register simply could not be pulled.
+        // The 90-day window is now only the DEFAULT; any period can be requested.
+        const from = range?.from ? new Date(range.from.length <= 10 ? `${range.from}T00:00:00` : range.from) : null;
+        const to = range?.to ? new Date(range.to.length <= 10 ? `${range.to}T23:59:59.999` : range.to) : null;
+        const defaultFrom = new Date();
+        defaultFrom.setDate(defaultFrom.getDate() - 90);
+
+        const dateWhere = (from || to)
+            ? { created_at: { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } }
+            : { created_at: { gte: defaultFrom } };
 
         const entries = await (db.narcoticRegister as any).findMany({
             where: {
                 organizationId,
-                ...(drugName ? { drug_name: drugName } : {}),
-                created_at: { gte: ninetyDaysAgo },
+                // The screen's filter is a free-text input, so an exact equality
+                // match returned nothing unless the name was typed perfectly.
+                ...(drugName ? { drug_name: { contains: drugName, mode: 'insensitive' } } : {}),
+                ...dateWhere,
             },
             orderBy: { created_at: 'desc' },
-            take: 500,
+            // Explicit range = an inspection pull, so allow the full period.
+            take: (from || to) ? 5000 : 500,
         });
 
         return { success: true, data: entries };
