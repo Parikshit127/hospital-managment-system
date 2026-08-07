@@ -16,8 +16,19 @@ export default function PharmacyOrdersPage() {
         setRefreshing(true);
         const res = await getPharmacyQueue();
         if (res.success) {
-            setOrders(res.data);
-            setFilteredOrders(res.data);
+            // getPharmacyQueue returns BOTH doctor prescriptions and ward nurse
+            // indents. /pharmacy/ip-orders (Nursing Indent) takes the indents with
+            // `is_ipd_linked || admission_id`; this screen never took the inverse,
+            // so every indent showed up here as well and the pharmacist saw the
+            // same work twice, in two places, with two different dispense flows.
+            //
+            // A nurse indent is created with is_ipd_linked: true + admission_id
+            // (nurse-actions), a doctor prescription with neither (doctor-actions),
+            // so this is the exact complement of the Nursing Indent screen.
+            const doctorOrders = (res.data as { is_ipd_linked?: boolean; admission_id?: string | null }[])
+                .filter((o) => !o.is_ipd_linked && !o.admission_id);
+            setOrders(doctorOrders);
+            setFilteredOrders(doctorOrders);
         }
         setRefreshing(false);
     };
@@ -149,7 +160,17 @@ export default function PharmacyOrdersPage() {
                                                 <button onClick={() => setSearchQuery('')} className="mt-2 text-xs font-bold text-orange-600 hover:text-orange-700">Clear search</button>
                                             </>
                                         ) : (
-                                            <p className="font-medium">No pending pharmacy orders.</p>
+                                            <>
+                                                <p className="font-medium">No pending doctor prescriptions.</p>
+                                                {/* Ward indents live on their own screen now — say so, or
+                                                    an empty queue reads as "nothing to dispense". */}
+                                                <p className="mt-1 text-xs text-gray-400">
+                                                    Ward indents raised by nurses are on{' '}
+                                                    <Link href="/pharmacy/ip-orders" className="font-bold text-orange-600 hover:text-orange-700">
+                                                        Nursing Indent
+                                                    </Link>.
+                                                </p>
+                                            </>
                                         )}
                                     </td>
                                 </tr>
