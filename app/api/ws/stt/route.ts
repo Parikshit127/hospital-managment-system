@@ -8,7 +8,8 @@
  *  Browser → Server:
  *    • Binary frame  = Int16 PCM audio at 16 000 Hz mono (from AudioWorklet)
  *    • Text frame    = JSON control message, one of:
- *        { type: "init",           lang: "en-IN" | "hi-IN" }   (first message)
+ *        { type: "init", lang: "en-IN" | "hi-IN", accurate?: boolean }
+ *                                                             (first message)
  *        { type: "end_of_speech" }                               (VAD fired)
  *        { type: "abort" }                                       (user cancelled)
  *
@@ -141,6 +142,7 @@ function buildWav(pcmBuffer: Buffer): Buffer {
 async function transcribeWithGroq(
   pcmChunks: Buffer[],
   langCode: string,
+  model: string = 'whisper-large-v3-turbo',
 ): Promise<string> {
   const groqKey = process.env.GROQ_API_KEY;
   if (!groqKey) {
@@ -167,7 +169,7 @@ async function transcribeWithGroq(
 
     const response = await groq.audio.transcriptions.create({
       file: audioFile,
-      model: 'whisper-large-v3-turbo',
+      model,
       language: whisperLang,
       response_format: 'json',
     });
@@ -272,6 +274,10 @@ export function UPGRADE(
 
   // ── Session state ──────────────────────────────────────────────────────────
   let langCode = 'en-IN';           // Set by first "init" message
+  // Dictation into a clinical record (discharge summary, notes) sets this so the
+  // FINAL transcript uses the accurate Whisper model rather than the distilled
+  // one. Conversational callers leave it false and keep the latency.
+  let accurate = false;             // Set by first "init" message
   const pcmChunks: Buffer[] = [];   // All audio received so far
   let totalBytes = 0;
   let probeDispatched = false;       // True after the first interim Groq call
@@ -299,13 +305,16 @@ export function UPGRADE(
    * language-ID) with a Groq fallback if Sarvam is unavailable/fails; any
    * already-locked language goes straight to the faster Groq path.
    */
-  const transcribeAny = async (chunks: Buffer[]): Promise<{ text: string; detectedLangCode: string }> => {
+  const transcribeAny = async (
+    chunks: Buffer[],
+    model?: string,
+  ): Promise<{ text: string; detectedLangCode: string }> => {
     if (langCode === 'auto') {
       const sarvamResult = await transcribeAutoWithSarvam(chunks);
       if (sarvamResult) return sarvamResult;
       console.warn('[WS-STT] Sarvam auto-detect unavailable — falling back to Groq');
     }
-    const text = await transcribeWithGroq(chunks, langCode);
+    const text = await transcribeWithGroq(chunks, langCode, model);
     return { text, detectedLangCode: langCode };
   };
 
@@ -320,7 +329,9 @@ export function UPGRADE(
     console.log(`[WS-STT] Probe: transcribing first ${PROBE_MS}ms of audio`);
     // Snapshot current chunks (don't include audio that arrives after this)
     const snapshot = pcmChunks.map(b => Buffer.from(b));
-    const { text } = await transcribeAny(snapshot);
+    // The probe is throwaway "hearing…" feedback that the final transcript
+    // overwrites, so it always takes the fast model even in accurate mode.
+    const { text } = await transcribeAny(snapshot, 'whisper-large-v3-turbo');
     if (text && !finalDispatched && !aborted) {
       send({ type: 'transcript', text });
     }
@@ -338,7 +349,10 @@ export function UPGRADE(
       `[WS-STT] Final: transcribing ${totalBytes} bytes (${(totalBytes / (SAMPLE_RATE * BYTES_PER_SAMPLE)).toFixed(1)}s)`,
     );
 
-    const { text: rawText, detectedLangCode } = await transcribeAny(pcmChunks);
+    const { text: rawText, detectedLangCode } = await transcribeAny(
+      pcmChunks,
+      accurate ? 'whisper-large-v3' : 'whisper-large-v3-turbo',
+    );
     // transcribeAny only actually detects a new language on the 'auto' path;
     // otherwise detectedLangCode just echoes the already-known langCode back
     // (see transcribeAny below). Adopt it either way so the translation check
@@ -375,7 +389,7 @@ export function UPGRADE(
       }
     } else {
       // Text control frame
-      let msg: { type: string; lang?: string };
+      let msg: { type: string; lang?: string; accurate?: boolean };
       try {
         msg = JSON.parse(raw.toString());
       } catch {
@@ -386,7 +400,8 @@ export function UPGRADE(
       switch (msg.type) {
         case 'init':
           langCode = msg.lang ?? 'en-IN';
-          console.log(`[WS-STT] Init: lang=${langCode}`);
+          accurate = msg.accurate === true;
+          console.log(`[WS-STT] Init: lang=${langCode} accurate=${accurate}`);
           send({ type: 'ready' });
           break;
 

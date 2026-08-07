@@ -3,7 +3,6 @@
  */
 
 const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
-const WHISPER_API_URL = 'https://api.openai.com/v1/audio/transcriptions';
 
 function getOpenAIKey(): string | null {
     return process.env.OPENAI_API_KEY || null;
@@ -202,34 +201,5 @@ Provide a concise pre-consultation brief:`;
     }
 }
 
-// ========================================
-// Audio Transcription (Whisper)
-// ========================================
-
-export async function transcribeAudio(audioBuffer: Buffer, filename: string = 'audio.webm'): Promise<string> {
-    const apiKey = getOpenAIKey();
-    if (!apiKey) throw new Error('OPENAI_API_KEY not configured');
-
-    const formData = new FormData();
-    const blob = new Blob([new Uint8Array(audioBuffer)], { type: 'audio/webm' });
-    formData.append('file', blob, filename);
-    formData.append('model', 'whisper-1');
-    formData.append('language', 'en');
-    formData.append('prompt', 'Medical consultation notes. Patient symptoms, diagnosis, treatment plan.');
-
-    const response = await fetch(WHISPER_API_URL, {
-        method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${apiKey}`,
-        },
-        body: formData,
-    });
-
-    if (!response.ok) {
-        const err = await response.text();
-        throw new Error(`Whisper API error: ${response.status} ${err}`);
-    }
-
-    const data = await response.json();
-    return data.text || '';
-}
+// Audio transcription lives in `app/lib/stt.ts` — it no longer goes through
+// OpenAI. See that file for the provider order and why.

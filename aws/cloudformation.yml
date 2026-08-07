@@ -396,7 +396,7 @@ Resources:
     Properties:
       Name: !Sub "hospitalos/${Environment}/app"
       Description: "HospitalOS application secrets"
-      SecretString: '{"JWT_SECRET":"REPLACE_ME","RAZORPAY_KEY_SECRET":"REPLACE_ME","OPENAI_API_KEY":"REPLACE_ME","SMTP_PASS":"REPLACE_ME","AISENSY_API_KEY":"REPLACE_ME"}'
+      SecretString: '{"JWT_SECRET":"REPLACE_ME","RAZORPAY_KEY_SECRET":"REPLACE_ME","OPENAI_API_KEY":"REPLACE_ME","SARVAM_API_KEY":"REPLACE_ME","GROQ_API_KEY":"REPLACE_ME","SMTP_PASS":"REPLACE_ME","AISENSY_API_KEY":"REPLACE_ME"}'
 
   # ── CloudWatch Log Group ───────────────────────────────────────────────
   LogGroup:
@@ -446,6 +446,13 @@ Resources:
               ValueFrom: !Sub "${AppSecrets}:RAZORPAY_KEY_SECRET::"
             - Name: OPENAI_API_KEY
               ValueFrom: !Sub "${AppSecrets}:OPENAI_API_KEY::"
+            # Speech-to-text and text-to-speech. Without these the entire voice
+            # stack (doctor dictation, discharge summaries, patient voice
+            # registration and booking) silently returns empty transcripts.
+            - Name: SARVAM_API_KEY
+              ValueFrom: !Sub "${AppSecrets}:SARVAM_API_KEY::"
+            - Name: GROQ_API_KEY
+              ValueFrom: !Sub "${AppSecrets}:GROQ_API_KEY::"
             - Name: SMTP_PASS
               ValueFrom: !Sub "${AppSecrets}:SMTP_PASS::"
             - Name: AISENSY_API_KEY

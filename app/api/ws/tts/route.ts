@@ -105,10 +105,14 @@ async function fetchSarvamWav(
     const client = new SarvamAIClient({ apiSubscriptionKey: sarvamKey });
 
     const response = await client.textToSpeech.convert({
-      model: 'bulbul:v3',
+      // v2, not the v3 beta: v3 bills ₹30/10K characters against v2's ₹15 for
+      // no audible gain on these scripted prompts. Speaker rosters are disjoint
+      // between the two versions, so the voice has to change with the model —
+      // 'ritu' is v3-only and 'anushka' is v2's nearest equivalent.
+      model: 'bulbul:v2',
       text: sentence,
       target_language_code: targetLang as any,
-      speaker: 'ritu',
+      speaker: 'anushka',
       // Slightly faster than the 1.0 default so the assistant sounds snappier.
       pace: 1.1,
     });

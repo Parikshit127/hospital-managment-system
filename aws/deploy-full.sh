@@ -280,6 +280,12 @@ echo -e "${BOLD}  --- AI Features (Optional) ---${NC}"
 read -rp "  OpenAI API Key [skip]: " OPENAI_API_KEY
 
 echo ""
+echo -e "${BOLD}  --- Voice / Speech (required for all voice features) ---${NC}"
+print_info "Sarvam = Indian-language speech; Groq = Whisper fallback + NLU"
+read -rp "  Sarvam API Key [skip]: " SARVAM_API_KEY
+read -rp "  Groq API Key [skip]: " GROQ_API_KEY
+
+echo ""
 echo -e "${BOLD}  --- WhatsApp / AiSensy (Optional) ---${NC}"
 read -rp "  AiSensy API Key [skip]: " AISENSY_API_KEY
 WHATSAPP_VERIFY_TOKEN=$(openssl rand -base64 16 | tr -d '\n')
@@ -325,6 +331,10 @@ NEXT_PUBLIC_RAZORPAY_KEY_ID="${RAZORPAY_KEY_ID:-}"
 
 # ── AI Features ──────────────────────────────────────────────────────
 OPENAI_API_KEY="${OPENAI_API_KEY:-}"
+
+# ── Voice / Speech ───────────────────────────────────────────────────
+SARVAM_API_KEY="${SARVAM_API_KEY:-}"
+GROQ_API_KEY="${GROQ_API_KEY:-}"
 
 # ── WhatsApp (AiSensy) ───────────────────────────────────────────────
 COMBIRDS_BASE_URL="https://backend.aisensy.com/campaign/t1/api"

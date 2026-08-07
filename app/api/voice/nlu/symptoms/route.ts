@@ -19,23 +19,42 @@ import { prisma } from '@/backend/db';
 import { analyseSymptoms, getValidSpecialties } from '@/lib/booking/symptom-nlu';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Lightweight in-process rate limiter (per cold-start window)
-// Protects against burst LLM calls; not a substitute for edge rate limiting.
+// In-process rate limiter.
+//
+// This ships as a long-running Node process on ECS/EC2, not per-request
+// serverless, so these counters live for the life of the task — the limit is
+// real, not the "per cold-start" approximation. With N tasks behind the load
+// balancer the effective ceiling is N x the numbers below.
+//
+// Limited per IP as well as per org: this route is deliberately unauthenticated
+// (the patient voice agent runs pre-login, see proxy.ts) and `organisationId`
+// is caller-supplied and publicly known, so an org-only limit is one an abuser
+// can widen at will by rotating IDs. It bills a real LLM call per request.
 // ─────────────────────────────────────────────────────────────────────────────
 const callCounts = new Map<string, { count: number; resetAt: number }>();
 const RATE_LIMIT_WINDOW_MS = 60_000; // 1 minute
 const RATE_LIMIT_MAX = 15;           // max calls per org per minute
+const RATE_LIMIT_MAX_IP = 15;        // and per caller IP per minute
 
-function checkRateLimit(orgId: string): boolean {
+function checkRateLimit(key: string, max: number): boolean {
   const now = Date.now();
-  const entry = callCounts.get(orgId);
+
+  // IP keys are unbounded, so sweep expired entries before the map can grow
+  // without limit. Cheap because it only runs once the map is already large.
+  if (callCounts.size > 10_000) {
+    for (const [k, v] of callCounts) {
+      if (now > v.resetAt) callCounts.delete(k);
+    }
+  }
+
+  const entry = callCounts.get(key);
 
   if (!entry || now > entry.resetAt) {
-    callCounts.set(orgId, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    callCounts.set(key, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
     return true;
   }
 
-  if (entry.count >= RATE_LIMIT_MAX) return false;
+  if (entry.count >= max) return false;
   entry.count++;
   return true;
 }
@@ -89,7 +108,13 @@ export async function POST(request: NextRequest) {
     }
 
     // ── Rate limit ────────────────────────────────────────────────────────────
-    if (!checkRateLimit(organisationId)) {
+    // Behind the ALB this is the real client; direct callers share the
+    // 'unknown' bucket, which errs strict rather than permissive.
+    const clientIp = request.headers.get('x-forwarded-for')?.split(',')[0].trim() || 'unknown';
+    if (
+      !checkRateLimit(`org:${organisationId}`, RATE_LIMIT_MAX) ||
+      !checkRateLimit(`ip:${clientIp}`, RATE_LIMIT_MAX_IP)
+    ) {
       return NextResponse.json(
         { success: false, error: 'Too many requests. Please wait a moment.' },
         { status: 429 },

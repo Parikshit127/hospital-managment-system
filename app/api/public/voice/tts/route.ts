@@ -62,7 +62,8 @@ export async function POST(req: Request) {
     }
 
     const targetLang = languageCode === 'hi' ? 'hi-IN' : 'en-IN';
-    const speaker = 'ritu';
+    // Must match the model below — v2 and v3 have disjoint speaker rosters.
+    const speaker = 'anushka';
     const sanitizedText = sanitizeForTTS(text);
 
     // ── 1. Try Sarvam AI TTS (Primary) ──────────────────────────────────
@@ -74,7 +75,9 @@ export async function POST(req: Request) {
         });
 
         const response = await client.textToSpeech.convert({
-          model: "bulbul:v3",
+          // See the note in app/api/ws/tts/route.ts — v2 is half the price of
+          // the v3 beta, and the speaker above must match the model.
+          model: "bulbul:v2",
           text: sanitizedText,
           target_language_code: targetLang as any,
           speaker: speaker,

@@ -37,7 +37,10 @@ export function DischargeSummaryEditor({ admissionId }: { admissionId: string })
     const [dischargeDateTime, setDischargeDateTime] = useState('');
     const voiceSessionRef = useRef<VoiceSession | null>(null);
     const getVoiceSession = (): VoiceSession => {
-        if (!voiceSessionRef.current) voiceSessionRef.current = createVoiceSession('auto');
+        // `accurate`: this dictation lands in a discharge summary, not a
+        // conversation — nobody is waiting on the reply, so spend the extra
+        // latency on the accurate Whisper model instead of the distilled one.
+        if (!voiceSessionRef.current) voiceSessionRef.current = createVoiceSession('auto', { accurate: true });
         return voiceSessionRef.current;
     };
 

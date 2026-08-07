@@ -97,7 +97,7 @@ export async function listenOnce(
   language: LanguageCode,
   timeoutMs: number = 15000,
   expectedType: 'boolean' | 'text' = 'text',
-  opts?: { autoDetect?: boolean }
+  opts?: { autoDetect?: boolean; accurate?: boolean }
 ): Promise<STTResult> {
   if (!isSTTSupported()) {
     throw new Error('Microphone access is not supported in this browser');
@@ -330,6 +330,7 @@ export async function listenOnce(
         const fd = new FormData();
         fd.append('file', blob, `audio.${ext}`);
         fd.append('language_code', langCode);
+        if (opts?.accurate) fd.append('accurate', '1');
         try {
           const res = await fetch('/api/public/voice/stt', { method: 'POST', body: fd });
           if (!res.ok) throw new Error(`STT HTTP ${res.status}`);
@@ -374,7 +375,7 @@ export async function listenOnce(
 
     ws.onopen = () => {
       console.log('[STT-WS] Connected — sending init');
-      ws!.send(JSON.stringify({ type: 'init', lang: langCode }));
+      ws!.send(JSON.stringify({ type: 'init', lang: langCode, accurate: opts?.accurate === true }));
     };
 
     ws.onmessage = (event) => {

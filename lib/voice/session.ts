@@ -15,7 +15,10 @@ import { speakText, stopSpeaking } from './tts';
  * patient's first real (non yes/no) utterance. Pass a concrete `LanguageCode`
  * to skip detection (e.g. a QA override).
  */
-export function createVoiceSession(language: LanguageCode | 'auto'): VoiceSession {
+export function createVoiceSession(
+  language: LanguageCode | 'auto',
+  opts?: { accurate?: boolean },
+): VoiceSession {
   const memory = new Map<string, unknown>();
   let currentLanguage: LanguageCode = language === 'auto' ? 'en' : language;
   let locked = language !== 'auto';
@@ -27,14 +30,17 @@ export function createVoiceSession(language: LanguageCode | 'auto'): VoiceSessio
 
     async listen(expectedType?: 'boolean' | 'text'): Promise<{ text: string; confidence: number }> {
       if (!locked && expectedType !== 'boolean') {
-        const result = await listenOnce(currentLanguage, 15000, expectedType, { autoDetect: true });
+        const result = await listenOnce(currentLanguage, 15000, expectedType, {
+          autoDetect: true,
+          accurate: opts?.accurate,
+        });
         if (result.detectedLanguage) {
           currentLanguage = result.detectedLanguage;
         }
         locked = true;
         return result;
       }
-      return listenOnce(currentLanguage, 15000, expectedType);
+      return listenOnce(currentLanguage, 15000, expectedType, { accurate: opts?.accurate });
     },
 
     async speak(text: string): Promise<void> {

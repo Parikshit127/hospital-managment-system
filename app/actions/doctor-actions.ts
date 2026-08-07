@@ -632,16 +632,31 @@ export async function getAIPreConsultBrief(patientId: string) {
 
 export async function transcribeVoiceNote(formData: FormData) {
   try {
-    const { transcribeAudio } = await import("@/app/lib/ai-service");
+    const { transcribeSpeech, mimeFromFilename } = await import("@/app/lib/stt");
     const audioFile = formData.get("audio") as File;
     if (!audioFile) return { success: false, error: "No audio file provided" };
 
     const buffer = Buffer.from(await audioFile.arrayBuffer());
-    const text = await transcribeAudio(
+    const fileName = audioFile.name || "recording.webm";
+    const result = await transcribeSpeech(
       buffer,
-      audioFile.name || "recording.webm",
+      fileName,
+      audioFile.type || mimeFromFilename(fileName),
+      {
+        // 'en-IN' rather than 'auto' deliberately: this dictation lands in a
+        // clinical record, and auto-detect can return Devanagari for Hinglish.
+        // Sarvam's translit mode keeps Indian names in Latin script. Switch to
+        // 'auto' if doctors should be able to dictate in Hindi.
+        languageCode: "en-IN",
+        prompt:
+          "Medical consultation notes. Patient symptoms, diagnosis, treatment plan, drug names and dosages.",
+      },
     );
-    return { success: true, data: text };
+
+    if (!result.transcript) {
+      return { success: false, error: "Could not transcribe the recording. Please try again." };
+    }
+    return { success: true, data: result.transcript };
   } catch (error: any) {
     console.error("Voice transcription error:", error);
     return { success: false, error: error.message || "Transcription failed" };

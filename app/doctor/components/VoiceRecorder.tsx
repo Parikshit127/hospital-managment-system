@@ -68,7 +68,7 @@ export default function VoiceRecorder({ onTranscription, disabled }: VoiceRecord
             if (result.success && result.data) {
                 onTranscription(result.data);
             } else {
-                toast.error(result.error || 'Transcription failed. Is OPENAI_API_KEY configured?');
+                toast.error(result.error || 'Transcription failed.');
             }
         } catch (err) {
             console.error('Transcription error:', err);
@@ -109,7 +109,7 @@ export default function VoiceRecorder({ onTranscription, disabled }: VoiceRecord
             onClick={startRecording}
             disabled={disabled}
             className="flex items-center gap-2 px-4 py-2.5 bg-orange-500/10 text-teal-400 border border-orange-500/20 rounded-xl text-sm font-bold hover:bg-orange-500/20 transition disabled:opacity-50"
-            title="Record voice notes — transcribed via Whisper AI"
+            title="Record voice notes — transcribed automatically"
         >
             <Mic className="h-4 w-4" />
             Voice
