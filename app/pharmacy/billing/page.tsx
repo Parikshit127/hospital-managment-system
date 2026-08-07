@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 import { DateField } from '@/app/components/ui/DateField';
 import {
     Pill, Search, Plus, Minus, Receipt, ShoppingCart,
@@ -200,7 +201,21 @@ export default function PharmacyPage() {
 
     const loadQueue = useCallback(async () => {
         const res = await getPharmacyQueue();
-        if (res.success) setOrderQueue(res.data);
+        // getPharmacyQueue returns doctor prescriptions AND ward nurse indents in
+        // one list. The "Doctor Orders" tab rendered it as-is, so nursing indents
+        // showed up here too — even though they belong to the Nursing Indent
+        // screen (/pharmacy/ip-orders) and are dispensed against the IPD bill, not
+        // billed over the counter from here.
+        //
+        // A nurse indent carries is_ipd_linked: true + an admission_id
+        // (nurse-actions); a doctor prescription carries neither (doctor-actions),
+        // so this keeps only the doctor orders — same filter /pharmacy/orders uses.
+        if (res.success) {
+            setOrderQueue(
+                (res.data as { is_ipd_linked?: boolean; admission_id?: string | null }[])
+                    .filter((o) => !o.is_ipd_linked && !o.admission_id)
+            );
+        }
     }, []);
 
     const loadData = async () => {
@@ -1039,6 +1054,14 @@ export default function PharmacyPage() {
                                         <Package className="h-8 w-8 text-gray-300" />
                                     </div>
                                     <span className="text-gray-400 font-bold">No incoming orders from doctors</span>
+                                    {/* Ward indents are not on this tab — say where they are, or an
+                                        empty queue reads as "nothing left to dispense". */}
+                                    <span className="mt-1 text-xs text-gray-400">
+                                        Ward indents raised by nurses are on{' '}
+                                        <Link href="/pharmacy/ip-orders" className="font-bold text-orange-600 hover:text-orange-700">
+                                            Nursing Indent
+                                        </Link>.
+                                    </span>
                                 </div>
                             ) : orderQueue.map(order => (
                                 <div key={order.id} className="bg-white border border-gray-200 shadow-sm p-6 rounded-2xl mb-4 hover:border-orange-500/20 transition-all relative overflow-hidden group">
