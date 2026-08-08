@@ -40,6 +40,8 @@
  *   # overrides (all optional)
  *   --name "Kamla Pawa"        patient name to search for (partial, case-insensitive)
  *   --invoice AVS-IPD-26-27-0  exact invoice number, when the patient has several bills
+ *   --invoice-id 1234          invoice row id — how you pick a DRAFT bill, which has
+ *                              no invoice number yet (the dry run prints the id)
  *   --expected-bill 54154      bill total before discount, cross-checked (0 = skip check)
  *   --net 38124                target net payable  → discount = bill − net
  *   --percent 29.6             discount as a % of the bill (alternative to --net)
@@ -63,6 +65,8 @@ function arg(flag: string): string | undefined {
 
 const PATIENT_NAME = arg('--name') ?? 'kamla paw'; // matches "Kamla Pawa" and "Kamla Pawar"
 const INVOICE_NUMBER = arg('--invoice');
+// A Draft bill has no invoice_number yet, so --invoice cannot address one.
+const INVOICE_ID = arg('--invoice-id') !== undefined ? Number(arg('--invoice-id')) : undefined;
 const EXPECTED_BILL = Number(arg('--expected-bill') ?? 54154);
 const TARGET_NET = arg('--net') !== undefined ? Number(arg('--net')) : undefined;
 const PERCENT = arg('--percent') !== undefined ? Number(arg('--percent')) : undefined;
@@ -109,15 +113,17 @@ async function main() {
             patient_id: { in: patients.map((p) => p.patient_id) },
             status: { notIn: ['Cancelled', 'Voided'] },
             ...(INVOICE_NUMBER ? { invoice_number: INVOICE_NUMBER } : {}),
+            ...(INVOICE_ID !== undefined ? { id: INVOICE_ID } : {}),
         },
         include: { items: true },
         orderBy: { created_at: 'desc' },
     });
 
     if (invoices.length === 0) {
+        const picked = INVOICE_NUMBER ?? (INVOICE_ID !== undefined ? `#${INVOICE_ID}` : null);
         fail(
-            INVOICE_NUMBER
-                ? `Invoice ${INVOICE_NUMBER} not found for this patient (or it is cancelled).`
+            picked
+                ? `Invoice ${picked} not found for this patient (or it is cancelled).`
                 : 'This patient has no active bill.',
         );
     }
@@ -141,7 +147,8 @@ async function main() {
     console.log(`Active bill(s) for this patient:`);
     for (const d of described) {
         console.log(
-            `  • ${d.inv.invoice_number ?? `draft#${d.inv.id}`}  [${d.inv.invoice_type}]  status=${d.inv.status}` +
+            `  • ${d.inv.invoice_number ?? '(Draft — no invoice number)'}  id=${d.inv.id}` +
+                `  [${d.inv.invoice_type}]  status=${d.inv.status}` +
                 `${d.inv.is_locked ? ' LOCKED' : ''}\n` +
                 `      bill before discount ${money(d.billBeforeDiscount)}` +
                 `   line disc ${money(d.lineDiscount)}   bill disc ${money(n(d.inv.bill_discount))}\n` +
@@ -159,7 +166,8 @@ async function main() {
     }
     if (!target) {
         fail(
-            `More than one bill could be the right one. Re-run with --invoice <invoice number> to say which.`,
+            'More than one bill could be the right one. Re-run with --invoice <invoice number>,\n' +
+                '    or --invoice-id <id> for a Draft bill (the ids are listed above), to say which.',
         );
     }
 
