@@ -1769,6 +1769,16 @@ export async function generateInterimBill(admissionId: string) {
                     net_amount: Number(invoice.net_amount),
                     paid_amount: Number(invoice.paid_amount),
                     balance_due: Number(invoice.balance_due),
+                    // Lifecycle + bill-level discount. The IPD billing screen needs all
+                    // four to offer the same discount controls the counter/OPD bill has:
+                    // status/is_locked decide whether editing is open at all, and
+                    // bill_discount/discount_remark prefill the discount dialog with
+                    // what is already on the bill (total_discount is line + bill, so it
+                    // cannot be used to seed the input without double-counting).
+                    status: invoice.status,
+                    is_locked: invoice.is_locked,
+                    bill_discount: Number(invoice.bill_discount || 0),
+                    discount_remark: invoice.discount_remark || '',
                     // Billing type so the settlement screen can offer a TPA-approved
                     // amount input for insurance/TPA patients.
                     billing_patient_type: invoice.billing_patient_type,

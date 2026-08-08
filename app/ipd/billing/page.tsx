@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { getIPDAdmissions } from '@/app/actions/ipd-actions';
 import { generateInterimBill, postChargeToIpdBill, getGstSummary, getAbsorbedCharges, removeAbsorbedCharge } from '@/app/actions/ipd-finance-actions';
-import { recordPayment, recordSplitPayment, removeInvoiceItem, updateInvoiceItem } from '@/app/actions/finance-actions';
+import { recordPayment, recordSplitPayment, removeInvoiceItem, updateInvoiceItem, updateInvoiceHeader } from '@/app/actions/finance-actions';
 import { getCashComplianceConfig } from '@/app/actions/cash-compliance-actions';
 import { CASH_COMPLIANCE_DEFAULTS, isValidPan, normalizePan, resolveRegisteredPan } from '@/app/lib/cash-compliance';
 import { collectDeposit, getPatientDeposits, applyDepositToInvoice } from '@/app/actions/deposit-actions';
@@ -58,12 +58,22 @@ export default function IpdBillingPage() {
     const [chargeDateTime, setChargeDateTime] = useState('');
     const [removingItemId, setRemovingItemId] = useState<number | null>(null);
 
-    // Inline edit of a charge row (service name, qty, service date). Rate stays locked.
+    // Inline edit of a charge row (service name, qty, discount, service date).
+    // Rate stays locked to the master — a discount is how the amount comes down.
     const [editingItemId, setEditingItemId] = useState<number | null>(null);
     const [editDesc, setEditDesc] = useState('');
     const [editQty, setEditQty] = useState(1);
+    const [editDiscount, setEditDiscount] = useState('');
     const [editDate, setEditDate] = useState('');
     const [savingItem, setSavingItem] = useState(false);
+
+    // Bill-level discount — a flat ₹ off the whole IPD bill, on top of any line
+    // discounts, same as the counter/OPD bill offers via EditInvoiceModal.
+    const [showDiscountModal, setShowDiscountModal] = useState(false);
+    const [discountMode, setDiscountMode] = useState<'amount' | 'percent'>('amount');
+    const [discountInput, setDiscountInput] = useState('');
+    const [discountRemark, setDiscountRemark] = useState('');
+    const [savingDiscount, setSavingDiscount] = useState(false);
 
     // Deposit state
     const [showDepositModal, setShowDepositModal] = useState(false);
@@ -254,6 +264,7 @@ export default function IpdBillingPage() {
         setEditingItemId(item.id);
         setEditDesc(item.description || '');
         setEditQty(Number(item.quantity) || 1);
+        setEditDiscount(Number(item.discount) > 0 ? String(Number(item.discount)) : '');
         // created_at is the service date the bill shows this charge against.
         setEditDate(item.created_at ? new Date(item.created_at).toISOString().slice(0, 10) : '');
     }
@@ -262,6 +273,7 @@ export default function IpdBillingPage() {
         setEditingItemId(null);
         setEditDesc('');
         setEditQty(1);
+        setEditDiscount('');
         setEditDate('');
     }
 
@@ -269,10 +281,20 @@ export default function IpdBillingPage() {
         if (!billData?.invoice?.id) return;
         if (!editDesc.trim()) { showToast('Service name cannot be empty', 'error'); return; }
         if (!editQty || editQty < 1) { showToast('Quantity must be at least 1', 'error'); return; }
+        // A line discount comes off the line's gross (qty × rate). More than that
+        // would push the line negative, which the server would happily store.
+        const lineDiscount = parseFloat(editDiscount) || 0;
+        const lineGross = editQty * Number(item.unit_price || 0);
+        if (lineDiscount < 0) { showToast('Discount cannot be negative', 'error'); return; }
+        if (lineDiscount > lineGross) {
+            showToast(`Discount cannot exceed the line amount of ₹${lineGross.toLocaleString('en-IN')}`, 'error');
+            return;
+        }
         setSavingItem(true);
         const res = await updateInvoiceItem(item.id, {
             description: editDesc.trim(),
             quantity: editQty,
+            discount: lineDiscount,
             service_date: editDate || undefined,
         });
         setSavingItem(false);
@@ -297,6 +319,59 @@ export default function IpdBillingPage() {
             await refreshBill();
         } else {
             showToast(res.error || 'Failed to remove charge', 'error');
+        }
+    }
+
+    // ── Bill-level discount ────────────────────────────────────────────────────
+    // The base a % is taken on, and the ceiling for a flat ₹: what the bill is
+    // worth before this discount. net_amount already has the current bill discount
+    // taken off, so adding it back is what keeps re-editing an existing discount
+    // from shrinking its own base every time it is saved.
+    const billDiscountApplied = Number(billData?.invoice?.bill_discount ?? 0);
+    const discountBase = Number(billData?.invoice?.net_amount ?? 0) + billDiscountApplied;
+    const discountEntered = parseFloat(discountInput) || 0;
+    const discountAmountResolved = discountMode === 'percent'
+        ? Math.round(discountBase * Math.min(100, Math.max(0, discountEntered))) / 100
+        : discountEntered;
+
+    function openDiscountModal() {
+        // Prefill with what is already on the bill so the dialog edits the running
+        // discount instead of silently replacing it with a blank.
+        setDiscountMode('amount');
+        setDiscountInput(billDiscountApplied > 0 ? String(billDiscountApplied) : '');
+        setDiscountRemark(billData?.invoice?.discount_remark || '');
+        setShowDiscountModal(true);
+    }
+
+    async function handleApplyBillDiscount() {
+        if (!billData?.invoice?.id) return;
+        if (discountAmountResolved < 0) { showToast('Discount cannot be negative', 'error'); return; }
+        if (discountAmountResolved > discountBase) {
+            showToast(`Discount cannot exceed the bill amount of ₹${discountBase.toLocaleString('en-IN')}`, 'error');
+            return;
+        }
+        // A discount on a hospital bill is a write-off — it needs a stated reason on
+        // the record, the same as the discharge settlement asks for one.
+        if (discountAmountResolved > 0 && !discountRemark.trim()) {
+            showToast('Enter a reason for the discount', 'error');
+            return;
+        }
+        setSavingDiscount(true);
+        const res = await updateInvoiceHeader(billData.invoice.id, {
+            bill_discount: discountAmountResolved,
+            discount_remark: discountRemark.trim() || null,
+        });
+        setSavingDiscount(false);
+        if (res.success) {
+            setShowDiscountModal(false);
+            showToast(
+                discountAmountResolved > 0
+                    ? `Discount of ₹${discountAmountResolved.toLocaleString('en-IN')} applied to the bill`
+                    : 'Bill discount removed',
+            );
+            await refreshBill();
+        } else {
+            showToast(res.error || 'Failed to apply discount', 'error');
         }
     }
 
@@ -551,9 +626,20 @@ export default function IpdBillingPage() {
                                                         <span>₹{(billData.invoice.total_amount || 0).toLocaleString('en-IN')}</span>
                                                     </div>
                                                     <div className="flex justify-between p-2 bg-gray-50 rounded">
-                                                        <span className="text-gray-500">Discount</span>
+                                                        <span className="text-gray-500">
+                                                            Discount
+                                                            {billDiscountApplied > 0 && (
+                                                                <span className="text-gray-400"> (incl. ₹{billDiscountApplied.toLocaleString('en-IN')} on bill)</span>
+                                                            )}
+                                                        </span>
                                                         <span>₹{(billData.invoice.total_discount || 0).toLocaleString('en-IN')}</span>
                                                     </div>
+                                                    {billData.invoice.discount_remark && (
+                                                        <div className="flex justify-between p-2 bg-gray-50 rounded col-span-2">
+                                                            <span className="text-gray-500">Discount Reason</span>
+                                                            <span className="text-gray-700">{billData.invoice.discount_remark}</span>
+                                                        </div>
+                                                    )}
                                                     <div className="flex justify-between p-2 bg-gray-50 rounded">
                                                         <span className="text-gray-500">Total GST</span>
                                                         <span>₹{(billData.invoice.total_tax || 0).toLocaleString('en-IN')}</span>
@@ -643,6 +729,7 @@ export default function IpdBillingPage() {
                                                                 <th className="p-2 text-left">Date</th>
                                                                 <th className="p-2 text-right">Qty</th>
                                                                 <th className="p-2 text-right">Rate</th>
+                                                                <th className="p-2 text-right">Disc</th>
                                                                 <th className="p-2 text-right">GST%</th>
                                                                 <th className="p-2 text-right">Amount</th>
                                                                 <th className="p-2 text-center w-16"></th>
@@ -682,6 +769,19 @@ export default function IpdBillingPage() {
                                                                         <td className="p-2 text-right text-gray-400" title="Rate is locked to the master. Apply a discount or re-add the service to change the amount.">
                                                                             ₹{item.unit_price?.toLocaleString('en-IN')}
                                                                         </td>
+                                                                        <td className="p-1.5">
+                                                                            <input
+                                                                                type="number"
+                                                                                min="0"
+                                                                                step="0.01"
+                                                                                max={editQty * Number(item.unit_price || 0)}
+                                                                                value={editDiscount}
+                                                                                onChange={(e) => setEditDiscount(e.target.value)}
+                                                                                title="Discount in ₹ on this line"
+                                                                                placeholder="0"
+                                                                                className="w-20 px-2 py-1 border rounded text-xs text-right ml-auto block"
+                                                                            />
+                                                                        </td>
                                                                         <td className="p-2 text-right text-gray-400">{item.tax_rate}%</td>
                                                                         <td className="p-2 text-right text-gray-400">₹{(item.net_price + item.tax_amount)?.toLocaleString('en-IN')}</td>
                                                                         <td className="p-2 text-center whitespace-nowrap">
@@ -709,13 +809,16 @@ export default function IpdBillingPage() {
                                                                         <td className="p-2 text-gray-400">{new Date(item.created_at).toLocaleDateString('en-GB')}</td>
                                                                         <td className="p-2 text-right">{item.quantity}</td>
                                                                         <td className="p-2 text-right">₹{item.unit_price?.toLocaleString('en-IN')}</td>
+                                                                        <td className={`p-2 text-right ${Number(item.discount) > 0 ? 'text-emerald-600 font-medium' : 'text-gray-300'}`}>
+                                                                            {Number(item.discount) > 0 ? `-₹${Number(item.discount).toLocaleString('en-IN')}` : '—'}
+                                                                        </td>
                                                                         <td className="p-2 text-right">{item.tax_rate}%</td>
                                                                         <td className="p-2 text-right">₹{(item.net_price + item.tax_amount)?.toLocaleString('en-IN')}</td>
                                                                         <td className="p-2 text-center whitespace-nowrap">
                                                                             <button
                                                                                 onClick={() => startEditItem(item)}
                                                                                 disabled={editingItemId !== null}
-                                                                                title="Edit service name, quantity or date"
+                                                                                title="Edit service name, quantity, discount or date"
                                                                                 className="text-gray-300 hover:text-blue-600 disabled:opacity-40 text-sm leading-none mr-1.5 transition-colors"
                                                                             >
                                                                                 ✎
@@ -835,6 +938,14 @@ export default function IpdBillingPage() {
                                     className="w-full px-3 py-2 bg-purple-600 text-white rounded-md text-sm hover:bg-purple-700 disabled:opacity-50"
                                 >
                                     Collect Deposit
+                                </button>
+                                <button
+                                    onClick={openDiscountModal}
+                                    disabled={!billData?.invoice?.id}
+                                    className="w-full px-3 py-2 bg-amber-600 text-white rounded-md text-sm hover:bg-amber-700 disabled:opacity-50"
+                                    title="Apply a discount to this IPD bill"
+                                >
+                                    {billDiscountApplied > 0 ? `Discount (₹${billDiscountApplied.toLocaleString('en-IN')})` : 'Apply Discount'}
                                 </button>
                                 <button
                                     onClick={() => {
@@ -1211,6 +1322,104 @@ export default function IpdBillingPage() {
                                 <button
                                     onClick={() => setShowDepositModal(false)}
                                     className="flex-1 px-3 py-2 border rounded-md text-sm"
+                                >
+                                    Cancel
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Bill Discount Modal — flat ₹ off the whole IPD bill, entered as an
+                amount or a % of the bill. Sits on the invoice header (bill_discount),
+                so line rates stay locked to the master and the GST already charged on
+                each line is untouched, exactly like the counter/OPD bill. */}
+            {showDiscountModal && billData && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                    <div className="bg-white rounded-lg p-6 w-96">
+                        <h3 className="text-lg font-semibold">Apply Discount</h3>
+                        <p className="text-xs text-gray-500 mt-0.5 mb-4">
+                            {billData.admission?.patient_name} · Bill before discount ₹{discountBase.toLocaleString('en-IN')}
+                        </p>
+                        <div className="space-y-3">
+                            <div className="flex gap-2">
+                                {([['amount', '₹ Amount'], ['percent', '% of Bill']] as const).map(([mode, label]) => (
+                                    <button
+                                        key={mode}
+                                        onClick={() => { setDiscountMode(mode); setDiscountInput(''); }}
+                                        className={`flex-1 px-3 py-1.5 rounded-md text-xs font-semibold border ${
+                                            discountMode === mode
+                                                ? 'bg-amber-600 text-white border-amber-600'
+                                                : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                                        }`}
+                                    >
+                                        {label}
+                                    </button>
+                                ))}
+                            </div>
+                            <div>
+                                <label className="text-sm text-gray-600">
+                                    {discountMode === 'percent' ? 'Discount (%)' : 'Discount (₹)'}
+                                </label>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    step={discountMode === 'percent' ? '0.1' : '1'}
+                                    max={discountMode === 'percent' ? 100 : discountBase}
+                                    value={discountInput}
+                                    onChange={(e) => setDiscountInput(e.target.value)}
+                                    className="w-full px-3 py-2 border rounded-md"
+                                    placeholder="0"
+                                />
+                                {/* Entering 0 is the way to take an existing discount back off. */}
+                                <p className="text-[11px] text-gray-400 mt-1">
+                                    {billDiscountApplied > 0
+                                        ? 'This replaces the discount currently on the bill. Set 0 to remove it.'
+                                        : 'Applies on top of any line-level discounts already on the charges.'}
+                                </p>
+                            </div>
+                            <div>
+                                <label className="text-sm text-gray-600">Reason *</label>
+                                <input
+                                    type="text"
+                                    value={discountRemark}
+                                    onChange={(e) => setDiscountRemark(e.target.value)}
+                                    className="w-full px-3 py-2 border rounded-md"
+                                    placeholder="Staff discount, management approval, etc."
+                                />
+                            </div>
+
+                            <div className="p-3 bg-gray-50 border rounded-md text-xs space-y-1">
+                                <div className="flex justify-between">
+                                    <span className="text-gray-500">Bill before discount</span>
+                                    <span>₹{discountBase.toLocaleString('en-IN')}</span>
+                                </div>
+                                <div className="flex justify-between text-amber-700">
+                                    <span>Discount</span>
+                                    <span>-₹{discountAmountResolved.toLocaleString('en-IN')}</span>
+                                </div>
+                                <div className="flex justify-between font-semibold text-gray-900 pt-1 border-t">
+                                    <span>Net payable</span>
+                                    <span>₹{Math.max(0, discountBase - discountAmountResolved).toLocaleString('en-IN')}</span>
+                                </div>
+                            </div>
+                            {discountAmountResolved > discountBase && (
+                                <p className="text-xs text-rose-600">Discount cannot exceed the bill amount.</p>
+                            )}
+
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={handleApplyBillDiscount}
+                                    disabled={savingDiscount || discountAmountResolved > discountBase}
+                                    className="flex-1 px-3 py-2 bg-amber-600 text-white rounded-md text-sm disabled:opacity-50"
+                                >
+                                    {savingDiscount ? 'Applying...' : 'Apply Discount'}
+                                </button>
+                                <button
+                                    onClick={() => setShowDiscountModal(false)}
+                                    disabled={savingDiscount}
+                                    className="flex-1 px-3 py-2 border rounded-md text-sm disabled:opacity-50"
                                 >
                                     Cancel
                                 </button>
