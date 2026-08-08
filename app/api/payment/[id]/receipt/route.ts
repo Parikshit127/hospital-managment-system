@@ -359,23 +359,6 @@ function generateReceiptHTML(payment: any, org: any, logoSignedUrl = '') {
             </div>` : ''}
         </div>` : ''}
 
-        ${(() => {
-            // Hospital's own receiving bank account (single account on the org).
-            const bn = org?.bank_name, ban = org?.bank_account_name, bac = org?.bank_account_number,
-                  bif = org?.bank_ifsc, bbr = org?.bank_branch, bupi = org?.bank_upi_id;
-            if (!(bn || bac || bif || bupi)) return '';
-            const parts: string[] = [];
-            if (bn) parts.push(`<strong>Bank:</strong> ${bn}${bbr ? `, ${bbr}` : ''}`);
-            if (ban) parts.push(`<strong>A/c Name:</strong> ${ban}`);
-            if (bac) parts.push(`<strong>A/c No.:</strong> ${bac}`);
-            if (bif) parts.push(`<strong>IFSC:</strong> ${bif}`);
-            if (bupi) parts.push(`<strong>UPI:</strong> ${bupi}`);
-            return `<div style="border:1px solid #e5e7eb;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:11px;color:#374151;line-height:1.8;position:relative;z-index:2;">
-                <p style="font-size:9px;color:#9ca3af;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px;">Remit payment to</p>
-                ${parts.join(' &nbsp;·&nbsp; ')}
-            </div>`;
-        })()}
-
         <!-- Footer -->
         <div style="border-top:1px solid #e5e7eb;padding-top:16px;text-align:center;position:relative;z-index:2;">
             <p style="font-size:11px;color:#9ca3af;">This is a computer-generated receipt and does not require a signature.</p>

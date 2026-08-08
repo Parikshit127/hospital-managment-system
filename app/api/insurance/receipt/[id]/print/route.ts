@@ -255,7 +255,7 @@ ${isReversed ? `
 
     <p style="font-size:10px;color:#6b7280;margin-bottom:22px;">Settled = amount the payer allowed against the bill (TDS is withheld from it, so In Bank = Settled − TDS).</p>
 
-    ${bankDetailsHtml(b)}
+    ${bankDetailsHtml({ name: r.bank_name, accountName: r.bank_account_name, accountNumber: r.bank_account_number, ifsc: r.bank_ifsc, branch: r.bank_branch, upiId: r.bank_upi_id })}
 
     <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:30px;">
         <p style="font-size:10px;color:${isReversed ? '#b91c1c' : '#9ca3af'};">${isReversed

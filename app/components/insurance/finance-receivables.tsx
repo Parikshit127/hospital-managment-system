@@ -17,6 +17,7 @@ import { getHospitalBillingInfo } from '@/app/actions/admin-actions';
 import {
   getInsuranceReceiptSummary, listInsuranceReceipts,
   allocateReceipt, getPendingAdvices, recordAndAllocateReceipt, reverseInsuranceReceipt,
+  getOrgBankDetailsForReceipt,
   getInsuranceReceiptHistory, searchInvoicesForInsuranceReceipt, updateInsuranceReceipt,
 } from '@/app/actions/insurance-receipts-actions';
 import { applyAvailableDepositToInvoice } from '@/app/actions/deposit-actions';
@@ -880,6 +881,16 @@ export function NewReceiptModal({ providers, onClose, onSaved, defaultProviderId
   const [addQuery, setAddQuery] = useState('');
   const [addResults, setAddResults] = useState<any[]>([]);
   const [addSearching, setAddSearching] = useState(false);
+
+  // Hospital's own receiving bank account (master, from Bill Settings). Optionally
+  // snapshot onto THIS receipt so it prints on the TPA receipt. Opt-in checkbox.
+  const [orgBank, setOrgBank] = useState<{ hasAny: boolean; data: any } | null>(null);
+  const [attachBank, setAttachBank] = useState(true);
+  useEffect(() => {
+    getOrgBankDetailsForReceipt().then((r: any) => {
+      if (r?.success) { setOrgBank({ hasAny: !!r.hasAny, data: r.data }); setAttachBank(!!r.hasAny); }
+    });
+  }, []);
   // Explains why a picked bill couldn't select its own payer (no insurer on the
   // bill and no active policy on the patient) instead of failing silently.
   const [addNotice, setAddNotice] = useState<string | null>(null);
@@ -1042,6 +1053,7 @@ export function NewReceiptModal({ providers, onClose, onSaved, defaultProviderId
       claim_amount: totalBill, sanctioned_amount: round2(totalBill - totalDisallowed), tds_amount: totalTds, service_charge: 0,
       remarks: form.remarks,
       settle_gross: true,
+      include_bank_details: attachBank && !!orgBank?.hasAny,
       lines: payload,
     });
     setSaving(false);
@@ -1276,6 +1288,32 @@ export function NewReceiptModal({ providers, onClose, onSaved, defaultProviderId
         </div>
 
         <Field label="Remarks"><input className={INPUT} value={form.remarks} onChange={(e) => setForm({ ...form, remarks: e.target.value })} /></Field>
+
+        {/* Hospital bank details — opt in to print them on THIS TPA receipt. */}
+        {orgBank && (
+          orgBank.hasAny ? (
+            <label className="mt-1 flex items-start gap-2.5 rounded-lg border border-gray-200 bg-gray-50/60 px-3 py-2.5 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={attachBank}
+                onChange={(e) => setAttachBank(e.target.checked)}
+                className="mt-0.5 h-4 w-4 accent-blue-600"
+              />
+              <span className="text-xs text-gray-600 leading-relaxed">
+                <span className="font-bold text-gray-800">Print our bank details on this receipt</span>
+                <span className="block text-[11px] text-gray-500 mt-0.5">
+                  {orgBank.data?.bank_name || 'Bank'}
+                  {orgBank.data?.bank_account_number ? ` · A/c ${orgBank.data.bank_account_number}` : ''}
+                  {orgBank.data?.bank_ifsc ? ` · ${orgBank.data.bank_ifsc}` : ''}
+                </span>
+              </span>
+            </label>
+          ) : (
+            <p className="mt-1 rounded-lg border border-dashed border-gray-300 bg-gray-50/60 px-3 py-2 text-[11px] text-gray-500">
+              No hospital bank details on file. Add them in <span className="font-semibold">Admin → Bill Settings → Hospital &amp; GST</span> to print them on TPA receipts.
+            </p>
+          )
+        )}
       </div>
       <div className="mt-4 flex items-center justify-end gap-3">
         {/* Say WHY Save is greyed out instead of leaving the biller guessing. */}

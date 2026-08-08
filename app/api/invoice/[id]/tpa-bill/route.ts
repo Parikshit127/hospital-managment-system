@@ -28,6 +28,8 @@ import {
     fmtBillDateTime,
     deriveInvoiceTotals,
     deriveTpaStatusPill,
+    bankDetailsHtml,
+    brandingToBankDetails,
     type BillBranding,
 } from '@/app/lib/bill-branding';
 import { formatDoctorName } from '@/app/lib/format-name';
@@ -381,6 +383,7 @@ function generateTpaBillHTML(
 
                 <p style="font-size:10px;text-align:right;color:#666;margin-bottom:10px;">(All figures are in Rupees (INR) only)</p>
                 <p style="font-size:9px;color:#9ca3af;margin-bottom:10px;">This is the hospital's claim bill addressed to the insurer/TPA, reflecting the actual treatment charges. The patient's own bill is issued separately.</p>
+                ${bankDetailsHtml(brandingToBankDetails(branding))}
                 ${billFooterHtml(branding)}
             </div>
         </td></tr></tbody>

@@ -69,6 +69,21 @@ function instrumentToMethod(instrument?: string): string {
   return 'Other';
 }
 
+// The hospital's own receiving bank account (master, from Bill Settings) — shown
+// in the Record Insurance Receipt modal so the biller can print it on the receipt.
+export async function getOrgBankDetailsForReceipt() {
+  const { db, organizationId } = await requireTenantContext();
+  const org = await db.organization.findUnique({
+    where: { id: organizationId },
+    select: {
+      bank_name: true, bank_account_name: true, bank_account_number: true,
+      bank_ifsc: true, bank_branch: true, bank_upi_id: true,
+    },
+  });
+  const hasAny = !!(org && (org.bank_name || org.bank_account_number || org.bank_ifsc || org.bank_upi_id));
+  return { success: true, data: org, hasAny };
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // CREATE RECEIPT (header only — money received from a payer)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -87,9 +102,32 @@ export async function createInsuranceReceipt(input: {
   tds_amount?: number;
   service_charge?: number;
   remarks?: string;
+  // When true, snapshot the hospital's master bank account onto this receipt so it
+  // prints on the receipt. Opt-in from the Record Insurance Receipt modal — old
+  // receipts never captured it, so they stay blank.
+  include_bank_details?: boolean;
 }) {
   try {
     const { db, session, organizationId } = await requireTenantContext();
+
+    // Snapshot the hospital's receiving bank account if the biller opted in.
+    let bankSnapshot: Record<string, string | null> = {};
+    if (input.include_bank_details) {
+      const org = await db.organization.findUnique({
+        where: { id: organizationId },
+        select: {
+          bank_name: true, bank_account_name: true, bank_account_number: true,
+          bank_ifsc: true, bank_branch: true, bank_upi_id: true,
+        },
+      });
+      if (org && (org.bank_name || org.bank_account_number || org.bank_ifsc || org.bank_upi_id)) {
+        bankSnapshot = {
+          bank_name: org.bank_name, bank_account_name: org.bank_account_name,
+          bank_account_number: org.bank_account_number, bank_ifsc: org.bank_ifsc,
+          bank_branch: org.bank_branch, bank_upi_id: org.bank_upi_id,
+        };
+      }
+    }
 
     const total = round2(Number(input.total_amount));
     if (!Number.isFinite(total) || total <= 0) return { success: false, error: 'total_amount must be greater than 0' };
@@ -136,6 +174,7 @@ export async function createInsuranceReceipt(input: {
         service_charge: serviceCharge,
         status: 'Open',
         remarks: input.remarks || null,
+        ...bankSnapshot,
         organizationId,
         created_by: session?.username || session?.name || null,
       },
@@ -636,6 +675,7 @@ export async function recordAndAllocateReceipt(input: {
   service_charge?: number;
   remarks?: string;
   settle_gross?: boolean;
+  include_bank_details?: boolean;
   lines?: Array<{
     invoice_id: number;
     allocated_amount: number;

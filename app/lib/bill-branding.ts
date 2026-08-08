@@ -79,17 +79,33 @@ export async function getBillBranding(organizationId: string): Promise<BillBrand
 }
 
 // ─── Shared bank-details block ───────────────────────────────────────────────
-// "Remit payment to" — printed on bills, TPA invoices and receipts so payers
-// know where to send the money. Renders nothing if no bank details are set.
-export function bankDetailsHtml(b: BillBranding, opts?: { compact?: boolean }): string {
-    const hasAny = b.bankName || b.bankAccountNumber || b.bankIfsc || b.bankUpiId;
-    if (!hasAny) return '';
+// "Remit payment to" — used ONLY on TPA documents (TPA invoice from the org's
+// master account; insurance receipt from the per-receipt snapshot). Renders
+// nothing if no bank details are present.
+export interface BankDetails {
+    name?: string | null;
+    accountName?: string | null;
+    accountNumber?: string | null;
+    ifsc?: string | null;
+    branch?: string | null;
+    upiId?: string | null;
+}
+
+export function brandingToBankDetails(b: BillBranding): BankDetails {
+    return {
+        name: b.bankName, accountName: b.bankAccountName, accountNumber: b.bankAccountNumber,
+        ifsc: b.bankIfsc, branch: b.bankBranch, upiId: b.bankUpiId,
+    };
+}
+
+export function bankDetailsHtml(bank: BankDetails, opts?: { compact?: boolean }): string {
+    if (!bank || !(bank.name || bank.accountNumber || bank.ifsc || bank.upiId)) return '';
     const rows: string[] = [];
-    if (b.bankName) rows.push(`<b>Bank:</b> ${escHtml(b.bankName)}${b.bankBranch ? `, ${escHtml(b.bankBranch)}` : ''}`);
-    if (b.bankAccountName) rows.push(`<b>A/c Name:</b> ${escHtml(b.bankAccountName)}`);
-    if (b.bankAccountNumber) rows.push(`<b>A/c No.:</b> ${escHtml(b.bankAccountNumber)}`);
-    if (b.bankIfsc) rows.push(`<b>IFSC:</b> ${escHtml(b.bankIfsc)}`);
-    if (b.bankUpiId) rows.push(`<b>UPI:</b> ${escHtml(b.bankUpiId)}`);
+    if (bank.name) rows.push(`<b>Bank:</b> ${escHtml(bank.name)}${bank.branch ? `, ${escHtml(bank.branch)}` : ''}`);
+    if (bank.accountName) rows.push(`<b>A/c Name:</b> ${escHtml(bank.accountName)}`);
+    if (bank.accountNumber) rows.push(`<b>A/c No.:</b> ${escHtml(bank.accountNumber)}`);
+    if (bank.ifsc) rows.push(`<b>IFSC:</b> ${escHtml(bank.ifsc)}`);
+    if (bank.upiId) rows.push(`<b>UPI:</b> ${escHtml(bank.upiId)}`);
     const sep = opts?.compact ? ' &nbsp;·&nbsp; ' : '<br/>';
     return `
     <div style="border:1px solid #e5e7eb;border-radius:6px;padding:8px 12px;font-size:10px;color:#374151;line-height:1.7;">
@@ -185,13 +201,13 @@ export function signatureBlockHtml(b: BillBranding): string {
 
 export function billFooterHtml(b: BillBranding): string {
     const termsText = b.termsConditions || 'Payment due on receipt. Subject to local jurisdiction.';
-    const bankBlock = bankDetailsHtml(b);
+    // Bank details are intentionally NOT in the shared footer — they belong on TPA
+    // documents only (TPA invoice + insurance receipt), not on cash/OPD bills.
     return `
     <div style="border-top:1px solid #e5e7eb;padding-top:14px;margin-top:20px;">
-        <div style="display:flex;justify-content:space-between;gap:16px;">
-            <div style="max-width:60%;">
-                ${bankBlock}
-                <p style="font-size:10px;color:#9ca3af;margin-top:${bankBlock ? '8px' : '0'};">Terms: ${escHtml(termsText)}</p>
+        <div style="display:flex;justify-content:space-between;">
+            <div>
+                <p style="font-size:10px;color:#9ca3af;">Terms: ${escHtml(termsText)}</p>
             </div>
             ${signatureBlockHtml(b)}
         </div>

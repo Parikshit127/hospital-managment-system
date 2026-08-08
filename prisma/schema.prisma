@@ -5030,6 +5030,15 @@ model InsuranceReceipt {
   status           String   @default("Open") // Open | PartiallyAllocated | Allocated | Reversed
   remarks          String?
   gl_posted        Boolean  @default(false)
+  // Snapshot of the hospital's receiving bank account AT THE TIME the receipt was
+  // recorded (copied from the org master when the biller opts in). Printed on this
+  // receipt only — so old receipts, which never captured it, stay blank.
+  bank_name           String?
+  bank_account_name   String?
+  bank_account_number String?
+  bank_ifsc           String?
+  bank_branch         String?
+  bank_upi_id         String?
   organizationId   String
   created_by       String?
   created_at       DateTime @default(now())
