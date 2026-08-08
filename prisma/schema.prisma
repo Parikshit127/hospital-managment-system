@@ -175,6 +175,14 @@ model Organization {
   organization_gstin             String?
   gst_state_code                 String?
   website                        String?
+  // Hospital's OWN receiving bank account — printed on bills / TPA invoices /
+  // receipts so payers know where to remit. Single account per hospital.
+  bank_name                      String?
+  bank_account_name              String?
+  bank_account_number            String?
+  bank_ifsc                      String?
+  bank_branch                    String?
+  bank_upi_id                    String?
   specialties                    String[]                      @default([])
   latitude                       Float?
   longitude                      Float?

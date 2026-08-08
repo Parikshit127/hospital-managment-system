@@ -124,6 +124,12 @@ export default function BillSettingsPage() {
             phone: billingInfo.phone || '',
             email: billingInfo.email || '',
             address: billingInfo.address || '',
+            bank_name: billingInfo.bank_name || '',
+            bank_account_name: billingInfo.bank_account_name || '',
+            bank_account_number: billingInfo.bank_account_number || '',
+            bank_ifsc: billingInfo.bank_ifsc || '',
+            bank_branch: billingInfo.bank_branch || '',
+            bank_upi_id: billingInfo.bank_upi_id || '',
         });
         if (res.success) showToast('Billing info saved');
         else showToast('Failed to save billing info', 'error');
@@ -528,6 +534,75 @@ export default function BillSettingsPage() {
                                         value={billingInfo.registration_number || ''}
                                         onChange={(e) => setBillingInfo((p: any) => ({ ...p, registration_number: e.target.value }))}
                                         className={inputCls}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Hospital bank account — printed on bills, TPA invoices & receipts */}
+                        <div className={cardCls}>
+                            <h3 className="text-sm font-black text-gray-900 mb-1">Hospital Bank Details</h3>
+                            <p className="text-xs text-gray-500 mb-4">The hospital&apos;s own receiving account. Shown as a &ldquo;Remit payment to&rdquo; block on bills, TPA invoices and receipts. Leave blank to hide it.</p>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <label className={labelCls}>Bank Name</label>
+                                    <input
+                                        type="text"
+                                        value={billingInfo.bank_name || ''}
+                                        onChange={(e) => setBillingInfo((p: any) => ({ ...p, bank_name: e.target.value }))}
+                                        className={inputCls}
+                                        placeholder="e.g. HDFC Bank"
+                                    />
+                                </div>
+                                <div>
+                                    <label className={labelCls}>Account Holder Name</label>
+                                    <input
+                                        type="text"
+                                        value={billingInfo.bank_account_name || ''}
+                                        onChange={(e) => setBillingInfo((p: any) => ({ ...p, bank_account_name: e.target.value }))}
+                                        className={inputCls}
+                                        placeholder="As per bank records"
+                                    />
+                                </div>
+                                <div>
+                                    <label className={labelCls}>Account Number</label>
+                                    <input
+                                        type="text"
+                                        value={billingInfo.bank_account_number || ''}
+                                        onChange={(e) => setBillingInfo((p: any) => ({ ...p, bank_account_number: e.target.value }))}
+                                        className={inputCls}
+                                        placeholder="Account number"
+                                    />
+                                </div>
+                                <div>
+                                    <label className={labelCls}>IFSC Code</label>
+                                    <input
+                                        type="text"
+                                        value={billingInfo.bank_ifsc || ''}
+                                        onChange={(e) => setBillingInfo((p: any) => ({ ...p, bank_ifsc: e.target.value.toUpperCase() }))}
+                                        className={inputCls}
+                                        placeholder="e.g. HDFC0001234"
+                                        maxLength={11}
+                                    />
+                                </div>
+                                <div>
+                                    <label className={labelCls}>Branch</label>
+                                    <input
+                                        type="text"
+                                        value={billingInfo.bank_branch || ''}
+                                        onChange={(e) => setBillingInfo((p: any) => ({ ...p, bank_branch: e.target.value }))}
+                                        className={inputCls}
+                                        placeholder="Branch name / city"
+                                    />
+                                </div>
+                                <div>
+                                    <label className={labelCls}>UPI ID <span className="text-gray-400 normal-case font-normal">(optional)</span></label>
+                                    <input
+                                        type="text"
+                                        value={billingInfo.bank_upi_id || ''}
+                                        onChange={(e) => setBillingInfo((p: any) => ({ ...p, bank_upi_id: e.target.value }))}
+                                        className={inputCls}
+                                        placeholder="e.g. hospital@hdfcbank"
                                     />
                                 </div>
                             </div>

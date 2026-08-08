@@ -21,6 +21,13 @@ export interface BillBranding {
     termsConditions: string | null;
     signatureTitle: string | null;
     signatureName: string | null;
+    // Hospital's own receiving bank account (for the "Remit payment to" block).
+    bankName: string | null;
+    bankAccountName: string | null;
+    bankAccountNumber: string | null;
+    bankIfsc: string | null;
+    bankBranch: string | null;
+    bankUpiId: string | null;
 }
 
 // ─── Fetch branding from DB ──────────────────────────────────────────────────
@@ -62,7 +69,33 @@ export async function getBillBranding(organizationId: string): Promise<BillBrand
         termsConditions: b?.terms_conditions || null,
         signatureTitle: b?.signature_title || null,
         signatureName: b?.signature_name || null,
+        bankName: org?.bank_name || null,
+        bankAccountName: org?.bank_account_name || null,
+        bankAccountNumber: org?.bank_account_number || null,
+        bankIfsc: org?.bank_ifsc || null,
+        bankBranch: org?.bank_branch || null,
+        bankUpiId: org?.bank_upi_id || null,
     };
+}
+
+// ─── Shared bank-details block ───────────────────────────────────────────────
+// "Remit payment to" — printed on bills, TPA invoices and receipts so payers
+// know where to send the money. Renders nothing if no bank details are set.
+export function bankDetailsHtml(b: BillBranding, opts?: { compact?: boolean }): string {
+    const hasAny = b.bankName || b.bankAccountNumber || b.bankIfsc || b.bankUpiId;
+    if (!hasAny) return '';
+    const rows: string[] = [];
+    if (b.bankName) rows.push(`<b>Bank:</b> ${escHtml(b.bankName)}${b.bankBranch ? `, ${escHtml(b.bankBranch)}` : ''}`);
+    if (b.bankAccountName) rows.push(`<b>A/c Name:</b> ${escHtml(b.bankAccountName)}`);
+    if (b.bankAccountNumber) rows.push(`<b>A/c No.:</b> ${escHtml(b.bankAccountNumber)}`);
+    if (b.bankIfsc) rows.push(`<b>IFSC:</b> ${escHtml(b.bankIfsc)}`);
+    if (b.bankUpiId) rows.push(`<b>UPI:</b> ${escHtml(b.bankUpiId)}`);
+    const sep = opts?.compact ? ' &nbsp;·&nbsp; ' : '<br/>';
+    return `
+    <div style="border:1px solid #e5e7eb;border-radius:6px;padding:8px 12px;font-size:10px;color:#374151;line-height:1.7;">
+        <p style="font-size:9px;color:#9ca3af;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px;">Remit payment to</p>
+        ${rows.join(sep)}
+    </div>`;
 }
 
 // ─── Pattern A: Full-page letterhead background ──────────────────────────────
@@ -152,11 +185,13 @@ export function signatureBlockHtml(b: BillBranding): string {
 
 export function billFooterHtml(b: BillBranding): string {
     const termsText = b.termsConditions || 'Payment due on receipt. Subject to local jurisdiction.';
+    const bankBlock = bankDetailsHtml(b);
     return `
     <div style="border-top:1px solid #e5e7eb;padding-top:14px;margin-top:20px;">
-        <div style="display:flex;justify-content:space-between;">
-            <div>
-                <p style="font-size:10px;color:#9ca3af;">Terms: ${escHtml(termsText)}</p>
+        <div style="display:flex;justify-content:space-between;gap:16px;">
+            <div style="max-width:60%;">
+                ${bankBlock}
+                <p style="font-size:10px;color:#9ca3af;margin-top:${bankBlock ? '8px' : '0'};">Terms: ${escHtml(termsText)}</p>
             </div>
             ${signatureBlockHtml(b)}
         </div>

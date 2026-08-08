@@ -1003,6 +1003,12 @@ export async function getHospitalBillingInfo() {
         organization_gstin: true,
         gst_state_code: true,
         registration_number: true,
+        bank_name: true,
+        bank_account_name: true,
+        bank_account_number: true,
+        bank_ifsc: true,
+        bank_branch: true,
+        bank_upi_id: true,
       },
     });
     return { success: true, data: org };
@@ -1018,12 +1024,28 @@ export async function updateHospitalBillingInfo(data: {
   phone?: string;
   email?: string;
   address?: string;
+  bank_name?: string;
+  bank_account_name?: string;
+  bank_account_number?: string;
+  bank_ifsc?: string;
+  bank_branch?: string;
+  bank_upi_id?: string;
 }) {
   try {
     const { organizationId } = await requireTenantContext();
+    // Explicit whitelist — never spread arbitrary keys onto the org row.
+    const allowed: (keyof typeof data)[] = [
+      'organization_gstin', 'gst_state_code', 'registration_number', 'phone', 'email', 'address',
+      'bank_name', 'bank_account_name', 'bank_account_number', 'bank_ifsc', 'bank_branch', 'bank_upi_id',
+    ];
+    const patch: Record<string, any> = {};
+    for (const k of allowed) if (data[k] !== undefined) patch[k] = data[k];
+    // IFSC is conventionally upper-case; normalise so it prints consistently.
+    if (typeof patch.bank_ifsc === 'string') patch.bank_ifsc = patch.bank_ifsc.trim().toUpperCase();
+
     const org = await prisma.organization.update({
       where: { id: organizationId },
-      data,
+      data: patch,
     });
     return { success: true, data: org };
   } catch (error: any) {

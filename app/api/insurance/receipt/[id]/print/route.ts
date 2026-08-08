@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/backend/db';
 import { resolveRouteAuth } from '@/app/lib/route-auth';
-import { getBillBranding, fmtBillDate } from '@/app/lib/bill-branding';
+import { getBillBranding, fmtBillDate, bankDetailsHtml } from '@/app/lib/bill-branding';
 
 // Printable acknowledgement for a TPA / insurance receipt: the payer settlement
 // on hospital letterhead, with the bill-wise split of what was applied.
@@ -254,6 +254,8 @@ ${isReversed ? `
     </table>
 
     <p style="font-size:10px;color:#6b7280;margin-bottom:22px;">Settled = amount the payer allowed against the bill (TDS is withheld from it, so In Bank = Settled − TDS).</p>
+
+    ${bankDetailsHtml(b)}
 
     <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:30px;">
         <p style="font-size:10px;color:${isReversed ? '#b91c1c' : '#9ca3af'};">${isReversed
