@@ -7,12 +7,26 @@
  *     Discount     : 29.6%   (= ₹16,030)
  *     Net payable  : ₹38,124
  *
- * It writes the discount the same way the app does — as `bill_discount` on the
- * invoice header, with the totals recomputed exactly like the app's
- * recalculateInvoice(): line rates and the GST already charged on each line are
- * left untouched, so the bill still adds up and the printed bill picks the
- * discount up on its own (both bill renderers read it through
- * deriveInvoiceTotals).
+ * TWO SCOPES, because "the bill" means two different figures for an admitted
+ * patient. An IPD stay is ONE invoice, but the Pharmacy Sales screen shows only
+ * that invoice's pharmacy lines — so a total read off the pharmacy screen is
+ * smaller than the invoice. Kamla Pawa's invoice is ₹65,454.83 of which
+ * ₹54,154.83 is pharmacy and ₹11,300.00 is other charges.
+ *
+ *   --scope bill      (default) discount the whole invoice. Written as
+ *                     `bill_discount` on the header, the way the app's own
+ *                     bill-discount control does. Line rates and the GST already
+ *                     charged on each line stay untouched.
+ *
+ *   --scope pharmacy  discount only the pharmacy lines. Written as a per-line
+ *                     discount on each of them, because a header discount is
+ *                     invisible to the Pharmacy Sales screen (it totals the
+ *                     lines) and would leave GST charged on the full,
+ *                     undiscounted medicine value.
+ *
+ * Either way the invoice totals are recomputed exactly like the app's
+ * recalculateInvoice(), so the bill still adds up and both bill renderers pick
+ * the discount up on their own through deriveInvoiceTotals:
  *
  *   total_discount = Σ(line discounts) + bill_discount
  *   net_amount     = Σ(line net) + Σ(line tax) − bill_discount
@@ -24,9 +38,10 @@
  *  - Refuses to guess: if the name matches more than one patient, or the patient
  *    has more than one candidate bill, it prints them and stops so you pick one
  *    with --invoice.
- *  - Cross-checks the bill it found against --expected-bill (₹54,154) and stops
- *    on a mismatch — a bill that has moved since the number was quoted is a
- *    different bill and should not be silently discounted to the old figure.
+ *  - Cross-checks what it is about to discount against --expected-bill (₹54,154)
+ *    and stops on a mismatch — a bill that has moved since the number was quoted
+ *    should not be silently discounted to the old figure. If the whole bill does
+ *    not match but the pharmacy lines do, it says so and names --scope pharmacy.
  *  - Never lets the discount exceed the bill, and warns (does not silently
  *    proceed) when the target net is below what the patient has already paid.
  *  - Snapshots the invoice into invoice_snapshots and writes a system_audit_log
@@ -42,9 +57,11 @@
  *   --invoice AVS-IPD-26-27-0  exact invoice number, when the patient has several bills
  *   --invoice-id 1234          invoice row id — how you pick a DRAFT bill, which has
  *                              no invoice number yet (the dry run prints the id)
- *   --expected-bill 54154      bill total before discount, cross-checked (0 = skip check)
- *   --net 38124                target net payable  → discount = bill − net
- *   --percent 29.6             discount as a % of the bill (alternative to --net)
+ *   --scope pharmacy           discount only the pharmacy lines (default: bill)
+ *   --expected-bill 54154      total before discount, cross-checked (0 = skip check)
+ *   --net 38124                target net payable  → discount = base − net
+ *   --percent 29.6             discount as a % of the base (alternative to --net)
+ *   --show-items               list the charge lines on an --apply run too
  *   --reason "..."             stored in discount_remark on the bill
  *   --by "Dr. X"               name recorded as who applied it, in the audit log
  */
@@ -174,39 +191,104 @@ async function main() {
     const { inv, lineDiscount, netItems, tax, billBeforeDiscount } = target;
     const label = inv.invoice_number ?? `draft#${inv.id}`;
 
-    // ── 4. Cross-check against the quoted total ─────────────────────────────
-    if (EXPECTED_BILL > 0 && Math.abs(billBeforeDiscount - EXPECTED_BILL) > EPS) {
+    // ── 4. Scope: the whole bill, or only its pharmacy lines ────────────────
+    // An IPD bill is one invoice, but the Pharmacy Sales screen shows only that
+    // invoice's PHARMACY lines (getInvoices expands an IPD invoice into pharmacy
+    // rows). So "the bill" can legitimately mean two different figures, and a
+    // discount quoted off the pharmacy screen is quoted on the smaller one.
+    // Same rule the app uses to decide what counts as a pharmacy line.
+    const isPharmItem = (it: { service_category: string | null; department: string; description: string }) => {
+        const cat = String(it.service_category ?? '').toLowerCase();
+        const dept = String(it.department ?? '').toLowerCase();
+        const desc = String(it.description ?? '').toLowerCase();
+        return cat === 'pharmacy' || dept === 'pharmacy' || desc.startsWith('pharmacy:');
+    };
+    const pharmItems = inv.items.filter(isPharmItem);
+    const pharmBase = round2(pharmItems.reduce((s, i) => s + n(i.net_price) + n(i.tax_amount), 0));
+    const pharmGross = round2(pharmItems.reduce((s, i) => s + n(i.total_price), 0));
+
+    const SCOPE = (arg('--scope') ?? 'bill').toLowerCase();
+    if (SCOPE !== 'bill' && SCOPE !== 'pharmacy') fail(`--scope must be "bill" or "pharmacy" (got "${SCOPE}").`);
+    const pharmacyScope = SCOPE === 'pharmacy';
+
+    if (pharmacyScope && pharmItems.length === 0) fail(`Bill ${label} has no pharmacy lines to discount.`);
+
+    // What the discount is taken on, and what it lands on.
+    const base = pharmacyScope ? pharmBase : billBeforeDiscount;
+    const baseLabel = pharmacyScope ? 'pharmacy charges' : 'whole bill';
+
+    console.log(`Bill ${label}: whole bill ${money(billBeforeDiscount)}` +
+        `  ·  pharmacy lines ${money(pharmBase)} (${pharmItems.length})` +
+        `  ·  other charges ${money(round2(billBeforeDiscount - pharmBase))}`);
+    console.log(`Discount scope: ${baseLabel} → base ${money(base)}\n`);
+
+    // ── 5. Cross-check against the quoted total ─────────────────────────────
+    if (EXPECTED_BILL > 0 && Math.abs(base - EXPECTED_BILL) > EPS) {
         fail(
-            `Bill ${label} is ${money(billBeforeDiscount)} before discount, but ${money(EXPECTED_BILL)} was expected.\n` +
-                `    The bill has changed since that figure was quoted — confirm the amount, then re-run with\n` +
-                `    --expected-bill ${Math.round(billBeforeDiscount)} (or --expected-bill 0 to skip this check).`,
+            `The ${baseLabel} on ${label} come to ${money(base)}, but ${money(EXPECTED_BILL)} was expected.\n` +
+                `    Confirm the amount, then re-run with --expected-bill ${round2(base)}` +
+                `${!pharmacyScope && Math.abs(pharmBase - EXPECTED_BILL) <= EPS
+                    ? `,\n    or add --scope pharmacy — the pharmacy lines DO come to ${money(pharmBase)}.`
+                    : ' (or --expected-bill 0 to skip this check).'}`,
         );
     }
 
-    // ── 5. Work out the discount ────────────────────────────────────────────
+    // ── 6. Work out the discount ────────────────────────────────────────────
     if (TARGET_NET !== undefined && PERCENT !== undefined) {
         fail('Pass either --net or --percent, not both.');
     }
     const targetNet =
-        PERCENT !== undefined
-            ? round2(billBeforeDiscount * (1 - PERCENT / 100))
-            : (TARGET_NET ?? DEFAULT_NET);
+        PERCENT !== undefined ? round2(base * (1 - PERCENT / 100)) : (TARGET_NET ?? DEFAULT_NET);
 
-    const newBillDiscount = round2(billBeforeDiscount - targetNet);
-    const pct = billBeforeDiscount > 0 ? (newBillDiscount / billBeforeDiscount) * 100 : 0;
+    const discountAmount = round2(base - targetNet);
+    const pct = base > 0 ? (discountAmount / base) * 100 : 0;
 
-    if (newBillDiscount < 0) fail(`Target net ${money(targetNet)} is above the bill ${money(billBeforeDiscount)}.`);
-    if (newBillDiscount > billBeforeDiscount) fail('Discount cannot exceed the bill.');
+    if (discountAmount < 0) fail(`Target net ${money(targetNet)} is above the ${baseLabel} ${money(base)}.`);
+    if (discountAmount > base) fail(`Discount cannot exceed the ${baseLabel}.`);
 
-    // ── 6. Recompute the totals exactly like the app's recalculateInvoice ───
+    // ── 7. Recompute the totals exactly like the app's recalculateInvoice ───
+    // Whole-bill scope puts the discount on the invoice header (bill_discount),
+    // which leaves every line — and the GST charged on it — untouched.
+    //
+    // Pharmacy scope instead scales each pharmacy LINE down by the same
+    // percentage, because a header discount is invisible to the Pharmacy Sales
+    // screen (it totals the lines) and would leave GST charged on the full,
+    // undiscounted medicine value. Scaling every line by (1 − p) scales the
+    // pharmacy total by exactly (1 − p) whatever mix of GST rates the lines
+    // carry; only per-line rounding to paise can drift, and that is reported.
+    const p = base > 0 ? discountAmount / base : 0;
+    const lineUpdates = pharmacyScope
+        ? pharmItems.map((it) => {
+              const gross = n(it.total_price);
+              const discount = round2(gross * p);
+              const net_price = round2(gross - discount);
+              const tax_amount = round2((net_price * n(it.tax_rate)) / 100);
+              return { id: it.id, description: it.description, discount, net_price, tax_amount, was: n(it.discount) };
+          })
+        : [];
+
+    // Rebuild the invoice totals off the items as they will be AFTER the writes.
+    const patched = new Map(lineUpdates.map((u) => [u.id, u]));
+    const newLineDiscount = round2(inv.items.reduce((s, i) => s + (patched.get(i.id)?.discount ?? n(i.discount)), 0));
+    const newNetItems = round2(inv.items.reduce((s, i) => s + (patched.get(i.id)?.net_price ?? n(i.net_price)), 0));
+    const newTax = round2(inv.items.reduce((s, i) => s + (patched.get(i.id)?.tax_amount ?? n(i.tax_amount)), 0));
+    // Header discount only moves in whole-bill scope; pharmacy scope leaves it as is.
+    const newBillDiscount = pharmacyScope ? n(inv.bill_discount) : discountAmount;
+
     const total_amount = target.gross;
-    const total_discount = round2(lineDiscount + newBillDiscount);
-    const net_amount = round2(netItems + tax - newBillDiscount);
+    const total_discount = round2(newLineDiscount + newBillDiscount);
+    const net_amount = round2(newNetItems + newTax - newBillDiscount);
     const paid = n(inv.paid_amount);
     const balance_due = round2(Math.max(0, net_amount - paid));
     const isInterState = inv.is_inter_state;
 
-    const reason = REASON ?? `Discount ${round2(pct)}% approved — net ${money(targetNet)}`;
+    // What the scope's own total actually lands on after rounding.
+    const achievedBase = pharmacyScope
+        ? round2(lineUpdates.reduce((s, u) => s + u.net_price + u.tax_amount, 0))
+        : round2(base - discountAmount);
+
+    const reason =
+        REASON ?? `Discount ${round2(pct)}% on ${baseLabel} — net ${money(achievedBase)}`;
 
     // The charge lines. Printed on a dry run because the usual reason a bill does
     // not match the figure a discount was approved on is that charges were added
@@ -229,19 +311,52 @@ async function main() {
     }
 
     console.log(`Target bill : ${label}  [${inv.invoice_type}]  patient ${inv.patient_id}`);
-    console.log(`  Bill before discount : ${money(billBeforeDiscount)}   (items ${money(netItems)} + GST ${money(tax)})`);
-    console.log(`  Discount             : ${money(newBillDiscount)}  (${round2(pct)}%)`);
-    console.log(`  Net payable          : ${money(net_amount)}`);
-    console.log(`  Already paid         : ${money(paid)}`);
-    console.log(`  Balance due          : ${money(n(inv.balance_due))}  →  ${money(balance_due)}`);
-    console.log(`  Reason               : ${reason}\n`);
+    console.log(`  ${`Before discount (${baseLabel})`.padEnd(34)}: ${money(base)}`);
+    console.log(`  ${'Discount'.padEnd(34)}: ${money(discountAmount)}  (${round2(pct)}%)`);
+    console.log(`  ${`After discount (${baseLabel})`.padEnd(34)}: ${money(achievedBase)}`);
+    if (pharmacyScope) {
+        console.log(`  ${'Applied as'.padEnd(34)}: line discounts on ${lineUpdates.length} pharmacy line(s)`);
+        // A line discount comes off the TAXABLE value, so the GST charged drops
+        // with it. The bill's "Discount" line therefore shows the taxable-value
+        // cut, and the rest of the patient's saving shows up as less GST — the
+        // two together are the full reduction printed above.
+        const taxableCut = round2(lineUpdates.reduce((s, u) => s + u.discount, 0) - lineDiscount);
+        console.log(`  ${'  ↳ shown on the bill as Discount'.padEnd(34)}: ${money(taxableCut)}`);
+        console.log(`  ${'  ↳ rest is GST no longer charged'.padEnd(34)}: ${money(round2(discountAmount - taxableCut))}`);
+        const drift = round2(achievedBase - round2(base - discountAmount));
+        if (Math.abs(drift) >= 0.01) {
+            console.log(`  ${'Rounding drift'.padEnd(34)}: ${money(drift)} (per-line rounding to paise)`);
+        }
+    } else {
+        console.log(`  ${'Applied as'.padEnd(34)}: bill_discount on the invoice header`);
+    }
+    console.log('  ─── whole invoice ───');
+    console.log(`  ${'Gross (all lines)'.padEnd(34)}: ${money(total_amount)}`);
+    console.log(`  ${'Total discount'.padEnd(34)}: ${money(n(inv.total_discount))}  →  ${money(total_discount)}`);
+    console.log(`  ${'GST'.padEnd(34)}: ${money(tax)}  →  ${money(newTax)}`);
+    console.log(`  ${'Net payable'.padEnd(34)}: ${money(n(inv.net_amount))}  →  ${money(net_amount)}`);
+    console.log(`  ${'Already paid'.padEnd(34)}: ${money(paid)}`);
+    console.log(`  ${'Balance due'.padEnd(34)}: ${money(n(inv.balance_due))}  →  ${money(balance_due)}`);
+    console.log(`  ${'Reason'.padEnd(34)}: ${reason}\n`);
 
-    // ── 7. Things the operator must see before this is written ─────────────
-    if (n(inv.bill_discount) > 0) {
+    // ── 8. Things the operator must see before this is written ─────────────
+    if (!pharmacyScope && n(inv.bill_discount) > 0) {
         console.log(
-            `⚠️   This bill already carries a discount of ${money(n(inv.bill_discount))}. ` +
-                `It is REPLACED (not added to) by ${money(newBillDiscount)}.\n`,
+            `⚠️   This bill already carries a bill discount of ${money(n(inv.bill_discount))}. ` +
+                `It is REPLACED (not added to) by ${money(discountAmount)}.\n`,
         );
+    }
+    if (pharmacyScope && n(inv.bill_discount) > 0) {
+        console.log(
+            `⚠️   This bill also carries a bill-level discount of ${money(n(inv.bill_discount))}, which is\n` +
+                `    LEFT AS IS and still comes off on top of these line discounts.\n`,
+        );
+    }
+    const replacing = lineUpdates.filter((u) => u.was > 0);
+    if (replacing.length > 0) {
+        console.log(`⚠️   ${replacing.length} pharmacy line(s) already had a discount; it is REPLACED:`);
+        for (const u of replacing) console.log(`      ${u.description.slice(0, 50)}  ${money(u.was)} → ${money(u.discount)}`);
+        console.log('');
     }
     if (paid > net_amount + EPS) {
         console.log(
@@ -269,7 +384,7 @@ async function main() {
         return;
     }
 
-    // ── 8. Write ────────────────────────────────────────────────────────────
+    // ── 9. Write ────────────────────────────────────────────────────────────
     await prisma.$transaction(async (tx) => {
         // Pre-change snapshot, same shape the app stores on an invoice edit.
         await tx.invoice_snapshots.create({
@@ -300,10 +415,18 @@ async function main() {
                     })),
                 },
                 changed_by: APPLIED_BY,
-                change_summary: `Bill discount set to ${money(newBillDiscount)} (${round2(pct)}%) by script`,
+                change_summary: `Discount ${money(discountAmount)} (${round2(pct)}%) on ${baseLabel} by script`,
                 organizationId: inv.organizationId,
             },
         });
+
+        // Pharmacy scope: the discount lives on the lines.
+        for (const u of lineUpdates) {
+            await tx.invoice_items.update({
+                where: { id: u.id },
+                data: { discount: u.discount, net_price: u.net_price, tax_amount: u.tax_amount },
+            });
+        }
 
         await tx.invoices.update({
             where: { id: inv.id },
@@ -313,10 +436,10 @@ async function main() {
                 total_amount,
                 total_discount,
                 net_amount,
-                total_tax: tax,
-                cgst_amount: isInterState ? 0 : round2(tax / 2),
-                sgst_amount: isInterState ? 0 : round2(tax / 2),
-                igst_amount: isInterState ? tax : 0,
+                total_tax: newTax,
+                cgst_amount: isInterState ? 0 : round2(newTax / 2),
+                sgst_amount: isInterState ? 0 : round2(newTax / 2),
+                igst_amount: isInterState ? newTax : 0,
                 balance_due,
                 version: { increment: 1 },
             },
@@ -330,14 +453,21 @@ async function main() {
                 entity_id: inv.invoice_number ?? `draft#${inv.id}`,
                 details: JSON.stringify({
                     source: 'scripts/apply-patient-bill-discount.ts',
-                    patch: { bill_discount: newBillDiscount, discount_remark: reason },
+                    scope: baseLabel,
+                    discount: { base, amount: discountAmount, percent: round2(pct) },
+                    patch: {
+                        bill_discount: newBillDiscount,
+                        discount_remark: reason,
+                        line_discounts: lineUpdates.map((u) => ({ item_id: u.id, from: u.was, to: u.discount })),
+                    },
                     before: {
                         bill_discount: n(inv.bill_discount),
                         total_discount: n(inv.total_discount),
+                        total_tax: tax,
                         net_amount: n(inv.net_amount),
                         balance_due: n(inv.balance_due),
                     },
-                    after: { bill_discount: newBillDiscount, total_discount, net_amount, balance_due },
+                    after: { bill_discount: newBillDiscount, total_discount, total_tax: newTax, net_amount, balance_due },
                 }),
                 username: APPLIED_BY,
                 organizationId: inv.organizationId,
