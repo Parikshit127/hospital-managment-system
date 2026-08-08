@@ -208,6 +208,26 @@ async function main() {
 
     const reason = REASON ?? `Discount ${round2(pct)}% approved — net ${money(targetNet)}`;
 
+    // The charge lines. Printed on a dry run because the usual reason a bill does
+    // not match the figure a discount was approved on is that charges were added
+    // after it was quoted — and then you need to see WHAT was added before
+    // deciding what the discount should now be.
+    if (!APPLY || argv.includes('--show-items')) {
+        console.log(`Charges on ${label}:`);
+        for (const it of [...inv.items].sort((a, b) => +a.created_at - +b.created_at)) {
+            const gross = n(it.total_price);
+            console.log(
+                `  ${new Date(it.created_at).toLocaleDateString('en-GB')}  ` +
+                    `${String(it.description).slice(0, 44).padEnd(44)} ` +
+                    `${String(n(it.quantity)).padStart(4)} x ${money(n(it.unit_price)).padStart(12)}` +
+                    ` = ${money(gross).padStart(13)}` +
+                    `${n(it.discount) > 0 ? `  (−${money(n(it.discount))})` : ''}` +
+                    `${n(it.tax_amount) > 0 ? `  +GST ${money(n(it.tax_amount))}` : ''}`,
+            );
+        }
+        console.log('');
+    }
+
     console.log(`Target bill : ${label}  [${inv.invoice_type}]  patient ${inv.patient_id}`);
     console.log(`  Bill before discount : ${money(billBeforeDiscount)}   (items ${money(netItems)} + GST ${money(tax)})`);
     console.log(`  Discount             : ${money(newBillDiscount)}  (${round2(pct)}%)`);
