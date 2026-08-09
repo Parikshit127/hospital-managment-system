@@ -112,8 +112,9 @@ export default function PharmacyPage() {
     const [walkInName, setWalkInName] = useState('');
     const [walkInContact, setWalkInContact] = useState('');
     const [walkInAddress, setWalkInAddress] = useState('');
-    // Optional bill-level discount (₹) for walk-in / OTC sales.
+    // Optional bill-level discount for walk-in / OTC sales — can be % or flat ₹.
     const [discount, setDiscount] = useState('');
+    const [discountMode, setDiscountMode] = useState<'pct' | 'flat'>('pct');
 
     // Backdate + prescribing doctor (optional)
     const [billDateTime, setBillDateTime] = useState('');
@@ -456,8 +457,9 @@ export default function PharmacyPage() {
     // Discount (percentage, clamped 0–100% → ₹ off the bill) is allowed on any
     // counter sale — walk-in/OTC AND registered patients ("patient ke according").
     // Only Hospital Internal Use (a stock transfer, not a sale) is excluded.
-    const discountPct = isHospitalUse ? 0 : Math.min(Math.max(0, Number(discount) || 0), 100);
-    const discountAmt = grandTotal * discountPct / 100;
+    const discountPct = isHospitalUse ? 0 : (discountMode === 'pct' ? Math.min(Math.max(0, Number(discount) || 0), 100) : 0);
+    const discountFlat = isHospitalUse ? 0 : (discountMode === 'flat' ? Math.max(0, Math.min(Number(discount) || 0, grandTotal)) : 0);
+    const discountAmt = discountMode === 'pct' ? (grandTotal * discountPct / 100) : discountFlat;
     const payableTotal = Math.max(0, grandTotal - discountAmt);
 
     const handleCheckout = () => {
@@ -489,7 +491,8 @@ export default function PharmacyPage() {
                 doctorId: doctorId || undefined,
                 doctorName: doctorName || undefined,
                 paymentMethod: isHospitalUse ? 'Credit' : paymentMethod,
-                discountPct: discountPct || undefined,
+                discountPct: discountMode === 'pct' ? (discountPct || undefined) : undefined,
+                discount: discountMode === 'flat' ? (discountFlat || undefined) : undefined,
             });
             if (res.success) {
                 setInvoiceResult(res);
@@ -516,6 +519,7 @@ export default function PharmacyPage() {
         setWalkInContact('');
         setWalkInAddress('');
         setDiscount('');
+        setDiscountMode('pct');
         setBillDateTime('');
         setDoctorId('');
         setDoctorName('');
@@ -1596,24 +1600,45 @@ export default function PharmacyPage() {
                                                         </>
                                                     )}
                                                     {!isHospitalUse && (
-                                                        <div className="flex justify-between items-center pt-1">
-                                                            <span className="text-gray-500">Discount (%)</span>
-                                                            <div className="flex items-center gap-1">
-                                                                <input
-                                                                    type="number" min="0" max="100" step="0.01"
-                                                                    value={discount}
-                                                                    onChange={e => setDiscount(e.target.value)}
-                                                                    placeholder="0"
-                                                                    className="w-16 text-right text-xs p-1.5 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-400"
-                                                                />
-                                                                <span className="text-gray-400 text-xs">%</span>
+                                                        <div className="space-y-1">
+                                                            <div className="flex justify-between items-center pt-1">
+                                                                <div className="flex items-center gap-1">
+                                                                    <span className="text-gray-500">Discount</span>
+                                                                    {/* Toggle % / ₹ */}
+                                                                    <div className="flex bg-gray-100 rounded-md p-0.5 text-[10px] font-bold">
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => { setDiscountMode('pct'); setDiscount(''); }}
+                                                                            className={`px-1.5 py-0.5 rounded transition-all ${discountMode === 'pct' ? 'bg-white text-teal-600 shadow-sm' : 'text-gray-400'}`}
+                                                                        >%</button>
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => { setDiscountMode('flat'); setDiscount(''); }}
+                                                                            className={`px-1.5 py-0.5 rounded transition-all ${discountMode === 'flat' ? 'bg-white text-teal-600 shadow-sm' : 'text-gray-400'}`}
+                                                                        >₹</button>
+                                                                    </div>
+                                                                </div>
+                                                                <div className="flex items-center gap-1">
+                                                                    {discountMode === 'flat' && <span className="text-gray-400 text-xs">₹</span>}
+                                                                    <input
+                                                                        type="number"
+                                                                        min="0"
+                                                                        max={discountMode === 'pct' ? 100 : grandTotal}
+                                                                        step={discountMode === 'pct' ? '0.01' : '1'}
+                                                                        value={discount}
+                                                                        onChange={e => setDiscount(e.target.value)}
+                                                                        placeholder="0"
+                                                                        className="w-20 text-right text-xs p-1.5 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-400"
+                                                                    />
+                                                                    {discountMode === 'pct' && <span className="text-gray-400 text-xs">%</span>}
+                                                                </div>
                                                             </div>
-                                                        </div>
-                                                    )}
-                                                    {discountAmt > 0 && (
-                                                        <div className="flex justify-between text-emerald-600">
-                                                            <span>Discount ({discountPct}%)</span>
-                                                            <span>−₹{discountAmt.toFixed(2)}</span>
+                                                            {discountAmt > 0 && (
+                                                                <div className="flex justify-between text-emerald-600 text-xs">
+                                                                    <span>Discount{discountMode === 'pct' ? ` (${discountPct}%)` : ' (Flat)'}</span>
+                                                                    <span>−₹{discountAmt.toFixed(2)}</span>
+                                                                </div>
+                                                            )}
                                                         </div>
                                                     )}
                                                     <div className="flex justify-between items-baseline pt-2 mt-1 border-t border-gray-200">
@@ -1871,7 +1896,7 @@ export default function PharmacyPage() {
                                         )}
                                         {discountAmt > 0 && (
                                             <div className="flex justify-between text-xs text-emerald-600">
-                                                <span>Discount ({discountPct}%)</span><span>−₹{discountAmt.toFixed(2)}</span>
+                                                <span>Discount{discountMode === 'pct' ? ` (${discountPct}%)` : ' (Flat)'}</span><span>−₹{discountAmt.toFixed(2)}</span>
                                             </div>
                                         )}
                                         <div className="flex justify-between pt-1.5 border-t border-gray-300">
