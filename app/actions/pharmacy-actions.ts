@@ -781,7 +781,15 @@ export async function generateInvoice(
                 // it on every pharmacy line item (client feedback: clutters the bill).
                 const dispensedAt = backdatedAt || new Date();
                 const chargeFailures: string[] = [];
+                const grossAmount = totalAmount + totalTax;
+                const rawDiscount = billDiscountPct > 0 ? grossAmount * billDiscountPct / 100 : flatDiscount;
+                const appliedDiscount = Math.min(Math.max(0, rawDiscount), grossAmount);
+                const discountRatio = grossAmount > 0 ? appliedDiscount / grossAmount : 0;
+
                 for (const item of invoiceItems) {
+                    const itemGross = (item.unit_price * item.qty) + item.tax_amount;
+                    const itemDiscount = Math.round(itemGross * discountRatio * 100) / 100;
+
                     const chargeResult = await postChargeToIpdBill({
                         admission_id: activeAdmission.admission_id,
                         source_module: 'pharmacy',
@@ -789,6 +797,7 @@ export async function generateInvoice(
                         description: `Pharmacy: ${item.medicine_name} (Batch ${item.batch_no}) × ${item.qty}`,
                         quantity: item.qty,
                         unit_price: item.unit_price,
+                        discount: itemDiscount,
                         tax_rate: item.tax_rate,
                         hsn_sac_code: item.hsn_sac_code,
                         service_category: 'Pharmacy',
@@ -1583,7 +1592,11 @@ export async function getPharmacyDashboardStats() {
     }
 }
 
-export async function dispenseMedicine(orderId: number, dispensedItems: any[]) {
+export async function dispenseMedicine(
+    orderId: number,
+    dispensedItems: any[],
+    options?: { discountPct?: number; itemDiscounts?: Record<string | number, number> }
+) {
     const denied = await denyUnlessPharmacyRole(PHARMACY_OPERATE_ROLES);
     if (denied) return denied;
 
@@ -1874,6 +1887,7 @@ export async function dispenseMedicine(orderId: number, dispensedItems: any[]) {
         if (isIpdPatient && targetAdmissionId) {
             // IPD path: post charges to IPD bill
             for (const detail of dispensedDetails) {
+                const itemDisc = options?.itemDiscounts?.[detail.medicine_id] ?? (options?.discountPct ? Math.round(detail.unit_price * detail.quantity * (options.discountPct / 100) * 100) / 100 : 0);
                 const chargeResult = await postChargeToIpdBill({
                     admission_id: targetAdmissionId,
                     source_module: 'pharmacy',
@@ -1881,6 +1895,7 @@ export async function dispenseMedicine(orderId: number, dispensedItems: any[]) {
                     description: `Pharmacy: ${detail.medicine_name} x${detail.quantity}`,
                     quantity: detail.quantity,
                     unit_price: detail.unit_price,
+                    discount: itemDisc,
                     tax_rate: detail.tax_rate,
                     hsn_sac_code: detail.hsn_sac_code,
                     service_category: 'Pharmacy',

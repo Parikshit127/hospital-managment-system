@@ -89,7 +89,7 @@ export default function PharmacyPage() {
     const [ipdActionLoading, setIpdActionLoading] = useState<number | null>(null);
     const [ipdRemovingId, setIpdRemovingId] = useState<number | null>(null);
     const [ipdEditingId, setIpdEditingId] = useState<number | null>(null);
-    const [ipdEditRow, setIpdEditRow] = useState<{ description: string; quantity: number; unit_price: number }>({ description: '', quantity: 1, unit_price: 0 });
+    const [ipdEditRow, setIpdEditRow] = useState<{ description: string; quantity: number; unit_price: number; discount: number }>({ description: '', quantity: 1, unit_price: 0, discount: 0 });
     const [ipdToast, setIpdToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
     // Add-charge modal
     const [showIpdAddModal, setShowIpdAddModal] = useState(false);
@@ -99,6 +99,7 @@ export default function PharmacyPage() {
     const [ipdAddItem, setIpdAddItem] = useState<any>(null);
     const [ipdAddQty, setIpdAddQty] = useState(1);
     const [ipdAddPrice, setIpdAddPrice] = useState('');
+    const [ipdAddDiscount, setIpdAddDiscount] = useState('');
     const [ipdAddDesc, setIpdAddDesc] = useState('');
     const [selectedOrder, setSelectedOrder] = useState<any>(null);
 
@@ -306,7 +307,7 @@ export default function PharmacyPage() {
 
     function startIpdEdit(item: any) {
         setIpdEditingId(item.id);
-        setIpdEditRow({ description: item.description, quantity: item.quantity, unit_price: item.unit_price });
+        setIpdEditRow({ description: item.description, quantity: item.quantity, unit_price: item.unit_price, discount: Number(item.discount || 0) });
     }
 
     async function saveIpdEdit(item: any) {
@@ -315,6 +316,7 @@ export default function PharmacyPage() {
             description: ipdEditRow.description,
             quantity: Number(ipdEditRow.quantity),
             unit_price: Number(ipdEditRow.unit_price),
+            discount: Number(ipdEditRow.discount || 0),
         });
         setIpdActionLoading(null);
         if (res.success) {
@@ -335,6 +337,7 @@ export default function PharmacyPage() {
             description: ipdAddDesc.trim(),
             quantity: Number(ipdAddQty),
             unit_price: Number(ipdAddPrice),
+            discount: Number(ipdAddDiscount) || 0,
             service_category: 'Pharmacy',
         });
         setIpdActionLoading(null);
@@ -346,6 +349,7 @@ export default function PharmacyPage() {
             setIpdAddInventory([]);
             setIpdAddQty(1);
             setIpdAddPrice('');
+            setIpdAddDiscount('');
             setIpdAddDesc('');
             await refreshIpdBill();
         } else {
@@ -731,6 +735,7 @@ export default function PharmacyPage() {
                                                             setIpdAddInventory([]);
                                                             setIpdAddQty(1);
                                                             setIpdAddPrice('');
+                                                            setIpdAddDiscount('');
                                                             setIpdAddDesc('');
                                                             setShowIpdAddModal(true);
                                                         }}
@@ -757,13 +762,14 @@ export default function PharmacyPage() {
                                                             <th className="text-left px-5 py-3 text-[10px] font-black uppercase tracking-wider text-gray-400">Category</th>
                                                             <th className="text-center px-4 py-3 text-[10px] font-black uppercase tracking-wider text-gray-400">Qty</th>
                                                             <th className="text-right px-4 py-3 text-[10px] font-black uppercase tracking-wider text-gray-400">Unit Price</th>
+                                                            <th className="text-right px-4 py-3 text-[10px] font-black uppercase tracking-wider text-gray-400">Discount</th>
                                                             <th className="text-right px-5 py-3 text-[10px] font-black uppercase tracking-wider text-gray-400">Total</th>
                                                             <th className="text-center px-4 py-3 text-[10px] font-black uppercase tracking-wider text-gray-400">Actions</th>
                                                         </tr>
                                                     </thead>
                                                     <tbody className="divide-y divide-gray-100">
                                                         {ipdBillData.items.length === 0 ? (
-                                                            <tr><td colSpan={6} className="text-center py-10 text-gray-400 text-xs font-medium">No charges posted yet</td></tr>
+                                                            <tr><td colSpan={7} className="text-center py-10 text-gray-400 text-xs font-medium">No charges posted yet</td></tr>
                                                         ) : ipdBillData.items.map((item: any) => {
                                                             const isPharmacy = (item.service_category || '').toLowerCase() === 'pharmacy' || (item.department || '').toLowerCase() === 'pharmacy';
                                                             const isEditing = ipdEditingId === item.id;
@@ -830,12 +836,30 @@ export default function PharmacyPage() {
                                                                             <span className="font-semibold text-gray-700">₹{item.unit_price.toFixed(2)}</span>
                                                                         )}
                                                                     </td>
+                                                                    {/* Discount */}
+                                                                    <td className="px-4 py-3 text-right">
+                                                                        {isEditing ? (
+                                                                            <div className="flex items-center justify-end gap-1">
+                                                                                <span className="text-xs text-gray-400">₹</span>
+                                                                                <input
+                                                                                    type="number" min="0" step="0.01"
+                                                                                    value={ipdEditRow.discount}
+                                                                                    onChange={e => setIpdEditRow(r => ({ ...r, discount: Number(e.target.value) }))}
+                                                                                    className="w-20 text-right px-2 py-1 border border-blue-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-400 font-bold text-amber-600"
+                                                                                />
+                                                                            </div>
+                                                                        ) : (
+                                                                            <span className={`font-semibold ${Number(item.discount || 0) > 0 ? 'text-amber-600' : 'text-gray-400'}`}>
+                                                                                {Number(item.discount || 0) > 0 ? `₹${Number(item.discount).toFixed(2)}` : '—'}
+                                                                            </span>
+                                                                        )}
+                                                                    </td>
                                                                     {/* Row total */}
                                                                     <td className="px-5 py-3 text-right">
                                                                         <span className="font-bold text-gray-900">
                                                                             ₹{isEditing
-                                                                                ? (ipdEditRow.quantity * ipdEditRow.unit_price).toFixed(2)
-                                                                                : (item.quantity * item.unit_price).toFixed(2)}
+                                                                                ? Math.max(0, ipdEditRow.quantity * ipdEditRow.unit_price - ipdEditRow.discount).toFixed(2)
+                                                                                : (Number(item.net_price ?? (item.quantity * item.unit_price - Number(item.discount || 0)))).toFixed(2)}
                                                                         </span>
                                                                     </td>
                                                                     {/* Action buttons */}
@@ -994,8 +1018,8 @@ export default function PharmacyPage() {
                                                 />
                                             </div>
 
-                                            {/* Qty + Price */}
-                                            <div className="grid grid-cols-2 gap-4">
+                                            {/* Qty + Price + Discount */}
+                                            <div className="grid grid-cols-3 gap-3">
                                                 <div>
                                                     <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider mb-1.5 block">Quantity</label>
                                                     <input
@@ -1015,13 +1039,30 @@ export default function PharmacyPage() {
                                                         placeholder="0.00"
                                                     />
                                                 </div>
+                                                <div>
+                                                    <label className="text-[10px] font-black text-amber-600 uppercase tracking-wider mb-1.5 block">Discount (₹)</label>
+                                                    <input
+                                                        type="number" min="0" step="0.01"
+                                                        value={ipdAddDiscount}
+                                                        onChange={e => setIpdAddDiscount(e.target.value)}
+                                                        className="w-full px-3 py-2.5 border border-amber-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-400 font-bold text-amber-700"
+                                                        placeholder="0.00"
+                                                    />
+                                                </div>
                                             </div>
 
                                             {/* Line total preview */}
                                             {ipdAddQty > 0 && Number(ipdAddPrice) > 0 && (
                                                 <div className="flex items-center justify-between bg-blue-50 border border-blue-200 rounded-xl px-4 py-2.5">
                                                     <span className="text-xs font-bold text-blue-700">Line Total</span>
-                                                    <span className="text-lg font-black text-blue-800">₹{(ipdAddQty * Number(ipdAddPrice)).toFixed(2)}</span>
+                                                    <div className="text-right">
+                                                        <span className="text-lg font-black text-blue-800">₹{Math.max(0, ipdAddQty * Number(ipdAddPrice) - (Number(ipdAddDiscount) || 0)).toFixed(2)}</span>
+                                                        {Number(ipdAddDiscount) > 0 && (
+                                                            <span className="block text-[10px] text-amber-600 font-semibold">
+                                                                (Subtotal: ₹{(ipdAddQty * Number(ipdAddPrice)).toFixed(2)} − Discount: ₹{Number(ipdAddDiscount).toFixed(2)})
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             )}
                                         </div>

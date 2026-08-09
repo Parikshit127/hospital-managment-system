@@ -22,7 +22,7 @@ const STATUS_COLOR: Record<string, string> = {
 type DatePreset = 'today' | 'week' | 'month' | 'custom';
 type CategoryFilter = 'all' | 'counter' | 'ipd-admitted' | 'ipd-discharged' | 'ipd-package';
 
-type MedRow = { medicine_id?: number; id?: number; name: string; qty: number; unit_price: number; tax_rate: number; hsn: string; batch_no: string; description?: string };
+type MedRow = { medicine_id?: number; id?: number; name: string; qty: number; unit_price: number; discount?: number; tax_rate: number; hsn: string; batch_no: string; description?: string };
 
 function updateDescriptionQty(desc: string, newQty: number) {
     const match = desc.match(/^(Pharmacy:\s+.*?\s*\(Batch\s+.*?\))\s*(?:x|×)\s*\d+$/i);
@@ -245,6 +245,7 @@ export default function PharmacyInvoicesPage() {
                         name: name,
                         qty: item.quantity,
                         unit_price: Number(item.unit_price || 0),
+                        discount: Number(item.discount || 0),
                         tax_rate: Number(item.tax_rate || 0),
                         hsn: item.hsn_sac_code || '3004',
                         batch_no: batch,
@@ -272,6 +273,7 @@ export default function PharmacyInvoicesPage() {
                 name: med.medicine?.brand_name || '',
                 qty: 1,
                 unit_price: Number(med.mrp || med.medicine?.mrp || med.medicine?.selling_price || med.medicine?.price_per_unit || 0),
+                discount: 0,
                 tax_rate: Number(med.medicine?.gst_percent || med.medicine?.tax_rate || 0),
                 hsn: med.medicine?.hsn_sac_code || '3004',
                 batch_no: med.batch_no || 'N/A',
@@ -312,6 +314,7 @@ export default function PharmacyInvoicesPage() {
                     const res = await updateInvoiceItem(row.id, {
                         quantity: row.qty,
                         unit_price: row.unit_price,
+                        discount: Number(row.discount || 0),
                         description: newDesc
                     });
                     if (!res.success) {
@@ -326,6 +329,7 @@ export default function PharmacyInvoicesPage() {
                         description: `Pharmacy: ${row.name} (Batch ${row.batch_no}) × ${row.qty}`,
                         quantity: row.qty,
                         unit_price: row.unit_price,
+                        discount: Number(row.discount || 0),
                         tax_rate: row.tax_rate,
                         hsn_sac_code: row.hsn,
                         service_category: 'Pharmacy',
@@ -706,6 +710,7 @@ export default function PharmacyInvoicesPage() {
                                                             <th className="px-3 py-2 text-left">Medicine</th>
                                                             <th className="px-3 py-2 text-center w-24">Qty</th>
                                                             <th className="px-3 py-2 text-right w-28">Unit Price</th>
+                                                            <th className="px-3 py-2 text-right w-24">Discount (₹)</th>
                                                             <th className="px-3 py-2 text-right w-24">Total</th>
                                                             <th className="px-3 py-2 w-8"></th>
                                                         </tr>
@@ -720,15 +725,20 @@ export default function PharmacyInvoicesPage() {
                                                                 <td className="px-3 py-2 text-center">
                                                                     <input type="number" min={0} step="any" value={row.qty}
                                                                         onChange={e => { const v = e.target.value; setEditRows(rows => rows.map((r, ri) => ri === i ? { ...r, qty: v === '' ? 0 : Number(v) } : r)); }}
-                                                                        className="w-16 text-center px-2 py-1 border border-gray-200 rounded-lg text-sm focus:ring-1 focus:ring-blue-500 outline-none" />
+                                                                        className="w-16 text-center px-2 py-1 border border-gray-200 rounded-lg text-sm focus:ring-1 focus:ring-blue-500 outline-none font-bold" />
                                                                 </td>
                                                                 <td className="px-3 py-2 text-right">
                                                                     <input type="number" min={0} step="any" value={row.unit_price}
                                                                         onChange={e => { const v = e.target.value; setEditRows(rows => rows.map((r, ri) => ri === i ? { ...r, unit_price: v === '' ? 0 : Number(v) } : r)); }}
-                                                                        className="w-24 text-right px-2 py-1 border border-gray-200 rounded-lg text-sm focus:ring-1 focus:ring-blue-500 outline-none" />
+                                                                        className="w-24 text-right px-2 py-1 border border-gray-200 rounded-lg text-sm focus:ring-1 focus:ring-blue-500 outline-none font-bold" />
+                                                                </td>
+                                                                <td className="px-3 py-2 text-right">
+                                                                    <input type="number" min={0} step="any" value={row.discount || 0}
+                                                                        onChange={e => { const v = e.target.value; setEditRows(rows => rows.map((r, ri) => ri === i ? { ...r, discount: v === '' ? 0 : Number(v) } : r)); }}
+                                                                        className="w-20 text-right px-2 py-1 border border-amber-300 rounded-lg text-sm focus:ring-1 focus:ring-amber-500 outline-none text-amber-600 font-bold" />
                                                                 </td>
                                                                 <td className="px-3 py-2 text-right font-bold text-gray-900">
-                                                                    ₹{(row.qty * row.unit_price).toFixed(2)}
+                                                                    ₹{Math.max(0, row.qty * row.unit_price - (row.discount || 0)).toFixed(2)}
                                                                 </td>
                                                                 <td className="px-3 py-2">
                                                                     <button onClick={() => removeRow(i)}
@@ -741,7 +751,7 @@ export default function PharmacyInvoicesPage() {
                                                     </tbody>
                                                 </table>
                                                 <div className="px-3 py-2 bg-gray-50 border-t border-gray-200 text-right text-sm font-bold text-gray-900">
-                                                    Total: ₹{editRows.reduce((s, r) => s + r.qty * r.unit_price, 0).toFixed(2)}
+                                                    Total: ₹{editRows.reduce((s, r) => s + Math.max(0, r.qty * r.unit_price - (r.discount || 0)), 0).toFixed(2)}
                                                 </div>
                                             </div>
                                         </div>
