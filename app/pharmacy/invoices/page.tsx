@@ -94,6 +94,9 @@ export default function PharmacyInvoicesPage() {
     const [saveError, setSaveError] = useState('');
     const [deletedItemIds, setDeletedItemIds] = useState<number[]>([]);
     const [editModalLoading, setEditModalLoading] = useState(false);
+    // Cumulative (whole-bill) discount
+    const [cumulativeDiscount, setCumulativeDiscount] = useState('');
+    const [cumulativeDiscountMode, setCumulativeDiscountMode] = useState<'pct' | 'flat'>('pct');
 
     const debouncedMedSearch = useDebouncedValue(medSearch, 250);
 
@@ -224,6 +227,8 @@ export default function PharmacyInvoicesPage() {
         setDeletedItemIds([]);
         setMedSearch('');
         setSaveError('');
+        setCumulativeDiscount('');
+        setCumulativeDiscountMode('pct');
         setEditModal(true);
         setEditModalLoading(true);
         
@@ -288,6 +293,35 @@ export default function PharmacyInvoicesPage() {
             setDeletedItemIds(prev => [...prev, row.id!]);
         }
         setEditRows(rows => rows.filter((_, ri) => ri !== index));
+    };
+
+    // Distribute a cumulative discount proportionally across all items
+    const applyCumulativeDiscount = () => {
+        if (editRows.length === 0) return;
+        const gross = editRows.reduce((s, r) => s + r.qty * r.unit_price, 0);
+        if (gross <= 0) return;
+        const pct = cumulativeDiscountMode === 'pct'
+            ? Math.min(Math.max(0, Number(cumulativeDiscount) || 0), 100)
+            : 0;
+        const flat = cumulativeDiscountMode === 'flat'
+            ? Math.max(0, Math.min(Number(cumulativeDiscount) || 0, gross))
+            : 0;
+        const totalDisc = cumulativeDiscountMode === 'pct' ? (gross * pct / 100) : flat;
+        if (totalDisc <= 0) return;
+        // Spread proportionally; last item absorbs rounding residual
+        let allocated = 0;
+        setEditRows(rows => rows.map((r, i) => {
+            const lineGross = r.qty * r.unit_price;
+            let d: number;
+            if (i === rows.length - 1) {
+                d = Math.max(0, Math.round((totalDisc - allocated) * 100) / 100);
+            } else {
+                d = Math.round((totalDisc * (lineGross / gross)) * 100) / 100;
+                allocated += d;
+            }
+            return { ...r, discount: d };
+        }));
+        setCumulativeDiscount('');
     };
 
     const handleSaveMedicines = async () => {
@@ -750,8 +784,67 @@ export default function PharmacyInvoicesPage() {
                                                         ))}
                                                     </tbody>
                                                 </table>
-                                                <div className="px-3 py-2 bg-gray-50 border-t border-gray-200 text-right text-sm font-bold text-gray-900">
-                                                    Total: ₹{editRows.reduce((s, r) => s + Math.max(0, r.qty * r.unit_price - (r.discount || 0)), 0).toFixed(2)}
+                                                <div className="px-3 py-2 bg-gray-50 border-t border-gray-200">
+                                                    {/* Cumulative discount */}
+                                                    <div className="flex items-center gap-2 mb-2">
+                                                        <span className="text-xs text-gray-500 font-medium flex-1">Bill Discount</span>
+                                                        {/* mode toggle */}
+                                                        <div className="flex bg-gray-200 rounded-md p-0.5 text-[10px] font-bold">
+                                                            <button type="button"
+                                                                onClick={() => { setCumulativeDiscountMode('pct'); setCumulativeDiscount(''); }}
+                                                                className={`px-2 py-0.5 rounded transition-all ${cumulativeDiscountMode === 'pct' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500'}`}>
+                                                                %
+                                                            </button>
+                                                            <button type="button"
+                                                                onClick={() => { setCumulativeDiscountMode('flat'); setCumulativeDiscount(''); }}
+                                                                className={`px-2 py-0.5 rounded transition-all ${cumulativeDiscountMode === 'flat' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500'}`}>
+                                                                ₹
+                                                            </button>
+                                                        </div>
+                                                        <div className="flex items-center gap-1">
+                                                            {cumulativeDiscountMode === 'flat' && <span className="text-xs text-gray-400">₹</span>}
+                                                            <input
+                                                                type="number" min={0} step="any"
+                                                                max={cumulativeDiscountMode === 'pct' ? 100 : undefined}
+                                                                value={cumulativeDiscount}
+                                                                onChange={e => setCumulativeDiscount(e.target.value)}
+                                                                placeholder="0"
+                                                                className="w-20 text-right px-2 py-1 border border-blue-200 rounded-lg text-sm focus:ring-1 focus:ring-blue-500 outline-none"
+                                                            />
+                                                            {cumulativeDiscountMode === 'pct' && <span className="text-xs text-gray-400">%</span>}
+                                                        </div>
+                                                        <button
+                                                            type="button"
+                                                            onClick={applyCumulativeDiscount}
+                                                            disabled={!cumulativeDiscount || editRows.length === 0}
+                                                            className="px-3 py-1 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 disabled:opacity-40 transition-all">
+                                                            Apply
+                                                        </button>
+                                                    </div>
+                                                    {/* Totals */}
+                                                    {(() => {
+                                                        const gross = editRows.reduce((s, r) => s + r.qty * r.unit_price, 0);
+                                                        const totalDisc = editRows.reduce((s, r) => s + (r.discount || 0), 0);
+                                                        const net = Math.max(0, gross - totalDisc);
+                                                        return (
+                                                            <div className="space-y-0.5 text-right text-xs">
+                                                                {totalDisc > 0 && (
+                                                                    <>
+                                                                        <div className="flex justify-between text-gray-500">
+                                                                            <span>Subtotal</span><span>₹{gross.toFixed(2)}</span>
+                                                                        </div>
+                                                                        <div className="flex justify-between text-emerald-600">
+                                                                            <span>Total Discount</span><span>−₹{totalDisc.toFixed(2)}</span>
+                                                                        </div>
+                                                                    </>
+                                                                )}
+                                                                <div className="flex justify-between font-bold text-gray-900 text-sm pt-1 border-t border-gray-200">
+                                                                    <span>Net Total</span>
+                                                                    <span>₹{net.toFixed(2)}</span>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })()}
                                                 </div>
                                             </div>
                                         </div>
