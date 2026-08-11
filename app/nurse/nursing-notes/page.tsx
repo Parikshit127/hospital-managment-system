@@ -8,7 +8,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { AppShell } from '@/app/components/layout/AppShell';
 import {
-    ScrollText, Search, Loader2, Clock, User, BedDouble, Plus, Save, FileText,
+    ScrollText, Search, Loader2, Clock, User, BedDouble, Plus, Save, FileText, Printer,
 } from 'lucide-react';
 import { getWardPatients, getNursingNotes, addNursingNote } from '@/app/actions/nurse-actions';
 import { useToast } from '@/app/components/ui/Toast';
@@ -75,6 +75,11 @@ export default function NurseNursingNotesPage() {
         setDetails('');
         setNoteType('General');
         loadNotes(p.admissionId);
+    };
+
+    const handlePrintNotes = () => {
+        if (!selected?.admissionId) return;
+        window.open(`/api/nurse/notes/${selected.admissionId}/print`, '_blank');
     };
 
     const handleAdd = async () => {
@@ -206,9 +211,21 @@ export default function NurseNursingNotesPage() {
 
                             {/* History */}
                             <div className="mt-5">
-                                <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-1.5">
-                                    <FileText className="h-3.5 w-3.5" /> Notes History {notes.length > 0 && <span className="text-gray-300">({notes.length})</span>}
-                                </h3>
+                                <div className="flex items-center justify-between mb-2">
+                                    <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
+                                        <FileText className="h-3.5 w-3.5" /> Notes History {notes.length > 0 && <span className="text-gray-300">({notes.length})</span>}
+                                    </h3>
+                                    <button
+                                        type="button"
+                                        onClick={handlePrintNotes}
+                                        disabled={!selected || notesLoading || notes.length === 0}
+                                        className="px-3 py-1 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-lg text-xs flex items-center gap-1.5 shadow-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+                                        title={!selected ? 'Select a patient to print' : notes.length === 0 ? 'No notes to print' : 'Print Nursing Notes'}
+                                    >
+                                        <Printer className="h-3.5 w-3.5" />
+                                        Print
+                                    </button>
+                                </div>
                                 {notesLoading ? (
                                     <div className="flex items-center justify-center h-16"><Loader2 className="h-4 w-4 animate-spin text-teal-400" /></div>
                                 ) : notes.length === 0 ? (

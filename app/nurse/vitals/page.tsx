@@ -4,7 +4,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { AppShell } from '@/app/components/layout/AppShell';
 import {
     Activity, Search, Save, Loader2, Heart, Thermometer, Wind,
-    HeartPulse, Scale, Ruler, Clock, User, CheckCircle2, X
+    HeartPulse, Scale, Ruler, Clock, User, CheckCircle2, X, Printer
 } from 'lucide-react';
 import { recordVitals, getPatientVitals, getWardPatients } from '@/app/actions/nurse-actions';
 import { useToast } from '@/app/components/ui/Toast';
@@ -90,6 +90,11 @@ export default function NurseVitalsPage() {
         setSelectedPatient(null);
         setPatientSearch('');
         setRecentVitals([]);
+    };
+
+    const handlePrintVitals = () => {
+        if (!selectedPatient?.patientId) return;
+        window.open(`/api/nurse/vitals/${selectedPatient.patientId}/print`, '_blank');
     };
 
     const resetForm = () => {
@@ -366,13 +371,25 @@ export default function NurseVitalsPage() {
                 {/* Recent Vitals Sidebar */}
                 <div className="lg:col-span-2">
                     <div className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden sticky top-24">
-                        <div className="px-6 py-4 border-b border-gray-200 bg-gray-50/50">
-                            <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
-                                <Clock className="h-4 w-4 text-orange-500" /> Recent Vitals
-                            </h3>
-                            {selectedPatient && (
-                                <p className="text-[10px] text-gray-400 mt-0.5">For {selectedPatient.patientName}</p>
-                            )}
+                        <div className="px-6 py-4 border-b border-gray-200 bg-gray-50/50 flex items-center justify-between">
+                            <div>
+                                <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                                    <Clock className="h-4 w-4 text-orange-500" /> Recent Vitals
+                                </h3>
+                                {selectedPatient && (
+                                    <p className="text-[10px] text-gray-400 mt-0.5">For {selectedPatient.patientName}</p>
+                                )}
+                            </div>
+                            <button
+                                type="button"
+                                onClick={handlePrintVitals}
+                                disabled={!selectedPatient || loadingVitals || recentVitals.length === 0}
+                                className="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-lg text-xs flex items-center gap-1.5 shadow-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+                                title={!selectedPatient ? 'Select a patient to print' : recentVitals.length === 0 ? 'No vitals to print' : 'Print Vitals History'}
+                            >
+                                <Printer className="h-3.5 w-3.5" />
+                                Print
+                            </button>
                         </div>
 
                         <div className="p-4 max-h-[600px] overflow-y-auto">
