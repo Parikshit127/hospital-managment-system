@@ -187,6 +187,7 @@ model Organization {
   latitude                       Float?
   longitude                      Float?
   admission_bookings             AdmissionBooking[]
+  hospital_bank_accounts         HospitalBankAccount[]
   appointment_waitlists          AppointmentWaitlist[]
   billing_order_sets             BillingOrderSet[]
   crm_campaigns                  CRMCampaign[]
@@ -5895,4 +5896,23 @@ model EmailJob {
 
   @@index([status, created_at]) // drives the cron drain query (status=PENDING, oldest first)
   @@map("email_jobs")
+}
+
+model HospitalBankAccount {
+  id                  Int          @id @default(autoincrement())
+  organizationId      String
+  bank_name           String
+  account_number      String
+  ifsc_code           String
+  branch_name         String?
+  account_holder_name String
+  bank_upi_id         String?
+  is_active           Boolean      @default(true)
+  created_at          DateTime     @default(now())
+  updated_at          DateTime     @updatedAt
+
+  organization        Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
+  @@map("hospital_bank_accounts")
 }

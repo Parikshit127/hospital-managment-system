@@ -106,13 +106,28 @@ export async function createInsuranceReceipt(input: {
   // prints on the receipt. Opt-in from the Record Insurance Receipt modal — old
   // receipts never captured it, so they stay blank.
   include_bank_details?: boolean;
+  bank_account_id?: number;
 }) {
   try {
     const { db, session, organizationId } = await requireTenantContext();
 
-    // Snapshot the hospital's receiving bank account if the biller opted in.
+    // Snapshot the hospital's receiving bank account if a bank account ID or opt-in is provided.
     let bankSnapshot: Record<string, string | null> = {};
-    if (input.include_bank_details) {
+    if (input.bank_account_id) {
+      const bankAcc = await db.hospitalBankAccount.findFirst({
+        where: { id: input.bank_account_id, organizationId },
+      });
+      if (bankAcc) {
+        bankSnapshot = {
+          bank_name: bankAcc.bank_name,
+          bank_account_name: bankAcc.account_holder_name,
+          bank_account_number: bankAcc.account_number,
+          bank_ifsc: bankAcc.ifsc_code,
+          bank_branch: bankAcc.branch_name,
+          bank_upi_id: bankAcc.bank_upi_id,
+        };
+      }
+    } else if (input.include_bank_details) {
       const org = await db.organization.findUnique({
         where: { id: organizationId },
         select: {
@@ -676,6 +691,7 @@ export async function recordAndAllocateReceipt(input: {
   remarks?: string;
   settle_gross?: boolean;
   include_bank_details?: boolean;
+  bank_account_id?: number;
   lines?: Array<{
     invoice_id: number;
     allocated_amount: number;

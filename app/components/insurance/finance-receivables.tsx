@@ -20,6 +20,7 @@ import {
   getOrgBankDetailsForReceipt,
   getInsuranceReceiptHistory, searchInvoicesForInsuranceReceipt, updateInsuranceReceipt,
 } from '@/app/actions/insurance-receipts-actions';
+import { listHospitalBankAccounts } from '@/app/actions/bank-master-actions';
 import { applyAvailableDepositToInvoice } from '@/app/actions/deposit-actions';
 
 const fmt = (n: number) =>
@@ -882,13 +883,19 @@ export function NewReceiptModal({ providers, onClose, onSaved, defaultProviderId
   const [addResults, setAddResults] = useState<any[]>([]);
   const [addSearching, setAddSearching] = useState(false);
 
-  // Hospital's own receiving bank account (master, from Bill Settings). Optionally
-  // snapshot onto THIS receipt so it prints on the TPA receipt. Opt-in checkbox.
-  const [orgBank, setOrgBank] = useState<{ hasAny: boolean; data: any } | null>(null);
-  const [attachBank, setAttachBank] = useState(true);
+  // Hospital receiving bank accounts (from Bank Master). Dropdown selection for TPA receipt.
+  const [bankAccounts, setBankAccounts] = useState<any[]>([]);
+  const [selectedBankId, setSelectedBankId] = useState<string>('');
+  const [bankLoading, setBankLoading] = useState(true);
   useEffect(() => {
-    getOrgBankDetailsForReceipt().then((r: any) => {
-      if (r?.success) { setOrgBank({ hasAny: !!r.hasAny, data: r.data }); setAttachBank(!!r.hasAny); }
+    listHospitalBankAccounts(true).then((r: any) => {
+      if (r?.success && Array.isArray(r.data)) {
+        setBankAccounts(r.data);
+        if (r.data.length > 0) {
+          setSelectedBankId(String(r.data[0].id));
+        }
+      }
+      setBankLoading(false);
     });
   }, []);
   // Explains why a picked bill couldn't select its own payer (no insurer on the
@@ -1053,7 +1060,8 @@ export function NewReceiptModal({ providers, onClose, onSaved, defaultProviderId
       claim_amount: totalBill, sanctioned_amount: round2(totalBill - totalDisallowed), tds_amount: totalTds, service_charge: 0,
       remarks: form.remarks,
       settle_gross: true,
-      include_bank_details: attachBank && !!orgBank?.hasAny,
+      include_bank_details: !!selectedBankId,
+      bank_account_id: selectedBankId ? Number(selectedBankId) : undefined,
       lines: payload,
     });
     setSaving(false);
@@ -1289,30 +1297,33 @@ export function NewReceiptModal({ providers, onClose, onSaved, defaultProviderId
 
         <Field label="Remarks"><input className={INPUT} value={form.remarks} onChange={(e) => setForm({ ...form, remarks: e.target.value })} /></Field>
 
-        {/* Hospital bank details — opt in to print them on THIS TPA receipt. */}
-        {orgBank && (
-          orgBank.hasAny ? (
-            <label className="mt-1 flex items-start gap-2.5 rounded-lg border border-gray-200 bg-gray-50/60 px-3 py-2.5 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={attachBank}
-                onChange={(e) => setAttachBank(e.target.checked)}
-                className="mt-0.5 h-4 w-4 accent-blue-600"
-              />
-              <span className="text-xs text-gray-600 leading-relaxed">
-                <span className="font-bold text-gray-800">Print our bank details on this receipt</span>
-                <span className="block text-[11px] text-gray-500 mt-0.5">
-                  {orgBank.data?.bank_name || 'Bank'}
-                  {orgBank.data?.bank_account_number ? ` · A/c ${orgBank.data.bank_account_number}` : ''}
-                  {orgBank.data?.bank_ifsc ? ` · ${orgBank.data.bank_ifsc}` : ''}
-                </span>
-              </span>
+        {/* Hospital bank details — select which account to print on THIS TPA receipt. */}
+        {bankLoading ? (
+          <div className="mt-1 flex items-center text-xs text-gray-400 py-1">
+            <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5 text-blue-600" /> Loading bank accounts...
+          </div>
+        ) : bankAccounts.length > 0 ? (
+          <div className="mt-1 space-y-1">
+            <label className="block text-xs font-bold text-gray-700">
+              Remit to Bank Account (printed on receipt)
             </label>
-          ) : (
-            <p className="mt-1 rounded-lg border border-dashed border-gray-300 bg-gray-50/60 px-3 py-2 text-[11px] text-gray-500">
-              No hospital bank details on file. Add them in <span className="font-semibold">Admin → Bill Settings → Hospital &amp; GST</span> to print them on TPA receipts.
-            </p>
-          )
+            <select
+              value={selectedBankId}
+              onChange={(e) => setSelectedBankId(e.target.value)}
+              className={INPUT}
+            >
+              <option value="">— Don't print bank details —</option>
+              {bankAccounts.map((acc: any) => (
+                <option key={acc.id} value={acc.id}>
+                  {acc.bank_name} · A/c {acc.account_number} ({acc.ifsc_code}){acc.branch_name ? ` · ${acc.branch_name}` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : (
+          <p className="mt-1 rounded-lg border border-dashed border-gray-300 bg-gray-50/60 px-3 py-2 text-[11px] text-gray-500">
+            No active hospital bank details on file. Add them in <a href="/admin/finance/bank-master" target="_blank" className="font-semibold text-blue-600 underline">Admin → Finance → Bank Master</a> to print them on TPA receipts.
+          </p>
         )}
       </div>
       <div className="mt-4 flex items-center justify-end gap-3">

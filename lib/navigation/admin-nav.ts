@@ -45,6 +45,7 @@ export const ADMIN_NAV_SECTIONS: NavSection[] = [
             { label: 'Pharmacy', href: '/admin/pharmacy', icon: Pill },
             { label: 'Finance', href: '/admin/finance', icon: DollarSign },
             { label: 'TPA & Insurance', href: '/admin/finance/tpa-insurance', icon: ShieldAlert },
+            { label: 'Bank Master', href: '/admin/finance/bank-master', icon: Building2 },
             { label: 'Finance Master', href: '/admin/finance-master', icon: Receipt },
             { label: 'Referrals', href: '/admin/referrals', icon: UserCheck },
             { label: 'Doctor Invoicing', href: '/admin/doctor-invoicing', icon: Stethoscope },
