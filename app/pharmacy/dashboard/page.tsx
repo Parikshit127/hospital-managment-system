@@ -3,9 +3,10 @@
 import React, { useEffect, useState } from 'react';
 import { AppShell } from '@/app/components/layout/AppShell';
 import {
-    Activity, Clock, AlertTriangle, IndianRupee, Bell, PackageOpen,
-    TrendingUp, ShoppingCart, ArrowUpRight, ArrowDownRight, Package,
-    Pill, BarChart3, Truck, RotateCcw, Shield, CreditCard
+    Activity, Clock, AlertTriangle, IndianRupee, PackageOpen,
+    TrendingUp, ShoppingCart, ArrowUpRight, Package,
+    Pill, BarChart3, Truck, RotateCcw, Shield, CreditCard, ChevronRight,
+    CircleAlert, CircleCheck
 } from 'lucide-react';
 import { getPharmacyAnalytics } from '@/app/actions/pharmacy-actions';
 import { SkeletonCard } from '@/app/components/ui/Skeleton';
@@ -32,14 +33,120 @@ export default function PharmacyDashboardPage() {
         { label: 'Total Outstanding', value: `₹${Math.round(data.pharmacyOutstanding ?? 0).toLocaleString('en-IN')}`, sub: `${data.pharmacyOutstandingCount ?? 0} unpaid pharma bill${(data.pharmacyOutstandingCount ?? 0) !== 1 ? 's' : ''} (excl. IPD)`, icon: CreditCard, color: 'text-rose-600', bg: 'bg-rose-50', link: '/pharmacy/billing' },
     ] : [];
 
+    const attentionItems = data ? [
+        data.pendingOrders > 0 && {
+            label: `${data.pendingOrders} pending order${data.pendingOrders === 1 ? '' : 's'}`,
+            detail: 'Review and dispense prescriptions awaiting action.',
+            href: '/pharmacy/orders',
+            tone: 'amber',
+        },
+        data.outOfStockCount > 0 && {
+            label: `${data.outOfStockCount} item${data.outOfStockCount === 1 ? '' : 's'} out of stock`,
+            detail: 'Check alternatives or initiate a replenishment.',
+            href: '/pharmacy/inventory',
+            tone: 'red',
+        },
+        data.expiredCount > 0 && {
+            label: `${data.expiredCount} expired batch${data.expiredCount === 1 ? '' : 'es'}`,
+            detail: 'Remove from sale and process the write-off.',
+            href: '/pharmacy/returns',
+            tone: 'red',
+        },
+        data.expiring30Count > 0 && {
+            label: `${data.expiring30Count} batch${data.expiring30Count === 1 ? '' : 'es'} expire within 30 days`,
+            detail: 'Prioritize dispensing or return eligible stock.',
+            href: '/pharmacy/inventory',
+            tone: 'amber',
+        },
+        (data.pharmacyOutstandingCount ?? 0) > 0 && {
+            label: `${data.pharmacyOutstandingCount} unpaid pharmacy bill${data.pharmacyOutstandingCount === 1 ? '' : 's'}`,
+            detail: 'Follow up on outstanding counter payments.',
+            href: '/pharmacy/billing',
+            tone: 'blue',
+        },
+    ].filter(Boolean) as Array<{ label: string; detail: string; href: string; tone: 'amber' | 'red' | 'blue' }> : [];
+
+    const attentionStyles = {
+        amber: 'bg-amber-50 border-amber-200 text-amber-900 hover:border-amber-400',
+        red: 'bg-red-50 border-red-200 text-red-900 hover:border-red-400',
+        blue: 'bg-blue-50 border-blue-200 text-blue-900 hover:border-blue-400',
+    };
+
     return (
-        <AppShell pageTitle="Pharmacy Dashboard" pageIcon={<Activity className="h-5 w-5" />} onRefresh={loadStats} refreshing={refreshing}>
+        <AppShell
+            pageTitle="Pharmacy Dashboard"
+            pageIcon={<Activity className="h-5 w-5" />}
+            onRefresh={loadStats}
+            refreshing={refreshing}
+            headerActions={
+                <Link
+                    href="/pharmacy/billing"
+                    className="hidden sm:inline-flex items-center gap-2 rounded-xl bg-teal-700 px-3.5 py-2 text-xs font-bold text-white shadow-sm transition-all hover:bg-teal-800 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2"
+                >
+                    <Pill className="h-4 w-4" />
+                    Dispense medicine
+                </Link>
+            }
+        >
             {!data ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                     {Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)}
                 </div>
             ) : (
                 <>
+                    {/* Operational focus — keeps the next most important task at the top. */}
+                    <section className="mb-6 overflow-hidden rounded-2xl border border-teal-100 bg-gradient-to-r from-teal-800 to-teal-700 text-white shadow-sm">
+                        <div className="flex flex-col gap-5 p-5 sm:p-6 lg:flex-row lg:items-center lg:justify-between">
+                            <div>
+                                <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.18em] text-teal-200">Counter workspace</p>
+                                <h2 className="text-xl font-black tracking-tight">Ready for the next patient.</h2>
+                                <p className="mt-1 text-sm text-teal-100">Start dispensing or clear the tasks that can affect patient service today.</p>
+                            </div>
+                            <Link
+                                href="/pharmacy/billing"
+                                className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-extrabold text-teal-800 shadow-sm transition-all hover:bg-teal-50 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-teal-700"
+                            >
+                                <Pill className="h-4 w-4" />
+                                Dispense medicine
+                                <ArrowUpRight className="h-4 w-4" />
+                            </Link>
+                        </div>
+                    </section>
+
+                    <section className="mb-6 rounded-2xl border border-gray-200 bg-white p-5 sm:p-6">
+                        <div className="mb-4 flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-2">
+                                <div className={`rounded-lg p-2 ${attentionItems.length ? 'bg-amber-50 text-amber-600' : 'bg-emerald-50 text-emerald-600'}`}>
+                                    {attentionItems.length ? <CircleAlert className="h-4 w-4" /> : <CircleCheck className="h-4 w-4" />}
+                                </div>
+                                <div>
+                                    <h2 className="text-sm font-black text-gray-800">Needs attention</h2>
+                                    <p className="text-xs text-gray-500">Prioritized tasks for today&apos;s pharmacy operations.</p>
+                                </div>
+                            </div>
+                            {attentionItems.length > 0 && <span className="rounded-full bg-gray-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-gray-500">{attentionItems.length} open</span>}
+                        </div>
+                        {attentionItems.length ? (
+                            <div className="grid grid-cols-1 gap-2 lg:grid-cols-2 xl:grid-cols-3">
+                                {attentionItems.map((item) => (
+                                    <Link key={item.label} href={item.href} className={`group flex items-center gap-3 rounded-xl border p-3.5 transition-colors ${attentionStyles[item.tone]}`}>
+                                        <CircleAlert className="h-4 w-4 shrink-0" />
+                                        <div className="min-w-0 flex-1">
+                                            <p className="text-xs font-extrabold leading-5">{item.label}</p>
+                                            <p className="mt-0.5 text-[11px] leading-4 opacity-70">{item.detail}</p>
+                                        </div>
+                                        <ChevronRight className="h-4 w-4 shrink-0 opacity-50 transition-transform group-hover:translate-x-0.5" />
+                                    </Link>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="flex items-center gap-3 rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+                                <CircleCheck className="h-5 w-5 shrink-0" />
+                                <span className="font-semibold">No urgent pharmacy tasks right now.</span>
+                            </div>
+                        )}
+                    </section>
+
                     {/* KPI Cards */}
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                         {kpis.map((kpi, i) => {
