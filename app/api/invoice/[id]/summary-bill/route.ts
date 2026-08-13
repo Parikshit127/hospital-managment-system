@@ -93,10 +93,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
             ? await prisma.patientDeposit.findMany({
                 where: {
                     patient_id: invoice.patient_id,
-                    OR: [
-                        { applied_to_invoice: invoiceId },
-                        ...(invoice.admission_id ? [{ admission_id: invoice.admission_id }] : []),
-                    ],
+                    applied_to_invoice: invoiceId,
                 },
             })
             : [];
