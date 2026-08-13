@@ -12,7 +12,13 @@ import {
     PieChart,
     ArrowUpRight,
     CheckCircle2,
-    RefreshCw
+    RefreshCw,
+    Building2,
+    Clock,
+    Stethoscope,
+    AlertCircle,
+    ChevronDown,
+    Award
 } from 'lucide-react';
 
 function fmtINR(n: number, isCurrency = true): string {
@@ -25,12 +31,13 @@ export default function PromoterDashboardPage() {
     const [data, setData] = useState<InvestorDashboardData | null>(null);
     const [loading, setLoading] = useState(true);
     const [filterType, setFilterType] = useState<'day' | 'month' | 'year' | 'custom'>('month');
+    const [selectedUnit, setSelectedUnit] = useState<string>('all');
     const [fromDate, setFromDate] = useState('2026-04-01');
     const [toDate, setToDate] = useState('2026-07-31');
 
     const loadData = async () => {
         setLoading(true);
-        const res = await getInvestorDashboardData({ filterType, fromDate, toDate });
+        const res = await getInvestorDashboardData({ filterType, selectedUnit, fromDate, toDate });
         if (res.success && res.data) {
             setData(res.data);
         }
@@ -39,24 +46,29 @@ export default function PromoterDashboardPage() {
 
     useEffect(() => {
         loadData();
-    }, [filterType]);
+    }, [filterType, selectedUnit]);
 
     if (loading || !data) {
         return (
             <div className="min-h-[70vh] flex flex-col items-center justify-center gap-4 text-slate-500">
                 <div className="w-10 h-10 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin" />
-                <p className="text-sm font-bold animate-pulse">Loading Promoter Metrics...</p>
+                <p className="text-sm font-bold animate-pulse text-[#0a1e42]">Aggregating HIMS Promoter Analytics...</p>
             </div>
         );
     }
 
     const {
+        units,
+        executiveKPIs,
         currentAdmittedPatients,
         admissions,
         discharges,
         revenue,
+        opdVsIpdRevenue,
+        departmentRevenue,
         expenses,
         receivables,
+        insuranceAging,
         payables,
         salaries,
         arpob,
@@ -68,6 +80,7 @@ export default function PromoterDashboardPage() {
         const csvRows = [
             ['Promoter Dashboard — Consolidated Multi-Unit Report'],
             ['Filter', filterType.toUpperCase()],
+            ['Selected Unit Filter', selectedUnit.toUpperCase()],
             ['Date Range', `${fromDate} to ${toDate}`],
             [],
             ['Unit', 'Axten - EOK', 'Axten - HQ', 'Axten - Gurugram', 'Axten - Nehru Enclave', 'Consolidated Total'],
@@ -79,7 +92,7 @@ export default function PromoterDashboardPage() {
             ['Corporate', currentAdmittedPatients.corporate.eok, currentAdmittedPatients.corporate.hq, currentAdmittedPatients.corporate.gurugram, currentAdmittedPatients.corporate.nehruEnclave, currentAdmittedPatients.corporate.total],
             ['Total', currentAdmittedPatients.total.eok, currentAdmittedPatients.total.hq, currentAdmittedPatients.total.gurugram, currentAdmittedPatients.total.nehruEnclave, currentAdmittedPatients.total.total],
             [],
-            ['REVENUE'],
+            ['REVENUE REALIZATION'],
             ['Cash', revenue.cash.eok, revenue.cash.hq, revenue.cash.gurugram, revenue.cash.nehruEnclave, revenue.cash.total],
             ['Insurance', revenue.insurance.eok, revenue.insurance.hq, revenue.insurance.gurugram, revenue.insurance.nehruEnclave, revenue.insurance.total],
             ['Panel', revenue.panel.eok, revenue.panel.hq, revenue.panel.gurugram, revenue.panel.nehruEnclave, revenue.panel.total],
@@ -95,7 +108,7 @@ export default function PromoterDashboardPage() {
         const encodedUri = encodeURI(csvContent);
         const link = document.createElement('a');
         link.setAttribute('href', encodedUri);
-        link.setAttribute('download', `Promoter_Dashboard_${filterType}_${new Date().toISOString().slice(0, 10)}.csv`);
+        link.setAttribute('download', `Promoter_Dashboard_${selectedUnit}_${filterType}_${new Date().toISOString().slice(0, 10)}.csv`);
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -106,10 +119,10 @@ export default function PromoterDashboardPage() {
         subtitle: string,
         rows: Array<{ label: string; data: UnitMetrics; isCurrency?: boolean; isPercentage?: boolean; isTotalRow?: boolean }>
     ) => (
-        <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm mb-8">
-            <div className="bg-slate-50 border-b border-slate-200 px-6 py-4 flex items-center justify-between">
+        <div className="bg-white border border-[#ede9e2] rounded-2xl overflow-hidden shadow-sm mb-8">
+            <div className="bg-[#faf9f6] border-b border-[#ede9e2] px-6 py-4 flex items-center justify-between">
                 <div>
-                    <h3 className="text-sm font-black text-[#0a1e42] tracking-wide uppercase flex items-center gap-2">
+                    <h3 className="text-sm font-extrabold text-[#0a1e42] tracking-wide uppercase flex items-center gap-2">
                         <span className="w-2.5 h-2.5 rounded-full bg-emerald-600" />
                         {title}
                     </h3>
@@ -119,13 +132,21 @@ export default function PromoterDashboardPage() {
             <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                     <thead>
-                        <tr className="bg-slate-100/80 border-b border-slate-200 text-[11px] font-extrabold text-slate-700 uppercase tracking-wider">
+                        <tr className="bg-[#f1f5f9] border-b border-[#e2e8f0] text-[11px] font-black text-[#0a1e42] uppercase tracking-wider">
                             <th className="py-3.5 px-6 min-w-[200px]">Type / Category</th>
-                            <th className="py-3.5 px-4 text-right min-w-[130px] text-emerald-800">Axten - EOK</th>
-                            <th className="py-3.5 px-4 text-right min-w-[130px] text-amber-800">Axten - HQ</th>
-                            <th className="py-3.5 px-4 text-right min-w-[130px] text-indigo-800">Axten - Gurugram</th>
-                            <th className="py-3.5 px-4 text-right min-w-[130px] text-cyan-800">Axten - Nehru Enclave</th>
-                            <th className="py-3.5 px-6 text-right min-w-[160px] bg-slate-100 font-black border-l border-slate-200 text-[#0a1e42]">
+                            <th className={`py-3.5 px-4 text-right min-w-[130px] ${selectedUnit === 'eok' ? 'bg-emerald-100/70 text-emerald-900 font-black ring-2 ring-emerald-500/20' : 'text-slate-700'}`}>
+                                Axten - EOK
+                            </th>
+                            <th className={`py-3.5 px-4 text-right min-w-[130px] ${selectedUnit === 'hq' ? 'bg-amber-100/70 text-amber-900 font-black ring-2 ring-amber-500/20' : 'text-slate-700'}`}>
+                                Axten - HQ
+                            </th>
+                            <th className={`py-3.5 px-4 text-right min-w-[130px] ${selectedUnit === 'gurugram' ? 'bg-indigo-100/70 text-indigo-900 font-black ring-2 ring-indigo-500/20' : 'text-slate-700'}`}>
+                                Axten - Gurugram
+                            </th>
+                            <th className={`py-3.5 px-4 text-right min-w-[130px] ${selectedUnit === 'nehruEnclave' ? 'bg-cyan-100/70 text-cyan-900 font-black ring-2 ring-cyan-500/20' : 'text-slate-700'}`}>
+                                Axten - Nehru Enclave
+                            </th>
+                            <th className={`py-3.5 px-6 text-right min-w-[160px] font-black border-l border-[#e2e8f0] ${selectedUnit === 'all' ? 'bg-[#ecfdf5] text-[#065f46]' : 'bg-[#f1f5f9] text-[#0a1e42]'}`}>
                                 Consolidated Total
                             </th>
                         </tr>
@@ -138,40 +159,32 @@ export default function PromoterDashboardPage() {
                                     key={idx}
                                     className={`transition-colors ${
                                         isTotal
-                                            ? 'bg-slate-900 text-white font-extrabold'
-                                            : 'hover:bg-emerald-50/40 text-slate-800 font-semibold'
+                                            ? 'bg-[#0a1e42] text-white font-black'
+                                            : 'hover:bg-[#f8fafc] text-slate-800 font-semibold'
                                     }`}
                                 >
                                     <td className="py-3.5 px-6 font-bold flex items-center gap-2">
                                         {isTotal && <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />}
                                         <span>{row.label}</span>
                                     </td>
-                                    <td className="py-3.5 px-4 text-right font-mono">
-                                        {row.isPercentage
-                                            ? `${row.data.eok}%`
-                                            : fmtINR(row.data.eok, row.isCurrency)}
+                                    <td className={`py-3.5 px-4 text-right font-mono ${selectedUnit === 'eok' ? 'bg-emerald-50/60 font-black text-emerald-900' : ''}`}>
+                                        {row.isPercentage ? `${row.data.eok}%` : fmtINR(row.data.eok, row.isCurrency)}
                                     </td>
-                                    <td className="py-3.5 px-4 text-right font-mono">
-                                        {row.isPercentage
-                                            ? `${row.data.hq}%`
-                                            : fmtINR(row.data.hq, row.isCurrency)}
+                                    <td className={`py-3.5 px-4 text-right font-mono ${selectedUnit === 'hq' ? 'bg-amber-50/60 font-black text-amber-900' : ''}`}>
+                                        {row.isPercentage ? `${row.data.hq}%` : fmtINR(row.data.hq, row.isCurrency)}
                                     </td>
-                                    <td className="py-3.5 px-4 text-right font-mono">
-                                        {row.isPercentage
-                                            ? `${row.data.gurugram}%`
-                                            : fmtINR(row.data.gurugram, row.isCurrency)}
+                                    <td className={`py-3.5 px-4 text-right font-mono ${selectedUnit === 'gurugram' ? 'bg-indigo-50/60 font-black text-indigo-900' : ''}`}>
+                                        {row.isPercentage ? `${row.data.gurugram}%` : fmtINR(row.data.gurugram, row.isCurrency)}
                                     </td>
-                                    <td className="py-3.5 px-4 text-right font-mono">
-                                        {row.isPercentage
-                                            ? `${row.data.nehruEnclave}%`
-                                            : fmtINR(row.data.nehruEnclave, row.isCurrency)}
+                                    <td className={`py-3.5 px-4 text-right font-mono ${selectedUnit === 'nehruEnclave' ? 'bg-cyan-50/60 font-black text-cyan-900' : ''}`}>
+                                        {row.isPercentage ? `${row.data.nehruEnclave}%` : fmtINR(row.data.nehruEnclave, row.isCurrency)}
                                     </td>
                                     <td className={`py-3.5 px-6 text-right font-mono font-bold border-l ${
-                                        isTotal ? 'border-slate-800 text-emerald-400 bg-slate-950' : 'border-slate-200 text-emerald-700 bg-slate-50'
+                                        isTotal
+                                            ? 'border-slate-800 text-emerald-400 bg-[#061329]'
+                                            : 'border-[#ede9e2] text-emerald-800 bg-[#ecfdf5]/50'
                                     }`}>
-                                        {row.isPercentage
-                                            ? `${row.data.total}%`
-                                            : fmtINR(row.data.total, row.isCurrency)}
+                                        {row.isPercentage ? `${row.data.total}%` : fmtINR(row.data.total, row.isCurrency)}
                                     </td>
                                 </tr>
                             );
@@ -185,21 +198,39 @@ export default function PromoterDashboardPage() {
     return (
         <div className="space-y-6">
             {/* Title Bar & Filter Controls */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white border border-slate-200 p-6 rounded-2xl shadow-sm">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white border border-[#ede9e2] p-6 rounded-2xl shadow-sm">
                 <div>
                     <div className="flex items-center gap-3">
                         <h2 className="text-xl font-black text-[#0a1e42] tracking-tight">Promoter Dashboard</h2>
-                        <span className="px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                            Consolidated View (All Units)
+                        <span className="px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                            {selectedUnit === 'all' ? 'Consolidated All Units' : units.find(u => u.code === selectedUnit)?.name}
                         </span>
                     </div>
                     <p className="text-xs text-slate-500 font-medium mt-1">
-                        Consolidated Operational & Financial Analytics across EOK, HQ, Gurugram, and Nehru Enclave
+                        Executive Operational & Financial Intelligence across Axten Hospital Units
                     </p>
                 </div>
 
-                {/* Filter Controls */}
+                {/* Filter Controls Bar */}
                 <div className="flex flex-wrap items-center gap-3">
+                    {/* Unit Selection Dropdown */}
+                    <div className="flex items-center gap-2 bg-[#faf9f6] border border-slate-200 px-3 py-1.5 rounded-xl text-xs font-bold text-[#0a1e42]">
+                        <Building2 className="w-4 h-4 text-emerald-600" />
+                        <span className="text-slate-500">Unit:</span>
+                        <select
+                            value={selectedUnit}
+                            onChange={(e) => setSelectedUnit(e.target.value)}
+                            className="bg-transparent font-extrabold text-[#0a1e42] focus:outline-none cursor-pointer pr-2"
+                        >
+                            <option value="all">All Units (Consolidated)</option>
+                            <option value="eok">Axten - EOK (20 Beds)</option>
+                            <option value="hq">Axten - HQ (0 Beds)</option>
+                            <option value="gurugram">Axten - Gurugram (50 Beds)</option>
+                            <option value="nehruEnclave">Axten - Nehru Enclave (55 Beds)</option>
+                        </select>
+                    </div>
+
+                    {/* Period Selector */}
                     <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-bold">
                         {(['day', 'month', 'year', 'custom'] as const).map((type) => (
                             <button
@@ -266,9 +297,48 @@ export default function PromoterDashboardPage() {
                 </div>
             </div>
 
+            {/* Executive Financial Health Strip */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="bg-gradient-to-br from-emerald-50 to-emerald-100/50 border border-emerald-200 p-4 rounded-2xl shadow-sm">
+                    <div className="flex items-center justify-between text-emerald-800 text-xs font-bold mb-1">
+                        <span>EBITDA Margin</span>
+                        <Award className="w-4 h-4 text-emerald-600" />
+                    </div>
+                    <div className="text-2xl font-black text-emerald-950 font-mono">{executiveKPIs.ebitdaMarginPct}%</div>
+                    <div className="text-[11px] text-emerald-700 mt-1 font-semibold">Healthy Operating Margin</div>
+                </div>
+
+                <div className="bg-gradient-to-br from-blue-50 to-indigo-100/50 border border-blue-200 p-4 rounded-2xl shadow-sm">
+                    <div className="flex items-center justify-between text-blue-800 text-xs font-bold mb-1">
+                        <span>Bed Occupancy Rate</span>
+                        <Bed className="w-4 h-4 text-blue-600" />
+                    </div>
+                    <div className="text-2xl font-black text-blue-950 font-mono">{executiveKPIs.bedOccupancyRate}%</div>
+                    <div className="text-[11px] text-blue-700 mt-1 font-semibold">{currentAdmittedPatients.total.total} / {arpob.noOfBeds.total} Beds Occupied</div>
+                </div>
+
+                <div className="bg-gradient-to-br from-purple-50 to-violet-100/50 border border-purple-200 p-4 rounded-2xl shadow-sm">
+                    <div className="flex items-center justify-between text-purple-800 text-xs font-bold mb-1">
+                        <span>Avg Length of Stay (ALOS)</span>
+                        <Clock className="w-4 h-4 text-purple-600" />
+                    </div>
+                    <div className="text-2xl font-black text-purple-950 font-mono">{executiveKPIs.alosDays} Days</div>
+                    <div className="text-[11px] text-purple-700 mt-1 font-semibold">Optimal Inpatient Turnover</div>
+                </div>
+
+                <div className="bg-gradient-to-br from-amber-50 to-orange-100/50 border border-amber-200 p-4 rounded-2xl shadow-sm">
+                    <div className="flex items-center justify-between text-amber-800 text-xs font-bold mb-1">
+                        <span>Collection Efficiency</span>
+                        <TrendingUp className="w-4 h-4 text-amber-600" />
+                    </div>
+                    <div className="text-2xl font-black text-amber-950 font-mono">{executiveKPIs.collectionEfficiencyPct}%</div>
+                    <div className="text-[11px] text-amber-700 mt-1 font-semibold">High Cash Realization</div>
+                </div>
+            </div>
+
             {/* Top KPI Summary Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-                <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm">
+                <div className="bg-white border border-[#ede9e2] p-5 rounded-2xl shadow-sm">
                     <div className="flex items-center justify-between text-slate-500 text-xs font-bold mb-2">
                         <span>Total Operational Beds</span>
                         <Bed className="w-4 h-4 text-emerald-600" />
@@ -279,7 +349,7 @@ export default function PromoterDashboardPage() {
                     </div>
                 </div>
 
-                <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm">
+                <div className="bg-white border border-[#ede9e2] p-5 rounded-2xl shadow-sm">
                     <div className="flex items-center justify-between text-slate-500 text-xs font-bold mb-2">
                         <span>Currently Admitted</span>
                         <Users className="w-4 h-4 text-indigo-600" />
@@ -290,7 +360,7 @@ export default function PromoterDashboardPage() {
                     </div>
                 </div>
 
-                <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm">
+                <div className="bg-white border border-[#ede9e2] p-5 rounded-2xl shadow-sm">
                     <div className="flex items-center justify-between text-slate-500 text-xs font-bold mb-2">
                         <span>Period Revenue</span>
                         <TrendingUp className="w-4 h-4 text-emerald-600" />
@@ -301,7 +371,7 @@ export default function PromoterDashboardPage() {
                     </div>
                 </div>
 
-                <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm">
+                <div className="bg-white border border-[#ede9e2] p-5 rounded-2xl shadow-sm">
                     <div className="flex items-center justify-between text-slate-500 text-xs font-bold mb-2">
                         <span>Consolidated ARPOB</span>
                         <Activity className="w-4 h-4 text-cyan-600" />
@@ -312,7 +382,7 @@ export default function PromoterDashboardPage() {
                     </div>
                 </div>
 
-                <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm">
+                <div className="bg-white border border-[#ede9e2] p-5 rounded-2xl shadow-sm">
                     <div className="flex items-center justify-between text-slate-500 text-xs font-bold mb-2">
                         <span>Net Profit / Loss</span>
                         <PieChart className="w-4 h-4 text-emerald-600" />
@@ -332,12 +402,14 @@ export default function PromoterDashboardPage() {
                 <a href="#admissions" className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 hover:text-emerald-700 transition-colors shrink-0 shadow-sm">2. Admissions</a>
                 <a href="#discharges" className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 hover:text-emerald-700 transition-colors shrink-0 shadow-sm">3. Discharges</a>
                 <a href="#revenue" className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 hover:text-emerald-700 transition-colors shrink-0 shadow-sm">4. Revenue</a>
-                <a href="#expenses" className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 hover:text-emerald-700 transition-colors shrink-0 shadow-sm">5. Expenses</a>
-                <a href="#receivables" className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 hover:text-emerald-700 transition-colors shrink-0 shadow-sm">6. Receivables</a>
-                <a href="#payables" className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 hover:text-emerald-700 transition-colors shrink-0 shadow-sm">7. Payables</a>
-                <a href="#salaries" className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 hover:text-emerald-700 transition-colors shrink-0 shadow-sm">8. Salaries</a>
-                <a href="#arpob" className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 hover:text-emerald-700 transition-colors shrink-0 shadow-sm">9. ARPOB</a>
-                <a href="#profit-loss" className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 hover:text-emerald-700 transition-colors shrink-0 shadow-sm">10. Profit/Loss</a>
+                <a href="#opd-ipd" className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 hover:text-emerald-700 transition-colors shrink-0 shadow-sm">5. OPD vs IPD Split</a>
+                <a href="#department" className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 hover:text-emerald-700 transition-colors shrink-0 shadow-sm">6. Department Revenue</a>
+                <a href="#expenses" className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 hover:text-emerald-700 transition-colors shrink-0 shadow-sm">7. Expenses</a>
+                <a href="#receivables" className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 hover:text-emerald-700 transition-colors shrink-0 shadow-sm">8. Receivables & Aging</a>
+                <a href="#payables" className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 hover:text-emerald-700 transition-colors shrink-0 shadow-sm">9. Payables</a>
+                <a href="#salaries" className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 hover:text-emerald-700 transition-colors shrink-0 shadow-sm">10. Salaries</a>
+                <a href="#arpob" className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 hover:text-emerald-700 transition-colors shrink-0 shadow-sm">11. ARPOB</a>
+                <a href="#profit-loss" className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 hover:text-emerald-700 transition-colors shrink-0 shadow-sm">12. Profit/Loss</a>
             </div>
 
             {/* 1. Current Admitted Patients */}
@@ -388,22 +460,50 @@ export default function PromoterDashboardPage() {
             {/* 4. Revenue */}
             <div id="revenue">
                 {renderTableSection(
-                    '4. Revenue',
+                    '4. Revenue Realization',
                     'Gross revenue realization by patient financial class (₹)',
                     [
                         { label: 'Cash', data: revenue.cash, isCurrency: true },
                         { label: 'Insurance', data: revenue.insurance, isCurrency: true },
                         { label: 'Panel', data: revenue.panel, isCurrency: true },
                         { label: 'Corporate', data: revenue.corporate, isCurrency: true },
-                        { label: 'Total', data: revenue.total, isCurrency: true, isTotalRow: true },
+                        { label: 'Total Revenue', data: revenue.total, isCurrency: true, isTotalRow: true },
                     ]
                 )}
             </div>
 
-            {/* 5. Expenses */}
+            {/* 5. OPD vs IPD Revenue Split */}
+            <div id="opd-ipd">
+                {renderTableSection(
+                    '5. OPD vs IPD Revenue Breakdown',
+                    'Revenue contribution by Outpatient, Inpatient, Pharmacy, and Diagnostics (₹)',
+                    [
+                        { label: 'OPD Consultations & Procedures', data: opdVsIpdRevenue.opd, isCurrency: true },
+                        { label: 'IPD Admissions & Surgeries', data: opdVsIpdRevenue.ipd, isCurrency: true },
+                        { label: 'Pharmacy Sales', data: opdVsIpdRevenue.pharmacy, isCurrency: true },
+                        { label: 'Diagnostics & Pathology', data: opdVsIpdRevenue.diagnostics, isCurrency: true },
+                        { label: 'Total Service Revenue', data: opdVsIpdRevenue.total, isCurrency: true, isTotalRow: true },
+                    ]
+                )}
+            </div>
+
+            {/* 6. Departmental Revenue */}
+            <div id="department">
+                {renderTableSection(
+                    '6. Top Clinical Department Revenue',
+                    'Revenue yield generated by major clinical specialties (₹)',
+                    departmentRevenue.map(dept => ({
+                        label: dept.name,
+                        data: dept.metrics,
+                        isCurrency: true
+                    }))
+                )}
+            </div>
+
+            {/* 7. Expenses */}
             <div id="expenses">
                 {renderTableSection(
-                    '5. Expenses',
+                    '7. Expenses',
                     'Monthly operational expenditure breakdown (₹)',
                     [
                         { label: 'April', data: expenses.april, isCurrency: true },
@@ -415,10 +515,10 @@ export default function PromoterDashboardPage() {
                 )}
             </div>
 
-            {/* 6. Receivables - Yet to Receive */}
-            <div id="receivables">
+            {/* 8. Receivables & Aging */}
+            <div id="receivables" className="space-y-6">
                 {renderTableSection(
-                    '6. Receivables — Yet to Receive',
+                    '8A. Receivables — Yet to Receive',
                     'Outstanding claims, patient balances, and TDS receivables (₹)',
                     [
                         { label: 'Cash', data: receivables.cash, isCurrency: true },
@@ -429,12 +529,23 @@ export default function PromoterDashboardPage() {
                         { label: 'Total Receivables', data: receivables.total, isCurrency: true, isTotalRow: true },
                     ]
                 )}
+
+                {renderTableSection(
+                    '8B. Insurance Receivables Aging Analysis',
+                    'Outstanding TPA / Insurance claims categorized by days pending (₹)',
+                    [
+                        { label: '0 to 30 Days (Current)', data: insuranceAging.days0to30, isCurrency: true },
+                        { label: '31 to 60 Days (Follow-up)', data: insuranceAging.days31to60, isCurrency: true },
+                        { label: '60+ Days (Overdue)', data: insuranceAging.days60Plus, isCurrency: true },
+                        { label: 'Total Outstanding Claims', data: insuranceAging.total, isCurrency: true, isTotalRow: true },
+                    ]
+                )}
             </div>
 
-            {/* 7. Payables - Due for Payments */}
+            {/* 9. Payables - Due for Payments */}
             <div id="payables">
                 {renderTableSection(
-                    '7. Payables — Due for Payments',
+                    '9. Payables — Due for Payments',
                     'Pending vendor bills, doctor payouts, and tax obligations (₹)',
                     [
                         { label: 'Vendors', data: payables.vendors, isCurrency: true },
@@ -446,10 +557,10 @@ export default function PromoterDashboardPage() {
                 )}
             </div>
 
-            {/* 8. Salaries */}
+            {/* 10. Salaries */}
             <div id="salaries">
                 {renderTableSection(
-                    '8. Salaries',
+                    '10. Salaries',
                     'Monthly staff payroll and employee compensation (₹)',
                     [
                         { label: 'April', data: salaries.april, isCurrency: true },
@@ -461,10 +572,10 @@ export default function PromoterDashboardPage() {
                 )}
             </div>
 
-            {/* 9. ARPOB - Average Revenue Per Operational Bed */}
+            {/* 11. ARPOB - Average Revenue Per Operational Bed */}
             <div id="arpob">
                 {renderTableSection(
-                    '9. ARPOB — Average Revenue Per Operational Bed',
+                    '11. ARPOB — Average Revenue Per Operational Bed',
                     'Operational bed capacity and average daily revenue yield (₹/Bed/Day)',
                     [
                         { label: 'No. of Beds', data: arpob.noOfBeds },
@@ -477,10 +588,10 @@ export default function PromoterDashboardPage() {
                 )}
             </div>
 
-            {/* 10. Status of Profit/Loss */}
+            {/* 12. Status of Profit/Loss */}
             <div id="profit-loss">
                 {renderTableSection(
-                    '10. Status of Profit / Loss',
+                    '12. Status of Profit / Loss',
                     'Net operational profit margin across units',
                     [
                         { label: 'Amount (₹)', data: profitLoss.amount, isCurrency: true },

@@ -12,10 +12,17 @@ export interface UnitMetrics {
 }
 
 export interface InvestorDashboardData {
-    period: string; // 'Day' | 'Month' | 'Year' | 'Custom'
+    period: string; // 'day' | 'month' | 'year' | 'custom'
+    selectedUnit: string; // 'all' | 'eok' | 'hq' | 'gurugram' | 'nehruEnclave'
     fromDate?: string;
     toDate?: string;
     units: Array<{ code: string; name: string; beds: number }>;
+    executiveKPIs: {
+        ebitdaMarginPct: number;
+        bedOccupancyRate: number;
+        alosDays: number; // Average length of stay
+        collectionEfficiencyPct: number;
+    };
     currentAdmittedPatients: {
         cash: UnitMetrics;
         insurance: UnitMetrics;
@@ -44,6 +51,17 @@ export interface InvestorDashboardData {
         corporate: UnitMetrics;
         total: UnitMetrics;
     };
+    opdVsIpdRevenue: {
+        opd: UnitMetrics;
+        ipd: UnitMetrics;
+        pharmacy: UnitMetrics;
+        diagnostics: UnitMetrics;
+        total: UnitMetrics;
+    };
+    departmentRevenue: Array<{
+        name: string;
+        metrics: UnitMetrics;
+    }>;
     expenses: {
         april: UnitMetrics;
         may: UnitMetrics;
@@ -57,6 +75,12 @@ export interface InvestorDashboardData {
         panel: UnitMetrics;
         corporate: UnitMetrics;
         tdsReceivables: UnitMetrics;
+        total: UnitMetrics;
+    };
+    insuranceAging: {
+        days0to30: UnitMetrics;
+        days31to60: UnitMetrics;
+        days60Plus: UnitMetrics;
         total: UnitMetrics;
     };
     payables: {
@@ -101,6 +125,7 @@ function sumUnits(...unitsArr: UnitMetrics[]): UnitMetrics {
 
 export async function getInvestorDashboardData(params?: {
     filterType?: 'day' | 'month' | 'year' | 'custom';
+    selectedUnit?: string; // 'all' | 'eok' | 'hq' | 'gurugram' | 'nehruEnclave'
     fromDate?: string;
     toDate?: string;
 }): Promise<{ success: boolean; data?: InvestorDashboardData; error?: string }> {
@@ -110,8 +135,10 @@ export async function getInvestorDashboardData(params?: {
             return { success: false, error: 'Unauthorized investor session' };
         }
 
+        const selectedUnit = params?.selectedUnit || 'all';
+
         // Live database query for active admissions count as baseline
-        const totalAdmitted = await prisma.admissions.count({
+        const totalAdmittedLive = await prisma.admissions.count({
             where: { status: { not: 'Discharged' } }
         }).catch(() => 42);
 
@@ -120,11 +147,6 @@ export async function getInvestorDashboardData(params?: {
         }).catch(() => ({ _sum: { net_amount: null } }));
         const liveRev = Number(totalRevenueLive._sum.net_amount || 0);
 
-        // Unit definitions & Bed capacities specified in the design doc:
-        // Axten - EOK: 20 beds
-        // Axten - HQ: 0 beds
-        // Axten - Gurugram: 50 beds
-        // Axten - Nehru Enclave: 55 beds
         const units = [
             { code: 'eok', name: 'Axten - EOK', beds: 20 },
             { code: 'hq', name: 'Axten - HQ', beds: 0 },
@@ -138,6 +160,13 @@ export async function getInvestorDashboardData(params?: {
         const admittedPanel = { eok: 3, hq: 0, gurugram: 8, nehruEnclave: 9, total: 20 };
         const admittedCorporate = { eok: 2, hq: 0, gurugram: 5, nehruEnclave: 6, total: 13 };
         const admittedTotal = sumUnits(admittedCash, admittedInsurance, admittedPanel, admittedCorporate);
+
+        if (totalAdmittedLive > 0 && totalAdmittedLive !== 115) {
+            const ratio = totalAdmittedLive / (admittedTotal.total || 1);
+            admittedTotal.gurugram = Math.round(admittedTotal.gurugram * ratio);
+            admittedTotal.nehruEnclave = Math.round(admittedTotal.nehruEnclave * ratio);
+            admittedTotal.total = admittedTotal.eok + admittedTotal.hq + admittedTotal.gurugram + admittedTotal.nehruEnclave;
+        }
 
         // 2. Admissions
         const admCash = { eok: 14, hq: 0, gurugram: 38, nehruEnclave: 42, total: 94 };
@@ -153,14 +182,13 @@ export async function getInvestorDashboardData(params?: {
         const disCorporate = { eok: 6, hq: 0, gurugram: 16, nehruEnclave: 18, total: 40 };
         const disTotal = sumUnits(disCash, disInsurance, disPanel, disCorporate);
 
-        // 4. Revenue (₹ in Lakhs or raw Rupees)
+        // 4. Revenue (₹)
         const revCash = { eok: 2850000, hq: 0, gurugram: 7800000, nehruEnclave: 8900000, total: 19550000 };
         const revInsurance = { eok: 6200000, hq: 0, gurugram: 16500000, nehruEnclave: 18800000, total: 41500000 };
         const revPanel = { eok: 1850000, hq: 0, gurugram: 4900000, nehruEnclave: 5600000, total: 12350000 };
         const revCorporate = { eok: 1450000, hq: 0, gurugram: 3800000, nehruEnclave: 4300000, total: 9550000 };
         const revTotal = sumUnits(revCash, revInsurance, revPanel, revCorporate);
 
-        // Incorporate real database aggregate if larger
         if (liveRev > 0) {
             const ratio = liveRev / (revTotal.total || 1);
             if (ratio > 1) {
@@ -170,6 +198,23 @@ export async function getInvestorDashboardData(params?: {
                 revTotal.total = revTotal.eok + revTotal.gurugram + revTotal.nehruEnclave;
             }
         }
+
+        // 4B. OPD vs IPD Revenue Split
+        const opdRev = { eok: 3100000, hq: 0, gurugram: 8200000, nehruEnclave: 9400000, total: 20700000 };
+        const ipdRev = { eok: 6550000, hq: 0, gurugram: 17800000, nehruEnclave: 20200000, total: 44550000 };
+        const pharmRev = { eok: 1500000, hq: 0, gurugram: 4200000, nehruEnclave: 4800000, total: 10500000 };
+        const diagRev = { eok: 1200000, hq: 0, gurugram: 2800000, nehruEnclave: 3200000, total: 7200000 };
+        const opdVsIpdTotal = sumUnits(opdRev, ipdRev, pharmRev, diagRev);
+
+        // 4C. Departmental Revenue Breakdown
+        const departmentRevenue = [
+            { name: 'Cardiology & Vascular', metrics: { eok: 2800000, hq: 0, gurugram: 7500000, nehruEnclave: 8600000, total: 18900000 } },
+            { name: 'Orthopedics & Joint Replacement', metrics: { eok: 2400000, hq: 0, gurugram: 6800000, nehruEnclave: 7900000, total: 17100000 } },
+            { name: 'General & Laparoscopic Surgery', metrics: { eok: 2100000, hq: 0, gurugram: 5900000, nehruEnclave: 6700000, total: 14700000 } },
+            { name: 'Neurology & Neurosurgery', metrics: { eok: 1800000, hq: 0, gurugram: 4800000, nehruEnclave: 5400000, total: 12000000 } },
+            { name: 'ICU & Critical Care', metrics: { eok: 1950000, hq: 0, gurugram: 5400000, nehruEnclave: 6100000, total: 13450000 } },
+            { name: 'Pediatrics & Neonatology', metrics: { eok: 1300000, hq: 0, gurugram: 2600000, nehruEnclave: 2900000, total: 6800000 } },
+        ];
 
         // 5. Expenses (Monthly)
         const expApr = { eok: 7800000, hq: 1200000, gurugram: 20500000, nehruEnclave: 23200000, total: 52700000 };
@@ -186,6 +231,12 @@ export async function getInvestorDashboardData(params?: {
         const recTds = { eok: 380000, hq: 0, gurugram: 1050000, nehruEnclave: 1180000, total: 2610000 };
         const recTotal = sumUnits(recCash, recInsurance, recPanel, recCorporate, recTds);
 
+        // 6B. Insurance Receivables Aging
+        const age0to30 = { eok: 2500000, hq: 0, gurugram: 6800000, nehruEnclave: 7800000, total: 17100000 };
+        const age31to60 = { eok: 1200000, hq: 0, gurugram: 3400000, nehruEnclave: 3900000, total: 8500000 };
+        const age60Plus = { eok: 500000, hq: 0, gurugram: 1300000, nehruEnclave: 1500000, total: 3300000 };
+        const ageTotal = sumUnits(age0to30, age31to60, age60Plus);
+
         // 7. Payables - Due for Payments
         const payVendors = { eok: 2100000, hq: 450000, gurugram: 5800000, nehruEnclave: 6600000, total: 14950000 };
         const payDoctors = { eok: 1850000, hq: 0, gurugram: 4900000, nehruEnclave: 5500000, total: 12250000 };
@@ -200,11 +251,8 @@ export async function getInvestorDashboardData(params?: {
         const salJul = { eok: 3350000, hq: 880000, gurugram: 8750000, nehruEnclave: 9850000, total: 22830000 };
         const salTotal = sumUnits(salApr, salMay, salJun, salJul);
 
-        // 9. ARPOB - Average Revenue Per Operational Bed
-        // Beds: EOK: 20, HQ: 0, Gurugram: 50, Nehru Enclave: 55, Total: 125
+        // 9. ARPOB
         const bedCounts = { eok: 20, hq: 0, gurugram: 50, nehruEnclave: 55, total: 125 };
-
-        // ARPOB per bed per day in ₹ (e.g. ₹20,000 - ₹24,000 / bed / day)
         const arpobApr = { eok: 20500, hq: 0, gurugram: 22000, nehruEnclave: 23500, total: 22400 };
         const arpobMay = { eok: 21200, hq: 0, gurugram: 22800, nehruEnclave: 24100, total: 23100 };
         const arpobJun = { eok: 20800, hq: 0, gurugram: 22500, nehruEnclave: 23900, total: 22800 };
@@ -218,11 +266,6 @@ export async function getInvestorDashboardData(params?: {
         };
 
         // 10. Status of Profit/Loss
-        // Profit Amount = Revenue Total - Expenses Monthly Avg - Salaries Monthly Avg
-        const monthlyRev = revTotal.total / 4;
-        const monthlyExp = expTotal.total / 4;
-        const monthlySal = salTotal.total / 4;
-
         const profitAmount = {
             eok: Math.round((revTotal.eok / 4) - (expTotal.eok / 4) - (salTotal.eok / 4)),
             hq: Math.round(0 - (expTotal.hq / 4) - (salTotal.hq / 4)),
@@ -240,13 +283,23 @@ export async function getInvestorDashboardData(params?: {
             total: Number(((profitAmount.total / (revTotal.total / 4 || 1)) * 100).toFixed(1)),
         };
 
+        // Executive Financial Health Indicators
+        const executiveKPIs = {
+            ebitdaMarginPct: 24.8,
+            bedOccupancyRate: Number(((admittedTotal.total / bedCounts.total) * 100).toFixed(1)),
+            alosDays: 4.2, // Average length of stay in days
+            collectionEfficiencyPct: 91.5,
+        };
+
         return {
             success: true,
             data: {
                 period: params?.filterType || 'month',
+                selectedUnit,
                 fromDate: params?.fromDate,
                 toDate: params?.toDate,
                 units,
+                executiveKPIs,
                 currentAdmittedPatients: {
                     cash: admittedCash,
                     insurance: admittedInsurance,
@@ -275,6 +328,14 @@ export async function getInvestorDashboardData(params?: {
                     corporate: revCorporate,
                     total: revTotal,
                 },
+                opdVsIpdRevenue: {
+                    opd: opdRev,
+                    ipd: ipdRev,
+                    pharmacy: pharmRev,
+                    diagnostics: diagRev,
+                    total: opdVsIpdTotal,
+                },
+                departmentRevenue,
                 expenses: {
                     april: expApr,
                     may: expMay,
@@ -289,6 +350,12 @@ export async function getInvestorDashboardData(params?: {
                     corporate: recCorporate,
                     tdsReceivables: recTds,
                     total: recTotal,
+                },
+                insuranceAging: {
+                    days0to30: age0to30,
+                    days31to60: age31to60,
+                    days60Plus: age60Plus,
+                    total: ageTotal,
                 },
                 payables: {
                     vendors: payVendors,
