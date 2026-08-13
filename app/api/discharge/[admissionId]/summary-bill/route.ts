@@ -54,7 +54,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ admi
         const sections = await getBillSections(auth.context.organizationId, 'discharge_summary');
 
         const deposits = await prisma.patientDeposit.findMany({
-            where: { patient_id: admission.patient_id },
+            where: { patient_id: admission.patient_id, applied_to_invoice: invoice.id },
         });
 
         const isFinal = admission.status === 'Discharged';
