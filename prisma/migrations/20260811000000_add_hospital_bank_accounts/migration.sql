@@ -19,4 +19,5 @@ CREATE TABLE "hospital_bank_accounts" (
 CREATE INDEX "hospital_bank_accounts_organizationId_idx" ON "hospital_bank_accounts"("organizationId");
 
 -- AddForeignKey
-ALTER TABLE "hospital_bank_accounts" ADD CONSTRAINT "hospital_bank_accounts_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "Organization"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "hospital_bank_accounts" ADD CONSTRAINT "hospital_bank_accounts_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "organizations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
