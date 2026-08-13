@@ -64,6 +64,7 @@ make-dev-admin.js
 
 # local handover notes and internal docs
 Claude_Handover.md
+docs/claude/LLM_INDEX.md
 docs/help-centre/.superpowers/
 
 .superpowers/
@@ -75,3 +76,7 @@ docs/voice-agents/ai-voice-agent-prd.pdf
 CLAUDE.local.md
 DEPLOYMENT_2026-07-25_nursing_hardening.md
 DEPLOYMENT_2026-07-25_nursing_hardening.pdf
+
+.agents/rules/ponytail.md
+.agents/rules/standing-instructions.md
+design-craft/
