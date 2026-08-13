@@ -12,7 +12,7 @@ export default async function InvestorLayout({ children }: { children: React.Rea
     return (
         <div className="min-h-screen bg-[#faf9f6] text-[#0a1e42] font-sans">
             {/* Top HIMS Header Bar */}
-            <header className="sticky top-0 z-50 bg-white border-b border-[#ede9e2] shadow-sm px-6 py-3.5 flex items-center justify-between">
+            <header className="sticky top-0 z-50 bg-white border-b border-[#ede9e2] shadow-sm px-6 py-3.5 flex items-center justify-between print:hidden">
                 <div className="flex items-center gap-3">
                     <div className="w-9 h-9 rounded-xl bg-[#0a1e42] text-white flex items-center justify-center shadow-sm">
                         <Building2 className="w-5 h-5 font-bold text-emerald-400" />
@@ -25,17 +25,16 @@ export default async function InvestorLayout({ children }: { children: React.Rea
                                 Promoter Suite
                             </span>
                         </div>
-                        <p className="text-[11px] text-slate-500 font-medium">Consolidated Dashboard of All Hospital Units</p>
+                        <p className="text-[11px] text-slate-500 font-medium">Consolidated Executive Dashboard of All Hospital Units</p>
                     </div>
                 </div>
 
-                {/* Unit Badges */}
+                {/* Active Hospital Units Badges */}
                 <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#faf9f6] border border-[#ede9e2] text-xs">
                     <span className="text-slate-500 font-bold mr-1">Active Units:</span>
-                    <span className="px-2 py-0.5 rounded bg-white text-emerald-800 border border-emerald-300 font-bold">EOK (20B)</span>
-                    <span className="px-2 py-0.5 rounded bg-white text-amber-800 border border-amber-300 font-bold">HQ (0B)</span>
-                    <span className="px-2 py-0.5 rounded bg-white text-indigo-800 border border-indigo-300 font-bold">Gurugram (50B)</span>
-                    <span className="px-2 py-0.5 rounded bg-white text-cyan-800 border border-cyan-300 font-bold">Nehru Enclave (55B)</span>
+                    <span className="px-2.5 py-0.5 rounded bg-white text-emerald-800 border border-emerald-300 font-extrabold">Axten (20B)</span>
+                    <span className="px-2.5 py-0.5 rounded bg-white text-indigo-800 border border-indigo-300 font-extrabold">Avise (50B)</span>
+                    <span className="px-2.5 py-0.5 rounded bg-white text-amber-800 border border-amber-300 font-extrabold">Axten HQ (0B)</span>
                 </div>
 
                 {/* User Session & Logout */}
@@ -63,7 +62,7 @@ export default async function InvestorLayout({ children }: { children: React.Rea
             </header>
 
             {/* Main Dashboard Container */}
-            <main className="p-6 max-w-[1600px] mx-auto">
+            <main className="p-6 max-w-[1600px] mx-auto print:p-0 print:max-w-none">
                 {children}
             </main>
         </div>

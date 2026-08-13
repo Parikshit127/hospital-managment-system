@@ -18,7 +18,7 @@ import {
     Award
 } from 'lucide-react';
 
-// Format numbers: default is currency=false (no ₹ symbol) so counts render as 1, 2, 13, 94!
+// Format numbers: default is currency=false (no ₹ symbol) so counts render as pure numbers!
 function fmtINR(n: number, isCurrency = false): string {
     if (n === undefined || n === null) return '-';
     if (!isCurrency) return n.toLocaleString('en-IN');
@@ -76,30 +76,51 @@ export default function PromoterDashboardPage() {
     const exportToCSV = () => {
         if (!data) return;
         const csvRows = [
-            ['AvaniOS Promoter Dashboard — Consolidated Multi-Unit Report'],
+            ['AvaniOS Promoter Dashboard — Consolidated Executive Financial Report'],
             ['Filter', filterType.toUpperCase()],
-            ['Selected Unit Filter', selectedUnit.toUpperCase()],
+            ['Selected Unit', selectedUnit.toUpperCase()],
             ['Date Range', `${fromDate} to ${toDate}`],
             [],
-            ['Unit', 'Axten - EOK', 'Axten - HQ', 'Axten - Gurugram', 'Axten - Nehru Enclave', 'Consolidated Total'],
+            ['Unit / Category', 'Axten Hospital', 'Avise Hospital', 'Axten HQ', 'Consolidated Total'],
             [],
-            ['CURRENT ADMITTED PATIENTS'],
-            ['Cash', currentAdmittedPatients.cash.eok, currentAdmittedPatients.cash.hq, currentAdmittedPatients.cash.gurugram, currentAdmittedPatients.cash.nehruEnclave, currentAdmittedPatients.cash.total],
-            ['Insurance', currentAdmittedPatients.insurance.eok, currentAdmittedPatients.insurance.hq, currentAdmittedPatients.insurance.gurugram, currentAdmittedPatients.insurance.nehruEnclave, currentAdmittedPatients.insurance.total],
-            ['Panel', currentAdmittedPatients.panel.eok, currentAdmittedPatients.panel.hq, currentAdmittedPatients.panel.gurugram, currentAdmittedPatients.panel.nehruEnclave, currentAdmittedPatients.panel.total],
-            ['Corporate', currentAdmittedPatients.corporate.eok, currentAdmittedPatients.corporate.hq, currentAdmittedPatients.corporate.gurugram, currentAdmittedPatients.corporate.nehruEnclave, currentAdmittedPatients.corporate.total],
-            ['Total', currentAdmittedPatients.total.eok, currentAdmittedPatients.total.hq, currentAdmittedPatients.total.gurugram, currentAdmittedPatients.total.nehruEnclave, currentAdmittedPatients.total.total],
+            ['1. CURRENT ADMITTED PATIENTS'],
+            ['Cash Patients', currentAdmittedPatients.cash.axten, currentAdmittedPatients.cash.avise, currentAdmittedPatients.cash.axtenHq, currentAdmittedPatients.cash.total],
+            ['Insurance Patients', currentAdmittedPatients.insurance.axten, currentAdmittedPatients.insurance.avise, currentAdmittedPatients.insurance.axtenHq, currentAdmittedPatients.insurance.total],
+            ['Panel Patients', currentAdmittedPatients.panel.axten, currentAdmittedPatients.panel.avise, currentAdmittedPatients.panel.axtenHq, currentAdmittedPatients.panel.total],
+            ['Corporate Patients', currentAdmittedPatients.corporate.axten, currentAdmittedPatients.corporate.avise, currentAdmittedPatients.corporate.axtenHq, currentAdmittedPatients.corporate.total],
+            ['Total Admitted Patients', currentAdmittedPatients.total.axten, currentAdmittedPatients.total.avise, currentAdmittedPatients.total.axtenHq, currentAdmittedPatients.total.total],
             [],
-            ['REVENUE REALIZATION'],
-            ['Cash', revenue.cash.eok, revenue.cash.hq, revenue.cash.gurugram, revenue.cash.nehruEnclave, revenue.cash.total],
-            ['Insurance', revenue.insurance.eok, revenue.insurance.hq, revenue.insurance.gurugram, revenue.insurance.nehruEnclave, revenue.insurance.total],
-            ['Panel', revenue.panel.eok, revenue.panel.hq, revenue.panel.gurugram, revenue.panel.nehruEnclave, revenue.panel.total],
-            ['Corporate', revenue.corporate.eok, revenue.corporate.hq, revenue.corporate.gurugram, revenue.corporate.nehruEnclave, revenue.corporate.total],
-            ['Total', revenue.total.eok, revenue.total.hq, revenue.total.gurugram, revenue.total.nehruEnclave, revenue.total.total],
+            ['2. ADMISSIONS'],
+            ['Cash', admissions.cash.axten, admissions.cash.avise, admissions.cash.axtenHq, admissions.cash.total],
+            ['Insurance', admissions.insurance.axten, admissions.insurance.avise, admissions.insurance.axtenHq, admissions.insurance.total],
+            ['Panel', admissions.panel.axten, admissions.panel.avise, admissions.panel.axtenHq, admissions.panel.total],
+            ['Corporate', admissions.corporate.axten, admissions.corporate.avise, admissions.corporate.axtenHq, admissions.corporate.total],
+            ['Total Admissions', admissions.total.axten, admissions.total.avise, admissions.total.axtenHq, admissions.total.total],
             [],
-            ['STATUS OF PROFIT / LOSS'],
-            ['Net Amount (₹)', profitLoss.amount.eok, profitLoss.amount.hq, profitLoss.amount.gurugram, profitLoss.amount.nehruEnclave, profitLoss.amount.total],
-            ['Percentage (%)', `${profitLoss.percentage.eok}%`, `${profitLoss.percentage.hq}%`, `${profitLoss.percentage.gurugram}%`, `${profitLoss.percentage.nehruEnclave}%`, `${profitLoss.percentage.total}%`],
+            ['3. DISCHARGES'],
+            ['Cash', discharges.cash.axten, discharges.cash.avise, discharges.cash.axtenHq, discharges.cash.total],
+            ['Insurance', discharges.insurance.axten, discharges.insurance.avise, discharges.insurance.axtenHq, discharges.insurance.total],
+            ['Panel', discharges.panel.axten, discharges.panel.avise, discharges.panel.axtenHq, discharges.panel.total],
+            ['Corporate', discharges.corporate.axten, discharges.corporate.avise, discharges.corporate.axtenHq, discharges.corporate.total],
+            ['Total Discharges', discharges.total.axten, discharges.total.avise, discharges.total.axtenHq, discharges.total.total],
+            [],
+            ['4. REVENUE REALIZATION (₹)'],
+            ['Cash', revenue.cash.axten, revenue.cash.avise, revenue.cash.axtenHq, revenue.cash.total],
+            ['Insurance', revenue.insurance.axten, revenue.insurance.avise, revenue.insurance.axtenHq, revenue.insurance.total],
+            ['Panel', revenue.panel.axten, revenue.panel.avise, revenue.panel.axtenHq, revenue.panel.total],
+            ['Corporate', revenue.corporate.axten, revenue.corporate.avise, revenue.corporate.axtenHq, revenue.corporate.total],
+            ['Total Revenue', revenue.total.axten, revenue.total.avise, revenue.total.axtenHq, revenue.total.total],
+            [],
+            ['5. OPD vs IPD REVENUE SPLIT (₹)'],
+            ['OPD Consultations & Procedures', opdVsIpdRevenue.opd.axten, opdVsIpdRevenue.opd.avise, opdVsIpdRevenue.opd.axtenHq, opdVsIpdRevenue.opd.total],
+            ['IPD Admissions & Surgeries', opdVsIpdRevenue.ipd.axten, opdVsIpdRevenue.ipd.avise, opdVsIpdRevenue.ipd.axtenHq, opdVsIpdRevenue.ipd.total],
+            ['Pharmacy Sales', opdVsIpdRevenue.pharmacy.axten, opdVsIpdRevenue.pharmacy.avise, opdVsIpdRevenue.pharmacy.axtenHq, opdVsIpdRevenue.pharmacy.total],
+            ['Diagnostics & Pathology', opdVsIpdRevenue.diagnostics.axten, opdVsIpdRevenue.diagnostics.avise, opdVsIpdRevenue.diagnostics.axtenHq, opdVsIpdRevenue.diagnostics.total],
+            ['Total Service Revenue', opdVsIpdRevenue.total.axten, opdVsIpdRevenue.total.avise, opdVsIpdRevenue.total.axtenHq, opdVsIpdRevenue.total.total],
+            [],
+            ['6. STATUS OF PROFIT / LOSS'],
+            ['Net Amount (₹)', profitLoss.amount.axten, profitLoss.amount.avise, profitLoss.amount.axtenHq, profitLoss.amount.total],
+            ['Profit Percentage (%)', `${profitLoss.percentage.axten}%`, `${profitLoss.percentage.avise}%`, `${profitLoss.percentage.axtenHq}%`, `${profitLoss.percentage.total}%`],
         ];
 
         const csvContent = 'data:text/csv;charset=utf-8,' + csvRows.map((e) => e.join(',')).join('\n');
@@ -117,39 +138,36 @@ export default function PromoterDashboardPage() {
         subtitle: string,
         rows: Array<{ label: string; data: UnitMetrics; isCurrency?: boolean; isPercentage?: boolean; isTotalRow?: boolean }>
     ) => (
-        <div className="bg-white border border-[#ede9e2] rounded-2xl overflow-hidden shadow-sm mb-8">
-            <div className="bg-[#faf9f6] border-b border-[#ede9e2] px-6 py-4 flex items-center justify-between">
+        <div className="bg-white border border-[#ede9e2] rounded-2xl overflow-hidden shadow-sm mb-8 print:border-slate-300 print:shadow-none print:mb-6 print:break-inside-avoid">
+            <div className="bg-[#faf9f6] border-b border-[#ede9e2] px-6 py-4 flex items-center justify-between print:py-2 print:px-4">
                 <div>
-                    <h3 className="text-sm font-black text-[#0a1e42] tracking-wide uppercase flex items-center gap-2">
-                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-600" />
+                    <h3 className="text-sm font-black text-[#0a1e42] tracking-wide uppercase flex items-center gap-2 print:text-xs">
+                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 print:hidden" />
                         {title}
                     </h3>
-                    <p className="text-xs text-slate-500 font-medium mt-0.5">{subtitle}</p>
+                    <p className="text-xs text-slate-500 font-medium mt-0.5 print:text-[10px]">{subtitle}</p>
                 </div>
             </div>
             <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                     <thead>
-                        <tr className="bg-[#f1f5f9] border-b border-[#e2e8f0] text-[11px] font-black text-[#0a1e42] uppercase tracking-wider">
-                            <th className="py-3.5 px-6 min-w-[200px]">Type / Category</th>
-                            <th className={`py-3.5 px-4 text-right min-w-[130px] ${selectedUnit === 'eok' ? 'bg-emerald-100/80 text-emerald-950 font-black' : 'text-slate-700'}`}>
-                                Axten - EOK
+                        <tr className="bg-[#f1f5f9] border-b border-[#e2e8f0] text-[11px] font-black text-[#0a1e42] uppercase tracking-wider print:text-[10px]">
+                            <th className="py-3.5 px-6 min-w-[200px] print:py-2 print:px-4">Type / Category</th>
+                            <th className={`py-3.5 px-4 text-right min-w-[130px] print:py-2 ${selectedUnit === 'axten' ? 'bg-emerald-100/80 text-emerald-950 font-black' : 'text-slate-700'}`}>
+                                Axten Hospital
                             </th>
-                            <th className={`py-3.5 px-4 text-right min-w-[130px] ${selectedUnit === 'hq' ? 'bg-amber-100/80 text-amber-950 font-black' : 'text-slate-700'}`}>
-                                Axten - HQ
+                            <th className={`py-3.5 px-4 text-right min-w-[130px] print:py-2 ${selectedUnit === 'avise' ? 'bg-indigo-100/80 text-indigo-950 font-black' : 'text-slate-700'}`}>
+                                Avise Hospital
                             </th>
-                            <th className={`py-3.5 px-4 text-right min-w-[130px] ${selectedUnit === 'gurugram' ? 'bg-indigo-100/80 text-indigo-950 font-black' : 'text-slate-700'}`}>
-                                Axten - Gurugram
+                            <th className={`py-3.5 px-4 text-right min-w-[130px] print:py-2 ${selectedUnit === 'axtenHq' ? 'bg-amber-100/80 text-amber-950 font-black' : 'text-slate-700'}`}>
+                                Axten HQ
                             </th>
-                            <th className={`py-3.5 px-4 text-right min-w-[130px] ${selectedUnit === 'nehruEnclave' ? 'bg-cyan-100/80 text-cyan-950 font-black' : 'text-slate-700'}`}>
-                                Axten - Nehru Enclave
-                            </th>
-                            <th className={`py-3.5 px-6 text-right min-w-[160px] font-black border-l border-[#e2e8f0] ${selectedUnit === 'all' ? 'bg-[#ecfdf5] text-[#065f46]' : 'bg-[#f1f5f9] text-[#0a1e42]'}`}>
+                            <th className={`py-3.5 px-6 text-right min-w-[160px] font-black border-l border-[#e2e8f0] print:py-2 print:px-4 ${selectedUnit === 'all' ? 'bg-[#ecfdf5] text-[#065f46]' : 'bg-[#f1f5f9] text-[#0a1e42]'}`}>
                                 Consolidated Total
                             </th>
                         </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100 text-xs">
+                    <tbody className="divide-y divide-slate-100 text-xs print:text-[11px]">
                         {rows.map((row, idx) => {
                             const isTotal = row.isTotalRow || row.label.toLowerCase() === 'total';
                             return (
@@ -157,27 +175,24 @@ export default function PromoterDashboardPage() {
                                     key={idx}
                                     className={`transition-colors ${
                                         isTotal
-                                            ? 'bg-[#0a1e42] text-white font-black'
+                                            ? 'bg-[#0a1e42] text-white font-black print:bg-slate-900'
                                             : 'hover:bg-[#f8fafc] text-slate-800 font-semibold'
                                     }`}
                                 >
-                                    <td className="py-3.5 px-6 font-bold flex items-center gap-2">
-                                        {isTotal && <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />}
+                                    <td className="py-3 px-6 font-bold flex items-center gap-2 print:py-1.5 print:px-4">
+                                        {isTotal && <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 print:hidden" />}
                                         <span>{row.label}</span>
                                     </td>
-                                    <td className={`py-3.5 px-4 text-right font-mono ${selectedUnit === 'eok' ? (isTotal ? 'bg-[#061329]' : 'bg-emerald-50/70 font-black text-emerald-950') : ''}`}>
-                                        {row.isPercentage ? `${row.data.eok}%` : fmtINR(row.data.eok, row.isCurrency)}
+                                    <td className={`py-3 px-4 text-right font-mono print:py-1.5 ${selectedUnit === 'axten' ? (isTotal ? 'bg-[#061329]' : 'bg-emerald-50/70 font-black text-emerald-950') : ''}`}>
+                                        {row.isPercentage ? `${row.data.axten}%` : fmtINR(row.data.axten, row.isCurrency)}
                                     </td>
-                                    <td className={`py-3.5 px-4 text-right font-mono ${selectedUnit === 'hq' ? (isTotal ? 'bg-[#061329]' : 'bg-amber-50/70 font-black text-amber-950') : ''}`}>
-                                        {row.isPercentage ? `${row.data.hq}%` : fmtINR(row.data.hq, row.isCurrency)}
+                                    <td className={`py-3 px-4 text-right font-mono print:py-1.5 ${selectedUnit === 'avise' ? (isTotal ? 'bg-[#061329]' : 'bg-indigo-50/70 font-black text-indigo-950') : ''}`}>
+                                        {row.isPercentage ? `${row.data.avise}%` : fmtINR(row.data.avise, row.isCurrency)}
                                     </td>
-                                    <td className={`py-3.5 px-4 text-right font-mono ${selectedUnit === 'gurugram' ? (isTotal ? 'bg-[#061329]' : 'bg-indigo-50/70 font-black text-indigo-950') : ''}`}>
-                                        {row.isPercentage ? `${row.data.gurugram}%` : fmtINR(row.data.gurugram, row.isCurrency)}
+                                    <td className={`py-3 px-4 text-right font-mono print:py-1.5 ${selectedUnit === 'axtenHq' ? (isTotal ? 'bg-[#061329]' : 'bg-amber-50/70 font-black text-amber-950') : ''}`}>
+                                        {row.isPercentage ? `${row.data.axtenHq}%` : fmtINR(row.data.axtenHq, row.isCurrency)}
                                     </td>
-                                    <td className={`py-3.5 px-4 text-right font-mono ${selectedUnit === 'nehruEnclave' ? (isTotal ? 'bg-[#061329]' : 'bg-cyan-50/70 font-black text-cyan-950') : ''}`}>
-                                        {row.isPercentage ? `${row.data.nehruEnclave}%` : fmtINR(row.data.nehruEnclave, row.isCurrency)}
-                                    </td>
-                                    <td className={`py-3.5 px-6 text-right font-mono font-bold border-l ${
+                                    <td className={`py-3 px-6 text-right font-mono font-bold border-l print:py-1.5 print:px-4 ${
                                         isTotal
                                             ? 'border-slate-800 text-emerald-400 bg-[#061329]'
                                             : 'border-[#ede9e2] text-emerald-800 bg-[#ecfdf5]/60 font-black'
@@ -195,8 +210,23 @@ export default function PromoterDashboardPage() {
 
     return (
         <div className="space-y-6">
-            {/* Title Bar & Filter Controls */}
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white border border-[#ede9e2] p-6 rounded-2xl shadow-sm">
+            {/* Formal Printable Header (Visible ONLY when printing) */}
+            <div className="hidden print:block border-b-2 border-[#0a1e42] pb-4 mb-6">
+                <div className="flex justify-between items-start">
+                    <div>
+                        <h1 className="text-2xl font-black text-[#0a1e42]">AVANIOS HEALTHCARE SYSTEMS</h1>
+                        <p className="text-sm font-bold text-emerald-700 uppercase">Executive Promoter Audit Report — Consolidated Multi-Unit Analysis</p>
+                    </div>
+                    <div className="text-right text-xs text-slate-600 font-mono">
+                        <p><strong>Report Date:</strong> {new Date().toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                        <p><strong>Filter Period:</strong> {filterType.toUpperCase()}</p>
+                        <p><strong>Selected Unit:</strong> {selectedUnit === 'all' ? 'All Units (Consolidated)' : units.find(u => u.code === selectedUnit)?.name}</p>
+                    </div>
+                </div>
+            </div>
+
+            {/* Title Bar & Filter Controls (Hidden in Print) */}
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white border border-[#ede9e2] p-6 rounded-2xl shadow-sm print:hidden">
                 <div>
                     <div className="flex items-center gap-3">
                         <h2 className="text-xl font-black text-[#0a1e42] tracking-tight">AvaniOS Promoter Dashboard</h2>
@@ -221,10 +251,9 @@ export default function PromoterDashboardPage() {
                             className="bg-transparent font-extrabold text-[#0a1e42] focus:outline-none cursor-pointer pr-2"
                         >
                             <option value="all">All Units (Consolidated)</option>
-                            <option value="eok">Axten - EOK (20 Beds)</option>
-                            <option value="hq">Axten - HQ (0 Beds)</option>
-                            <option value="gurugram">Axten - Gurugram (50 Beds)</option>
-                            <option value="nehruEnclave">Axten - Nehru Enclave (55 Beds)</option>
+                            <option value="axten">Axten Hospital (20 Beds)</option>
+                            <option value="avise">Avise Hospital (50 Beds)</option>
+                            <option value="axtenHq">Axten HQ (0 Beds)</option>
                         </select>
                     </div>
 
@@ -296,105 +325,105 @@ export default function PromoterDashboardPage() {
             </div>
 
             {/* Executive Financial Health Strip */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="bg-gradient-to-br from-emerald-50 to-emerald-100/50 border border-emerald-200 p-4 rounded-2xl shadow-sm">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 print:grid-cols-4 print:gap-2">
+                <div className="bg-gradient-to-br from-emerald-50 to-emerald-100/50 border border-emerald-200 p-4 rounded-2xl shadow-sm print:bg-white print:p-3">
                     <div className="flex items-center justify-between text-emerald-800 text-xs font-bold mb-1">
                         <span>EBITDA Margin</span>
-                        <Award className="w-4 h-4 text-emerald-600" />
+                        <Award className="w-4 h-4 text-emerald-600 print:hidden" />
                     </div>
-                    <div className="text-2xl font-black text-emerald-950 font-mono">{executiveKPIs.ebitdaMarginPct}%</div>
-                    <div className="text-[11px] text-emerald-700 mt-1 font-semibold">Healthy Operating Margin</div>
+                    <div className="text-2xl font-black text-emerald-950 font-mono print:text-xl">{executiveKPIs.ebitdaMarginPct}%</div>
+                    <div className="text-[11px] text-emerald-700 mt-1 font-semibold print:text-[9px]">Healthy Operating Margin</div>
                 </div>
 
-                <div className="bg-gradient-to-br from-blue-50 to-indigo-100/50 border border-blue-200 p-4 rounded-2xl shadow-sm">
+                <div className="bg-gradient-to-br from-blue-50 to-indigo-100/50 border border-blue-200 p-4 rounded-2xl shadow-sm print:bg-white print:p-3">
                     <div className="flex items-center justify-between text-blue-800 text-xs font-bold mb-1">
                         <span>Bed Occupancy Rate</span>
-                        <Bed className="w-4 h-4 text-blue-600" />
+                        <Bed className="w-4 h-4 text-blue-600 print:hidden" />
                     </div>
-                    <div className="text-2xl font-black text-blue-950 font-mono">{executiveKPIs.bedOccupancyRate}%</div>
-                    <div className="text-[11px] text-blue-700 mt-1 font-semibold">{currentAdmittedPatients.total.total} / {arpob.noOfBeds.total} Beds Occupied</div>
+                    <div className="text-2xl font-black text-blue-950 font-mono print:text-xl">{executiveKPIs.bedOccupancyRate}%</div>
+                    <div className="text-[11px] text-blue-700 mt-1 font-semibold print:text-[9px]">{currentAdmittedPatients.total.total} / {arpob.noOfBeds.total} Beds Occupied</div>
                 </div>
 
-                <div className="bg-gradient-to-br from-purple-50 to-violet-100/50 border border-purple-200 p-4 rounded-2xl shadow-sm">
+                <div className="bg-gradient-to-br from-purple-50 to-violet-100/50 border border-purple-200 p-4 rounded-2xl shadow-sm print:bg-white print:p-3">
                     <div className="flex items-center justify-between text-purple-800 text-xs font-bold mb-1">
                         <span>Avg Length of Stay (ALOS)</span>
-                        <Clock className="w-4 h-4 text-purple-600" />
+                        <Clock className="w-4 h-4 text-purple-600 print:hidden" />
                     </div>
-                    <div className="text-2xl font-black text-purple-950 font-mono">{executiveKPIs.alosDays} Days</div>
-                    <div className="text-[11px] text-purple-700 mt-1 font-semibold">Optimal Inpatient Turnover</div>
+                    <div className="text-2xl font-black text-purple-950 font-mono print:text-xl">{executiveKPIs.alosDays} Days</div>
+                    <div className="text-[11px] text-purple-700 mt-1 font-semibold print:text-[9px]">Optimal Inpatient Turnover</div>
                 </div>
 
-                <div className="bg-gradient-to-br from-amber-50 to-orange-100/50 border border-amber-200 p-4 rounded-2xl shadow-sm">
+                <div className="bg-gradient-to-br from-amber-50 to-orange-100/50 border border-amber-200 p-4 rounded-2xl shadow-sm print:bg-white print:p-3">
                     <div className="flex items-center justify-between text-amber-800 text-xs font-bold mb-1">
                         <span>Collection Efficiency</span>
-                        <TrendingUp className="w-4 h-4 text-amber-600" />
+                        <TrendingUp className="w-4 h-4 text-amber-600 print:hidden" />
                     </div>
-                    <div className="text-2xl font-black text-amber-950 font-mono">{executiveKPIs.collectionEfficiencyPct}%</div>
-                    <div className="text-[11px] text-amber-700 mt-1 font-semibold">High Cash Realization</div>
+                    <div className="text-2xl font-black text-amber-950 font-mono print:text-xl">{executiveKPIs.collectionEfficiencyPct}%</div>
+                    <div className="text-[11px] text-amber-700 mt-1 font-semibold print:text-[9px]">High Cash Realization</div>
                 </div>
             </div>
 
             {/* Top KPI Summary Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-                <div className="bg-white border border-[#ede9e2] p-5 rounded-2xl shadow-sm">
-                    <div className="flex items-center justify-between text-slate-500 text-xs font-bold mb-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 print:grid-cols-5 print:gap-2">
+                <div className="bg-white border border-[#ede9e2] p-5 rounded-2xl shadow-sm print:p-3">
+                    <div className="flex items-center justify-between text-slate-500 text-xs font-bold mb-2 print:mb-1">
                         <span>Total Operational Beds</span>
-                        <Bed className="w-4 h-4 text-emerald-600" />
+                        <Bed className="w-4 h-4 text-emerald-600 print:hidden" />
                     </div>
-                    <div className="text-2xl font-black text-[#0a1e42] font-mono">{arpob.noOfBeds.total} Beds</div>
-                    <div className="text-[11px] text-slate-500 mt-2 font-semibold">
-                        EOK: 20 • Gurugram: 50 • Nehru: 55
+                    <div className="text-2xl font-black text-[#0a1e42] font-mono print:text-lg">{arpob.noOfBeds.total} Beds</div>
+                    <div className="text-[11px] text-slate-500 mt-2 font-semibold print:text-[9px]">
+                        Axten: 20 • Avise: 50
                     </div>
                 </div>
 
-                <div className="bg-white border border-[#ede9e2] p-5 rounded-2xl shadow-sm">
-                    <div className="flex items-center justify-between text-slate-500 text-xs font-bold mb-2">
+                <div className="bg-white border border-[#ede9e2] p-5 rounded-2xl shadow-sm print:p-3">
+                    <div className="flex items-center justify-between text-slate-500 text-xs font-bold mb-2 print:mb-1">
                         <span>Currently Admitted</span>
-                        <Users className="w-4 h-4 text-indigo-600" />
+                        <Users className="w-4 h-4 text-indigo-600 print:hidden" />
                     </div>
-                    <div className="text-2xl font-black text-[#0a1e42] font-mono">{currentAdmittedPatients.total.total} Patients</div>
-                    <div className="text-[11px] text-indigo-700 mt-2 font-semibold">
-                        {currentAdmittedPatients.insurance.total} Insurance • {currentAdmittedPatients.cash.total} Cash
+                    <div className="text-2xl font-black text-[#0a1e42] font-mono print:text-lg">{currentAdmittedPatients.total.total} Patients</div>
+                    <div className="text-[11px] text-indigo-700 mt-2 font-semibold print:text-[9px]">
+                        {currentAdmittedPatients.insurance.total} Ins • {currentAdmittedPatients.cash.total} Cash
                     </div>
                 </div>
 
-                <div className="bg-white border border-[#ede9e2] p-5 rounded-2xl shadow-sm">
-                    <div className="flex items-center justify-between text-slate-500 text-xs font-bold mb-2">
+                <div className="bg-white border border-[#ede9e2] p-5 rounded-2xl shadow-sm print:p-3">
+                    <div className="flex items-center justify-between text-slate-500 text-xs font-bold mb-2 print:mb-1">
                         <span>Period Revenue</span>
-                        <TrendingUp className="w-4 h-4 text-emerald-600" />
+                        <TrendingUp className="w-4 h-4 text-emerald-600 print:hidden" />
                     </div>
-                    <div className="text-2xl font-black text-emerald-700 font-mono">{fmtINR(revenue.total.total, true)}</div>
-                    <div className="text-[11px] text-slate-500 mt-2 font-semibold">
+                    <div className="text-2xl font-black text-emerald-700 font-mono print:text-lg">{fmtINR(revenue.total.total, true)}</div>
+                    <div className="text-[11px] text-slate-500 mt-2 font-semibold print:text-[9px]">
                         Insurance: {fmtINR(revenue.insurance.total, true)}
                     </div>
                 </div>
 
-                <div className="bg-white border border-[#ede9e2] p-5 rounded-2xl shadow-sm">
-                    <div className="flex items-center justify-between text-slate-500 text-xs font-bold mb-2">
+                <div className="bg-white border border-[#ede9e2] p-5 rounded-2xl shadow-sm print:p-3">
+                    <div className="flex items-center justify-between text-slate-500 text-xs font-bold mb-2 print:mb-1">
                         <span>Consolidated ARPOB</span>
-                        <Activity className="w-4 h-4 text-cyan-600" />
+                        <Activity className="w-4 h-4 text-cyan-600 print:hidden" />
                     </div>
-                    <div className="text-2xl font-black text-[#0a1e42] font-mono">{fmtINR(arpob.average.total, true)}</div>
-                    <div className="text-[11px] text-cyan-700 mt-2 font-semibold">
-                        Average Revenue / Bed / Day
+                    <div className="text-2xl font-black text-[#0a1e42] font-mono print:text-lg">{fmtINR(arpob.average.total, true)}</div>
+                    <div className="text-[11px] text-cyan-700 mt-2 font-semibold print:text-[9px]">
+                        Avg Revenue / Bed / Day
                     </div>
                 </div>
 
-                <div className="bg-white border border-[#ede9e2] p-5 rounded-2xl shadow-sm">
-                    <div className="flex items-center justify-between text-slate-500 text-xs font-bold mb-2">
+                <div className="bg-white border border-[#ede9e2] p-5 rounded-2xl shadow-sm print:p-3">
+                    <div className="flex items-center justify-between text-slate-500 text-xs font-bold mb-2 print:mb-1">
                         <span>Net Profit / Loss</span>
-                        <PieChart className="w-4 h-4 text-emerald-600" />
+                        <PieChart className="w-4 h-4 text-emerald-600 print:hidden" />
                     </div>
-                    <div className="text-2xl font-black text-emerald-700 font-mono">{fmtINR(profitLoss.amount.total, true)}</div>
-                    <div className="text-[11px] text-emerald-700 mt-2 font-bold flex items-center gap-1">
-                        <ArrowUpRight className="w-3.5 h-3.5" />
-                        <span>Profit Margin: {profitLoss.percentage.total}%</span>
+                    <div className="text-2xl font-black text-emerald-700 font-mono print:text-lg">{fmtINR(profitLoss.amount.total, true)}</div>
+                    <div className="text-[11px] text-emerald-700 mt-2 font-bold flex items-center gap-1 print:text-[9px]">
+                        <ArrowUpRight className="w-3.5 h-3.5 print:hidden" />
+                        <span>Margin: {profitLoss.percentage.total}%</span>
                     </div>
                 </div>
             </div>
 
-            {/* Quick Navigation Anchor Bar */}
-            <div className="flex items-center gap-2 overflow-x-auto pb-2 text-xs text-slate-600 font-bold no-scrollbar">
+            {/* Quick Navigation Anchor Bar (Hidden in Print) */}
+            <div className="flex items-center gap-2 overflow-x-auto pb-2 text-xs text-slate-600 font-bold no-scrollbar print:hidden">
                 <span className="text-slate-400 uppercase text-[10px] tracking-wider shrink-0">Jump To Section:</span>
                 <a href="#admitted" className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 hover:text-emerald-700 transition-colors shrink-0 shadow-sm">1. Admitted</a>
                 <a href="#admissions" className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 hover:text-emerald-700 transition-colors shrink-0 shadow-sm">2. Admissions</a>
@@ -410,7 +439,7 @@ export default function PromoterDashboardPage() {
                 <a href="#profit-loss" className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 hover:text-emerald-700 transition-colors shrink-0 shadow-sm">12. Profit/Loss</a>
             </div>
 
-            {/* 1. Current Admitted Patients (Volume Table: NO Rupee symbols!) */}
+            {/* 1. Current Admitted Patients */}
             <div id="admitted">
                 {renderTableSection(
                     '1. Current Admitted Patients',
@@ -425,7 +454,7 @@ export default function PromoterDashboardPage() {
                 )}
             </div>
 
-            {/* 2. Admission (Volume Table: NO Rupee symbols!) */}
+            {/* 2. Admission */}
             <div id="admissions">
                 {renderTableSection(
                     '2. Admission',
@@ -440,7 +469,7 @@ export default function PromoterDashboardPage() {
                 )}
             </div>
 
-            {/* 3. Discharge (Volume Table: NO Rupee symbols!) */}
+            {/* 3. Discharge */}
             <div id="discharges">
                 {renderTableSection(
                     '3. Discharge',
@@ -455,7 +484,7 @@ export default function PromoterDashboardPage() {
                 )}
             </div>
 
-            {/* 4. Revenue (Monetary Table: Rupee symbols included!) */}
+            {/* 4. Revenue */}
             <div id="revenue">
                 {renderTableSection(
                     '4. Revenue Realization',
@@ -596,6 +625,11 @@ export default function PromoterDashboardPage() {
                         { label: 'Percentage %', data: profitLoss.percentage, isPercentage: true, isTotalRow: true },
                     ]
                 )}
+            </div>
+
+            {/* Report Footer for Printouts */}
+            <div className="hidden print:block text-center text-[10px] text-slate-500 pt-4 border-t border-slate-300 mt-8">
+                AvaniOS Hospital Systems — Confidential Executive Financial & Operational Audit Report.
             </div>
         </div>
     );
