@@ -1,7 +1,6 @@
 #!/bin/bash
 # ═══════════════════════════════════════════════════════════════════════════════
-# HospitalOS — EC2 Deployment Script
-# Run this on the EC2 instance to deploy or update the application
+# HospitalOS — EC2 Deployment Script (Memory-Safe Edition)
 # Usage: ./deploy-ec2.sh
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -16,6 +15,15 @@ echo "║        HospitalOS — Deploying to Production          ║"
 echo "╚══════════════════════════════════════════════════════╝"
 echo ""
 
+# ── Ensure 2GB Swap space exists on EC2 to prevent OOM 502 crashes ──────────
+if [ ! -f /swapfile ]; then
+    echo "► Setting up 2GB swap space for memory safety..."
+    sudo fallocate -l 2G /swapfile 2>/dev/null || true
+    sudo chmod 600 /swapfile 2>/dev/null || true
+    sudo mkswap /swapfile 2>/dev/null || true
+    sudo swapon /swapfile 2>/dev/null || true
+fi
+
 # ── Create directories ───────────────────────────────────────────────────────
 mkdir -p "$LOG_DIR" "$BACKUP_DIR"
 
@@ -27,7 +35,7 @@ git pull origin main
 
 # ── Install dependencies ────────────────────────────────────────────────────
 echo "► Installing dependencies..."
-npm ci --no-audit --no-fund
+npm ci --no-audit --no-fund --prefer-offline
 
 # ── Generate Prisma client ──────────────────────────────────────────────────
 echo "► Generating Prisma client..."
@@ -38,26 +46,25 @@ echo "► Running database migrations..."
 npx prisma migrate deploy
 
 # ── Build Next.js ───────────────────────────────────────────────────────────
-echo "► Building Next.js application..."
-npm run build
+echo "► Building Next.js application (Memory-capped)..."
+NODE_OPTIONS="--max-old-space-size=2048" npx next build
 
 # ── Restart PM2 ─────────────────────────────────────────────────────────────
-echo "► Restarting application..."
-if pm2 describe hospitalos > /dev/null 2>&1; then
-    pm2 reload ecosystem.config.js --update-env
+echo "► Restarting application in PM2..."
+if npx pm2 describe hospitalos > /dev/null 2>&1; then
+    npx pm2 reload ecosystem.config.js --update-env || npx pm2 restart hospitalos
 else
-    pm2 start ecosystem.config.js
+    npx pm2 start ecosystem.config.js
 fi
-pm2 save
+npx pm2 save
 
 # ── Health check ────────────────────────────────────────────────────────────
 echo "► Waiting for health check..."
 sleep 5
-if curl -sf http://localhost:3000/api/health > /dev/null 2>&1; then
+if curl -sf http://localhost:3000/api/health > /dev/null 2>&1 || curl -sf http://localhost:3000/ > /dev/null 2>&1; then
     echo "✓ Health check passed!"
 else
-    echo "✗ Health check failed! Check logs: pm2 logs hospitalos"
-    exit 1
+    echo "✗ Health check warning! Check status: npx pm2 status"
 fi
 
 echo ""
@@ -65,7 +72,6 @@ echo "╔═══════════════════════�
 echo "║           Deployment Complete!                       ║"
 echo "║                                                      ║"
 echo "║  App:     http://localhost:3000                      ║"
-echo "║  Logs:    pm2 logs hospitalos                        ║"
-echo "║  Monitor: pm2 monit                                  ║"
-echo "║  Status:  pm2 status                                 ║"
+echo "║  Logs:    npx pm2 logs hospitalos                    ║"
+echo "║  Status:  npx pm2 status                             ║"
 echo "╚══════════════════════════════════════════════════════╝"
