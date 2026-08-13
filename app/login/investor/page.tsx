@@ -26,7 +26,7 @@ export default function InvestorLoginPage() {
             if (res?.success) {
                 router.push('/investor/dashboard');
             } else {
-                setError(res?.error || 'Login failed. Please check credentials.');
+                setError(res?.error || 'Invalid investor credentials.');
             }
         });
     };
@@ -37,49 +37,49 @@ export default function InvestorLoginPage() {
             <div
                 className="absolute inset-0 pointer-events-none z-0"
                 style={{
-                    backgroundImage: `linear-gradient(to right, rgba(230, 220, 205, 0.35) 1px, transparent 1px), linear-gradient(to bottom, rgba(230, 220, 205, 0.35) 1px, transparent 1px)`,
+                    backgroundImage: `linear-gradient(to right, rgba(230, 220, 205, 0.3) 1px, transparent 1px), linear-gradient(to bottom, rgba(230, 220, 205, 0.3) 1px, transparent 1px)`,
                     backgroundSize: '48px 48px',
                 }}
             />
 
-            {/* Top Navigation Bar */}
-            <header className="relative z-10 px-8 md:px-16 lg:px-20 py-6 flex items-center justify-between">
+            {/* Header */}
+            <header className="relative z-10 px-8 md:px-16 py-6 flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shadow-md shadow-emerald-600/20">
-                        <Building2 className="w-5 h-5 font-bold" />
+                    <div className="w-10 h-10 rounded-2xl bg-[#0a1e42] text-white flex items-center justify-center shadow-sm">
+                        <Building2 className="w-5 h-5 font-bold text-emerald-400" />
                     </div>
                     <div>
-                        <div className="flex items-center text-xl font-extrabold tracking-tight select-none">
-                            <span className="text-[#0a1e42] font-black text-2xl">Axten</span>
-                            <span className="text-emerald-600 font-black text-2xl inline-flex items-start">
+                        <div className="flex items-center text-2xl font-black tracking-tight select-none">
+                            <span className="text-[#0a1e42]">Avani</span>
+                            <span className="text-emerald-600 font-black inline-flex items-start">
                                 OS<sup className="text-xs font-bold relative top-[-0.15em] ml-0.5">+</sup>
                             </span>
                         </div>
-                        <p className="text-xs text-slate-500 font-semibold">Promoter & Investor Portal</p>
+                        <p className="text-[11px] text-slate-500 font-semibold uppercase tracking-wider">Investor & Promoter Suite</p>
                     </div>
                 </div>
 
                 <div className="hidden sm:flex items-center gap-2 px-3.5 py-1.5 bg-white border border-[#ede9e2] rounded-full shadow-sm text-xs font-bold text-slate-600">
                     <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                    <span>256-Bit Encrypted Investor Access</span>
+                    <span>256-Bit Encrypted Portal</span>
                 </div>
             </header>
 
             {/* Main Content */}
             <main className="relative z-10 w-full max-w-[1200px] mx-auto px-6 py-8 flex-1 grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-                {/* Left Side: Branding & Info */}
+                {/* Left Side: Information */}
                 <div className="space-y-6">
                     <div className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-full text-xs font-bold uppercase tracking-wider">
                         Executive Suite
                     </div>
 
                     <h1 className="text-4xl lg:text-5xl font-black text-[#0a1e42] tracking-tight leading-tight">
-                        Consolidated <br />
+                        AvaniOS <br />
                         <span className="text-emerald-600">Promoter Dashboard</span>
                     </h1>
 
                     <p className="text-base text-slate-600 font-medium leading-relaxed max-w-lg">
-                        Real-time operational, clinical, and financial insights across all hospital units (EOK, HQ, Gurugram, and Nehru Enclave).
+                        Consolidated executive metrics, bed occupancy yield, financial performance, and multi-unit analytics across all hospital units.
                     </p>
 
                     <div className="grid grid-cols-2 gap-4 max-w-md pt-4 border-t border-slate-200/80">
@@ -94,9 +94,9 @@ export default function InvestorLoginPage() {
                     </div>
                 </div>
 
-                {/* Right Side: Login Card */}
+                {/* Right Side: Login Form Card */}
                 <div className="flex justify-center">
-                    <div className="bg-white rounded-[28px] shadow-[0_20px_50px_-12px_rgba(0,0,0,0.05)] w-full max-w-[440px] overflow-hidden border border-[#ede9e2] p-8 md:p-10">
+                    <div className="bg-white rounded-[28px] shadow-[0_20px_50px_-12px_rgba(0,0,0,0.04)] w-full max-w-[440px] overflow-hidden border border-[#ede9e2] p-8 md:p-10">
                         <div className="mb-6 text-center">
                             <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 border border-emerald-200 mb-3">
                                 <Lock className="w-6 h-6" />
@@ -154,7 +154,7 @@ export default function InvestorLoginPage() {
                                 </div>
                             </div>
 
-                            {/* Credentials Hint Box */}
+                            {/* Credentials Helper Pill */}
                             <div className="p-3 bg-emerald-50/70 border border-emerald-200/80 rounded-2xl text-xs flex items-center justify-between">
                                 <span className="text-slate-600 font-medium">Default Credentials:</span>
                                 <span className="font-mono font-bold text-emerald-800 bg-white px-2 py-0.5 rounded border border-emerald-200">
@@ -174,7 +174,7 @@ export default function InvestorLoginPage() {
                                     </>
                                 ) : (
                                     <>
-                                        <span>Sign In to Promoter Suite</span>
+                                        <span>Sign In to AvaniOS Investor Suite</span>
                                         <ArrowRight className="w-4 h-4" />
                                     </>
                                 )}
@@ -186,7 +186,7 @@ export default function InvestorLoginPage() {
 
             {/* Footer */}
             <footer className="relative z-10 px-8 py-6 text-center text-xs font-bold text-slate-400 border-t border-slate-200/60">
-                Axten Healthcare Systems © {new Date().getFullYear()} — Confidential Investor Data.
+                AvaniOS Hospital Systems © {new Date().getFullYear()} — Confidential Investor Suite.
             </footer>
         </div>
     );

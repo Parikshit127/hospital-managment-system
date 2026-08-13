@@ -1,7 +1,7 @@
 import React from 'react';
 import { getInvestorSession, investorLogout } from '@/app/actions/investor-auth-actions';
 import { redirect } from 'next/navigation';
-import { Building2, LogOut, ShieldCheck, User } from 'lucide-react';
+import { Building2, LogOut, User } from 'lucide-react';
 
 export default async function InvestorLayout({ children }: { children: React.ReactNode }) {
     const session = await getInvestorSession();
@@ -12,25 +12,25 @@ export default async function InvestorLayout({ children }: { children: React.Rea
     return (
         <div className="min-h-screen bg-[#faf9f6] text-[#0a1e42] font-sans">
             {/* Top HIMS Header Bar */}
-            <header className="sticky top-0 z-50 bg-white border-b border-slate-200 shadow-sm px-6 py-3.5 flex items-center justify-between">
+            <header className="sticky top-0 z-50 bg-white border-b border-[#ede9e2] shadow-sm px-6 py-3.5 flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-sm">
-                        <Building2 className="w-5 h-5 font-bold" />
+                    <div className="w-9 h-9 rounded-xl bg-[#0a1e42] text-white flex items-center justify-center shadow-sm">
+                        <Building2 className="w-5 h-5 font-bold text-emerald-400" />
                     </div>
                     <div>
                         <div className="flex items-center gap-2">
-                            <span className="text-xl font-black tracking-tight text-[#0a1e42]">Axten</span>
+                            <span className="text-xl font-black tracking-tight text-[#0a1e42]">Avani</span>
                             <span className="text-emerald-600 font-black text-xl">OS<sup>+</sup></span>
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200 uppercase tracking-wider">
-                                Promoter Portal
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-50 text-emerald-800 border border-emerald-200 uppercase tracking-wider">
+                                Promoter Suite
                             </span>
                         </div>
-                        <p className="text-[11px] text-slate-500 font-medium">Consolidated Dashboard of All Units</p>
+                        <p className="text-[11px] text-slate-500 font-medium">Consolidated Dashboard of All Hospital Units</p>
                     </div>
                 </div>
 
                 {/* Unit Badges */}
-                <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs">
+                <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#faf9f6] border border-[#ede9e2] text-xs">
                     <span className="text-slate-500 font-bold mr-1">Active Units:</span>
                     <span className="px-2 py-0.5 rounded bg-white text-emerald-800 border border-emerald-300 font-bold">EOK (20B)</span>
                     <span className="px-2 py-0.5 rounded bg-white text-amber-800 border border-amber-300 font-bold">HQ (0B)</span>

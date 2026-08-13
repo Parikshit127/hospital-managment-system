@@ -15,13 +15,11 @@ import {
     RefreshCw,
     Building2,
     Clock,
-    Stethoscope,
-    AlertCircle,
-    ChevronDown,
     Award
 } from 'lucide-react';
 
-function fmtINR(n: number, isCurrency = true): string {
+// Format numbers: default is currency=false (no ₹ symbol) so counts render as 1, 2, 13, 94!
+function fmtINR(n: number, isCurrency = false): string {
     if (n === undefined || n === null) return '-';
     if (!isCurrency) return n.toLocaleString('en-IN');
     return `₹${n.toLocaleString('en-IN')}`;
@@ -52,7 +50,7 @@ export default function PromoterDashboardPage() {
         return (
             <div className="min-h-[70vh] flex flex-col items-center justify-center gap-4 text-slate-500">
                 <div className="w-10 h-10 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin" />
-                <p className="text-sm font-bold animate-pulse text-[#0a1e42]">Aggregating HIMS Promoter Analytics...</p>
+                <p className="text-sm font-bold animate-pulse text-[#0a1e42]">Aggregating AvaniOS Executive Analytics...</p>
             </div>
         );
     }
@@ -78,7 +76,7 @@ export default function PromoterDashboardPage() {
     const exportToCSV = () => {
         if (!data) return;
         const csvRows = [
-            ['Promoter Dashboard — Consolidated Multi-Unit Report'],
+            ['AvaniOS Promoter Dashboard — Consolidated Multi-Unit Report'],
             ['Filter', filterType.toUpperCase()],
             ['Selected Unit Filter', selectedUnit.toUpperCase()],
             ['Date Range', `${fromDate} to ${toDate}`],
@@ -108,7 +106,7 @@ export default function PromoterDashboardPage() {
         const encodedUri = encodeURI(csvContent);
         const link = document.createElement('a');
         link.setAttribute('href', encodedUri);
-        link.setAttribute('download', `Promoter_Dashboard_${selectedUnit}_${filterType}_${new Date().toISOString().slice(0, 10)}.csv`);
+        link.setAttribute('download', `AvaniOS_Promoter_Report_${selectedUnit}_${filterType}_${new Date().toISOString().slice(0, 10)}.csv`);
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -122,7 +120,7 @@ export default function PromoterDashboardPage() {
         <div className="bg-white border border-[#ede9e2] rounded-2xl overflow-hidden shadow-sm mb-8">
             <div className="bg-[#faf9f6] border-b border-[#ede9e2] px-6 py-4 flex items-center justify-between">
                 <div>
-                    <h3 className="text-sm font-extrabold text-[#0a1e42] tracking-wide uppercase flex items-center gap-2">
+                    <h3 className="text-sm font-black text-[#0a1e42] tracking-wide uppercase flex items-center gap-2">
                         <span className="w-2.5 h-2.5 rounded-full bg-emerald-600" />
                         {title}
                     </h3>
@@ -134,16 +132,16 @@ export default function PromoterDashboardPage() {
                     <thead>
                         <tr className="bg-[#f1f5f9] border-b border-[#e2e8f0] text-[11px] font-black text-[#0a1e42] uppercase tracking-wider">
                             <th className="py-3.5 px-6 min-w-[200px]">Type / Category</th>
-                            <th className={`py-3.5 px-4 text-right min-w-[130px] ${selectedUnit === 'eok' ? 'bg-emerald-100/70 text-emerald-900 font-black ring-2 ring-emerald-500/20' : 'text-slate-700'}`}>
+                            <th className={`py-3.5 px-4 text-right min-w-[130px] ${selectedUnit === 'eok' ? 'bg-emerald-100/80 text-emerald-950 font-black' : 'text-slate-700'}`}>
                                 Axten - EOK
                             </th>
-                            <th className={`py-3.5 px-4 text-right min-w-[130px] ${selectedUnit === 'hq' ? 'bg-amber-100/70 text-amber-900 font-black ring-2 ring-amber-500/20' : 'text-slate-700'}`}>
+                            <th className={`py-3.5 px-4 text-right min-w-[130px] ${selectedUnit === 'hq' ? 'bg-amber-100/80 text-amber-950 font-black' : 'text-slate-700'}`}>
                                 Axten - HQ
                             </th>
-                            <th className={`py-3.5 px-4 text-right min-w-[130px] ${selectedUnit === 'gurugram' ? 'bg-indigo-100/70 text-indigo-900 font-black ring-2 ring-indigo-500/20' : 'text-slate-700'}`}>
+                            <th className={`py-3.5 px-4 text-right min-w-[130px] ${selectedUnit === 'gurugram' ? 'bg-indigo-100/80 text-indigo-950 font-black' : 'text-slate-700'}`}>
                                 Axten - Gurugram
                             </th>
-                            <th className={`py-3.5 px-4 text-right min-w-[130px] ${selectedUnit === 'nehruEnclave' ? 'bg-cyan-100/70 text-cyan-900 font-black ring-2 ring-cyan-500/20' : 'text-slate-700'}`}>
+                            <th className={`py-3.5 px-4 text-right min-w-[130px] ${selectedUnit === 'nehruEnclave' ? 'bg-cyan-100/80 text-cyan-950 font-black' : 'text-slate-700'}`}>
                                 Axten - Nehru Enclave
                             </th>
                             <th className={`py-3.5 px-6 text-right min-w-[160px] font-black border-l border-[#e2e8f0] ${selectedUnit === 'all' ? 'bg-[#ecfdf5] text-[#065f46]' : 'bg-[#f1f5f9] text-[#0a1e42]'}`}>
@@ -167,22 +165,22 @@ export default function PromoterDashboardPage() {
                                         {isTotal && <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />}
                                         <span>{row.label}</span>
                                     </td>
-                                    <td className={`py-3.5 px-4 text-right font-mono ${selectedUnit === 'eok' ? 'bg-emerald-50/60 font-black text-emerald-900' : ''}`}>
+                                    <td className={`py-3.5 px-4 text-right font-mono ${selectedUnit === 'eok' ? (isTotal ? 'bg-[#061329]' : 'bg-emerald-50/70 font-black text-emerald-950') : ''}`}>
                                         {row.isPercentage ? `${row.data.eok}%` : fmtINR(row.data.eok, row.isCurrency)}
                                     </td>
-                                    <td className={`py-3.5 px-4 text-right font-mono ${selectedUnit === 'hq' ? 'bg-amber-50/60 font-black text-amber-900' : ''}`}>
+                                    <td className={`py-3.5 px-4 text-right font-mono ${selectedUnit === 'hq' ? (isTotal ? 'bg-[#061329]' : 'bg-amber-50/70 font-black text-amber-950') : ''}`}>
                                         {row.isPercentage ? `${row.data.hq}%` : fmtINR(row.data.hq, row.isCurrency)}
                                     </td>
-                                    <td className={`py-3.5 px-4 text-right font-mono ${selectedUnit === 'gurugram' ? 'bg-indigo-50/60 font-black text-indigo-900' : ''}`}>
+                                    <td className={`py-3.5 px-4 text-right font-mono ${selectedUnit === 'gurugram' ? (isTotal ? 'bg-[#061329]' : 'bg-indigo-50/70 font-black text-indigo-950') : ''}`}>
                                         {row.isPercentage ? `${row.data.gurugram}%` : fmtINR(row.data.gurugram, row.isCurrency)}
                                     </td>
-                                    <td className={`py-3.5 px-4 text-right font-mono ${selectedUnit === 'nehruEnclave' ? 'bg-cyan-50/60 font-black text-cyan-900' : ''}`}>
+                                    <td className={`py-3.5 px-4 text-right font-mono ${selectedUnit === 'nehruEnclave' ? (isTotal ? 'bg-[#061329]' : 'bg-cyan-50/70 font-black text-cyan-950') : ''}`}>
                                         {row.isPercentage ? `${row.data.nehruEnclave}%` : fmtINR(row.data.nehruEnclave, row.isCurrency)}
                                     </td>
                                     <td className={`py-3.5 px-6 text-right font-mono font-bold border-l ${
                                         isTotal
                                             ? 'border-slate-800 text-emerald-400 bg-[#061329]'
-                                            : 'border-[#ede9e2] text-emerald-800 bg-[#ecfdf5]/50'
+                                            : 'border-[#ede9e2] text-emerald-800 bg-[#ecfdf5]/60 font-black'
                                     }`}>
                                         {row.isPercentage ? `${row.data.total}%` : fmtINR(row.data.total, row.isCurrency)}
                                     </td>
@@ -201,13 +199,13 @@ export default function PromoterDashboardPage() {
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white border border-[#ede9e2] p-6 rounded-2xl shadow-sm">
                 <div>
                     <div className="flex items-center gap-3">
-                        <h2 className="text-xl font-black text-[#0a1e42] tracking-tight">Promoter Dashboard</h2>
+                        <h2 className="text-xl font-black text-[#0a1e42] tracking-tight">AvaniOS Promoter Dashboard</h2>
                         <span className="px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-emerald-50 text-emerald-800 border border-emerald-200">
                             {selectedUnit === 'all' ? 'Consolidated All Units' : units.find(u => u.code === selectedUnit)?.name}
                         </span>
                     </div>
                     <p className="text-xs text-slate-500 font-medium mt-1">
-                        Executive Operational & Financial Intelligence across Axten Hospital Units
+                        Executive Operational & Financial Intelligence across Avani Hospital Units
                     </p>
                 </div>
 
@@ -365,9 +363,9 @@ export default function PromoterDashboardPage() {
                         <span>Period Revenue</span>
                         <TrendingUp className="w-4 h-4 text-emerald-600" />
                     </div>
-                    <div className="text-2xl font-black text-emerald-700 font-mono">{fmtINR(revenue.total.total)}</div>
+                    <div className="text-2xl font-black text-emerald-700 font-mono">{fmtINR(revenue.total.total, true)}</div>
                     <div className="text-[11px] text-slate-500 mt-2 font-semibold">
-                        Insurance: {fmtINR(revenue.insurance.total)}
+                        Insurance: {fmtINR(revenue.insurance.total, true)}
                     </div>
                 </div>
 
@@ -376,7 +374,7 @@ export default function PromoterDashboardPage() {
                         <span>Consolidated ARPOB</span>
                         <Activity className="w-4 h-4 text-cyan-600" />
                     </div>
-                    <div className="text-2xl font-black text-[#0a1e42] font-mono">{fmtINR(arpob.average.total)}</div>
+                    <div className="text-2xl font-black text-[#0a1e42] font-mono">{fmtINR(arpob.average.total, true)}</div>
                     <div className="text-[11px] text-cyan-700 mt-2 font-semibold">
                         Average Revenue / Bed / Day
                     </div>
@@ -387,7 +385,7 @@ export default function PromoterDashboardPage() {
                         <span>Net Profit / Loss</span>
                         <PieChart className="w-4 h-4 text-emerald-600" />
                     </div>
-                    <div className="text-2xl font-black text-emerald-700 font-mono">{fmtINR(profitLoss.amount.total)}</div>
+                    <div className="text-2xl font-black text-emerald-700 font-mono">{fmtINR(profitLoss.amount.total, true)}</div>
                     <div className="text-[11px] text-emerald-700 mt-2 font-bold flex items-center gap-1">
                         <ArrowUpRight className="w-3.5 h-3.5" />
                         <span>Profit Margin: {profitLoss.percentage.total}%</span>
@@ -412,52 +410,52 @@ export default function PromoterDashboardPage() {
                 <a href="#profit-loss" className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 hover:text-emerald-700 transition-colors shrink-0 shadow-sm">12. Profit/Loss</a>
             </div>
 
-            {/* 1. Current Admitted Patients */}
+            {/* 1. Current Admitted Patients (Volume Table: NO Rupee symbols!) */}
             <div id="admitted">
                 {renderTableSection(
                     '1. Current Admitted Patients',
                     'Real-time inpatient count across units by patient category',
                     [
-                        { label: 'Cash', data: currentAdmittedPatients.cash },
-                        { label: 'Insurance', data: currentAdmittedPatients.insurance },
-                        { label: 'Panel', data: currentAdmittedPatients.panel },
-                        { label: 'Corporate', data: currentAdmittedPatients.corporate },
-                        { label: 'Total', data: currentAdmittedPatients.total, isTotalRow: true },
+                        { label: 'Cash', data: currentAdmittedPatients.cash, isCurrency: false },
+                        { label: 'Insurance', data: currentAdmittedPatients.insurance, isCurrency: false },
+                        { label: 'Panel', data: currentAdmittedPatients.panel, isCurrency: false },
+                        { label: 'Corporate', data: currentAdmittedPatients.corporate, isCurrency: false },
+                        { label: 'Total', data: currentAdmittedPatients.total, isCurrency: false, isTotalRow: true },
                     ]
                 )}
             </div>
 
-            {/* 2. Admission */}
+            {/* 2. Admission (Volume Table: NO Rupee symbols!) */}
             <div id="admissions">
                 {renderTableSection(
                     '2. Admission',
                     'New patient admissions logged within selected period',
                     [
-                        { label: 'Cash', data: admissions.cash },
-                        { label: 'Insurance', data: admissions.insurance },
-                        { label: 'Panel', data: admissions.panel },
-                        { label: 'Corporate', data: admissions.corporate },
-                        { label: 'Total', data: admissions.total, isTotalRow: true },
+                        { label: 'Cash', data: admissions.cash, isCurrency: false },
+                        { label: 'Insurance', data: admissions.insurance, isCurrency: false },
+                        { label: 'Panel', data: admissions.panel, isCurrency: false },
+                        { label: 'Corporate', data: admissions.corporate, isCurrency: false },
+                        { label: 'Total', data: admissions.total, isCurrency: false, isTotalRow: true },
                     ]
                 )}
             </div>
 
-            {/* 3. Discharge */}
+            {/* 3. Discharge (Volume Table: NO Rupee symbols!) */}
             <div id="discharges">
                 {renderTableSection(
                     '3. Discharge',
                     'Patient discharge volume breakdown',
                     [
-                        { label: 'Cash', data: discharges.cash },
-                        { label: 'Insurance', data: discharges.insurance },
-                        { label: 'Panel', data: discharges.panel },
-                        { label: 'Corporate', data: discharges.corporate },
-                        { label: 'Total', data: discharges.total, isTotalRow: true },
+                        { label: 'Cash', data: discharges.cash, isCurrency: false },
+                        { label: 'Insurance', data: discharges.insurance, isCurrency: false },
+                        { label: 'Panel', data: discharges.panel, isCurrency: false },
+                        { label: 'Corporate', data: discharges.corporate, isCurrency: false },
+                        { label: 'Total', data: discharges.total, isCurrency: false, isTotalRow: true },
                     ]
                 )}
             </div>
 
-            {/* 4. Revenue */}
+            {/* 4. Revenue (Monetary Table: Rupee symbols included!) */}
             <div id="revenue">
                 {renderTableSection(
                     '4. Revenue Realization',
@@ -578,7 +576,7 @@ export default function PromoterDashboardPage() {
                     '11. ARPOB — Average Revenue Per Operational Bed',
                     'Operational bed capacity and average daily revenue yield (₹/Bed/Day)',
                     [
-                        { label: 'No. of Beds', data: arpob.noOfBeds },
+                        { label: 'No. of Beds', data: arpob.noOfBeds, isCurrency: false },
                         { label: 'April ARPOB', data: arpob.april, isCurrency: true },
                         { label: 'May ARPOB', data: arpob.may, isCurrency: true },
                         { label: 'June ARPOB', data: arpob.june, isCurrency: true },
