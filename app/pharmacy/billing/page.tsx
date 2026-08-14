@@ -122,6 +122,7 @@ export default function PharmacyPage() {
     const [doctorName, setDoctorName] = useState('');
     const [doctorOptions, setDoctorOptions] = useState<{ id: string; name: string; reg_no?: string }[]>([]);
     const [doctorRegNo, setDoctorRegNo] = useState('');
+    const [externalDoctorName, setExternalDoctorName] = useState('');
 
     const [showInvoiceModal, setShowInvoiceModal] = useState(false);
     const [invoiceResult, setInvoiceResult] = useState<any>(null);
@@ -488,7 +489,7 @@ export default function PharmacyPage() {
                 walkInContact: isWalkIn ? walkInContact : undefined,
                 walkInAddress: isWalkIn ? walkInAddress : undefined,
                 billDateTime: billDateTime || undefined,
-                doctorId: doctorId || undefined,
+                doctorId: (doctorId && doctorId !== '__external__') ? doctorId : undefined,
                 doctorName: doctorName || undefined,
                 paymentMethod: isHospitalUse ? 'Credit' : paymentMethod,
                 discountPct: discountMode === 'pct' ? (discountPct || undefined) : undefined,
@@ -524,6 +525,7 @@ export default function PharmacyPage() {
         setDoctorId('');
         setDoctorName('');
         setDoctorRegNo('');
+        setExternalDoctorName('');
         setIsHospitalUse(false);
     };
 
@@ -1666,18 +1668,41 @@ export default function PharmacyPage() {
                                                     <select
                                                         value={doctorId}
                                                         onChange={e => {
-                                                            const picked = doctorOptions.find(d => d.id === e.target.value);
-                                                            setDoctorId(picked?.id || '');
-                                                            setDoctorName(picked?.name || '');
-                                                            setDoctorRegNo(picked?.reg_no || '');
+                                                            const val = e.target.value;
+                                                            if (val === '__external__') {
+                                                                setDoctorId('__external__');
+                                                                setDoctorName('');
+                                                                setDoctorRegNo('');
+                                                                setExternalDoctorName('');
+                                                            } else {
+                                                                const picked = doctorOptions.find(d => d.id === val);
+                                                                setDoctorId(picked?.id || '');
+                                                                setDoctorName(picked?.name || '');
+                                                                setDoctorRegNo(picked?.reg_no || '');
+                                                                setExternalDoctorName('');
+                                                            }
                                                         }}
                                                         className="w-full text-xs p-2 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-400"
                                                     >
                                                         <option value="">— None —</option>
+                                                        <option value="__external__">✏️ Other / External Doctor</option>
                                                         {doctorOptions.map(d => (
                                                             <option key={d.id} value={d.id}>{formatDoctorName(d.name)}</option>
                                                         ))}
                                                     </select>
+                                                    {doctorId === '__external__' && (
+                                                        <input
+                                                            type="text"
+                                                            autoFocus
+                                                            placeholder="Enter doctor name…"
+                                                            value={externalDoctorName}
+                                                            onChange={e => {
+                                                                setExternalDoctorName(e.target.value);
+                                                                setDoctorName(e.target.value);
+                                                            }}
+                                                            className="mt-1.5 w-full text-xs p-2 bg-yellow-50 border border-yellow-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-400 placeholder-gray-400"
+                                                        />
+                                                    )}
                                                 </div>
                                             </div>
 

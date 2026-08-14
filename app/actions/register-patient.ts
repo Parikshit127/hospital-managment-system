@@ -18,7 +18,7 @@ import { logger, maskEmail } from '@/app/lib/logger';
 export async function checkDuplicatePatient(phone: string) {
     try {
         const { db, organizationId } = await requireTenantContext();
-        const cleaned = phone.replace(/[\s\-+91]/g, '').slice(-10);
+        const cleaned = phone.replace(/\D/g, '').slice(-10);
 
         if (cleaned.length < 10) {
             return { success: true, data: [] };
@@ -128,7 +128,7 @@ export async function registerPatient(formData: FormData) {
         // Block duplicate registration unless explicitly allowed
         const allowDuplicate = formData.get('allowDuplicate') === 'true';
         if (!allowDuplicate) {
-            const cleaned = rawData.phone.replace(/[\s\-+91]/g, '').slice(-10);
+            const cleaned = rawData.phone.replace(/\D/g, '').slice(-10);
             if (cleaned.length >= 10) {
                 const existingByPhone = await (db.oPD_REG.findFirst as any)({
                     where: {
