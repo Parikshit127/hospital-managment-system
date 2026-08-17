@@ -234,6 +234,8 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
     const [colColMethod, setColColMethod] = useState('');
     const [colAmountMin, setColAmountMin] = useState('');
     const [colDate, setColDate] = useState('');
+    const [viewMode, setViewMode] = useState<'patient' | 'payment'>('patient');
+    const [openPatientKey, setOpenPatientKey] = useState<string | null>(null);
 
     const uniquePaymentMethods: string[] = Array.from(new Set<string>(payments.map((p: any) => canonicalTender(p.payment_method)))).sort();
 
@@ -254,6 +256,34 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
     function clearColFilters() {
         setColReceipt(''); setColPatient(''); setColColMethod(''); setColAmountMin(''); setColDate('');
     }
+
+    // Group the same filtered payments by patient so collections can be reviewed
+    // per-patient instead of as one long chronological list.
+    type PatientGroup = {
+        key: string; patientName: string; patientId: string;
+        payments: any[]; total: number; firstDate: Date; lastDate: Date;
+    };
+    const patientGroups: PatientGroup[] = (() => {
+        const map = new Map<string, PatientGroup>();
+        filteredPayments.forEach((p: any) => {
+            const patientId = p.invoice?.patient?.patient_id;
+            const patientName = p.invoice?.patient?.full_name || 'Walk-in / No Patient';
+            const key = patientId || patientName;
+            const dt = new Date(p.created_at);
+            let group = map.get(key);
+            if (!group) {
+                group = { key, patientName, patientId: patientId || '-', payments: [], total: 0, firstDate: dt, lastDate: dt };
+                map.set(key, group);
+            }
+            group.payments.push(p);
+            group.total += Number(p.amount);
+            if (dt < group.firstDate) group.firstDate = dt;
+            if (dt > group.lastDate) group.lastDate = dt;
+        });
+        return Array.from(map.values())
+            .map((g) => ({ ...g, payments: [...g.payments].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()) }))
+            .sort((a, b) => b.lastDate.getTime() - a.lastDate.getTime());
+    })();
 
     async function handleCollectionsExcelExport() {
         setExcelExporting(true);
@@ -716,6 +746,17 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
                     <option value="Cheque">Cheque</option>
                     <option value="Razorpay">Razorpay</option>
                 </select>
+                <div className="flex items-center gap-1.5 ml-auto">
+                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider">View</span>
+                    <div className="flex items-center gap-1 bg-gray-50 border border-gray-200 rounded-lg p-1">
+                        {(['patient', 'payment'] as const).map((v) => (
+                            <button key={v} onClick={() => setViewMode(v)}
+                                className={`px-3 py-1.5 text-xs font-bold rounded-md transition ${viewMode === v ? 'bg-emerald-600 text-white' : 'text-gray-500 hover:bg-white'}`}>
+                                {v === 'patient' ? 'Patient-wise' : 'Payment-wise'}
+                            </button>
+                        ))}
+                    </div>
+                </div>
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -756,7 +797,9 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
                 <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
                     <div className="flex items-center gap-3">
                         <h3 className="font-semibold text-gray-900">
-                            Payment Details ({hasColFilter ? `${filteredPayments.length} of ${payments.length}` : payments.length})
+                            {viewMode === 'patient'
+                                ? `Patient-wise Collections (${patientGroups.length} patient${patientGroups.length !== 1 ? 's' : ''})`
+                                : `Payment Details (${hasColFilter ? `${filteredPayments.length} of ${payments.length}` : payments.length})`}
                         </h3>
                         {hasColFilter && (
                             <button onClick={clearColFilters} className="text-xs text-rose-500 hover:text-rose-700 font-medium underline">
@@ -788,92 +831,167 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
                         </button>
                     </div>
                 </div>
-                <div className="overflow-x-auto">
-                    <table className="w-full">
-                        <thead>
-                            <tr className="bg-gray-50 border-b border-gray-100">
-                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Receipt</th>
-                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Patient</th>
-                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Method</th>
-                                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Amount</th>
-                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Date</th>
-                            </tr>
-                            <tr className="bg-gray-50/60 border-b border-gray-200">
-                                <td className="px-3 py-2">
-                                    <input
-                                        type="text"
-                                        value={colReceipt}
-                                        onChange={e => setColReceipt(e.target.value)}
-                                        placeholder="Search receipt…"
-                                        className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-emerald-400 bg-white placeholder-gray-300"
-                                    />
-                                </td>
-                                <td className="px-3 py-2">
-                                    <input
-                                        type="text"
-                                        value={colPatient}
-                                        onChange={e => setColPatient(e.target.value)}
-                                        placeholder="Search patient…"
-                                        className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-emerald-400 bg-white placeholder-gray-300"
-                                    />
-                                </td>
-                                <td className="px-3 py-2">
-                                    <select
-                                        value={colColMethod}
-                                        onChange={e => setColColMethod(e.target.value)}
-                                        className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-emerald-400 bg-white text-gray-600"
-                                    >
-                                        <option value="">All methods</option>
-                                        {uniquePaymentMethods.map((m: string) => (
-                                            <option key={m} value={m}>{m}</option>
-                                        ))}
-                                    </select>
-                                </td>
-                                <td className="px-3 py-2">
-                                    <input
-                                        type="number"
-                                        value={colAmountMin}
-                                        onChange={e => setColAmountMin(e.target.value)}
-                                        placeholder="Min ₹"
-                                        min={0}
-                                        className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-emerald-400 bg-white placeholder-gray-300 text-right"
-                                    />
-                                </td>
-                                <td className="px-3 py-2">
-                                    <input
-                                        type="date"
-                                        value={colDate}
-                                        onChange={e => setColDate(e.target.value)}
-                                        className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-emerald-400 bg-white text-gray-600"
-                                    />
-                                </td>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-100">
-                            {filteredPayments.length === 0 ? (
-                                <tr><td colSpan={5} className="px-6 py-10 text-center text-sm text-gray-400">No payments match the current filters</td></tr>
-                            ) : filteredPayments.map((p: any) => (
-                                <tr key={p.id}
-                                    onClick={() => window.open(`/api/payment/${p.id}/receipt`, '_blank')}
-                                    title="Open receipt"
-                                    className="hover:bg-emerald-50/60 cursor-pointer transition-colors">
-                                    <td className="px-4 py-3 text-sm font-mono text-emerald-700 hover:underline">{p.receipt_number}</td>
-                                    <td className="px-4 py-3 text-sm text-gray-900">{p.invoice?.patient?.full_name || '-'}</td>
-                                    <td className="px-4 py-3 text-sm text-gray-600">{(() => {
-                                        if (!isDepositSettlement(p)) return canonicalTender(p.payment_method);
-                                        const parts = [
-                                            p.deposit_is_ipd != null ? (p.deposit_is_ipd ? 'IPD' : 'OPD') : null,
-                                            p.deposit_tender ? canonicalTender(p.deposit_tender) : null,
-                                        ].filter(Boolean);
-                                        return parts.length ? `Deposit (${parts.join(' · ')})` : 'Deposit';
-                                    })()}</td>
-                                    <td className="px-4 py-3 text-sm font-semibold text-gray-900 text-right">{fmt(Number(p.amount))}</td>
-                                    <td className="px-4 py-3 text-sm text-gray-500">{new Date(p.created_at).toLocaleDateString('en-GB')}</td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
+
+                {/* Shared filters — apply to both Patient-wise and Payment-wise views */}
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 px-6 py-3 bg-gray-50/60 border-b border-gray-100">
+                    <input
+                        type="text"
+                        value={colPatient}
+                        onChange={e => setColPatient(e.target.value)}
+                        placeholder="Search patient…"
+                        className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-emerald-400 bg-white placeholder-gray-300"
+                    />
+                    <input
+                        type="text"
+                        value={colReceipt}
+                        onChange={e => setColReceipt(e.target.value)}
+                        placeholder="Search receipt…"
+                        className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-emerald-400 bg-white placeholder-gray-300"
+                    />
+                    <select
+                        value={colColMethod}
+                        onChange={e => setColColMethod(e.target.value)}
+                        className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-emerald-400 bg-white text-gray-600"
+                    >
+                        <option value="">All methods</option>
+                        {uniquePaymentMethods.map((m: string) => (
+                            <option key={m} value={m}>{m}</option>
+                        ))}
+                    </select>
+                    <input
+                        type="number"
+                        value={colAmountMin}
+                        onChange={e => setColAmountMin(e.target.value)}
+                        placeholder="Min ₹"
+                        min={0}
+                        className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-emerald-400 bg-white placeholder-gray-300 text-right"
+                    />
+                    <input
+                        type="date"
+                        value={colDate}
+                        onChange={e => setColDate(e.target.value)}
+                        className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-emerald-400 bg-white text-gray-600"
+                    />
                 </div>
+
+                {viewMode === 'patient' ? (
+                    <div className="overflow-x-auto">
+                        <table className="w-full">
+                            <thead>
+                                <tr className="bg-gray-50 border-b border-gray-100">
+                                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Patient</th>
+                                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">MRN</th>
+                                    <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Payments</th>
+                                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">First Collection</th>
+                                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Last Collection</th>
+                                    <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Total Collected</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                                {patientGroups.length === 0 ? (
+                                    <tr><td colSpan={6} className="px-6 py-10 text-center text-sm text-gray-400">No payments match the current filters</td></tr>
+                                ) : patientGroups.map((g) => {
+                                    const isOpen = openPatientKey === g.key;
+                                    return (
+                                        <Fragment key={g.key}>
+                                            <tr
+                                                onClick={() => setOpenPatientKey(isOpen ? null : g.key)}
+                                                title="Click to see all payments from this patient"
+                                                className="hover:bg-emerald-50/60 cursor-pointer transition-colors">
+                                                <td className="px-4 py-3 text-sm font-medium text-gray-900">
+                                                    <span className="inline-flex items-center gap-1.5">
+                                                        {isOpen ? <ChevronDown className="h-3.5 w-3.5 text-gray-400" /> : <ChevronRight className="h-3.5 w-3.5 text-gray-400" />}
+                                                        {g.patientName}
+                                                    </span>
+                                                </td>
+                                                <td className="px-4 py-3 text-sm text-gray-500 font-mono">{g.patientId}</td>
+                                                <td className="px-4 py-3 text-sm text-gray-700 text-right">{g.payments.length}</td>
+                                                <td className="px-4 py-3 text-sm text-gray-500">{g.firstDate.toLocaleDateString('en-GB')}</td>
+                                                <td className="px-4 py-3 text-sm text-gray-500">{g.lastDate.toLocaleDateString('en-GB')}</td>
+                                                <td className="px-4 py-3 text-sm font-bold text-gray-900 text-right">{fmt(g.total)}</td>
+                                            </tr>
+                                            {isOpen && (
+                                                <tr className="bg-gray-50/60">
+                                                    <td colSpan={6} className="px-6 py-4">
+                                                        <table className="w-full">
+                                                            <thead>
+                                                                <tr className="text-left">
+                                                                    <th className="px-3 py-1.5 text-[10px] font-black text-gray-400 uppercase tracking-wider">Date</th>
+                                                                    <th className="px-3 py-1.5 text-[10px] font-black text-gray-400 uppercase tracking-wider">Receipt</th>
+                                                                    <th className="px-3 py-1.5 text-[10px] font-black text-gray-400 uppercase tracking-wider">Invoice</th>
+                                                                    <th className="px-3 py-1.5 text-[10px] font-black text-gray-400 uppercase tracking-wider">Method</th>
+                                                                    <th className="px-3 py-1.5 text-[10px] font-black text-gray-400 uppercase tracking-wider text-right">Amount</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody className="divide-y divide-gray-100">
+                                                                {g.payments.map((p: any) => (
+                                                                    <tr key={p.id}
+                                                                        onClick={(e) => { e.stopPropagation(); window.open(`/api/payment/${p.id}/receipt`, '_blank'); }}
+                                                                        title="Open receipt"
+                                                                        className="hover:bg-white cursor-pointer transition-colors">
+                                                                        <td className="px-3 py-2 text-xs text-gray-600">{new Date(p.created_at).toLocaleDateString('en-GB')}</td>
+                                                                        <td className="px-3 py-2 text-xs font-mono text-emerald-700 hover:underline">{p.receipt_number}</td>
+                                                                        <td className="px-3 py-2 text-xs text-gray-600">{p.invoice?.invoice_number || '-'}</td>
+                                                                        <td className="px-3 py-2 text-xs text-gray-600">{(() => {
+                                                                            if (!isDepositSettlement(p)) return canonicalTender(p.payment_method);
+                                                                            const parts = [
+                                                                                p.deposit_is_ipd != null ? (p.deposit_is_ipd ? 'IPD' : 'OPD') : null,
+                                                                                p.deposit_tender ? canonicalTender(p.deposit_tender) : null,
+                                                                            ].filter(Boolean);
+                                                                            return parts.length ? `Deposit (${parts.join(' · ')})` : 'Deposit';
+                                                                        })()}</td>
+                                                                        <td className="px-3 py-2 text-xs font-semibold text-gray-900 text-right">{fmt(Number(p.amount))}</td>
+                                                                    </tr>
+                                                                ))}
+                                                            </tbody>
+                                                        </table>
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </Fragment>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                ) : (
+                    <div className="overflow-x-auto">
+                        <table className="w-full">
+                            <thead>
+                                <tr className="bg-gray-50 border-b border-gray-100">
+                                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Receipt</th>
+                                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Patient</th>
+                                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Method</th>
+                                    <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Amount</th>
+                                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Date</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                                {filteredPayments.length === 0 ? (
+                                    <tr><td colSpan={5} className="px-6 py-10 text-center text-sm text-gray-400">No payments match the current filters</td></tr>
+                                ) : filteredPayments.map((p: any) => (
+                                    <tr key={p.id}
+                                        onClick={() => window.open(`/api/payment/${p.id}/receipt`, '_blank')}
+                                        title="Open receipt"
+                                        className="hover:bg-emerald-50/60 cursor-pointer transition-colors">
+                                        <td className="px-4 py-3 text-sm font-mono text-emerald-700 hover:underline">{p.receipt_number}</td>
+                                        <td className="px-4 py-3 text-sm text-gray-900">{p.invoice?.patient?.full_name || '-'}</td>
+                                        <td className="px-4 py-3 text-sm text-gray-600">{(() => {
+                                            if (!isDepositSettlement(p)) return canonicalTender(p.payment_method);
+                                            const parts = [
+                                                p.deposit_is_ipd != null ? (p.deposit_is_ipd ? 'IPD' : 'OPD') : null,
+                                                p.deposit_tender ? canonicalTender(p.deposit_tender) : null,
+                                            ].filter(Boolean);
+                                            return parts.length ? `Deposit (${parts.join(' · ')})` : 'Deposit';
+                                        })()}</td>
+                                        <td className="px-4 py-3 text-sm font-semibold text-gray-900 text-right">{fmt(Number(p.amount))}</td>
+                                        <td className="px-4 py-3 text-sm text-gray-500">{new Date(p.created_at).toLocaleDateString('en-GB')}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
             </div>
         </>
     );
