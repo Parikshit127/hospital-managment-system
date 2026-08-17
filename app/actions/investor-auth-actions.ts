@@ -13,9 +13,12 @@ export async function investorLogin(prevState: any, formData: FormData) {
         return { success: false, error: 'Please enter both username and password' };
     }
 
-    // Explicit Investor credentials specified by user: inv@123 / inv123
-    const isValidUsername = username.toLowerCase() === 'inv@123';
-    const isValidPassword = password === 'inv123';
+    // Investor credentials configurable via environment variables (falls back to demo defaults)
+    const validUsername = process.env.INVESTOR_USERNAME || 'inv@123';
+    const validPassword = process.env.INVESTOR_PASSWORD || 'inv123';
+
+    const isValidUsername = username.toLowerCase() === validUsername.toLowerCase();
+    const isValidPassword = password === validPassword;
 
     if (!isValidUsername || !isValidPassword) {
         return { success: false, error: 'Invalid investor credentials' };
@@ -23,7 +26,7 @@ export async function investorLogin(prevState: any, formData: FormData) {
 
     const cookieStore = await cookies();
     cookieStore.set(INVESTOR_COOKIE_NAME, JSON.stringify({
-        user: 'inv@123',
+        user: username,
         role: 'investor',
         name: 'Promoter / Investor',
         loggedInAt: new Date().toISOString(),

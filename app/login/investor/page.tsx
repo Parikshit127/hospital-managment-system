@@ -8,8 +8,8 @@ import { ShieldCheck, Lock, User, Eye, EyeOff, Building2, ArrowRight } from 'luc
 export default function InvestorLoginPage() {
     const router = useRouter();
     const [isPending, startTransition] = useTransition();
-    const [username, setUsername] = useState('inv@123');
-    const [password, setPassword] = useState('inv123');
+    const [username, setUsername] = useState('');
+    const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -123,7 +123,7 @@ export default function InvestorLoginPage() {
                                         type="text"
                                         value={username}
                                         onChange={(e) => setUsername(e.target.value)}
-                                        placeholder="inv@123"
+                                        placeholder="Enter investor username"
                                         required
                                         className="w-full pl-11 pr-4 py-3.5 bg-[#faf9f6] border border-slate-200 rounded-full focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 text-sm text-[#0a1e42] font-semibold tracking-wide placeholder-slate-400"
                                     />
@@ -152,14 +152,6 @@ export default function InvestorLoginPage() {
                                         {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                                     </button>
                                 </div>
-                            </div>
-
-                            {/* Credentials Helper Pill */}
-                            <div className="p-3 bg-emerald-50/70 border border-emerald-200/80 rounded-2xl text-xs flex items-center justify-between">
-                                <span className="text-slate-600 font-medium">Default Credentials:</span>
-                                <span className="font-mono font-bold text-emerald-800 bg-white px-2 py-0.5 rounded border border-emerald-200">
-                                    inv@123 / inv123
-                                </span>
                             </div>
 
                             <button
