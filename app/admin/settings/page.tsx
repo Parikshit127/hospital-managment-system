@@ -145,6 +145,27 @@ export default function OrgSettingsPage() {
                     </div>
                 </div>
 
+                {/* Investor Portal Access Section */}
+                <div className="bg-[#faf9f6] rounded-2xl border border-emerald-200 p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                        <div className="p-3 bg-emerald-100 text-emerald-800 rounded-xl font-bold">
+                            <ShieldAlert className="h-6 w-6" />
+                        </div>
+                        <div>
+                            <h3 className="text-base font-black text-gray-900">Investor Portal Credentials & 24h Temp Access</h3>
+                            <p className="text-xs text-gray-600 font-medium mt-0.5">
+                                Manage investor suite logins (`investor` / `inv@4321`) and generate temporary 24-hour access keys.
+                            </p>
+                        </div>
+                    </div>
+                    <a
+                        href="/admin/settings/investors"
+                        className="px-5 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl shadow transition-all whitespace-nowrap"
+                    >
+                        Manage Investor Access →
+                    </a>
+                </div>
+
                 {/* Sticky Footer */}
                 <div className="fixed bottom-0 left-0 lg:left-64 right-0 p-4 bg-white/80 backdrop-blur-md border-t border-gray-200 flex justify-end gap-4 z-40">
                     <button type="button" onClick={() => loadData()} className="px-6 py-3 font-bold text-gray-500 hover:bg-gray-100 rounded-xl transition-colors text-sm">Discard Changes</button>

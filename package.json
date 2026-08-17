@@ -24,6 +24,7 @@
     "db:migrate:dev": "prisma migrate dev",
     "db:status": "prisma migrate status",
     "db:backup": "mkdir -p backups && pg_dump \"$DIRECT_URL\" --format=custom --no-owner --no-acl --file \"backups/hospitalos-$(date +%Y%m%d-%H%M%S).dump\"",
+    "setup-investor": "npx tsx scripts/setup-investor-creds.ts",
     "postinstall": "prisma generate"
   },
   "prisma": {

@@ -45,7 +45,7 @@ export default async function InvestorLayout({ children }: { children: React.Rea
                         </div>
                         <div>
                             <p className="text-xs font-black text-[#0a1e42]">{session.name || 'Promoter'}</p>
-                            <p className="text-[10px] text-slate-500 font-medium">inv@123 • Executive Session</p>
+                            <p className="text-[10px] text-slate-500 font-medium">{session.user || 'investor'} • Executive Session</p>
                         </div>
                     </div>
 

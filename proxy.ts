@@ -239,7 +239,14 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // 3.5. Investor portal — standalone auth realm.
+  // Authenticates against its OWN `investor_session` cookie and is guarded by app/investor/layout.tsx.
+  if (pathname.startsWith("/investor") || pathname.startsWith("/login/investor")) {
+    return NextResponse.next();
+  }
+
   // 4. Public pages (no auth required)
+
   if (pathname === "/opd/display" || pathname.startsWith("/hospital")) {
     return NextResponse.next();
   }

@@ -5916,3 +5916,16 @@ model HospitalBankAccount {
   @@index([organizationId])
   @@map("hospital_bank_accounts")
 }
+
+model InvestorCredential {
+  id           String    @id @default(uuid())
+  username     String    @unique
+  password     String
+  is_temporary Boolean   @default(false)
+  expires_at   DateTime?
+  created_at   DateTime  @default(now())
+  created_by   String?   @default("system")
+
+  @@map("investor_credentials")
+}
+
