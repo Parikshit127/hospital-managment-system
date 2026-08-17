@@ -247,6 +247,22 @@ export default function ReceptionPage() {
         event.preventDefault();
         setIsSubmitting(true);
         const formData = new FormData(event.currentTarget);
+
+        // --- Pre-submit duplicate guard ---
+        // Always check on submit (catches cases where the on-change check was missed)
+        if (!allowDuplicate) {
+            const phoneVal = (formData.get('phone') as string || '').replace(/\D/g, '').slice(-10);
+            if (phoneVal.length >= 10) {
+                const dupResult = await checkDuplicatePatient(phoneVal);
+                if (dupResult.success && dupResult.data.length > 0) {
+                    setDuplicates(dupResult.data);
+                    setShowDuplicateWarning(true);
+                    setIsSubmitting(false);
+                    return; // Block submission — let the user decide via the modal
+                }
+            }
+        }
+
         if (allowDuplicate) {
             formData.set('allowDuplicate', 'true');
         }
