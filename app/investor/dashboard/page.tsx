@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { getInvestorDashboardData, type InvestorDashboardData, type UnitMetrics } from '@/app/actions/investor-actions';
 import {
     Activity,
@@ -15,8 +15,17 @@ import {
     RefreshCw,
     Building2,
     Clock,
-    Award
+    Award,
+    ChevronDown,
+    ChevronRight,
+    Check
 } from 'lucide-react';
+
+const UNIT_OPTIONS = [
+    { code: 'axten', name: 'Axten Hospital (20 Beds)', shortName: 'Axten' },
+    { code: 'avise', name: 'Avise Hospital (50 Beds)', shortName: 'Avise' },
+    { code: 'axtenHq', name: 'Axten HQ (0 Beds)', shortName: 'Axten HQ' },
+] as const;
 
 // Format numbers: default is currency=false (no ₹ symbol) so counts render as pure numbers!
 function fmtINR(n: number, isCurrency = false): string {
@@ -28,35 +37,96 @@ function fmtINR(n: number, isCurrency = false): string {
 export default function PromoterDashboardPage() {
     const [data, setData] = useState<InvestorDashboardData | null>(null);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
     const [filterType, setFilterType] = useState<'day' | 'month' | 'year' | 'custom'>('month');
-    const [selectedUnit, setSelectedUnit] = useState<string>('all');
+    const [selectedUnits, setSelectedUnits] = useState<string[]>(UNIT_OPTIONS.map(u => u.code));
+    const [unitMenuOpen, setUnitMenuOpen] = useState(false);
+    const unitMenuRef = useRef<HTMLDivElement>(null);
     const [fromDate, setFromDate] = useState('2026-04-01');
     const [toDate, setToDate] = useState('2026-07-31');
+    const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
+
+    const isAllUnitsSelected = selectedUnits.length === UNIT_OPTIONS.length;
+    const selectedUnitsLabel = isAllUnitsSelected
+        ? 'All Units (Consolidated)'
+        : selectedUnits.length === 0
+            ? 'No Units Selected'
+            : UNIT_OPTIONS.filter(u => selectedUnits.includes(u.code)).map(u => u.shortName).join(' + ');
+
+    const toggleUnit = (code: string) => {
+        setSelectedUnits((prev) =>
+            prev.includes(code) ? prev.filter((c) => c !== code) : [...prev, code]
+        );
+    };
+
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            if (unitMenuRef.current && !unitMenuRef.current.contains(e.target as Node)) {
+                setUnitMenuOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    const toggleSection = (key: string) => {
+        setExpandedSections((prev) => {
+            const next = new Set(prev);
+            if (next.has(key)) next.delete(key);
+            else next.add(key);
+            return next;
+        });
+    };
 
     const loadData = async () => {
         setLoading(true);
-        const res = await getInvestorDashboardData({ filterType, selectedUnit, fromDate, toDate });
-        if (res.success && res.data) {
-            setData(res.data);
+        setError(null);
+        try {
+            const res = await getInvestorDashboardData({ filterType, selectedUnit: isAllUnitsSelected ? 'all' : selectedUnits.join(','), fromDate, toDate });
+            if (res.success && res.data) {
+                setData(res.data);
+            } else {
+                setError(res.error || 'Failed to load dashboard data');
+            }
+        } catch (err: any) {
+            setError(err.message || 'Unexpected error loading data');
+        } finally {
+            setLoading(false);
         }
-        setLoading(false);
     };
 
     useEffect(() => {
         loadData();
-    }, [filterType, selectedUnit]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [filterType]);
 
-    if (loading || !data) {
+    if (loading) {
         return (
             <div className="min-h-[70vh] flex flex-col items-center justify-center gap-4 text-slate-500">
                 <div className="w-10 h-10 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin" />
-                <p className="text-sm font-bold animate-pulse text-[#0a1e42]">Aggregating AvaniOS Executive Analytics...</p>
+                <p className="text-sm font-bold animate-pulse text-[#0a1e42]">Aggregating AxtenOS Executive Analytics...</p>
+            </div>
+        );
+    }
+
+    if (error || !data) {
+        return (
+            <div className="min-h-[70vh] flex flex-col items-center justify-center gap-4">
+                <div className="bg-red-50 border border-red-200 rounded-2xl p-8 max-w-lg text-center">
+                    <p className="text-lg font-black text-red-800 mb-2">Failed to Load Dashboard</p>
+                    <p className="text-sm text-red-600 font-medium mb-4">{error || 'No data returned from server'}</p>
+                    <button
+                        onClick={loadData}
+                        className="px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 transition-colors cursor-pointer"
+                    >
+                        Retry
+                    </button>
+                </div>
             </div>
         );
     }
 
     const {
-        units,
         executiveKPIs,
         currentAdmittedPatients,
         admissions,
@@ -76,9 +146,9 @@ export default function PromoterDashboardPage() {
     const exportToCSV = () => {
         if (!data) return;
         const csvRows = [
-            ['AvaniOS Promoter Dashboard — Consolidated Executive Financial Report'],
+            ['AxtenOS Promoter Dashboard — Consolidated Executive Financial Report'],
             ['Filter', filterType.toUpperCase()],
-            ['Selected Unit', selectedUnit.toUpperCase()],
+            ['Selected Units', selectedUnitsLabel],
             ['Date Range', `${fromDate} to ${toDate}`],
             [],
             ['Unit / Category', 'Axten Hospital', 'Avise Hospital', 'Axten HQ', 'Consolidated Total'],
@@ -127,43 +197,70 @@ export default function PromoterDashboardPage() {
         const encodedUri = encodeURI(csvContent);
         const link = document.createElement('a');
         link.setAttribute('href', encodedUri);
-        link.setAttribute('download', `AvaniOS_Promoter_Report_${selectedUnit}_${filterType}_${new Date().toISOString().slice(0, 10)}.csv`);
+        link.setAttribute('download', `AxtenOS_Promoter_Report_${isAllUnitsSelected ? 'all' : selectedUnits.join('-')}_${filterType}_${new Date().toISOString().slice(0, 10)}.csv`);
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
     };
 
     const renderTableSection = (
+        key: string,
         title: string,
         subtitle: string,
         rows: Array<{ label: string; data: UnitMetrics; isCurrency?: boolean; isPercentage?: boolean; isTotalRow?: boolean }>
-    ) => (
+    ) => {
+        const isExpanded = expandedSections.has(key);
+        const totalRow = rows.find((r) => r.isTotalRow) || rows[rows.length - 1];
+        const totalDisplay = totalRow.isPercentage
+            ? `${totalRow.data.total}%`
+            : fmtINR(
+                  isAllUnitsSelected
+                      ? totalRow.data.total
+                      : selectedUnits.reduce((sum, u) => sum + (totalRow.data[u as 'axten' | 'avise' | 'axtenHq'] || 0), 0),
+                  totalRow.isCurrency
+              );
+
+        return (
         <div className="bg-white border border-[#ede9e2] rounded-2xl overflow-hidden shadow-sm mb-8 print:border-slate-300 print:shadow-none print:mb-6 print:break-inside-avoid">
-            <div className="bg-[#faf9f6] border-b border-[#ede9e2] px-6 py-4 flex items-center justify-between print:py-2 print:px-4">
+            <button
+                type="button"
+                onClick={() => toggleSection(key)}
+                className="w-full text-left bg-[#faf9f6] border-b border-[#ede9e2] px-6 py-4 flex items-center justify-between print:py-2 print:px-4 cursor-pointer hover:bg-[#f1efe9] transition-colors print:pointer-events-none"
+            >
                 <div>
                     <h3 className="text-sm font-black text-[#0a1e42] tracking-wide uppercase flex items-center gap-2 print:text-xs">
                         <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 print:hidden" />
                         {title}
                     </h3>
                     <p className="text-xs text-slate-500 font-medium mt-0.5 print:text-[10px]">{subtitle}</p>
+                    {!isExpanded && (
+                        <p className="text-sm font-black text-emerald-800 mt-2 print:hidden">
+                            {isAllUnitsSelected ? 'Consolidated Total' : 'Selected Units Total'}: {totalDisplay}
+                        </p>
+                    )}
                 </div>
-            </div>
-            <div className="overflow-x-auto">
+                {isExpanded ? (
+                    <ChevronDown className="w-4 h-4 text-slate-400 shrink-0 print:hidden" />
+                ) : (
+                    <ChevronRight className="w-4 h-4 text-slate-400 shrink-0 print:hidden" />
+                )}
+            </button>
+            <div className={`overflow-x-auto ${isExpanded ? '' : 'hidden print:block'}`}>
                 <table className="w-full text-left border-collapse">
                     <thead>
                         <tr className="bg-[#f1f5f9] border-b border-[#e2e8f0] text-[11px] font-black text-[#0a1e42] uppercase tracking-wider print:text-[10px]">
                             <th className="py-3.5 px-6 min-w-[200px] print:py-2 print:px-4">Type / Category</th>
-                            <th className={`py-3.5 px-4 text-right min-w-[130px] print:py-2 ${selectedUnit === 'axten' ? 'bg-emerald-100/80 text-emerald-950 font-black' : 'text-slate-700'}`}>
+                            <th className={`py-3.5 px-4 text-right min-w-[130px] print:py-2 ${selectedUnits.includes('axten') ? 'bg-emerald-100/80 text-emerald-950 font-black' : 'text-slate-700'}`}>
                                 Axten Hospital
                             </th>
-                            <th className={`py-3.5 px-4 text-right min-w-[130px] print:py-2 ${selectedUnit === 'avise' ? 'bg-indigo-100/80 text-indigo-950 font-black' : 'text-slate-700'}`}>
+                            <th className={`py-3.5 px-4 text-right min-w-[130px] print:py-2 ${selectedUnits.includes('avise') ? 'bg-indigo-100/80 text-indigo-950 font-black' : 'text-slate-700'}`}>
                                 Avise Hospital
                             </th>
-                            <th className={`py-3.5 px-4 text-right min-w-[130px] print:py-2 ${selectedUnit === 'axtenHq' ? 'bg-amber-100/80 text-amber-950 font-black' : 'text-slate-700'}`}>
+                            <th className={`py-3.5 px-4 text-right min-w-[130px] print:py-2 ${selectedUnits.includes('axtenHq') ? 'bg-amber-100/80 text-amber-950 font-black' : 'text-slate-700'}`}>
                                 Axten HQ
                             </th>
-                            <th className={`py-3.5 px-6 text-right min-w-[160px] font-black border-l border-[#e2e8f0] print:py-2 print:px-4 ${selectedUnit === 'all' ? 'bg-[#ecfdf5] text-[#065f46]' : 'bg-[#f1f5f9] text-[#0a1e42]'}`}>
-                                Consolidated Total
+                            <th className="py-3.5 px-6 text-right min-w-[160px] font-black border-l border-[#e2e8f0] print:py-2 print:px-4 bg-[#ecfdf5] text-[#065f46]">
+                                {isAllUnitsSelected ? 'Consolidated Total' : 'Selected Units Total'}
                             </th>
                         </tr>
                     </thead>
@@ -183,13 +280,13 @@ export default function PromoterDashboardPage() {
                                         {isTotal && <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 print:hidden" />}
                                         <span>{row.label}</span>
                                     </td>
-                                    <td className={`py-3 px-4 text-right font-mono print:py-1.5 ${selectedUnit === 'axten' ? (isTotal ? 'bg-[#061329]' : 'bg-emerald-50/70 font-black text-emerald-950') : ''}`}>
+                                    <td className={`py-3 px-4 text-right font-mono print:py-1.5 ${selectedUnits.includes('axten') ? (isTotal ? 'bg-[#061329]' : 'bg-emerald-50/70 font-black text-emerald-950') : ''}`}>
                                         {row.isPercentage ? `${row.data.axten}%` : fmtINR(row.data.axten, row.isCurrency)}
                                     </td>
-                                    <td className={`py-3 px-4 text-right font-mono print:py-1.5 ${selectedUnit === 'avise' ? (isTotal ? 'bg-[#061329]' : 'bg-indigo-50/70 font-black text-indigo-950') : ''}`}>
+                                    <td className={`py-3 px-4 text-right font-mono print:py-1.5 ${selectedUnits.includes('avise') ? (isTotal ? 'bg-[#061329]' : 'bg-indigo-50/70 font-black text-indigo-950') : ''}`}>
                                         {row.isPercentage ? `${row.data.avise}%` : fmtINR(row.data.avise, row.isCurrency)}
                                     </td>
-                                    <td className={`py-3 px-4 text-right font-mono print:py-1.5 ${selectedUnit === 'axtenHq' ? (isTotal ? 'bg-[#061329]' : 'bg-amber-50/70 font-black text-amber-950') : ''}`}>
+                                    <td className={`py-3 px-4 text-right font-mono print:py-1.5 ${selectedUnits.includes('axtenHq') ? (isTotal ? 'bg-[#061329]' : 'bg-amber-50/70 font-black text-amber-950') : ''}`}>
                                         {row.isPercentage ? `${row.data.axtenHq}%` : fmtINR(row.data.axtenHq, row.isCurrency)}
                                     </td>
                                     <td className={`py-3 px-6 text-right font-mono font-bold border-l print:py-1.5 print:px-4 ${
@@ -197,7 +294,14 @@ export default function PromoterDashboardPage() {
                                             ? 'border-slate-800 text-emerald-400 bg-[#061329]'
                                             : 'border-[#ede9e2] text-emerald-800 bg-[#ecfdf5]/60 font-black'
                                     }`}>
-                                        {row.isPercentage ? `${row.data.total}%` : fmtINR(row.data.total, row.isCurrency)}
+                                        {row.isPercentage
+                                            ? `${row.data.total}%`
+                                            : fmtINR(
+                                                  isAllUnitsSelected
+                                                      ? row.data.total
+                                                      : selectedUnits.reduce((sum, u) => sum + (row.data[u as 'axten' | 'avise' | 'axtenHq'] || 0), 0),
+                                                  row.isCurrency
+                                              )}
                                     </td>
                                 </tr>
                             );
@@ -206,7 +310,8 @@ export default function PromoterDashboardPage() {
                 </table>
             </div>
         </div>
-    );
+        );
+    };
 
     return (
         <div className="space-y-6">
@@ -214,13 +319,13 @@ export default function PromoterDashboardPage() {
             <div className="hidden print:block border-b-2 border-[#0a1e42] pb-4 mb-6">
                 <div className="flex justify-between items-start">
                     <div>
-                        <h1 className="text-2xl font-black text-[#0a1e42]">AVANIOS HEALTHCARE SYSTEMS</h1>
+                        <h1 className="text-2xl font-black text-[#0a1e42]">AXTENOS HEALTHCARE SYSTEMS</h1>
                         <p className="text-sm font-bold text-emerald-700 uppercase">Executive Promoter Audit Report — Consolidated Multi-Unit Analysis</p>
                     </div>
                     <div className="text-right text-xs text-slate-600 font-mono">
                         <p><strong>Report Date:</strong> {new Date().toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
                         <p><strong>Filter Period:</strong> {filterType.toUpperCase()}</p>
-                        <p><strong>Selected Unit:</strong> {selectedUnit === 'all' ? 'All Units (Consolidated)' : units.find(u => u.code === selectedUnit)?.name}</p>
+                        <p><strong>Selected Units:</strong> {selectedUnitsLabel}</p>
                     </div>
                 </div>
             </div>
@@ -229,32 +334,59 @@ export default function PromoterDashboardPage() {
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white border border-[#ede9e2] p-6 rounded-2xl shadow-sm print:hidden">
                 <div>
                     <div className="flex items-center gap-3">
-                        <h2 className="text-xl font-black text-[#0a1e42] tracking-tight">AvaniOS Promoter Dashboard</h2>
+                        <h2 className="text-xl font-black text-[#0a1e42] tracking-tight">AxtenOS Promoter Dashboard</h2>
                         <span className="px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-emerald-50 text-emerald-800 border border-emerald-200">
-                            {selectedUnit === 'all' ? 'Consolidated All Units' : units.find(u => u.code === selectedUnit)?.name}
+                            {isAllUnitsSelected ? 'Consolidated All Units' : selectedUnitsLabel}
                         </span>
                     </div>
                     <p className="text-xs text-slate-500 font-medium mt-1">
-                        Executive Operational & Financial Intelligence across Avani Hospital Units
+                        Executive Operational & Financial Intelligence across Axten Hospital Units
                     </p>
                 </div>
 
                 {/* Filter Controls Bar */}
                 <div className="flex flex-wrap items-center gap-3">
-                    {/* Unit Selection Dropdown */}
-                    <div className="flex items-center gap-2 bg-[#faf9f6] border border-slate-200 px-3 py-1.5 rounded-xl text-xs font-bold text-[#0a1e42]">
-                        <Building2 className="w-4 h-4 text-emerald-600" />
-                        <span className="text-slate-500">Unit:</span>
-                        <select
-                            value={selectedUnit}
-                            onChange={(e) => setSelectedUnit(e.target.value)}
-                            className="bg-transparent font-extrabold text-[#0a1e42] focus:outline-none cursor-pointer pr-2"
+                    {/* Unit Multi-Select Dropdown */}
+                    <div className="relative" ref={unitMenuRef}>
+                        <button
+                            type="button"
+                            onClick={() => setUnitMenuOpen((prev) => !prev)}
+                            className="flex items-center gap-2 bg-[#faf9f6] border border-slate-200 px-3 py-1.5 rounded-xl text-xs font-bold text-[#0a1e42] cursor-pointer hover:bg-[#f1efe9] transition-colors"
                         >
-                            <option value="all">All Units (Consolidated)</option>
-                            <option value="axten">Axten Hospital (20 Beds)</option>
-                            <option value="avise">Avise Hospital (50 Beds)</option>
-                            <option value="axtenHq">Axten HQ (0 Beds)</option>
-                        </select>
+                            <Building2 className="w-4 h-4 text-emerald-600" />
+                            <span className="text-slate-500">Units:</span>
+                            <span className="font-extrabold max-w-[220px] truncate">{selectedUnitsLabel}</span>
+                            <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform ${unitMenuOpen ? 'rotate-180' : ''}`} />
+                        </button>
+
+                        {unitMenuOpen && (
+                            <div className="absolute z-20 top-full mt-2 left-0 w-64 bg-white border border-[#ede9e2] rounded-xl shadow-lg overflow-hidden">
+                                <button
+                                    type="button"
+                                    onClick={() => setSelectedUnits(isAllUnitsSelected ? [] : UNIT_OPTIONS.map(u => u.code))}
+                                    className="w-full flex items-center justify-between px-4 py-2.5 text-xs font-bold text-[#0a1e42] hover:bg-[#faf9f6] border-b border-[#ede9e2] cursor-pointer"
+                                >
+                                    <span>{isAllUnitsSelected ? 'Clear All' : 'Select All'}</span>
+                                    {isAllUnitsSelected && <Check className="w-3.5 h-3.5 text-emerald-600" />}
+                                </button>
+                                {UNIT_OPTIONS.map((unit) => {
+                                    const checked = selectedUnits.includes(unit.code);
+                                    return (
+                                        <button
+                                            type="button"
+                                            key={unit.code}
+                                            onClick={() => toggleUnit(unit.code)}
+                                            className="w-full flex items-center gap-2.5 px-4 py-2.5 text-xs font-semibold text-[#0a1e42] hover:bg-[#faf9f6] cursor-pointer"
+                                        >
+                                            <span className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${checked ? 'bg-emerald-600 border-emerald-600' : 'border-slate-300'}`}>
+                                                {checked && <Check className="w-3 h-3 text-white" />}
+                                            </span>
+                                            <span>{unit.name}</span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        )}
                     </div>
 
                     {/* Period Selector */}
@@ -442,6 +574,7 @@ export default function PromoterDashboardPage() {
             {/* 1. Current Admitted Patients */}
             <div id="admitted">
                 {renderTableSection(
+                    'admitted',
                     '1. Current Admitted Patients',
                     'Real-time inpatient count across units by patient category',
                     [
@@ -457,6 +590,7 @@ export default function PromoterDashboardPage() {
             {/* 2. Admission */}
             <div id="admissions">
                 {renderTableSection(
+                    'admissions',
                     '2. Admission',
                     'New patient admissions logged within selected period',
                     [
@@ -472,6 +606,7 @@ export default function PromoterDashboardPage() {
             {/* 3. Discharge */}
             <div id="discharges">
                 {renderTableSection(
+                    'discharges',
                     '3. Discharge',
                     'Patient discharge volume breakdown',
                     [
@@ -487,6 +622,7 @@ export default function PromoterDashboardPage() {
             {/* 4. Revenue */}
             <div id="revenue">
                 {renderTableSection(
+                    'revenue',
                     '4. Revenue Realization',
                     'Gross revenue realization by patient financial class (₹)',
                     [
@@ -502,6 +638,7 @@ export default function PromoterDashboardPage() {
             {/* 5. OPD vs IPD Revenue Split */}
             <div id="opd-ipd">
                 {renderTableSection(
+                    'opd-ipd',
                     '5. OPD vs IPD Revenue Breakdown',
                     'Revenue contribution by Outpatient, Inpatient, Pharmacy, and Diagnostics (₹)',
                     [
@@ -517,6 +654,7 @@ export default function PromoterDashboardPage() {
             {/* 6. Departmental Revenue */}
             <div id="department">
                 {renderTableSection(
+                    'department',
                     '6. Top Clinical Department Revenue',
                     'Revenue yield generated by major clinical specialties (₹)',
                     departmentRevenue.map(dept => ({
@@ -530,6 +668,7 @@ export default function PromoterDashboardPage() {
             {/* 7. Expenses */}
             <div id="expenses">
                 {renderTableSection(
+                    'expenses',
                     '7. Expenses',
                     'Monthly operational expenditure breakdown (₹)',
                     [
@@ -545,6 +684,7 @@ export default function PromoterDashboardPage() {
             {/* 8. Receivables & Aging */}
             <div id="receivables" className="space-y-6">
                 {renderTableSection(
+                    'receivables-8a',
                     '8A. Receivables — Yet to Receive',
                     'Outstanding claims, patient balances, and TDS receivables (₹)',
                     [
@@ -558,6 +698,7 @@ export default function PromoterDashboardPage() {
                 )}
 
                 {renderTableSection(
+                    'receivables-8b',
                     '8B. Insurance Receivables Aging Analysis',
                     'Outstanding TPA / Insurance claims categorized by days pending (₹)',
                     [
@@ -572,6 +713,7 @@ export default function PromoterDashboardPage() {
             {/* 9. Payables - Due for Payments */}
             <div id="payables">
                 {renderTableSection(
+                    'payables',
                     '9. Payables — Due for Payments',
                     'Pending vendor bills, doctor payouts, and tax obligations (₹)',
                     [
@@ -587,6 +729,7 @@ export default function PromoterDashboardPage() {
             {/* 10. Salaries */}
             <div id="salaries">
                 {renderTableSection(
+                    'salaries',
                     '10. Salaries',
                     'Monthly staff payroll and employee compensation (₹)',
                     [
@@ -602,6 +745,7 @@ export default function PromoterDashboardPage() {
             {/* 11. ARPOB - Average Revenue Per Operational Bed */}
             <div id="arpob">
                 {renderTableSection(
+                    'arpob',
                     '11. ARPOB — Average Revenue Per Operational Bed',
                     'Operational bed capacity and average daily revenue yield (₹/Bed/Day)',
                     [
@@ -618,6 +762,7 @@ export default function PromoterDashboardPage() {
             {/* 12. Status of Profit/Loss */}
             <div id="profit-loss">
                 {renderTableSection(
+                    'profit-loss',
                     '12. Status of Profit / Loss',
                     'Net operational profit margin across units',
                     [
@@ -629,7 +774,7 @@ export default function PromoterDashboardPage() {
 
             {/* Report Footer for Printouts */}
             <div className="hidden print:block text-center text-[10px] text-slate-500 pt-4 border-t border-slate-300 mt-8">
-                AvaniOS Hospital Systems — Confidential Executive Financial & Operational Audit Report.
+                AxtenOS Hospital Systems — Confidential Executive Financial & Operational Audit Report.
             </div>
         </div>
     );

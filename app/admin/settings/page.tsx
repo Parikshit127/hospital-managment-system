@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { AdminPage } from '@/app/admin/components/AdminPage';
-import { Settings, Save, ShieldAlert, Globe, Clock, Banknote, Smartphone, Cpu } from 'lucide-react';
+import { Settings, Save, Globe, Clock, Banknote, Smartphone, Cpu } from 'lucide-react';
 import { getOrganizationSettings, updateOrganizationSettings } from '@/app/actions/admin-actions';
 import { useRouter } from 'next/navigation';
 

@@ -1,7 +1,8 @@
 import React from 'react';
+import Link from 'next/link';
 import { getInvestorSession, investorLogout } from '@/app/actions/investor-auth-actions';
 import { redirect } from 'next/navigation';
-import { Building2, LogOut, User } from 'lucide-react';
+import { Building2, LogOut, Settings, User } from 'lucide-react';
 
 export default async function InvestorLayout({ children }: { children: React.ReactNode }) {
     const session = await getInvestorSession();
@@ -19,7 +20,7 @@ export default async function InvestorLayout({ children }: { children: React.Rea
                     </div>
                     <div>
                         <div className="flex items-center gap-2">
-                            <span className="text-xl font-black tracking-tight text-[#0a1e42]">Avani</span>
+                            <span className="text-xl font-black tracking-tight text-[#0a1e42]">Axten</span>
                             <span className="text-emerald-600 font-black text-xl">OS<sup>+</sup></span>
                             <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-50 text-emerald-800 border border-emerald-200 uppercase tracking-wider">
                                 Promoter Suite
@@ -45,9 +46,17 @@ export default async function InvestorLayout({ children }: { children: React.Rea
                         </div>
                         <div>
                             <p className="text-xs font-black text-[#0a1e42]">{session.name || 'Promoter'}</p>
-                            <p className="text-[10px] text-slate-500 font-medium">inv@123 • Executive Session</p>
+                            <p className="text-[10px] text-slate-500 font-medium">{session.user || 'investor'} • Executive Session</p>
                         </div>
                     </div>
+
+                    <Link
+                        href="/investor/settings"
+                        title="Portal Access Settings"
+                        className="p-2 rounded-xl bg-slate-100 border border-slate-200 text-slate-600 hover:text-emerald-700 hover:bg-emerald-50 hover:border-emerald-200 transition-all cursor-pointer"
+                    >
+                        <Settings className="w-4 h-4" />
+                    </Link>
 
                     <form action={investorLogout}>
                         <button
