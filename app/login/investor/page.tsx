@@ -45,7 +45,7 @@ export default function InvestorLoginPage() {
                     </div>
                     <div>
                         <div className="flex items-center text-2xl font-black tracking-tight select-none">
-                            <span className="text-[#0f172a]">Avani</span>
+                            <span className="text-[#0f172a]">Axten</span>
                             <span className="text-emerald-600 font-black inline-flex items-start">
                                 OS<sup className="text-xs font-bold relative top-[-0.15em] ml-0.5">+</sup>
                             </span>
@@ -189,7 +189,7 @@ export default function InvestorLoginPage() {
 
             {/* Footer */}
             <footer className="relative z-10 px-8 py-6 text-center text-xs font-bold text-slate-400 border-t border-slate-200/60">
-                AvaniOS Hospital Systems © {new Date().getFullYear()} — Confidential Investor & Promoter Suite.
+                AxtenOS Hospital Systems © {new Date().getFullYear()} — Confidential Investor & Promoter Suite.
             </footer>
         </div>
     );

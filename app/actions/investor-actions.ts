@@ -25,7 +25,6 @@ export interface InvestorDashboardData {
     currentAdmittedPatients: {
         cash: UnitMetrics;
         insurance: UnitMetrics;
-        panel: UnitMetrics;
         corporate: UnitMetrics;
         total: UnitMetrics;
     };
@@ -110,6 +109,21 @@ export interface InvestorDashboardData {
     };
 }
 
+// Real organization IDs behind the 3 investor-facing hospital units.
+export const INVESTOR_UNIT_ORG_IDS: Record<'axten' | 'avise' | 'axtenHq', string> = {
+    axten: 'org-axten-production',
+    avise: '0425857b-6293-4d91-86b2-bd049de66252',
+    axtenHq: '9bd49bae-cecc-49f8-b18d-88f146124a98',
+};
+
+// Real OPD_REG.patient_type values behind each investor-facing payer category.
+// "Panel" has no real backing field yet and is not offered for drill-down.
+const CATEGORY_PATIENT_TYPE: Record<'cash' | 'insurance' | 'corporate', string> = {
+    cash: 'cash',
+    insurance: 'tpa_insurance',
+    corporate: 'corporate',
+};
+
 // Sum unit metrics across columns reliably
 function sumUnits(...unitsArr: UnitMetrics[]): UnitMetrics {
     const res = { axten: 0, avise: 0, axtenHq: 0, total: 0 };
@@ -136,11 +150,6 @@ export async function getInvestorDashboardData(params?: {
 
         const selectedUnit = params?.selectedUnit || 'all';
 
-        // Query live active admissions from DB if available
-        const totalAdmittedLive = await prisma.admissions.count({
-            where: { status: { not: 'Discharged' } }
-        }).catch(() => 0);
-
         // Query live revenue from DB if available
         const totalRevenueLive = await prisma.invoices.aggregate({
             _sum: { net_amount: true }
@@ -156,28 +165,37 @@ export async function getInvestorDashboardData(params?: {
 
         const bedCounts = { axten: 20, avise: 50, axtenHq: 0, total: 70 };
 
-        // 1. Current Admitted Patients
-        let admittedCash = { axten: 4, avise: 11, axtenHq: 0, total: 15 };
-        let admittedInsurance = { axten: 8, avise: 22, axtenHq: 0, total: 30 };
-        let admittedPanel = { axten: 3, avise: 8, axtenHq: 0, total: 11 };
-        let admittedCorporate = { axten: 2, avise: 5, axtenHq: 0, total: 7 };
+        // 1. Current Admitted Patients — real counts grouped by OPD_REG.patient_type
+        // and organizationId (Panel has no real backing field and is excluded here;
+        // the other 12 sections below remain illustrative/mock pending a phase-2 rebuild).
+        const admittedRows = await prisma.admissions.findMany({
+            where: {
+                status: { not: 'Discharged' },
+                is_archived: false,
+                organizationId: { in: Object.values(INVESTOR_UNIT_ORG_IDS) },
+            },
+            select: { organizationId: true, patient: { select: { patient_type: true } } },
+        }).catch(() => [] as Array<{ organizationId: string; patient: { patient_type: string } }>);
 
-        if (totalAdmittedLive > 0 && totalAdmittedLive !== 63) {
-            const scale = totalAdmittedLive / 63;
-            admittedCash = { axten: Math.round(admittedCash.axten * scale), avise: Math.round(admittedCash.avise * scale), axtenHq: 0, total: 0 };
-            admittedCash.total = admittedCash.axten + admittedCash.avise;
-
-            admittedInsurance = { axten: Math.round(admittedInsurance.axten * scale), avise: Math.round(admittedInsurance.avise * scale), axtenHq: 0, total: 0 };
-            admittedInsurance.total = admittedInsurance.axten + admittedInsurance.avise;
-
-            admittedPanel = { axten: Math.round(admittedPanel.axten * scale), avise: Math.round(admittedPanel.avise * scale), axtenHq: 0, total: 0 };
-            admittedPanel.total = admittedPanel.axten + admittedPanel.avise;
-
-            admittedCorporate = { axten: Math.round(admittedCorporate.axten * scale), avise: Math.round(admittedCorporate.avise * scale), axtenHq: 0, total: 0 };
-            admittedCorporate.total = admittedCorporate.axten + admittedCorporate.avise;
+        const zeroUnit = (): UnitMetrics => ({ axten: 0, avise: 0, axtenHq: 0, total: 0 });
+        const admittedCash = zeroUnit();
+        const admittedInsurance = zeroUnit();
+        const admittedCorporate = zeroUnit();
+        const orgToUnitKey = Object.fromEntries(
+            Object.entries(INVESTOR_UNIT_ORG_IDS).map(([unitKey, orgId]) => [orgId, unitKey as 'axten' | 'avise' | 'axtenHq'])
+        );
+        for (const row of admittedRows) {
+            const unitKey = orgToUnitKey[row.organizationId];
+            if (!unitKey) continue;
+            const bucket =
+                row.patient.patient_type === CATEGORY_PATIENT_TYPE.corporate ? admittedCorporate :
+                row.patient.patient_type === CATEGORY_PATIENT_TYPE.insurance ? admittedInsurance :
+                admittedCash; // default: cash
+            bucket[unitKey] += 1;
+            bucket.total += 1;
         }
 
-        const admittedTotal = sumUnits(admittedCash, admittedInsurance, admittedPanel, admittedCorporate);
+        const admittedTotal = sumUnits(admittedCash, admittedInsurance, admittedCorporate);
 
         // 2. Admissions
         const admCash = { axten: 14, avise: 38, axtenHq: 0, total: 52 };

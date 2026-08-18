@@ -62,7 +62,7 @@ export default function PromoterDashboardPage() {
         return (
             <div className="min-h-[70vh] flex flex-col items-center justify-center gap-4 text-slate-500">
                 <div className="w-10 h-10 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin" />
-                <p className="text-sm font-bold animate-pulse text-[#0a1e42]">Aggregating AvaniOS Executive Analytics...</p>
+                <p className="text-sm font-bold animate-pulse text-[#0a1e42]">Aggregating AxtenOS Executive Analytics...</p>
             </div>
         );
     }
@@ -88,7 +88,7 @@ export default function PromoterDashboardPage() {
     const exportToCSV = () => {
         if (!data) return;
         const csvRows = [
-            ['AvaniOS Promoter Dashboard — Consolidated Executive Financial Report'],
+            ['AxtenOS Promoter Dashboard — Consolidated Executive Financial Report'],
             ['Filter', filterType.toUpperCase()],
             ['Selected Unit', selectedUnit.toUpperCase()],
             ['Date Range', `${fromDate} to ${toDate}`],
@@ -139,7 +139,7 @@ export default function PromoterDashboardPage() {
         const encodedUri = encodeURI(csvContent);
         const link = document.createElement('a');
         link.setAttribute('href', encodedUri);
-        link.setAttribute('download', `AvaniOS_Promoter_Report_${selectedUnit}_${filterType}_${new Date().toISOString().slice(0, 10)}.csv`);
+        link.setAttribute('download', `AxtenOS_Promoter_Report_${selectedUnit}_${filterType}_${new Date().toISOString().slice(0, 10)}.csv`);
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -249,7 +249,7 @@ export default function PromoterDashboardPage() {
             <div className="hidden print:block border-b-2 border-[#0a1e42] pb-4 mb-6">
                 <div className="flex justify-between items-start">
                     <div>
-                        <h1 className="text-2xl font-black text-[#0a1e42]">AVANIOS HEALTHCARE SYSTEMS</h1>
+                        <h1 className="text-2xl font-black text-[#0a1e42]">AXTENOS HEALTHCARE SYSTEMS</h1>
                         <p className="text-sm font-bold text-emerald-700 uppercase">Executive Promoter Audit Report — Consolidated Multi-Unit Analysis</p>
                     </div>
                     <div className="text-right text-xs text-slate-600 font-mono">
@@ -264,13 +264,13 @@ export default function PromoterDashboardPage() {
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white border border-[#ede9e2] p-6 rounded-2xl shadow-sm print:hidden">
                 <div>
                     <div className="flex items-center gap-3">
-                        <h2 className="text-xl font-black text-[#0a1e42] tracking-tight">AvaniOS Promoter Dashboard</h2>
+                        <h2 className="text-xl font-black text-[#0a1e42] tracking-tight">AxtenOS Promoter Dashboard</h2>
                         <span className="px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-emerald-50 text-emerald-800 border border-emerald-200">
                             {selectedUnit === 'all' ? 'Consolidated All Units' : units.find(u => u.code === selectedUnit)?.name}
                         </span>
                     </div>
                     <p className="text-xs text-slate-500 font-medium mt-1">
-                        Executive Operational & Financial Intelligence across Avani Hospital Units
+                        Executive Operational & Financial Intelligence across Axten Hospital Units
                     </p>
                 </div>
 
@@ -677,7 +677,7 @@ export default function PromoterDashboardPage() {
 
             {/* Report Footer for Printouts */}
             <div className="hidden print:block text-center text-[10px] text-slate-500 pt-4 border-t border-slate-300 mt-8">
-                AvaniOS Hospital Systems — Confidential Executive Financial & Operational Audit Report.
+                AxtenOS Hospital Systems — Confidential Executive Financial & Operational Audit Report.
             </div>
         </div>
     );

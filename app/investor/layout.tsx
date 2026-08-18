@@ -19,7 +19,7 @@ export default async function InvestorLayout({ children }: { children: React.Rea
                     </div>
                     <div>
                         <div className="flex items-center gap-2">
-                            <span className="text-xl font-black tracking-tight text-[#0a1e42]">Avani</span>
+                            <span className="text-xl font-black tracking-tight text-[#0a1e42]">Axten</span>
                             <span className="text-emerald-600 font-black text-xl">OS<sup>+</sup></span>
                             <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-50 text-emerald-800 border border-emerald-200 uppercase tracking-wider">
                                 Promoter Suite
