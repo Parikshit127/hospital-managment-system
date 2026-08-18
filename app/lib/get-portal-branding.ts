@@ -84,17 +84,25 @@ export async function getPortalBranding(): Promise<PortalBranding> {
 /**
  * Branding for pre-login surfaces (login page, patient login, browser title)
  * where there is no session yet. Resolves the deployment's "landing" org by
- * slug (NEXT_PUBLIC_DEFAULT_ORG_SLUG, default "axten"). Because each deployment
- * reads its own database, the demo (Supabase) shows Avani and the live hospital
- * (AWS RDS) shows Axten — from the same code, with no per-deployment env change.
+ * slug (NEXT_PUBLIC_DEFAULT_ORG_SLUG, default "avani"). Falls back to the
+ * first active organization in the database, so any tenant deployment shows
+ * correct branding without any per-deployment env change.
  */
+
 export async function getDefaultBranding(): Promise<PortalBranding> {
   try {
-    const slug = process.env.NEXT_PUBLIC_DEFAULT_ORG_SLUG || 'axten';
-    const org = await prisma.organization.findFirst({
+    const slug = process.env.NEXT_PUBLIC_DEFAULT_ORG_SLUG || 'avani';
+    let org = await prisma.organization.findFirst({
       where: { slug },
       include: { branding: true },
     });
+    if (!org) {
+      org = await prisma.organization.findFirst({
+        where: { is_active: true },
+        orderBy: { created_at: 'asc' },
+        include: { branding: true },
+      });
+    }
     return toBranding(org);
   } catch {
     return DEFAULTS;

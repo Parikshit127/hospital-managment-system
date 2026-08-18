@@ -158,8 +158,10 @@ export async function login(prevState: any, formData: FormData) {
         case 'nurse': redirect('/nurse/dashboard');
         case 'opd_manager': redirect('/opd-manager/dashboard');
         case 'hr': redirect('/hr/dashboard');
+        case 'ot_manager': redirect('/ot/dashboard');
+        case 'er_staff': redirect('/er/dashboard');
         case 'coordinator': redirect('/coordinator/dashboard');
-        default: redirect('/');
+        default: redirect('/admin/dashboard');
     }
 }
 
