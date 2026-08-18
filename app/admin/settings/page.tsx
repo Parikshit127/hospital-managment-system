@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { AdminPage } from '@/app/admin/components/AdminPage';
-import { Settings, Save, ShieldAlert, Globe, Clock, Banknote, Smartphone, Cpu } from 'lucide-react';
+import { Settings, Save, Globe, Clock, Banknote, Smartphone, Cpu } from 'lucide-react';
 import { getOrganizationSettings, updateOrganizationSettings } from '@/app/actions/admin-actions';
 import { useRouter } from 'next/navigation';
 
@@ -143,27 +143,6 @@ export default function OrgSettingsPage() {
                         )}
 
                     </div>
-                </div>
-
-                {/* Investor Portal Access Section */}
-                <div className="bg-[#faf9f6] rounded-2xl border border-emerald-200 p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                    <div className="flex items-center gap-3">
-                        <div className="p-3 bg-emerald-100 text-emerald-800 rounded-xl font-bold">
-                            <ShieldAlert className="h-6 w-6" />
-                        </div>
-                        <div>
-                            <h3 className="text-base font-black text-gray-900">Investor Portal Credentials & 24h Temp Access</h3>
-                            <p className="text-xs text-gray-600 font-medium mt-0.5">
-                                Manage investor suite logins (`investor` / `inv@4321`) and generate temporary 24-hour access keys.
-                            </p>
-                        </div>
-                    </div>
-                    <a
-                        href="/admin/settings/investors"
-                        className="px-5 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl shadow transition-all whitespace-nowrap"
-                    >
-                        Manage Investor Access →
-                    </a>
                 </div>
 
                 {/* Sticky Footer */}

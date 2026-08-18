@@ -111,7 +111,7 @@ export interface InvestorDashboardData {
 }
 
 // Real organization IDs behind the 3 investor-facing hospital units.
-export const INVESTOR_UNIT_ORG_IDS: Record<'axten' | 'avise' | 'axtenHq', string> = {
+const INVESTOR_UNIT_ORG_IDS: Record<'axten' | 'avise' | 'axtenHq', string> = {
     axten: 'org-axten-production',
     avise: '0425857b-6293-4d91-86b2-bd049de66252',
     axtenHq: '9bd49bae-cecc-49f8-b18d-88f146124a98',
@@ -176,7 +176,10 @@ export async function getInvestorDashboardData(params?: {
                 organizationId: { in: Object.values(INVESTOR_UNIT_ORG_IDS) },
             },
             select: { organizationId: true, patient: { select: { patient_type: true } } },
-        }).catch(() => [] as Array<{ organizationId: string; patient: { patient_type: string } }>);
+        }).catch((err) => {
+            console.error('Error fetching admitted rows for investor dashboard:', err);
+            return [] as Array<{ organizationId: string; patient: { patient_type: string } | null }>;
+        });
 
         const zeroUnit = (): UnitMetrics => ({ axten: 0, avise: 0, axtenHq: 0, total: 0 });
         const admittedCash = zeroUnit();
@@ -189,9 +192,10 @@ export async function getInvestorDashboardData(params?: {
         for (const row of admittedRows) {
             const unitKey = orgToUnitKey[row.organizationId];
             if (!unitKey) continue;
+            const patientType = (row.patient?.patient_type || '').toLowerCase();
             const bucket =
-                row.patient.patient_type === CATEGORY_PATIENT_TYPE.corporate ? admittedCorporate :
-                row.patient.patient_type === CATEGORY_PATIENT_TYPE.insurance ? admittedInsurance :
+                patientType === CATEGORY_PATIENT_TYPE.corporate ? admittedCorporate :
+                patientType === CATEGORY_PATIENT_TYPE.insurance ? admittedInsurance :
                 admittedCash; // default: cash
             bucket[unitKey] += 1;
             bucket.total += 1;

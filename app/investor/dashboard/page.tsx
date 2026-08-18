@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { getInvestorDashboardData, type InvestorDashboardData, type UnitMetrics } from '@/app/actions/investor-actions';
 import {
     Activity,
@@ -17,8 +17,15 @@ import {
     Clock,
     Award,
     ChevronDown,
-    ChevronRight
+    ChevronRight,
+    Check
 } from 'lucide-react';
+
+const UNIT_OPTIONS = [
+    { code: 'axten', name: 'Axten Hospital (20 Beds)', shortName: 'Axten' },
+    { code: 'avise', name: 'Avise Hospital (50 Beds)', shortName: 'Avise' },
+    { code: 'axtenHq', name: 'Axten HQ (0 Beds)', shortName: 'Axten HQ' },
+] as const;
 
 // Format numbers: default is currency=false (no ₹ symbol) so counts render as pure numbers!
 function fmtINR(n: number, isCurrency = false): string {
@@ -32,10 +39,35 @@ export default function PromoterDashboardPage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [filterType, setFilterType] = useState<'day' | 'month' | 'year' | 'custom'>('month');
-    const [selectedUnit, setSelectedUnit] = useState<string>('all');
+    const [selectedUnits, setSelectedUnits] = useState<string[]>(UNIT_OPTIONS.map(u => u.code));
+    const [unitMenuOpen, setUnitMenuOpen] = useState(false);
+    const unitMenuRef = useRef<HTMLDivElement>(null);
     const [fromDate, setFromDate] = useState('2026-04-01');
     const [toDate, setToDate] = useState('2026-07-31');
     const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
+
+    const isAllUnitsSelected = selectedUnits.length === UNIT_OPTIONS.length;
+    const selectedUnitsLabel = isAllUnitsSelected
+        ? 'All Units (Consolidated)'
+        : selectedUnits.length === 0
+            ? 'No Units Selected'
+            : UNIT_OPTIONS.filter(u => selectedUnits.includes(u.code)).map(u => u.shortName).join(' + ');
+
+    const toggleUnit = (code: string) => {
+        setSelectedUnits((prev) =>
+            prev.includes(code) ? prev.filter((c) => c !== code) : [...prev, code]
+        );
+    };
+
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            if (unitMenuRef.current && !unitMenuRef.current.contains(e.target as Node)) {
+                setUnitMenuOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
 
     const toggleSection = (key: string) => {
         setExpandedSections((prev) => {
@@ -50,7 +82,7 @@ export default function PromoterDashboardPage() {
         setLoading(true);
         setError(null);
         try {
-            const res = await getInvestorDashboardData({ filterType, selectedUnit, fromDate, toDate });
+            const res = await getInvestorDashboardData({ filterType, selectedUnit: isAllUnitsSelected ? 'all' : selectedUnits.join(','), fromDate, toDate });
             if (res.success && res.data) {
                 setData(res.data);
             } else {
@@ -65,7 +97,8 @@ export default function PromoterDashboardPage() {
 
     useEffect(() => {
         loadData();
-    }, [filterType, selectedUnit]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [filterType]);
 
     if (loading) {
         return (
@@ -94,7 +127,6 @@ export default function PromoterDashboardPage() {
     }
 
     const {
-        units,
         executiveKPIs,
         currentAdmittedPatients,
         admissions,
@@ -116,7 +148,7 @@ export default function PromoterDashboardPage() {
         const csvRows = [
             ['AxtenOS Promoter Dashboard — Consolidated Executive Financial Report'],
             ['Filter', filterType.toUpperCase()],
-            ['Selected Unit', selectedUnit.toUpperCase()],
+            ['Selected Units', selectedUnitsLabel],
             ['Date Range', `${fromDate} to ${toDate}`],
             [],
             ['Unit / Category', 'Axten Hospital', 'Avise Hospital', 'Axten HQ', 'Consolidated Total'],
@@ -165,7 +197,7 @@ export default function PromoterDashboardPage() {
         const encodedUri = encodeURI(csvContent);
         const link = document.createElement('a');
         link.setAttribute('href', encodedUri);
-        link.setAttribute('download', `AxtenOS_Promoter_Report_${selectedUnit}_${filterType}_${new Date().toISOString().slice(0, 10)}.csv`);
+        link.setAttribute('download', `AxtenOS_Promoter_Report_${isAllUnitsSelected ? 'all' : selectedUnits.join('-')}_${filterType}_${new Date().toISOString().slice(0, 10)}.csv`);
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -181,7 +213,12 @@ export default function PromoterDashboardPage() {
         const totalRow = rows.find((r) => r.isTotalRow) || rows[rows.length - 1];
         const totalDisplay = totalRow.isPercentage
             ? `${totalRow.data.total}%`
-            : fmtINR(totalRow.data.total, totalRow.isCurrency);
+            : fmtINR(
+                  isAllUnitsSelected
+                      ? totalRow.data.total
+                      : selectedUnits.reduce((sum, u) => sum + (totalRow.data[u as 'axten' | 'avise' | 'axtenHq'] || 0), 0),
+                  totalRow.isCurrency
+              );
 
         return (
         <div className="bg-white border border-[#ede9e2] rounded-2xl overflow-hidden shadow-sm mb-8 print:border-slate-300 print:shadow-none print:mb-6 print:break-inside-avoid">
@@ -198,7 +235,7 @@ export default function PromoterDashboardPage() {
                     <p className="text-xs text-slate-500 font-medium mt-0.5 print:text-[10px]">{subtitle}</p>
                     {!isExpanded && (
                         <p className="text-sm font-black text-emerald-800 mt-2 print:hidden">
-                            Consolidated Total: {totalDisplay}
+                            {isAllUnitsSelected ? 'Consolidated Total' : 'Selected Units Total'}: {totalDisplay}
                         </p>
                     )}
                 </div>
@@ -213,17 +250,17 @@ export default function PromoterDashboardPage() {
                     <thead>
                         <tr className="bg-[#f1f5f9] border-b border-[#e2e8f0] text-[11px] font-black text-[#0a1e42] uppercase tracking-wider print:text-[10px]">
                             <th className="py-3.5 px-6 min-w-[200px] print:py-2 print:px-4">Type / Category</th>
-                            <th className={`py-3.5 px-4 text-right min-w-[130px] print:py-2 ${selectedUnit === 'axten' ? 'bg-emerald-100/80 text-emerald-950 font-black' : 'text-slate-700'}`}>
+                            <th className={`py-3.5 px-4 text-right min-w-[130px] print:py-2 ${selectedUnits.includes('axten') ? 'bg-emerald-100/80 text-emerald-950 font-black' : 'text-slate-700'}`}>
                                 Axten Hospital
                             </th>
-                            <th className={`py-3.5 px-4 text-right min-w-[130px] print:py-2 ${selectedUnit === 'avise' ? 'bg-indigo-100/80 text-indigo-950 font-black' : 'text-slate-700'}`}>
+                            <th className={`py-3.5 px-4 text-right min-w-[130px] print:py-2 ${selectedUnits.includes('avise') ? 'bg-indigo-100/80 text-indigo-950 font-black' : 'text-slate-700'}`}>
                                 Avise Hospital
                             </th>
-                            <th className={`py-3.5 px-4 text-right min-w-[130px] print:py-2 ${selectedUnit === 'axtenHq' ? 'bg-amber-100/80 text-amber-950 font-black' : 'text-slate-700'}`}>
+                            <th className={`py-3.5 px-4 text-right min-w-[130px] print:py-2 ${selectedUnits.includes('axtenHq') ? 'bg-amber-100/80 text-amber-950 font-black' : 'text-slate-700'}`}>
                                 Axten HQ
                             </th>
-                            <th className={`py-3.5 px-6 text-right min-w-[160px] font-black border-l border-[#e2e8f0] print:py-2 print:px-4 ${selectedUnit === 'all' ? 'bg-[#ecfdf5] text-[#065f46]' : 'bg-[#f1f5f9] text-[#0a1e42]'}`}>
-                                Consolidated Total
+                            <th className="py-3.5 px-6 text-right min-w-[160px] font-black border-l border-[#e2e8f0] print:py-2 print:px-4 bg-[#ecfdf5] text-[#065f46]">
+                                {isAllUnitsSelected ? 'Consolidated Total' : 'Selected Units Total'}
                             </th>
                         </tr>
                     </thead>
@@ -243,13 +280,13 @@ export default function PromoterDashboardPage() {
                                         {isTotal && <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 print:hidden" />}
                                         <span>{row.label}</span>
                                     </td>
-                                    <td className={`py-3 px-4 text-right font-mono print:py-1.5 ${selectedUnit === 'axten' ? (isTotal ? 'bg-[#061329]' : 'bg-emerald-50/70 font-black text-emerald-950') : ''}`}>
+                                    <td className={`py-3 px-4 text-right font-mono print:py-1.5 ${selectedUnits.includes('axten') ? (isTotal ? 'bg-[#061329]' : 'bg-emerald-50/70 font-black text-emerald-950') : ''}`}>
                                         {row.isPercentage ? `${row.data.axten}%` : fmtINR(row.data.axten, row.isCurrency)}
                                     </td>
-                                    <td className={`py-3 px-4 text-right font-mono print:py-1.5 ${selectedUnit === 'avise' ? (isTotal ? 'bg-[#061329]' : 'bg-indigo-50/70 font-black text-indigo-950') : ''}`}>
+                                    <td className={`py-3 px-4 text-right font-mono print:py-1.5 ${selectedUnits.includes('avise') ? (isTotal ? 'bg-[#061329]' : 'bg-indigo-50/70 font-black text-indigo-950') : ''}`}>
                                         {row.isPercentage ? `${row.data.avise}%` : fmtINR(row.data.avise, row.isCurrency)}
                                     </td>
-                                    <td className={`py-3 px-4 text-right font-mono print:py-1.5 ${selectedUnit === 'axtenHq' ? (isTotal ? 'bg-[#061329]' : 'bg-amber-50/70 font-black text-amber-950') : ''}`}>
+                                    <td className={`py-3 px-4 text-right font-mono print:py-1.5 ${selectedUnits.includes('axtenHq') ? (isTotal ? 'bg-[#061329]' : 'bg-amber-50/70 font-black text-amber-950') : ''}`}>
                                         {row.isPercentage ? `${row.data.axtenHq}%` : fmtINR(row.data.axtenHq, row.isCurrency)}
                                     </td>
                                     <td className={`py-3 px-6 text-right font-mono font-bold border-l print:py-1.5 print:px-4 ${
@@ -257,7 +294,14 @@ export default function PromoterDashboardPage() {
                                             ? 'border-slate-800 text-emerald-400 bg-[#061329]'
                                             : 'border-[#ede9e2] text-emerald-800 bg-[#ecfdf5]/60 font-black'
                                     }`}>
-                                        {row.isPercentage ? `${row.data.total}%` : fmtINR(row.data.total, row.isCurrency)}
+                                        {row.isPercentage
+                                            ? `${row.data.total}%`
+                                            : fmtINR(
+                                                  isAllUnitsSelected
+                                                      ? row.data.total
+                                                      : selectedUnits.reduce((sum, u) => sum + (row.data[u as 'axten' | 'avise' | 'axtenHq'] || 0), 0),
+                                                  row.isCurrency
+                                              )}
                                     </td>
                                 </tr>
                             );
@@ -281,7 +325,7 @@ export default function PromoterDashboardPage() {
                     <div className="text-right text-xs text-slate-600 font-mono">
                         <p><strong>Report Date:</strong> {new Date().toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
                         <p><strong>Filter Period:</strong> {filterType.toUpperCase()}</p>
-                        <p><strong>Selected Unit:</strong> {selectedUnit === 'all' ? 'All Units (Consolidated)' : units.find(u => u.code === selectedUnit)?.name}</p>
+                        <p><strong>Selected Units:</strong> {selectedUnitsLabel}</p>
                     </div>
                 </div>
             </div>
@@ -292,7 +336,7 @@ export default function PromoterDashboardPage() {
                     <div className="flex items-center gap-3">
                         <h2 className="text-xl font-black text-[#0a1e42] tracking-tight">AxtenOS Promoter Dashboard</h2>
                         <span className="px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-emerald-50 text-emerald-800 border border-emerald-200">
-                            {selectedUnit === 'all' ? 'Consolidated All Units' : units.find(u => u.code === selectedUnit)?.name}
+                            {isAllUnitsSelected ? 'Consolidated All Units' : selectedUnitsLabel}
                         </span>
                     </div>
                     <p className="text-xs text-slate-500 font-medium mt-1">
@@ -302,20 +346,47 @@ export default function PromoterDashboardPage() {
 
                 {/* Filter Controls Bar */}
                 <div className="flex flex-wrap items-center gap-3">
-                    {/* Unit Selection Dropdown */}
-                    <div className="flex items-center gap-2 bg-[#faf9f6] border border-slate-200 px-3 py-1.5 rounded-xl text-xs font-bold text-[#0a1e42]">
-                        <Building2 className="w-4 h-4 text-emerald-600" />
-                        <span className="text-slate-500">Unit:</span>
-                        <select
-                            value={selectedUnit}
-                            onChange={(e) => setSelectedUnit(e.target.value)}
-                            className="bg-transparent font-extrabold text-[#0a1e42] focus:outline-none cursor-pointer pr-2"
+                    {/* Unit Multi-Select Dropdown */}
+                    <div className="relative" ref={unitMenuRef}>
+                        <button
+                            type="button"
+                            onClick={() => setUnitMenuOpen((prev) => !prev)}
+                            className="flex items-center gap-2 bg-[#faf9f6] border border-slate-200 px-3 py-1.5 rounded-xl text-xs font-bold text-[#0a1e42] cursor-pointer hover:bg-[#f1efe9] transition-colors"
                         >
-                            <option value="all">All Units (Consolidated)</option>
-                            <option value="axten">Axten Hospital (20 Beds)</option>
-                            <option value="avise">Avise Hospital (50 Beds)</option>
-                            <option value="axtenHq">Axten HQ (0 Beds)</option>
-                        </select>
+                            <Building2 className="w-4 h-4 text-emerald-600" />
+                            <span className="text-slate-500">Units:</span>
+                            <span className="font-extrabold max-w-[220px] truncate">{selectedUnitsLabel}</span>
+                            <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform ${unitMenuOpen ? 'rotate-180' : ''}`} />
+                        </button>
+
+                        {unitMenuOpen && (
+                            <div className="absolute z-20 top-full mt-2 left-0 w-64 bg-white border border-[#ede9e2] rounded-xl shadow-lg overflow-hidden">
+                                <button
+                                    type="button"
+                                    onClick={() => setSelectedUnits(isAllUnitsSelected ? [] : UNIT_OPTIONS.map(u => u.code))}
+                                    className="w-full flex items-center justify-between px-4 py-2.5 text-xs font-bold text-[#0a1e42] hover:bg-[#faf9f6] border-b border-[#ede9e2] cursor-pointer"
+                                >
+                                    <span>{isAllUnitsSelected ? 'Clear All' : 'Select All'}</span>
+                                    {isAllUnitsSelected && <Check className="w-3.5 h-3.5 text-emerald-600" />}
+                                </button>
+                                {UNIT_OPTIONS.map((unit) => {
+                                    const checked = selectedUnits.includes(unit.code);
+                                    return (
+                                        <button
+                                            type="button"
+                                            key={unit.code}
+                                            onClick={() => toggleUnit(unit.code)}
+                                            className="w-full flex items-center gap-2.5 px-4 py-2.5 text-xs font-semibold text-[#0a1e42] hover:bg-[#faf9f6] cursor-pointer"
+                                        >
+                                            <span className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${checked ? 'bg-emerald-600 border-emerald-600' : 'border-slate-300'}`}>
+                                                {checked && <Check className="w-3 h-3 text-white" />}
+                                            </span>
+                                            <span>{unit.name}</span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        )}
                     </div>
 
                     {/* Period Selector */}

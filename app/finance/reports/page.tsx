@@ -212,7 +212,6 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
     quickFilter: 'all' | 'cash' | 'upi' | 'others'; setQuickFilter: (v: 'all' | 'cash' | 'upi' | 'others') => void;
     methodFilter: string; setMethodFilter: (v: string) => void;
 }) {
-    const payments = (data?.payments || []).filter((p: any) => p.status === 'Completed');
     const methodLabel = (m: string) => m;
     const depositsCollected = data?.depositsCollected || {};
     const depositModes = Object.entries(depositsCollected).filter(([k]) => k !== 'total');
@@ -237,11 +236,47 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
     const [viewMode, setViewMode] = useState<'patient' | 'payment'>('patient');
     const [openPatientKey, setOpenPatientKey] = useState<string | null>(null);
 
-    const uniquePaymentMethods: string[] = Array.from(new Set<string>(payments.map((p: any) => canonicalTender(p.payment_method)))).sort();
+    const depositsList: any[] = data?.depositsList || [];
 
-    const filteredPayments = payments.filter((p: any) => {
+    // Unified collection payments = Direct invoice payments (excluding internal deposit settlements)
+    // + Advance deposits collected in this period.
+    const allPayments = [
+        ...(data?.payments || [])
+            .filter((p: any) => p.status === 'Completed' && !isDepositSettlement(p))
+            .map((p: any) => ({
+                id: p.id,
+                created_at: p.created_at,
+                receipt_number: p.receipt_number,
+                amount: p.amount,
+                payment_method: p.payment_method,
+                patient_name: p.invoice?.patient?.full_name || 'Walk-in / No Patient',
+                patient_id: p.invoice?.patient?.patient_id || '-',
+                invoice_number: p.invoice?.invoice_number || '-',
+                _isDeposit: false,
+                raw: p,
+            })),
+        ...depositsList.map((d: any) => ({
+            id: `dep-${d.id}`,
+            deposit_id: d.id,
+            created_at: d.created_at,
+            receipt_number: d.deposit_number,
+            amount: d.amount,
+            payment_method: d.payment_method,
+            patient_name: d.patient_name || 'Walk-in / No Patient',
+            patient_id: d.patient_id || '-',
+            invoice_number: 'Advance',
+            _isDeposit: true,
+            raw: d,
+        })),
+    ];
+
+    const uniquePaymentMethods: string[] = Array.from(
+        new Set<string>(allPayments.map((p: any) => canonicalTender(p.payment_method)))
+    ).sort();
+
+    const filteredPayments = allPayments.filter((p: any) => {
         if (colReceipt && !String(p.receipt_number || '').toLowerCase().includes(colReceipt.toLowerCase())) return false;
-        if (colPatient && !(p.invoice?.patient?.full_name || '').toLowerCase().includes(colPatient.toLowerCase())) return false;
+        if (colPatient && !String(p.patient_name || '').toLowerCase().includes(colPatient.toLowerCase())) return false;
         if (colColMethod && canonicalTender(p.payment_method) !== colColMethod) return false;
         if (colAmountMin && Number(p.amount) < Number(colAmountMin)) return false;
         if (colDate) {
@@ -259,26 +294,18 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
 
     // Group the same filtered payments by patient so collections can be reviewed
     // per-patient instead of as one long chronological list.
-    // NOTE: depositsList entries are merged in here too — a patient who only paid
-    // an advance (no invoice payment) would otherwise be invisible in this view
-    // but still counted in the total, causing the visible total to not match.
     type PatientGroup = {
         key: string; patientName: string; patientId: string;
         payments: any[]; total: number; firstDate: Date; lastDate: Date;
     };
-    const depositsList: any[] = data?.depositsList || [];
     const patientGroups: PatientGroup[] = (() => {
         const map = new Map<string, PatientGroup>();
-
-        // 1. Invoice payments (already client-filtered)
         filteredPayments.forEach((p: any) => {
-            const patientId = p.invoice?.patient?.patient_id;
-            const patientName = p.invoice?.patient?.full_name || 'Walk-in / No Patient';
-            const key = patientId || patientName;
+            const key = (p.patient_id && p.patient_id !== '-') ? p.patient_id : p.patient_name;
             const dt = new Date(p.created_at);
             let group = map.get(key);
             if (!group) {
-                group = { key, patientName, patientId: patientId || '-', payments: [], total: 0, firstDate: dt, lastDate: dt };
+                group = { key, patientName: p.patient_name, patientId: p.patient_id, payments: [], total: 0, firstDate: dt, lastDate: dt };
                 map.set(key, group);
             }
             group.payments.push(p);
@@ -286,50 +313,6 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
             if (dt < group.firstDate) group.firstDate = dt;
             if (dt > group.lastDate) group.lastDate = dt;
         });
-
-        // 2. Deposit entries — patient-level advance receipts that have no invoice.
-        // Apply the same client-side filters that apply to invoice payments.
-        depositsList.forEach((d: any) => {
-            const patientId = d.patient_id;
-            const patientName = d.patient_name || 'Walk-in / No Patient';
-            const key = patientId || patientName;
-            const dt = new Date(d.created_at);
-
-            // Apply shared column filters where possible
-            if (colPatient && !patientName.toLowerCase().includes(colPatient.toLowerCase())) return;
-            if (colReceipt && !String(d.deposit_number || '').toLowerCase().includes(colReceipt.toLowerCase())) return;
-            if (colAmountMin && Number(d.amount) < Number(colAmountMin)) return;
-            if (colDate) {
-                const ymd = `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
-                if (ymd !== colDate) return;
-            }
-            // colColMethod: deposit tender from d.payment_method
-            if (colColMethod && canonicalTender(d.payment_method) !== colColMethod) return;
-
-            // Synthesise a payment-like object for the drill-down table so the
-            // receipt link still works (deposit receipt at /api/deposit/<id>/receipt).
-            const syntheticPayment = {
-                id: `dep-${d.id}`,
-                created_at: d.created_at,
-                receipt_number: d.deposit_number,
-                amount: d.amount,
-                payment_method: d.payment_method,
-                // Mark as a deposit-only entry so drill-down can render correctly
-                _isDeposit: true,
-                invoice: null,
-            };
-
-            let group = map.get(key);
-            if (!group) {
-                group = { key, patientName, patientId: patientId || '-', payments: [], total: 0, firstDate: dt, lastDate: dt };
-                map.set(key, group);
-            }
-            group.payments.push(syntheticPayment);
-            group.total += Number(d.amount);
-            if (dt < group.firstDate) group.firstDate = dt;
-            if (dt > group.lastDate) group.lastDate = dt;
-        });
-
         return Array.from(map.values())
             .map((g) => ({ ...g, payments: [...g.payments].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()) }))
             .sort((a, b) => b.lastDate.getTime() - a.lastDate.getTime());
@@ -849,7 +832,7 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
                         <h3 className="font-semibold text-gray-900">
                             {viewMode === 'patient'
                                 ? `Patient-wise Collections (${patientGroups.length} patient${patientGroups.length !== 1 ? 's' : ''})`
-                                : `Payment Details (${hasColFilter ? `${filteredPayments.length} of ${payments.length}` : payments.length})`}
+                                : `Payment Details (${hasColFilter ? `${filteredPayments.length} of ${allPayments.length}` : allPayments.length})`}
                         </h3>
                         {hasColFilter && (
                             <button onClick={clearColFilters} className="text-xs text-rose-500 hover:text-rose-700 font-medium underline">
@@ -860,7 +843,7 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
                     <div className="flex items-center gap-2">
                         <button
                             onClick={handleCollectionsExcelExport}
-                            disabled={excelExporting || !payments || payments.length === 0}
+                            disabled={excelExporting || !allPayments || allPayments.length === 0}
                             className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 flex items-center gap-2 transition disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             {excelExporting ? (
@@ -874,7 +857,7 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
                                 const methodVal = methodFilter !== 'all' ? methodFilter : quickFilter !== 'all' ? (quickFilter === 'cash' ? 'Cash' : quickFilter === 'upi' ? 'UPI' : 'others') : '';
                                 window.open(`/api/reports/collections/pdf?from=${from}&to=${to}${methodVal ? `&method=${methodVal}` : ''}`, '_blank');
                             }}
-                            disabled={!payments || payments.length === 0}
+                            disabled={!allPayments || allPayments.length === 0}
                             className="px-4 py-2 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 flex items-center gap-2 transition disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             <FileText className="h-4 w-4" /> Export PDF
@@ -1030,19 +1013,21 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
                                     <tr><td colSpan={5} className="px-6 py-10 text-center text-sm text-gray-400">No payments match the current filters</td></tr>
                                 ) : filteredPayments.map((p: any) => (
                                     <tr key={p.id}
-                                        onClick={() => window.open(`/api/payment/${p.id}/receipt`, '_blank')}
+                                        onClick={() => {
+                                            if (p._isDeposit) {
+                                                const depositId = p.deposit_id || String(p.id).replace(/^dep-/, '');
+                                                window.open(`/api/deposit/${depositId}/receipt`, '_blank');
+                                            } else {
+                                                window.open(`/api/payment/${p.id}/receipt`, '_blank');
+                                            }
+                                        }}
                                         title="Open receipt"
                                         className="hover:bg-emerald-50/60 cursor-pointer transition-colors">
                                         <td className="px-4 py-3 text-sm font-mono text-emerald-700 hover:underline">{p.receipt_number}</td>
-                                        <td className="px-4 py-3 text-sm text-gray-900">{p.invoice?.patient?.full_name || '-'}</td>
-                                        <td className="px-4 py-3 text-sm text-gray-600">{(() => {
-                                            if (!isDepositSettlement(p)) return canonicalTender(p.payment_method);
-                                            const parts = [
-                                                p.deposit_is_ipd != null ? (p.deposit_is_ipd ? 'IPD' : 'OPD') : null,
-                                                p.deposit_tender ? canonicalTender(p.deposit_tender) : null,
-                                            ].filter(Boolean);
-                                            return parts.length ? `Deposit (${parts.join(' · ')})` : 'Deposit';
-                                        })()}</td>
+                                        <td className="px-4 py-3 text-sm text-gray-900">{p.patient_name || '-'}</td>
+                                        <td className="px-4 py-3 text-sm text-gray-600">
+                                            {p._isDeposit ? `Advance · ${canonicalTender(p.payment_method)}` : canonicalTender(p.payment_method)}
+                                        </td>
                                         <td className="px-4 py-3 text-sm font-semibold text-gray-900 text-right">{fmt(Number(p.amount))}</td>
                                         <td className="px-4 py-3 text-sm text-gray-500">{new Date(p.created_at).toLocaleDateString('en-GB')}</td>
                                     </tr>
