@@ -104,8 +104,7 @@ async function main() {
         const admissionIds = admissions.map(a => a.admission_id);
 
         if (admissionIds.length > 0) {
-            // IPDVitals (@@map → ipd_vitals)
-            await prisma.ipd_vitals.deleteMany({ where: { admission_id: { in: admissionIds } } });
+            await prisma.iPDVitals.deleteMany({ where: { admission_id: { in: admissionIds } } });
             await prisma.medical_notes.deleteMany({ where: { admission_id: { in: admissionIds } } });
             await prisma.nursingNote.deleteMany({ where: { admission_id: { in: admissionIds } } });
             await prisma.discharge_summaries.deleteMany({ where: { admission_id: { in: admissionIds } } });
