@@ -25,6 +25,7 @@ export interface InvestorDashboardData {
     currentAdmittedPatients: {
         cash: UnitMetrics;
         insurance: UnitMetrics;
+        panel: UnitMetrics;
         corporate: UnitMetrics;
         total: UnitMetrics;
     };
@@ -180,6 +181,7 @@ export async function getInvestorDashboardData(params?: {
         const zeroUnit = (): UnitMetrics => ({ axten: 0, avise: 0, axtenHq: 0, total: 0 });
         const admittedCash = zeroUnit();
         const admittedInsurance = zeroUnit();
+        const admittedPanel = zeroUnit(); // Panel has no real backing patient_type field yet — always zero
         const admittedCorporate = zeroUnit();
         const orgToUnitKey = Object.fromEntries(
             Object.entries(INVESTOR_UNIT_ORG_IDS).map(([unitKey, orgId]) => [orgId, unitKey as 'axten' | 'avise' | 'axtenHq'])
@@ -195,7 +197,7 @@ export async function getInvestorDashboardData(params?: {
             bucket.total += 1;
         }
 
-        const admittedTotal = sumUnits(admittedCash, admittedInsurance, admittedCorporate);
+        const admittedTotal = sumUnits(admittedCash, admittedInsurance, admittedPanel, admittedCorporate);
 
         // 2. Admissions
         const admCash = { axten: 14, avise: 38, axtenHq: 0, total: 52 };

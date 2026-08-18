@@ -30,6 +30,7 @@ function fmtINR(n: number, isCurrency = false): string {
 export default function PromoterDashboardPage() {
     const [data, setData] = useState<InvestorDashboardData | null>(null);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
     const [filterType, setFilterType] = useState<'day' | 'month' | 'year' | 'custom'>('month');
     const [selectedUnit, setSelectedUnit] = useState<string>('all');
     const [fromDate, setFromDate] = useState('2026-04-01');
@@ -47,22 +48,47 @@ export default function PromoterDashboardPage() {
 
     const loadData = async () => {
         setLoading(true);
-        const res = await getInvestorDashboardData({ filterType, selectedUnit, fromDate, toDate });
-        if (res.success && res.data) {
-            setData(res.data);
+        setError(null);
+        try {
+            const res = await getInvestorDashboardData({ filterType, selectedUnit, fromDate, toDate });
+            if (res.success && res.data) {
+                setData(res.data);
+            } else {
+                setError(res.error || 'Failed to load dashboard data');
+            }
+        } catch (err: any) {
+            setError(err.message || 'Unexpected error loading data');
+        } finally {
+            setLoading(false);
         }
-        setLoading(false);
     };
 
     useEffect(() => {
         loadData();
     }, [filterType, selectedUnit]);
 
-    if (loading || !data) {
+    if (loading) {
         return (
             <div className="min-h-[70vh] flex flex-col items-center justify-center gap-4 text-slate-500">
                 <div className="w-10 h-10 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin" />
                 <p className="text-sm font-bold animate-pulse text-[#0a1e42]">Aggregating AxtenOS Executive Analytics...</p>
+            </div>
+        );
+    }
+
+    if (error || !data) {
+        return (
+            <div className="min-h-[70vh] flex flex-col items-center justify-center gap-4">
+                <div className="bg-red-50 border border-red-200 rounded-2xl p-8 max-w-lg text-center">
+                    <p className="text-lg font-black text-red-800 mb-2">Failed to Load Dashboard</p>
+                    <p className="text-sm text-red-600 font-medium mb-4">{error || 'No data returned from server'}</p>
+                    <button
+                        onClick={loadData}
+                        className="px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 transition-colors cursor-pointer"
+                    >
+                        Retry
+                    </button>
+                </div>
             </div>
         );
     }

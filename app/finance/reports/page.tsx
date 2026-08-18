@@ -259,12 +259,18 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
 
     // Group the same filtered payments by patient so collections can be reviewed
     // per-patient instead of as one long chronological list.
+    // NOTE: depositsList entries are merged in here too — a patient who only paid
+    // an advance (no invoice payment) would otherwise be invisible in this view
+    // but still counted in the total, causing the visible total to not match.
     type PatientGroup = {
         key: string; patientName: string; patientId: string;
         payments: any[]; total: number; firstDate: Date; lastDate: Date;
     };
+    const depositsList: any[] = data?.depositsList || [];
     const patientGroups: PatientGroup[] = (() => {
         const map = new Map<string, PatientGroup>();
+
+        // 1. Invoice payments (already client-filtered)
         filteredPayments.forEach((p: any) => {
             const patientId = p.invoice?.patient?.patient_id;
             const patientName = p.invoice?.patient?.full_name || 'Walk-in / No Patient';
@@ -280,6 +286,50 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
             if (dt < group.firstDate) group.firstDate = dt;
             if (dt > group.lastDate) group.lastDate = dt;
         });
+
+        // 2. Deposit entries — patient-level advance receipts that have no invoice.
+        // Apply the same client-side filters that apply to invoice payments.
+        depositsList.forEach((d: any) => {
+            const patientId = d.patient_id;
+            const patientName = d.patient_name || 'Walk-in / No Patient';
+            const key = patientId || patientName;
+            const dt = new Date(d.created_at);
+
+            // Apply shared column filters where possible
+            if (colPatient && !patientName.toLowerCase().includes(colPatient.toLowerCase())) return;
+            if (colReceipt && !String(d.deposit_number || '').toLowerCase().includes(colReceipt.toLowerCase())) return;
+            if (colAmountMin && Number(d.amount) < Number(colAmountMin)) return;
+            if (colDate) {
+                const ymd = `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
+                if (ymd !== colDate) return;
+            }
+            // colColMethod: deposit tender from d.payment_method
+            if (colColMethod && canonicalTender(d.payment_method) !== colColMethod) return;
+
+            // Synthesise a payment-like object for the drill-down table so the
+            // receipt link still works (deposit receipt at /api/deposit/<id>/receipt).
+            const syntheticPayment = {
+                id: `dep-${d.id}`,
+                created_at: d.created_at,
+                receipt_number: d.deposit_number,
+                amount: d.amount,
+                payment_method: d.payment_method,
+                // Mark as a deposit-only entry so drill-down can render correctly
+                _isDeposit: true,
+                invoice: null,
+            };
+
+            let group = map.get(key);
+            if (!group) {
+                group = { key, patientName, patientId: patientId || '-', payments: [], total: 0, firstDate: dt, lastDate: dt };
+                map.set(key, group);
+            }
+            group.payments.push(syntheticPayment);
+            group.total += Number(d.amount);
+            if (dt < group.firstDate) group.firstDate = dt;
+            if (dt > group.lastDate) group.lastDate = dt;
+        });
+
         return Array.from(map.values())
             .map((g) => ({ ...g, payments: [...g.payments].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()) }))
             .sort((a, b) => b.lastDate.getTime() - a.lastDate.getTime());
@@ -926,13 +976,22 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
                                                             <tbody className="divide-y divide-gray-100">
                                                                 {g.payments.map((p: any) => (
                                                                     <tr key={p.id}
-                                                                        onClick={(e) => { e.stopPropagation(); window.open(`/api/payment/${p.id}/receipt`, '_blank'); }}
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            if (p._isDeposit) {
+                                                                                const depositId = String(p.id).replace(/^dep-/, '');
+                                                                                window.open(`/api/deposit/${depositId}/receipt`, '_blank');
+                                                                            } else {
+                                                                                window.open(`/api/payment/${p.id}/receipt`, '_blank');
+                                                                            }
+                                                                        }}
                                                                         title="Open receipt"
                                                                         className="hover:bg-white cursor-pointer transition-colors">
                                                                         <td className="px-3 py-2 text-xs text-gray-600">{new Date(p.created_at).toLocaleDateString('en-GB')}</td>
                                                                         <td className="px-3 py-2 text-xs font-mono text-emerald-700 hover:underline">{p.receipt_number}</td>
-                                                                        <td className="px-3 py-2 text-xs text-gray-600">{p.invoice?.invoice_number || '-'}</td>
+                                                                        <td className="px-3 py-2 text-xs text-gray-600">{p._isDeposit ? <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">Advance</span> : (p.invoice?.invoice_number || '-')}</td>
                                                                         <td className="px-3 py-2 text-xs text-gray-600">{(() => {
+                                                                            if (p._isDeposit) return `Advance · ${canonicalTender(p.payment_method)}`;
                                                                             if (!isDepositSettlement(p)) return canonicalTender(p.payment_method);
                                                                             const parts = [
                                                                                 p.deposit_is_ipd != null ? (p.deposit_is_ipd ? 'IPD' : 'OPD') : null,
