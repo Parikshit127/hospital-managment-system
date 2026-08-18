@@ -15,7 +15,9 @@ import {
     RefreshCw,
     Building2,
     Clock,
-    Award
+    Award,
+    ChevronDown,
+    ChevronRight
 } from 'lucide-react';
 
 // Format numbers: default is currency=false (no ₹ symbol) so counts render as pure numbers!
@@ -32,6 +34,16 @@ export default function PromoterDashboardPage() {
     const [selectedUnit, setSelectedUnit] = useState<string>('all');
     const [fromDate, setFromDate] = useState('2026-04-01');
     const [toDate, setToDate] = useState('2026-07-31');
+    const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
+
+    const toggleSection = (key: string) => {
+        setExpandedSections((prev) => {
+            const next = new Set(prev);
+            if (next.has(key)) next.delete(key);
+            else next.add(key);
+            return next;
+        });
+    };
 
     const loadData = async () => {
         setLoading(true);
@@ -134,21 +146,43 @@ export default function PromoterDashboardPage() {
     };
 
     const renderTableSection = (
+        key: string,
         title: string,
         subtitle: string,
         rows: Array<{ label: string; data: UnitMetrics; isCurrency?: boolean; isPercentage?: boolean; isTotalRow?: boolean }>
-    ) => (
+    ) => {
+        const isExpanded = expandedSections.has(key);
+        const totalRow = rows.find((r) => r.isTotalRow) || rows[rows.length - 1];
+        const totalDisplay = totalRow.isPercentage
+            ? `${totalRow.data.total}%`
+            : fmtINR(totalRow.data.total, totalRow.isCurrency);
+
+        return (
         <div className="bg-white border border-[#ede9e2] rounded-2xl overflow-hidden shadow-sm mb-8 print:border-slate-300 print:shadow-none print:mb-6 print:break-inside-avoid">
-            <div className="bg-[#faf9f6] border-b border-[#ede9e2] px-6 py-4 flex items-center justify-between print:py-2 print:px-4">
+            <button
+                type="button"
+                onClick={() => toggleSection(key)}
+                className="w-full text-left bg-[#faf9f6] border-b border-[#ede9e2] px-6 py-4 flex items-center justify-between print:py-2 print:px-4 cursor-pointer hover:bg-[#f1efe9] transition-colors print:pointer-events-none"
+            >
                 <div>
                     <h3 className="text-sm font-black text-[#0a1e42] tracking-wide uppercase flex items-center gap-2 print:text-xs">
                         <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 print:hidden" />
                         {title}
                     </h3>
                     <p className="text-xs text-slate-500 font-medium mt-0.5 print:text-[10px]">{subtitle}</p>
+                    {!isExpanded && (
+                        <p className="text-sm font-black text-emerald-800 mt-2 print:hidden">
+                            Consolidated Total: {totalDisplay}
+                        </p>
+                    )}
                 </div>
-            </div>
-            <div className="overflow-x-auto">
+                {isExpanded ? (
+                    <ChevronDown className="w-4 h-4 text-slate-400 shrink-0 print:hidden" />
+                ) : (
+                    <ChevronRight className="w-4 h-4 text-slate-400 shrink-0 print:hidden" />
+                )}
+            </button>
+            <div className={`overflow-x-auto ${isExpanded ? '' : 'hidden print:block'}`}>
                 <table className="w-full text-left border-collapse">
                     <thead>
                         <tr className="bg-[#f1f5f9] border-b border-[#e2e8f0] text-[11px] font-black text-[#0a1e42] uppercase tracking-wider print:text-[10px]">
@@ -206,7 +240,8 @@ export default function PromoterDashboardPage() {
                 </table>
             </div>
         </div>
-    );
+        );
+    };
 
     return (
         <div className="space-y-6">
@@ -442,6 +477,7 @@ export default function PromoterDashboardPage() {
             {/* 1. Current Admitted Patients */}
             <div id="admitted">
                 {renderTableSection(
+                    'admitted',
                     '1. Current Admitted Patients',
                     'Real-time inpatient count across units by patient category',
                     [
@@ -457,6 +493,7 @@ export default function PromoterDashboardPage() {
             {/* 2. Admission */}
             <div id="admissions">
                 {renderTableSection(
+                    'admissions',
                     '2. Admission',
                     'New patient admissions logged within selected period',
                     [
@@ -472,6 +509,7 @@ export default function PromoterDashboardPage() {
             {/* 3. Discharge */}
             <div id="discharges">
                 {renderTableSection(
+                    'discharges',
                     '3. Discharge',
                     'Patient discharge volume breakdown',
                     [
@@ -487,6 +525,7 @@ export default function PromoterDashboardPage() {
             {/* 4. Revenue */}
             <div id="revenue">
                 {renderTableSection(
+                    'revenue',
                     '4. Revenue Realization',
                     'Gross revenue realization by patient financial class (₹)',
                     [
@@ -502,6 +541,7 @@ export default function PromoterDashboardPage() {
             {/* 5. OPD vs IPD Revenue Split */}
             <div id="opd-ipd">
                 {renderTableSection(
+                    'opd-ipd',
                     '5. OPD vs IPD Revenue Breakdown',
                     'Revenue contribution by Outpatient, Inpatient, Pharmacy, and Diagnostics (₹)',
                     [
@@ -517,6 +557,7 @@ export default function PromoterDashboardPage() {
             {/* 6. Departmental Revenue */}
             <div id="department">
                 {renderTableSection(
+                    'department',
                     '6. Top Clinical Department Revenue',
                     'Revenue yield generated by major clinical specialties (₹)',
                     departmentRevenue.map(dept => ({
@@ -530,6 +571,7 @@ export default function PromoterDashboardPage() {
             {/* 7. Expenses */}
             <div id="expenses">
                 {renderTableSection(
+                    'expenses',
                     '7. Expenses',
                     'Monthly operational expenditure breakdown (₹)',
                     [
@@ -545,6 +587,7 @@ export default function PromoterDashboardPage() {
             {/* 8. Receivables & Aging */}
             <div id="receivables" className="space-y-6">
                 {renderTableSection(
+                    'receivables-8a',
                     '8A. Receivables — Yet to Receive',
                     'Outstanding claims, patient balances, and TDS receivables (₹)',
                     [
@@ -558,6 +601,7 @@ export default function PromoterDashboardPage() {
                 )}
 
                 {renderTableSection(
+                    'receivables-8b',
                     '8B. Insurance Receivables Aging Analysis',
                     'Outstanding TPA / Insurance claims categorized by days pending (₹)',
                     [
@@ -572,6 +616,7 @@ export default function PromoterDashboardPage() {
             {/* 9. Payables - Due for Payments */}
             <div id="payables">
                 {renderTableSection(
+                    'payables',
                     '9. Payables — Due for Payments',
                     'Pending vendor bills, doctor payouts, and tax obligations (₹)',
                     [
@@ -587,6 +632,7 @@ export default function PromoterDashboardPage() {
             {/* 10. Salaries */}
             <div id="salaries">
                 {renderTableSection(
+                    'salaries',
                     '10. Salaries',
                     'Monthly staff payroll and employee compensation (₹)',
                     [
@@ -602,6 +648,7 @@ export default function PromoterDashboardPage() {
             {/* 11. ARPOB - Average Revenue Per Operational Bed */}
             <div id="arpob">
                 {renderTableSection(
+                    'arpob',
                     '11. ARPOB — Average Revenue Per Operational Bed',
                     'Operational bed capacity and average daily revenue yield (₹/Bed/Day)',
                     [
@@ -618,6 +665,7 @@ export default function PromoterDashboardPage() {
             {/* 12. Status of Profit/Loss */}
             <div id="profit-loss">
                 {renderTableSection(
+                    'profit-loss',
                     '12. Status of Profit / Loss',
                     'Net operational profit margin across units',
                     [
