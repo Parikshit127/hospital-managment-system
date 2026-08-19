@@ -552,9 +552,13 @@ export async function postChargeToIpdBill(data: {
             });
         }
 
-        // Use master values when available, else fall back to client-provided values
+        // Use master values when available, else fall back to client-provided values.
+        // Price is locked to the master rate unless the service is explicitly
+        // flagged is_price_editable — client-submitted unit_price is otherwise ignored.
         const description = masterService ? masterService.service_name : data.description;
-        const unitPrice = masterService ? Number(masterService.default_rate) : data.unit_price;
+        const unitPrice = masterService && !masterService.is_price_editable
+            ? Number(masterService.default_rate)
+            : data.unit_price;
 
         // GST on an IN-PATIENT bill is always nil.
         //

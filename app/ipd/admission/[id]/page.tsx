@@ -90,6 +90,9 @@ export default function AdmissionDetailPage() {
     const [requiresRenderedBy, setRequiresRenderedBy] = useState(false);
     const [renderedByDoctorId, setRenderedByDoctorId] = useState('');
     const [renderedByDoctors, setRenderedByDoctors] = useState<any[]>([]);
+    // Rate lock: set when a picked catalog service has is_price_editable=false.
+    // Free-typed (non-catalog) descriptions stay editable.
+    const [priceLocked, setPriceLocked] = useState(false);
 
     // Nursing task
     const [taskType, setTaskType] = useState('Vitals');
@@ -756,7 +759,7 @@ export default function AdmissionDetailPage() {
                     : 'Charge posted');
             setChargeDesc(''); setChargeQty('1'); setChargeRate(''); setChargeCategory('Miscellaneous'); setChargeDateTime('');
             setChargeDisposition('auto');
-            setSelectedServiceId(null); setRequiresRenderedBy(false); setRenderedByDoctorId('');
+            setSelectedServiceId(null); setRequiresRenderedBy(false); setRenderedByDoctorId(''); setPriceLocked(false);
             setBill(null); // reset bill cache so it reloads
             loadBill();
         } else {
@@ -2443,11 +2446,11 @@ export default function AdmissionDetailPage() {
                                                     <Plus className="h-3.5 w-3.5" /> Post Manual Charge
                                                 </h4>
                                                 <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-0.5">
-                                                    <button type="button" onClick={() => { setChargeMode('service'); setChargeDesc(''); setChargeRate(''); setCatalogQuery(''); setSelectedServiceId(null); setRequiresRenderedBy(false); setRenderedByDoctorId(''); }}
+                                                    <button type="button" onClick={() => { setChargeMode('service'); setChargeDesc(''); setChargeRate(''); setCatalogQuery(''); setSelectedServiceId(null); setRequiresRenderedBy(false); setRenderedByDoctorId(''); setPriceLocked(false); }}
                                                         className={`px-2.5 py-1 text-[10px] font-bold rounded-md transition-all ${chargeMode === 'service' ? 'bg-orange-500 text-white' : 'text-gray-500 hover:text-gray-800'}`}>
                                                         Service
                                                     </button>
-                                                    <button type="button" onClick={() => { setChargeMode('package'); setChargeDesc(''); setChargeRate(''); setPkgSearch(''); setSelectedPkgId(null); setSelectedServiceId(null); setRequiresRenderedBy(false); setRenderedByDoctorId(''); }}
+                                                    <button type="button" onClick={() => { setChargeMode('package'); setChargeDesc(''); setChargeRate(''); setPkgSearch(''); setSelectedPkgId(null); setSelectedServiceId(null); setRequiresRenderedBy(false); setRenderedByDoctorId(''); setPriceLocked(false); }}
                                                         className={`px-2.5 py-1 text-[10px] font-bold rounded-md transition-all ${chargeMode === 'package' ? 'bg-orange-500 text-white' : 'text-gray-500 hover:text-gray-800'}`}>
                                                         Package
                                                     </button>
@@ -2596,6 +2599,7 @@ export default function AdmissionDetailPage() {
                                                                     setSelectedServiceId(s.source === 'ipd' ? String(s.service_master_id) : null);
                                                                     setRequiresRenderedBy(!!s.requires_rendered_by);
                                                                     if (!s.requires_rendered_by) setRenderedByDoctorId('');
+                                                                    setPriceLocked(s.source === 'ipd' && !s.is_price_editable);
                                                                 }}
                                                                 className="w-full text-left px-3 py-2 hover:bg-orange-50 border-b border-gray-100 last:border-b-0"
                                                             >
@@ -2620,7 +2624,7 @@ export default function AdmissionDetailPage() {
                                                     onChange={e => {
                                                         setChargeDesc(e.target.value);
                                                         // Free-typed text is no longer tied to the picked catalog service.
-                                                        setSelectedServiceId(null); setRequiresRenderedBy(false); setRenderedByDoctorId('');
+                                                        setSelectedServiceId(null); setRequiresRenderedBy(false); setRenderedByDoctorId(''); setPriceLocked(false);
                                                     }}
                                                     placeholder="Description"
                                                     className="col-span-2 text-xs p-2.5 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-400"
@@ -2644,15 +2648,22 @@ export default function AdmissionDetailPage() {
                                                         <p className="text-[10px] text-gray-400 mt-1">This service requires attributing a rendering doctor for commission/invoicing.</p>
                                                     </div>
                                                 )}
-                                                <input
-                                                    type="number"
-                                                    required
-                                                    min="0"
-                                                    value={chargeRate}
-                                                    onChange={e => setChargeRate(e.target.value)}
-                                                    placeholder="Unit Rate (₹)"
-                                                    className="text-xs p-2.5 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-400"
-                                                />
+                                                <div>
+                                                    <input
+                                                        type="number"
+                                                        required
+                                                        min="0"
+                                                        value={chargeRate}
+                                                        onChange={e => setChargeRate(e.target.value)}
+                                                        readOnly={priceLocked}
+                                                        placeholder="Unit Rate (₹)"
+                                                        title={priceLocked ? 'Rate is locked to the master. Mark the service "Price editable" in Service Master to allow changes.' : undefined}
+                                                        className={`w-full text-xs p-2.5 border rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-400 ${priceLocked ? 'bg-gray-100 text-gray-500 border-gray-200 cursor-not-allowed' : 'bg-white border-gray-200'}`}
+                                                    />
+                                                    {priceLocked && (
+                                                        <p className="text-[10px] text-gray-400 mt-1">Locked to master rate</p>
+                                                    )}
+                                                </div>
                                                 <input
                                                     type="number"
                                                     min="0.01"

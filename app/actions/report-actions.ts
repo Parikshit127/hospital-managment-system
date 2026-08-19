@@ -433,13 +433,17 @@ export async function getProfitLossReport(filters: { from: string; to: string; i
         const toDate = new Date(filters.to + 'T23:59:59.999+05:30');
         const dateFilter = { gte: fromDate, lte: toDate };
         // Income (invoice items) can be split by IPD/OPD or admit/discharge; expenses are org-wide.
-        const itemWhere: any = { created_at: dateFilter };
-        if (filters.invoiceType || filters.admissionStatus) {
-            itemWhere.invoice = {
+        // Only Final invoices count as recognized revenue — Draft bills aren't billed yet and
+        // Cancelled bills carry no revenue (matches the Total Revenue card's MIS-based total_net,
+        // which zeroes Cancelled and never reaches Draft in the first place).
+        const itemWhere: any = {
+            created_at: dateFilter,
+            invoice: {
+                status: 'Final',
                 ...(filters.invoiceType ? { invoice_type: filters.invoiceType } : {}),
                 ...(filters.admissionStatus ? { admission: { status: filters.admissionStatus } } : {}),
-            };
-        }
+            },
+        };
 
         const [revenueByDept, expensesByCat] = await Promise.all([
             db.invoice_items.groupBy({

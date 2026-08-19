@@ -47,6 +47,14 @@ type EditableItem = {
     // Return / credit line (negative net_price, zero unit_price as stored). Its
     // value inputs are locked so the credit can't be accidentally recomputed away.
     _credit?: boolean;
+    // Price lock from the picked catalog service's is_price_editable flag.
+    // true (default) = no lock from this feature; existing/loaded rows always
+    // default true (see design note above pickService) so today's Admin/Finance
+    // edit-existing-line behavior is unchanged.
+    _priceEditable?: boolean;
+    // Raw catalog id of the picked service (e.g. "ipd-42"), sent as ref_id on
+    // add so the server can re-check is_price_editable independently of the client.
+    _serviceRef?: string;
     // Original snapshot for diff detection (existing rows only)
     _orig?: {
         department: string;
@@ -76,7 +84,7 @@ type HeaderState = {
 type CatalogSvc = {
     id: string; service_name: string; service_code: string;
     default_rate: number; tax_rate: number; service_category: string;
-    hsn_sac_code: string; source: string;
+    hsn_sac_code: string; source: string; is_price_editable: boolean;
 };
 
 const fmtINR = (n: number) =>
@@ -92,6 +100,7 @@ function blankItem(): EditableItem {
         tax_rate: 0,
         hsn_sac_code: null,
         service_category: null,
+        _priceEditable: true,
     };
 }
 
@@ -242,7 +251,10 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
                     hsn_sac_code: it.hsn_sac_code ?? null,
                     service_category: it.service_category ?? null,
                 };
-                return { id: it.id, ...orig, _orig: orig, _credit: isCredit };
+                // Loaded/existing rows predate this feature and have no reliable
+                // link back to a master service — leave their price edit access
+                // exactly as it was (role-gated only) rather than guessing a lock.
+                return { id: it.id, ...orig, _orig: orig, _credit: isCredit, _priceEditable: true };
             });
             setItems(loadedItems);
 
@@ -359,6 +371,8 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
             tax_rate: svc.tax_rate,
             hsn_sac_code: svc.hsn_sac_code,
             service_category: svc.service_category,
+            _priceEditable: svc.is_price_editable,
+            _serviceRef: svc.id,
         });
         setActiveSvcRow(null);
     }
@@ -452,6 +466,7 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
                     hsn_sac_code: it.hsn_sac_code,
                     service_category: it.service_category,
                     service_date: it.service_date || undefined,
+                    ref_id: it._serviceRef || undefined,
                 }));
             const items_to_remove = items
                 .filter(it => it.id && it._removed)
@@ -707,7 +722,8 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
                                                                     value={it.description}
                                                                     placeholder="Search services…"
                                                                     onChange={e => {
-                                                                        updateItem(idx, { description: e.target.value });
+                                                                        // Free-typed text is no longer tied to the picked catalog service.
+                                                                        updateItem(idx, { description: e.target.value, _priceEditable: true, _serviceRef: undefined });
                                                                         if (activeSvcRow !== idx) setActiveSvcRow(idx);
                                                                     }}
                                                                     onFocus={() => setActiveSvcRow(idx)}
@@ -764,7 +780,7 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
                                                     />
                                                 </td>
                                                 <td className="px-2 py-1.5 text-right">
-                                                    {canEditPaid ? (
+                                                    {canEditPaid && it._priceEditable !== false ? (
                                                         <input
                                                             type="number"
                                                             min={0}
@@ -781,7 +797,11 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
                                                             className={`${NUM_INPUT} bg-gray-50 text-gray-500 cursor-not-allowed`}
                                                             value={it.unit_price}
                                                             readOnly
-                                                            title="Item prices cannot be edited. To change the amount, apply a discount or cancel the service and add it again."
+                                                            title={
+                                                                canEditPaid
+                                                                    ? 'Rate is locked to the master. Mark the service "Price editable" in Service Master to allow changes.'
+                                                                    : 'Item prices cannot be edited. To change the amount, apply a discount or cancel the service and add it again.'
+                                                            }
                                                         />
                                                     )}
                                                 </td>

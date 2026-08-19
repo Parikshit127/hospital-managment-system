@@ -21,10 +21,11 @@ import { VoucherModal } from '@/app/components/finance/VoucherModal';
 import { canonicalTender, isDepositSettlement } from '@/app/lib/payment-tender';
 import Link from 'next/link';
 
-type ReportType = 'collections' | 'daily' | 'aging' | 'cashflow' | 'pnl' | 'balance-sheet' | 'insurance' | 'department';
+type ReportType = 'collections' | 'voucher' | 'daily' | 'aging' | 'cashflow' | 'pnl' | 'balance-sheet' | 'insurance' | 'department';
 
 const REPORT_TABS: { key: ReportType; label: string; icon: React.ReactNode }[] = [
     { key: 'collections', label: 'Collections', icon: <IndianRupee className="h-4 w-4" /> },
+    { key: 'voucher', label: 'Daily Sale Voucher', icon: <BookOpenCheck className="h-4 w-4" /> },
     { key: 'daily', label: 'Daily Activity', icon: <CalendarDays className="h-4 w-4" /> },
     { key: 'aging', label: 'A/R Aging', icon: <Clock className="h-4 w-4" /> },
     { key: 'cashflow', label: 'Cash Flow', icon: <TrendingUp className="h-4 w-4" /> },
@@ -78,6 +79,7 @@ export function FinancialReportsContent({ shell = 'app' }: { shell?: 'app' | 'ad
                     res = await getCollectionsReport({ from, to, method: activeMethod, invoiceType: it, admissionStatus: adm });
                     break;
                 }
+            case 'voucher': res = await getCollectionsReport({ from, to, invoiceType: it, admissionStatus: adm }); break;
             case 'daily': res = await getDailyActivityReport({ from, to }); break;
             case 'aging': res = await getARAgingReport({ invoiceType: it, admissionStatus: adm }); break;
             case 'cashflow': res = await getCashFlowReport({ from, to, invoiceType: it, admissionStatus: adm }); break;
@@ -189,6 +191,7 @@ export function FinancialReportsContent({ shell = 'app' }: { shell?: 'app' | 'ad
                             methodFilter={methodFilter} setMethodFilter={setMethodFilter}
                         />
                     )}
+                    {activeReport === 'voucher' && <DailySaleVoucherReport data={data} fmt={fmt} from={from} to={to} />}
                     {activeReport === 'daily' && <DailyActivityReport data={data} fmt={fmt} from={from} to={to} />}
                     {activeReport === 'aging' && <AgingReport data={data} fmt={fmt} />}
                     {activeReport === 'cashflow' && <CashFlowReport data={data} fmt={fmt} from={from} to={to} />}
@@ -1038,6 +1041,129 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
                 )}
             </div>
         </>
+    );
+}
+
+// Daily Sale Voucher — reuses getCollectionsReport's already-computed totals
+// (received / totals / depositApplied / depositsCollected) and lays them out as
+// a Dr/Cr journal so the front-desk can copy the figures straight into Tally.
+//   Dr <tender>      = received[tender] — real cash-counter tender payments
+//                       against bills PLUS new advance collected in that same
+//                       tender (blended, matches how a single Tally line reads).
+//   Dr Advance        = depositApplied — advance collected earlier, now settled
+//                       against today's bill (a non-cash adjustment).
+//   Cr Sales          = totals.total — money recognized against invoices today,
+//                       whether paid directly or via a settled advance.
+//   Cr Advance        = depositsCollected.total — brand-new advance taken today
+//                       for a patient not yet billed/discharged.
+// Dr and Cr always tie out: receivedTotal + depositApplied === totals.total + depositsCollected.total.
+function DailySaleVoucherReport({ data, fmt, from, to }: { data: any; fmt: (n: number) => string; from: string; to: string }) {
+    const received: Record<string, number> = data?.received || {};
+    const debitTenders = Object.entries(received).filter(([, amt]) => Number(amt) !== 0);
+    const receivedTotal = Number(data?.receivedTotal || 0);
+    const depositApplied = Number(data?.depositApplied || 0);
+    const sales = Number(data?.totals?.total || 0);
+    const depositsCollected: Record<string, number> = data?.depositsCollected || {};
+    const depositCollectedTotal = Number(depositsCollected.total || 0);
+    const depositModes = Object.entries(depositsCollected).filter(([mode, amt]) => mode !== 'total' && Number(amt) !== 0);
+
+    const totalDebit = receivedTotal + depositApplied;
+    const totalCredit = sales + depositCollectedTotal;
+    const balanced = Math.abs(totalDebit - totalCredit) < 1;
+
+    return (
+        <div className="space-y-6">
+            <div className="bg-white border border-gray-200 rounded-xl p-5">
+                <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+                    <div>
+                        <h3 className="text-sm font-bold text-gray-900">Daily Sale Voucher — Journal Entry</h3>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                            {from === to ? from : `${from} to ${to}`} · Ready to punch into Tally as a Sale/Journal voucher
+                        </p>
+                    </div>
+                    {!balanced && (
+                        <span className="text-xs font-bold text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-2 py-1">
+                            Debit/Credit mismatch — check data
+                        </span>
+                    )}
+                </div>
+
+                {debitTenders.length === 0 && sales === 0 && depositCollectedTotal === 0 ? (
+                    <p className="text-sm text-gray-400 py-6 text-center">No collections recorded for this period.</p>
+                ) : (
+                    <table className="w-full text-sm">
+                        <thead>
+                            <tr className="border-b border-gray-200 text-left text-[10px] font-black text-gray-400 uppercase tracking-wider">
+                                <th className="pb-2">Particulars</th>
+                                <th className="pb-2 text-right">Debit</th>
+                                <th className="pb-2 text-right">Credit</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                            {debitTenders.map(([tender, amt]) => (
+                                <tr key={tender}>
+                                    <td className="py-2 font-bold text-gray-700">Dr&nbsp; {tender}</td>
+                                    <td className="py-2 text-right font-mono">{fmt(Number(amt))}</td>
+                                    <td className="py-2 text-right" />
+                                </tr>
+                            ))}
+                            {depositApplied > 0 && (
+                                <tr>
+                                    <td className="py-2 font-bold text-gray-700">
+                                        Dr&nbsp; Advance <span className="text-gray-400 font-normal">(earlier advance applied to today's bills)</span>
+                                    </td>
+                                    <td className="py-2 text-right font-mono">{fmt(depositApplied)}</td>
+                                    <td className="py-2 text-right" />
+                                </tr>
+                            )}
+                            <tr>
+                                <td className="py-2 font-bold text-gray-700">
+                                    Cr&nbsp; Sales <span className="text-gray-400 font-normal">(billed amount for the day)</span>
+                                </td>
+                                <td className="py-2 text-right" />
+                                <td className="py-2 text-right font-mono">{fmt(sales)}</td>
+                            </tr>
+                            {depositCollectedTotal > 0 && (
+                                <tr>
+                                    <td className="py-2 font-bold text-gray-700">
+                                        Cr&nbsp; Advance <span className="text-gray-400 font-normal">(new — unbilled/undischarged patients)</span>
+                                    </td>
+                                    <td className="py-2 text-right" />
+                                    <td className="py-2 text-right font-mono">{fmt(depositCollectedTotal)}</td>
+                                </tr>
+                            )}
+                        </tbody>
+                        <tfoot>
+                            <tr className="border-t-2 border-gray-300 font-black">
+                                <td className="py-2">Total</td>
+                                <td className="py-2 text-right font-mono">{fmt(totalDebit)}</td>
+                                <td className="py-2 text-right font-mono">{fmt(totalCredit)}</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                )}
+            </div>
+
+            {depositModes.length > 0 && (
+                <div className="bg-white border border-gray-200 rounded-xl p-5">
+                    <h4 className="text-xs font-bold text-gray-900 mb-1">Memo — New Advance Collected, by Mode</h4>
+                    <p className="text-[11px] text-gray-400 mb-3">
+                        Already folded into the Dr tender lines above (for unbilled/undischarged patients) — shown separately only
+                        so you can see how much of today's Cash/UPI/Card was fresh advance vs. bill settlement. Don't add these again.
+                    </p>
+                    <table className="w-full text-sm">
+                        <tbody className="divide-y divide-gray-100">
+                            {depositModes.map(([mode, amt]) => (
+                                <tr key={mode}>
+                                    <td className="py-1.5 text-gray-600">{mode}</td>
+                                    <td className="py-1.5 text-right font-mono">{fmt(Number(amt))}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+        </div>
     );
 }
 

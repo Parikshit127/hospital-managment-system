@@ -32,6 +32,7 @@ const EMPTY_SERVICE = {
   service_category: 'OPD Consultation' as typeof SERVICE_CATEGORIES[number],
   default_rate: 0, hsn_sac_code: '', tax_rate: 0, is_active: true,
   requires_rendered_by: false,
+  is_price_editable: false,
 };
 
 const EMPTY_LAB_TEST = {
@@ -713,16 +714,16 @@ export default function ServiceMasterPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-200 bg-gray-50/80">
-                  {['Code', 'Name', 'Category', 'Rate', 'Tax%', 'Rendered By', 'Status', 'Actions'].map(h => (
+                  {['Code', 'Name', 'Category', 'Rate', 'Tax%', 'Rendered By', 'Price Editable', 'Status', 'Actions'].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {svcLoading ? (
-                  <tr><td colSpan={8} className="text-center py-16"><Loader2 className="h-6 w-6 animate-spin text-blue-500 mx-auto" /></td></tr>
+                  <tr><td colSpan={9} className="text-center py-16"><Loader2 className="h-6 w-6 animate-spin text-blue-500 mx-auto" /></td></tr>
                 ) : svcRows.length === 0 ? (
-                  <tr><td colSpan={8} className="text-center py-12 text-gray-400">No services found</td></tr>
+                  <tr><td colSpan={9} className="text-center py-12 text-gray-400">No services found</td></tr>
                 ) : svcRows.map(r => (
                   <tr key={r.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3 font-mono text-xs text-gray-600">{r.service_code}</td>
@@ -734,6 +735,11 @@ export default function ServiceMasterPage() {
                       {r.requires_rendered_by && (
                         <span className="inline-flex px-2 py-1 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700">Required</span>
                       )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex px-2 py-1 rounded-full text-[10px] font-bold ${r.is_price_editable ? 'bg-amber-50 text-amber-700' : 'bg-gray-100 text-gray-500'}`}>
+                        {r.is_price_editable ? 'Editable' : 'Locked'}
+                      </span>
                     </td>
                     <td className="px-4 py-3">
                       <span className={`inline-flex px-2 py-1 rounded-full text-[10px] font-bold ${r.is_active ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
@@ -821,6 +827,11 @@ export default function ServiceMasterPage() {
                     <input type="checkbox" checked={!!svcForm.requires_rendered_by}
                       onChange={e => setSvcForm((p: any) => ({ ...p, requires_rendered_by: e.target.checked }))} />
                     Requires Rendered By (doctor must be selected per bill line item)
+                  </label>
+                  <label className="col-span-2 flex items-center gap-2 text-sm">
+                    <input type="checkbox" checked={!!svcForm.is_price_editable}
+                      onChange={e => setSvcForm((p: any) => ({ ...p, is_price_editable: e.target.checked }))} />
+                    Price editable in billing (unchecked = rate is locked to this master's Default Rate in IPD &amp; OPD billing)
                   </label>
                   <label className="col-span-2 flex items-center gap-2 text-sm">
                     <input type="checkbox" checked={!!svcForm.is_active}

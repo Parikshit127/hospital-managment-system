@@ -3598,7 +3598,19 @@ export async function saveInvoiceEdits(invoiceId: number, payload: {
             // Adds
             for (const a of payload.items_to_add ?? []) {
                 const quantity = Number(a.quantity);
-                const unit_price = Number(a.unit_price);
+                // Price is locked to the master rate unless the picked service is
+                // explicitly flagged is_price_editable — re-checked here independently
+                // of the client so a modified request can't bypass the UI lock.
+                let unit_price = Number(a.unit_price);
+                const ipdRefMatch = /^ipd-(\d+)$/.exec(a.ref_id || '');
+                if (ipdRefMatch) {
+                    const masterService = await tx.ipdServiceMaster.findFirst({
+                        where: { id: parseInt(ipdRefMatch[1], 10), organizationId },
+                    });
+                    if (masterService && !masterService.is_price_editable) {
+                        unit_price = Number(masterService.default_rate);
+                    }
+                }
                 const discount = Number(a.discount || 0);
                 const tax_rate = Number(a.tax_rate || 0);
                 const total_price = quantity * unit_price;

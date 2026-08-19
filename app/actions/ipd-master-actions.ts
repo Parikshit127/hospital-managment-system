@@ -59,6 +59,7 @@ export async function getAllBillableServices() {
                 service_category: s.service_category || 'IPD Services',
                 hsn_sac_code: s.hsn_sac_code || '9993',
                 source: 'ipd',
+                is_price_editable: !!s.is_price_editable,
             })),
             ...chargeCatalog.map((s: any) => ({
                 id: `cat-${s.id}`,
@@ -69,6 +70,7 @@ export async function getAllBillableServices() {
                 service_category: s.service_category || s.category || 'Services',
                 hsn_sac_code: s.hsn_sac_code || '9993',
                 source: 'catalog',
+                is_price_editable: true,
             })),
             ...labTests.map((s: any) => ({
                 id: `lab-${s.id}`,
@@ -79,6 +81,7 @@ export async function getAllBillableServices() {
                 service_category: s.category || 'Laboratory',
                 hsn_sac_code: s.hsn_sac_code || '9993',
                 source: 'lab',
+                is_price_editable: true,
             })),
             ...radiology.map((s: any) => ({
                 id: `rad-${s.id}`,
@@ -89,6 +92,7 @@ export async function getAllBillableServices() {
                 service_category: s.category || s.modality || 'Radiology',
                 hsn_sac_code: s.hsn_sac_code || '9993',
                 source: 'radiology',
+                is_price_editable: true,
             })),
         ];
 
