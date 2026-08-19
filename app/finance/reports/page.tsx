@@ -1070,15 +1070,23 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
 //   Dr <tender>       = received[tender] — real cash-counter tender payments
 //                        against bills PLUS new advance collected in that same
 //                        tender (blended, matches how a single Tally line reads).
-//   Dr Advance         = depositApplied — advance collected earlier, now settled
-//                        against today's bill (a non-cash adjustment).
+//   Dr Advance         = depositApplied, NET of same-period round-trips — advance
+//                        collected in an EARLIER period, now settled against
+//                        today's bill (a non-cash adjustment). Deliberately
+//                        excludes a deposit that was both collected and applied
+//                        within this same date range (e.g. a discharge-day lump
+//                        sum taken as "advance" then immediately applied) — that
+//                        money never sat as real advance, so it's netted out and
+//                        just flows through as ordinary Cash → Sales.
 //   Cr Sales           = misSales (getMISReport's total_net) — the bill's OWN
 //                        date (OPD: invoice created_at, IPD: discharge date),
 //                        NOT the date money was collected. Using payment date
 //                        here would overstate Sales on any day a patient pays
 //                        against a bill raised on a different date.
-//   Cr Advance         = depositsCollected.total — brand-new advance taken today
-//                        for a patient not yet billed/discharged.
+//   Cr Advance         = depositsCollected.total, NET of the same same-period
+//                        round-trips above — only advance still genuinely
+//                        unapplied (sitting on the books) for an unbilled/
+//                        undischarged patient at the end of this period.
 //   Dr/Cr Sundry Debtors = reconciling line for the gap between "billed today"
 //                        and "collected today" — e.g. an IPD installment paid
 //                        today against a bill dated on an earlier/later day.
@@ -1086,20 +1094,48 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
 //                        Cr Debtors: collected today against an older bill.
 // Dr and Cr always tie out by construction (the Debtors line is the balancing figure).
 function DailySaleVoucherReport({ data, fmt, from, to }: { data: any; fmt: (n: number) => string; from: string; to: string }) {
+    const EPS = 0.5;
     const received: Record<string, number> = data?.received || {};
     const debitTenders = Object.entries(received).filter(([, amt]) => Number(amt) !== 0);
     const receivedTotal = Number(data?.receivedTotal || 0);
-    const depositApplied = Number(data?.depositApplied || 0);
     const misSalesAvailable = data?.misSales != null;
     const sales = Number(data?.misSales ?? data?.totals?.total ?? 0);
-    const depositsCollected: Record<string, number> = data?.depositsCollected || {};
-    const depositCollectedTotal = Number(depositsCollected.total || 0);
-    const depositModes = Object.entries(depositsCollected).filter(([mode, amt]) => mode !== 'total' && Number(amt) !== 0);
+
+    // A deposit collected AND applied within this same date range never really
+    // sat as advance — net it out of both Advance lines so it just flows through
+    // as Cash → Sales, instead of inflating both "new advance" and "applied advance".
+    // `p.deposit_tender` is only set (server-side) when the settlement's source
+    // deposit is itself in this period's depositRows — i.e. a same-period round-trip.
+    const paymentsList: any[] = data?.payments || [];
+    const sameSettlements = paymentsList.filter(
+        (p: any) => p.status === 'Completed' && isDepositSettlement(p) && p.deposit_tender != null
+    );
+    const sameSettledTotal = sameSettlements.reduce((s: number, p: any) => s + Number(p.amount), 0);
+    const sameSettledByTender: Record<string, number> = {};
+    sameSettlements.forEach((p: any) => {
+        const t = canonicalTender(p.deposit_tender);
+        sameSettledByTender[t] = (sameSettledByTender[t] || 0) + Number(p.amount);
+    });
+
+    // depositsCollectedRaw is already net of refunds (server nets refunded_amount per
+    // deposit), but sameSettledTotal is the gross amount applied — if a same-period
+    // deposit was applied and then partially refunded, the subtraction can go negative.
+    // Don't silently clamp that away: it means real money (the refund) isn't otherwise
+    // visible in this journal, so flag it instead of hiding it.
+    const depositAppliedRaw = Number(data?.depositApplied || 0) - sameSettledTotal;
+    const depositApplied = Math.max(0, depositAppliedRaw);
+    const depositsCollectedRaw: Record<string, number> = data?.depositsCollected || {};
+    const depositCollectedTotalRaw = Number(depositsCollectedRaw.total || 0) - sameSettledTotal;
+    const depositCollectedTotal = Math.max(0, depositCollectedTotalRaw);
+    const nettingOverflow = depositAppliedRaw < -EPS || depositCollectedTotalRaw < -EPS;
+    const depositModes = Object.entries(depositsCollectedRaw)
+        .filter(([mode]) => mode !== 'total')
+        .map(([mode, amt]) => [mode, Number(amt) - (sameSettledByTender[mode] || 0)] as [string, number])
+        .filter(([, amt]) => amt > 0.5);
 
     const debitCore = receivedTotal + depositApplied;
     const creditCore = sales + depositCollectedTotal;
     const netDebtors = creditCore - debitCore;
-    const EPS = 0.5;
     const drDebtors = netDebtors > EPS ? netDebtors : 0;
     const crDebtors = netDebtors < -EPS ? -netDebtors : 0;
 
@@ -1204,6 +1240,22 @@ function DailySaleVoucherReport({ data, fmt, from, to }: { data: any; fmt: (n: n
                     </table>
                 )}
             </div>
+
+            {sameSettledTotal > 0.5 && (
+                <p className="text-[11px] text-gray-400 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+                    Note: {fmt(sameSettledTotal)} was collected as advance and applied to a bill within this same period
+                    (e.g. a same-day discharge settlement) — netted out of both Advance lines above and left to flow through
+                    as an ordinary Cash → Sales entry instead of round-tripping through Advance.
+                </p>
+            )}
+
+            {nettingOverflow && (
+                <p className="text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                    A same-period advance was applied to a bill and then partially refunded within this same window —
+                    the Advance lines above have been floored at zero rather than shown negative. Check the Refunds
+                    section of the Collections report for this period to see the missing amount.
+                </p>
+            )}
 
             {depositModes.length > 0 && (
                 <div className="bg-white border border-gray-200 rounded-xl p-5">
