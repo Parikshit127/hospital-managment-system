@@ -5,7 +5,7 @@ import {
     getCollectionsReport, getARAgingReport, getCashFlowReport,
     getProfitLossReport, getInsuranceCollectionReport, getRevenueByDepartment,
     getPnLIncomeBreakdown, getPnLExpenseBreakdown, getInvoiceItemsBrief,
-    getDailyActivityReport,
+    getDailyActivityReport, getMISReport,
 } from '@/app/actions/report-actions';
 import { getBalanceSheet, getScheduleIIIBalanceSheet } from '@/app/actions/gl-actions';
 import { DateRangePicker } from '@/app/components/finance/DateRangePicker';
@@ -79,7 +79,26 @@ export function FinancialReportsContent({ shell = 'app' }: { shell?: 'app' | 'ad
                     res = await getCollectionsReport({ from, to, method: activeMethod, invoiceType: it, admissionStatus: adm });
                     break;
                 }
-            case 'voucher': res = await getCollectionsReport({ from, to, invoiceType: it, admissionStatus: adm }); break;
+            case 'voucher': {
+                    // Sales must be bill-date/accrual (same basis as MIS's "billed amount"),
+                    // not payment-date — getCollectionsReport's totals.total sums payments
+                    // received in range regardless of the underlying bill's date, which
+                    // overstates Sales whenever money comes in against an older bill (common
+                    // for IPD installments / late OPD dues). getMISReport gives the correct
+                    // bill-date total_net to use instead.
+                    // getMISReport has no admissionStatus filter — skip it when the
+                    // "Admitted"/"Discharged" bill-type filter is active so we don't compare
+                    // admission-filtered collections against an unfiltered MIS Sales total.
+                    const [collRes, misRes] = await Promise.all([
+                        getCollectionsReport({ from, to, invoiceType: it, admissionStatus: adm }),
+                        adm ? Promise.resolve({ success: false }) : getMISReport({ from, to, billType: it }),
+                    ]);
+                    const misOk = (misRes as any)?.success;
+                    res = collRes?.success
+                        ? { success: true, data: { ...collRes.data, misSales: misOk ? (misRes as any).data.summary?.total_net ?? 0 : null } }
+                        : collRes;
+                    break;
+                }
             case 'daily': res = await getDailyActivityReport({ from, to }); break;
             case 'aging': res = await getARAgingReport({ invoiceType: it, admissionStatus: adm }); break;
             case 'cashflow': res = await getCashFlowReport({ from, to, invoiceType: it, admissionStatus: adm }); break;
@@ -1044,31 +1063,48 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
     );
 }
 
-// Daily Sale Voucher — reuses getCollectionsReport's already-computed totals
-// (received / totals / depositApplied / depositsCollected) and lays them out as
-// a Dr/Cr journal so the front-desk can copy the figures straight into Tally.
-//   Dr <tender>      = received[tender] — real cash-counter tender payments
-//                       against bills PLUS new advance collected in that same
-//                       tender (blended, matches how a single Tally line reads).
-//   Dr Advance        = depositApplied — advance collected earlier, now settled
-//                       against today's bill (a non-cash adjustment).
-//   Cr Sales          = totals.total — money recognized against invoices today,
-//                       whether paid directly or via a settled advance.
-//   Cr Advance        = depositsCollected.total — brand-new advance taken today
-//                       for a patient not yet billed/discharged.
-// Dr and Cr always tie out: receivedTotal + depositApplied === totals.total + depositsCollected.total.
+// Daily Sale Voucher — combines getCollectionsReport (cash-side truth: what
+// actually moved today, by tender) with getMISReport (bill-side truth: what
+// was actually billed today, by the bill's own date) and lays them out as a
+// Dr/Cr journal so the front-desk can copy the figures straight into Tally.
+//   Dr <tender>       = received[tender] — real cash-counter tender payments
+//                        against bills PLUS new advance collected in that same
+//                        tender (blended, matches how a single Tally line reads).
+//   Dr Advance         = depositApplied — advance collected earlier, now settled
+//                        against today's bill (a non-cash adjustment).
+//   Cr Sales           = misSales (getMISReport's total_net) — the bill's OWN
+//                        date (OPD: invoice created_at, IPD: discharge date),
+//                        NOT the date money was collected. Using payment date
+//                        here would overstate Sales on any day a patient pays
+//                        against a bill raised on a different date.
+//   Cr Advance         = depositsCollected.total — brand-new advance taken today
+//                        for a patient not yet billed/discharged.
+//   Dr/Cr Sundry Debtors = reconciling line for the gap between "billed today"
+//                        and "collected today" — e.g. an IPD installment paid
+//                        today against a bill dated on an earlier/later day.
+//                        Dr Debtors: billed today, not fully collected today.
+//                        Cr Debtors: collected today against an older bill.
+// Dr and Cr always tie out by construction (the Debtors line is the balancing figure).
 function DailySaleVoucherReport({ data, fmt, from, to }: { data: any; fmt: (n: number) => string; from: string; to: string }) {
     const received: Record<string, number> = data?.received || {};
     const debitTenders = Object.entries(received).filter(([, amt]) => Number(amt) !== 0);
     const receivedTotal = Number(data?.receivedTotal || 0);
     const depositApplied = Number(data?.depositApplied || 0);
-    const sales = Number(data?.totals?.total || 0);
+    const misSalesAvailable = data?.misSales != null;
+    const sales = Number(data?.misSales ?? data?.totals?.total ?? 0);
     const depositsCollected: Record<string, number> = data?.depositsCollected || {};
     const depositCollectedTotal = Number(depositsCollected.total || 0);
     const depositModes = Object.entries(depositsCollected).filter(([mode, amt]) => mode !== 'total' && Number(amt) !== 0);
 
-    const totalDebit = receivedTotal + depositApplied;
-    const totalCredit = sales + depositCollectedTotal;
+    const debitCore = receivedTotal + depositApplied;
+    const creditCore = sales + depositCollectedTotal;
+    const netDebtors = creditCore - debitCore;
+    const EPS = 0.5;
+    const drDebtors = netDebtors > EPS ? netDebtors : 0;
+    const crDebtors = netDebtors < -EPS ? -netDebtors : 0;
+
+    const totalDebit = debitCore + drDebtors;
+    const totalCredit = creditCore + crDebtors;
     const balanced = Math.abs(totalDebit - totalCredit) < 1;
 
     return (
@@ -1087,6 +1123,13 @@ function DailySaleVoucherReport({ data, fmt, from, to }: { data: any; fmt: (n: n
                         </span>
                     )}
                 </div>
+
+                {!misSalesAvailable && (
+                    <p className="text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3">
+                        Couldn't load the bill-date Sales figure from the MIS report — showing the payment-date total instead,
+                        which may overstate Sales on days with collections against older bills. Try regenerating.
+                    </p>
+                )}
 
                 {debitTenders.length === 0 && sales === 0 && depositCollectedTotal === 0 ? (
                     <p className="text-sm text-gray-400 py-6 text-center">No collections recorded for this period.</p>
@@ -1130,6 +1173,24 @@ function DailySaleVoucherReport({ data, fmt, from, to }: { data: any; fmt: (n: n
                                     </td>
                                     <td className="py-2 text-right" />
                                     <td className="py-2 text-right font-mono">{fmt(depositCollectedTotal)}</td>
+                                </tr>
+                            )}
+                            {drDebtors > 0 && (
+                                <tr>
+                                    <td className="py-2 font-bold text-gray-700">
+                                        Dr&nbsp; Sundry Debtors <span className="text-gray-400 font-normal">(billed today, not yet fully collected)</span>
+                                    </td>
+                                    <td className="py-2 text-right font-mono">{fmt(drDebtors)}</td>
+                                    <td className="py-2 text-right" />
+                                </tr>
+                            )}
+                            {crDebtors > 0 && (
+                                <tr>
+                                    <td className="py-2 font-bold text-gray-700">
+                                        Cr&nbsp; Sundry Debtors <span className="text-gray-400 font-normal">(today's collection against an earlier bill)</span>
+                                    </td>
+                                    <td className="py-2 text-right" />
+                                    <td className="py-2 text-right font-mono">{fmt(crDebtors)}</td>
                                 </tr>
                             )}
                         </tbody>
