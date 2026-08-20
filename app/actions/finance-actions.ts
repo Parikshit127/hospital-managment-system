@@ -3189,9 +3189,19 @@ export async function updateInvoiceItem(itemId: number, patch: {
         await checkPeriodLock(db, item.invoice.created_at as any);
 
         const quantity = patch.quantity !== undefined ? Number(patch.quantity) : Number(item.quantity);
-        // Rule 6 & 8: unit price of a billed item is not editable (comes from the master).
-        // Reception can only change qty/discount; Admin/Finance may correct a price.
-        const unit_price = (isPrivilegedBilling(session) && patch.unit_price !== undefined)
+        // Price is locked to the master rate unless the line's picked service is
+        // explicitly flagged is_price_editable — re-checked here independently of
+        // the client, same rule as adding a new line (see addInvoiceItem). Role no
+        // longer factors in: unlock the service in Service Master to allow an edit.
+        let priceEditable = true;
+        const ipdRefMatch = /^ipd-(\d+)$/.exec(item.ref_id || '');
+        if (ipdRefMatch) {
+            const masterService = await db.ipdServiceMaster.findFirst({
+                where: { id: parseInt(ipdRefMatch[1], 10), organizationId },
+            });
+            if (masterService && !masterService.is_price_editable) priceEditable = false;
+        }
+        const unit_price = (priceEditable && patch.unit_price !== undefined)
             ? Number(patch.unit_price)
             : Number(item.unit_price);
         const discount = patch.discount !== undefined ? Number(patch.discount) : Number(item.discount);
@@ -3577,11 +3587,20 @@ export async function saveInvoiceEdits(invoiceId: number, payload: {
                 if (!existing || existing.invoice_id !== invoiceId) continue;
 
                 const quantity = u.quantity !== undefined ? Number(u.quantity) : Number(existing.quantity);
-                // Rule 6 & 8: the unit price of a billed item is NOT editable — it comes
-                // from the pricing master. Non-privileged staff can only change qty and
-                // discount; the stored unit_price is preserved regardless of what the
-                // client sends. Admin/Finance retain the ability to correct a price.
-                const unit_price = (isPrivilegedBilling(session) && u.unit_price !== undefined)
+                // Price is locked to the master rate unless the line's picked service is
+                // explicitly flagged is_price_editable — re-checked here independently of
+                // the client, same rule as adding a new line (see the items_to_add loop
+                // below). Role no longer factors in: unlock the service in Service Master
+                // to allow an edit.
+                let priceEditable = true;
+                const updateRefMatch = /^ipd-(\d+)$/.exec(existing.ref_id || '');
+                if (updateRefMatch) {
+                    const masterService = await tx.ipdServiceMaster.findFirst({
+                        where: { id: parseInt(updateRefMatch[1], 10), organizationId },
+                    });
+                    if (masterService && !masterService.is_price_editable) priceEditable = false;
+                }
+                const unit_price = (priceEditable && u.unit_price !== undefined)
                     ? Number(u.unit_price)
                     : Number(existing.unit_price);
                 const discount = u.discount !== undefined ? Number(u.discount) : Number(existing.discount);

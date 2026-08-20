@@ -19,7 +19,7 @@ import {
     getRegisteredPatients, getReceptionStats, getReceptionRevenueToday,
     getExpectedArrivals, checkInPatient, cancelAppointment,
 } from '@/app/actions/reception-actions';
-import { finalizePatientLatestDraft } from '@/app/actions/finance-actions';
+import { finalizePatientLatestDraft, getMyRole } from '@/app/actions/finance-actions';
 import { getIPDAdmissions, cancelAdmission } from '@/app/actions/ipd-actions';
 import { istDayKey, IST } from '@/app/lib/ist';
 import { getDoctorsForDropdown } from '@/app/actions/admin-actions';
@@ -126,6 +126,12 @@ export default function ReceptionDashboard() {
     const [cancelDateTime, setCancelDateTime] = useState('');
     const [cancelling, setCancelling] = useState(false);
     const [cancelError, setCancelError] = useState('');
+    const [cancelForce, setCancelForce] = useState(false);
+    const [myRole, setMyRole] = useState<string | null>(null);
+
+    useEffect(() => {
+        getMyRole().then(r => setMyRole(r.role));
+    }, []);
 
     // ── OPD Cancel Appointment Modal state ──
     const [cancelApptTarget, setCancelApptTarget] = useState<string | null>(null);
@@ -171,6 +177,7 @@ export default function ReceptionDashboard() {
         setCancelReason('');
         setCancelDateTime(getLocalDatetimeString(new Date()));
         setCancelError('');
+        setCancelForce(false);
     };
 
     const handleCancelAdmissionSubmit = async () => {
@@ -185,12 +192,13 @@ export default function ReceptionDashboard() {
         setCancelling(true);
         setCancelError('');
         try {
-            const res = await cancelAdmission(cancelModal.admission_id, cancelReason, cancelDateTime || undefined);
+            const res = await cancelAdmission(cancelModal.admission_id, cancelReason, cancelDateTime || undefined, cancelForce);
             if (res.success) {
                 toast.success('Admission cancelled successfully');
                 setCancelModal(null);
                 setCancelReason('');
                 setCancelDateTime('');
+                setCancelForce(false);
                 loadIPDData();
             } else {
                 setCancelError(res.error || 'Failed to cancel admission');
@@ -1496,11 +1504,11 @@ export default function ReceptionDashboard() {
                                                             >
                                                                 <Wallet className="h-3 w-3" /> Settle
                                                             </Link>
-                                                            {admission.canCancel && (
+                                                            {(admission.canCancel || myRole === 'admin') && (
                                                                 <button
                                                                     onClick={() => openCancelModal(admission)}
                                                                     className="inline-flex items-center gap-1 px-2 py-1.5 text-[10px] font-bold text-red-700 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition-colors"
-                                                                    title="Cancel Admission"
+                                                                    title={admission.canCancel ? "Cancel Admission" : "Cancel Admission (Force Cancel required — charges posted or past 8 hours)"}
                                                                 >
                                                                     <XCircle className="h-3 w-3" /> Cancel
                                                                 </button>
@@ -1687,6 +1695,19 @@ export default function ReceptionDashboard() {
                                     onChange={(e) => setCancelDateTime(e.target.value)}
                                 />
                             </div>
+
+                            {myRole === 'admin' && (
+                                <label className="flex items-center gap-2 cursor-pointer select-none">
+                                    <input
+                                        type="checkbox"
+                                        checked={cancelForce}
+                                        onChange={(e) => setCancelForce(e.target.checked)}
+                                        className="w-4 h-4 rounded border-gray-300 text-red-500 focus:ring-red-500"
+                                    />
+                                    <span className="text-xs font-bold text-amber-700">Force Cancel</span>
+                                    <span className="text-[10px] text-gray-400">(bypass 8-hour limit &amp; charges check)</span>
+                                </label>
+                            )}
                         </div>
 
                         {cancelError && (

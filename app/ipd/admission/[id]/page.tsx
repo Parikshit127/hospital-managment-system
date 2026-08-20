@@ -35,6 +35,7 @@ import {
     ensureIPDDemoMasterData,
 } from '@/app/actions/ipd-billing-helpers';
 import { getDoctorsForDropdown } from '@/app/actions/admin-actions';
+import { updatePatientField } from '@/app/actions/reception-actions';
 import { useToast } from '@/app/components/ui/Toast';
 import {
     setExpectedDischargeDate, markFitForDischarge,
@@ -112,6 +113,12 @@ export default function AdmissionDetailPage() {
     const [showDischargeEdit, setShowDischargeEdit] = useState(false);
     const [editDischargeDate, setEditDischargeDate] = useState('');
     const [savingDischargeEdit, setSavingDischargeEdit] = useState(false);
+
+    // Patient gender correction — fixes a wrong entry from registration without
+    // sending staff off to a separate reception screen
+    const [showGenderEdit, setShowGenderEdit] = useState(false);
+    const [editGender, setEditGender] = useState('');
+    const [savingGenderEdit, setSavingGenderEdit] = useState(false);
 
     // Clinical classification
     const [showDiagnosisForm, setShowDiagnosisForm] = useState(false);
@@ -489,6 +496,23 @@ export default function AdmissionDetailPage() {
             loadData();
         } else {
             toast.error(res.error || 'Failed to update discharge date');
+        }
+    };
+
+    const handleSaveGenderEdit = async () => {
+        if (!editGender) {
+            toast.error('Select a gender');
+            return;
+        }
+        setSavingGenderEdit(true);
+        const res = await updatePatientField(data.patient_id, 'gender', editGender);
+        setSavingGenderEdit(false);
+        if (res.success) {
+            toast.success('Gender updated');
+            setShowGenderEdit(false);
+            loadData();
+        } else {
+            toast.error(res.error || 'Failed to update gender');
         }
     };
 
@@ -1306,7 +1330,43 @@ export default function AdmissionDetailPage() {
                                         <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Patient Details</h4>
                                         <DetailRow label="Patient ID" value={data.patient_id} mono />
                                         <DetailRow label="Name" value={data.patient?.full_name} />
-                                        <DetailRow label="Age / Gender" value={`${data.patient?.age} yrs • ${data.patient?.gender}`} />
+                                        <DetailRow label="Age" value={`${data.patient?.age} yrs`} />
+                                        <div className="flex justify-between items-start gap-4">
+                                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide shrink-0">Gender</span>
+                                            {showGenderEdit ? (
+                                                <div className="flex items-center gap-1.5">
+                                                    <select
+                                                        value={editGender}
+                                                        onChange={e => setEditGender(e.target.value)}
+                                                        className="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                                                    >
+                                                        <option value="">Select…</option>
+                                                        <option value="Male">Male</option>
+                                                        <option value="Female">Female</option>
+                                                        <option value="Other">Other</option>
+                                                    </select>
+                                                    <button onClick={handleSaveGenderEdit} disabled={savingGenderEdit}
+                                                        className="text-[10px] font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg px-2 py-1 disabled:opacity-50">
+                                                        {savingGenderEdit ? '…' : 'Save'}
+                                                    </button>
+                                                    <button onClick={() => setShowGenderEdit(false)}
+                                                        className="text-[10px] font-bold text-gray-500 hover:text-gray-700 px-1">
+                                                        Cancel
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <span className="text-xs font-medium text-gray-800 text-right flex items-center gap-1.5">
+                                                    {data.patient?.gender || '—'}
+                                                    <button
+                                                        onClick={() => { setEditGender(data.patient?.gender || ''); setShowGenderEdit(true); }}
+                                                        className="text-gray-400 hover:text-indigo-600"
+                                                        title="Edit gender"
+                                                    >
+                                                        <Pencil className="h-3 w-3" />
+                                                    </button>
+                                                </span>
+                                            )}
+                                        </div>
                                         <DetailRow label="Phone" value={data.patient?.phone || '—'} />
                                         {data.case_is_rta && <div className="flex items-center gap-2 pt-1"><AlertTriangle className="h-4 w-4 text-amber-500" /><span className="text-xs font-bold text-amber-700">Road Traffic Accident Case</span></div>}
                                         {data.case_fir_number && <DetailRow label="FIR No." value={data.case_fir_number} />}

@@ -479,11 +479,11 @@ export function AdmissionsDataGrid({ initialData, wards, userRole = '' }: { init
                                                     >
                                                         <ArrowLeftRight className="h-4 w-4" />
                                                     </button>
-                                                    {adm.canCancel && (
+                                                    {(adm.canCancel || userRole === 'admin') && (
                                                         <button
                                                             onClick={() => openCancelModal(adm)}
                                                             className="p-2 bg-rose-50 text-rose-500 hover:bg-rose-100 rounded-xl transition-all"
-                                                            title="Cancel Admission"
+                                                            title={adm.canCancel ? "Cancel Admission" : "Cancel Admission (Force Cancel required — charges posted or past 8 hours)"}
                                                         >
                                                             <XCircle className="h-4 w-4" />
                                                         </button>

@@ -57,6 +57,7 @@ import {
 import { getIpdPackages } from "@/app/actions/ipd-master-actions";
 import { applyPackageToAdmission } from "@/app/actions/ipd-finance-actions";
 import { getDoctorsForDropdown } from "@/app/actions/admin-actions";
+import { getMyRole } from "@/app/actions/finance-actions";
 import { AppShell } from "@/app/components/layout/AppShell";
 
 function parseIpdPackageMeta(desc: string | null | undefined): {
@@ -144,6 +145,12 @@ export default function IPDDashboard() {
   const [cancelDateTime, setCancelDateTime] = useState("");
   const [cancelLoading, setCancelLoading] = useState(false);
   const [cancelError, setCancelError] = useState("");
+  const [forceCancel, setForceCancel] = useState(false);
+  const [myRole, setMyRole] = useState<string | null>(null);
+
+  useEffect(() => {
+    getMyRole().then((r) => setMyRole(r.role));
+  }, []);
 
   const handleCancelAdmissionSubmit = async () => {
     if (!cancelReason.trim()) {
@@ -160,12 +167,14 @@ export default function IPDDashboard() {
       const res = await cancelAdmission(
         cancelModal.admission_id,
         cancelReason,
-        cancelDateTime || undefined
+        cancelDateTime || undefined,
+        forceCancel
       );
       if (res.success) {
         setCancelModal(null);
         setCancelReason("");
         setCancelDateTime("");
+        setForceCancel(false);
         loadData();
       } else {
         setCancelError(res.error || "Failed to cancel admission");
@@ -1159,16 +1168,17 @@ export default function IPDDashboard() {
                                       >
                                         <LogOut className="h-3.5 w-3.5 text-rose-400/60" />
                                       </button>
-                                      {adm.canCancel && (
+                                      {(adm.canCancel || myRole === "admin") && (
                                         <button
                                           onClick={() => {
                                             setCancelModal(adm);
                                             setCancelReason("");
                                             setCancelDateTime(getLocalDatetimeString(new Date()));
                                             setCancelError("");
+                                            setForceCancel(false);
                                           }}
                                           className="p-1.5 hover:bg-red-500/10 rounded-lg"
-                                          title="Cancel Admission"
+                                          title={adm.canCancel ? "Cancel Admission" : "Cancel Admission (Force Cancel required — charges posted or past 8 hours)"}
                                         >
                                           <XCircle className="h-3.5 w-3.5 text-red-500/60" />
                                         </button>
@@ -1735,6 +1745,19 @@ export default function IPDDashboard() {
                 onChange={(e) => setCancelDateTime(e.target.value)}
               />
             </div>
+
+            {myRole === "admin" && (
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={forceCancel}
+                  onChange={(e) => setForceCancel(e.target.checked)}
+                  className="w-4 h-4 rounded border-gray-300 text-red-500 focus:ring-red-500"
+                />
+                <span className="text-xs font-bold text-amber-700">Force Cancel</span>
+                <span className="text-[10px] text-gray-400">(bypass 8-hour limit & charges check)</span>
+              </label>
+            )}
 
             {cancelError && (
               <p className="text-xs text-red-500 font-bold">{cancelError}</p>
