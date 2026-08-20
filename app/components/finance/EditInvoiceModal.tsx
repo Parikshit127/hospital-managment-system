@@ -780,7 +780,7 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
                                                     />
                                                 </td>
                                                 <td className="px-2 py-1.5 text-right">
-                                                    {canEditPaid && it._priceEditable !== false ? (
+                                                    {it._priceEditable !== false ? (
                                                         <input
                                                             type="number"
                                                             min={0}
