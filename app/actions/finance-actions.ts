@@ -235,8 +235,22 @@ export async function addInvoiceItem(data: {
         }
         const backdatedAt = backdate.date;
 
+        // Price is locked to the master rate unless the picked service is
+        // explicitly flagged is_price_editable — re-checked here independently
+        // of the client so a modified request can't bypass the UI lock.
+        let unit_price = Number(data.unit_price);
+        const ipdRefMatch = /^ipd-(\d+)$/.exec(data.ref_id || '');
+        if (ipdRefMatch) {
+            const masterService = await db.ipdServiceMaster.findFirst({
+                where: { id: parseInt(ipdRefMatch[1], 10), organizationId },
+            });
+            if (masterService && !masterService.is_price_editable) {
+                unit_price = Number(masterService.default_rate);
+            }
+        }
+
         const discount = data.discount || 0;
-        const total_price = data.quantity * data.unit_price;
+        const total_price = data.quantity * unit_price;
         const net_price = total_price - discount;
         const taxRate = data.tax_rate || 0;
         const tax_amount = net_price * taxRate / 100;
@@ -247,7 +261,7 @@ export async function addInvoiceItem(data: {
                 department: data.department,
                 description: data.description,
                 quantity: data.quantity,
-                unit_price: data.unit_price,
+                unit_price,
                 total_price,
                 discount,
                 net_price,

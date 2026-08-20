@@ -271,6 +271,7 @@ export function GenerateBillContent({ shell = 'app' }: { shell?: 'app' | 'admin'
                     unit_price: item.unit_price,
                     discount: item.discount,
                     tax_rate: item.tax_rate,
+                    ref_id: item.service_id,
                     service_category: item.department,
                     service_date: serviceDate || undefined,
                 });
@@ -594,15 +595,31 @@ export function GenerateBillContent({ shell = 'app' }: { shell?: 'app' | 'admin'
 
                                 <div>
                                     <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Amount (₹)</label>
-                                    <input
-                                        type="number" min="0" step="0.01"
-                                        inputMode="decimal"
-                                        value={draftUnitPrice}
-                                        placeholder={selectedServiceId ? String(Number(services.find(s => s.id === selectedServiceId)?.default_rate || 0)) : '0'}
-                                        readOnly
-                                        title="Item prices cannot be edited. To change the amount, apply a discount or cancel the service and add it again."
-                                        className="w-full p-2.5 bg-gray-100 text-gray-500 cursor-not-allowed border border-gray-200 rounded-lg text-sm font-medium outline-none"
-                                    />
+                                    {(() => {
+                                        const selectedSvc = services.find(s => s.id === selectedServiceId);
+                                        const priceEditable = selectedSvc ? selectedSvc.is_price_editable !== false : true;
+                                        return priceEditable ? (
+                                            <input
+                                                type="number" min="0" step="0.01"
+                                                inputMode="decimal"
+                                                value={draftUnitPrice}
+                                                placeholder={selectedServiceId ? String(Number(selectedSvc?.default_rate || 0)) : '0'}
+                                                onFocus={e => e.target.select()}
+                                                onChange={e => setDraftUnitPrice(sanitizeDecimal(e.target.value))}
+                                                className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm font-medium outline-none focus:border-emerald-400"
+                                            />
+                                        ) : (
+                                            <input
+                                                type="number" min="0" step="0.01"
+                                                inputMode="decimal"
+                                                value={draftUnitPrice}
+                                                placeholder={selectedServiceId ? String(Number(selectedSvc?.default_rate || 0)) : '0'}
+                                                readOnly
+                                                title="Rate is locked to the master. Mark the service &quot;Price editable&quot; in Service Master to allow changes."
+                                                className="w-full p-2.5 bg-gray-100 text-gray-500 cursor-not-allowed border border-gray-200 rounded-lg text-sm font-medium outline-none"
+                                            />
+                                        );
+                                    })()}
                                 </div>
 
                                 <div>
