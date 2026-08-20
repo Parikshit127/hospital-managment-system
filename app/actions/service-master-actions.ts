@@ -294,10 +294,31 @@ export async function listPackageTpaRates(providerId: number) {
       };
     });
 
-    const exclusivePackages = await db.ipdPackage.findMany({
+    const exclusivePackagesRaw = await db.ipdPackage.findMany({
       where: { organizationId, is_active: true, exclusive_provider_id: providerId },
       orderBy: { package_name: 'asc' },
-      select: { id: true, package_code: true, package_name: true, total_amount: true },
+      select: { id: true, package_code: true, package_name: true, total_amount: true, validity_days: true, description: true },
+    });
+    const exclusiveRates = await db.ipdPackageTpaRate.findMany({
+      where: { organizationId, provider_id: providerId, package_id: { in: exclusivePackagesRaw.map((p: any) => p.id) } },
+      select: { package_id: true, tpa_amount: true, tpa_package_name: true },
+    });
+    const exclusiveRateByPackageId = new Map<number, any>(exclusiveRates.map((r: any) => [r.package_id, r]));
+    // Shaped identically to `rows` so the UI can render both in one table —
+    // exclusive packages always have a rate row (created alongside the package),
+    // but fall back to total_amount defensively if one is ever missing.
+    const exclusivePackages = exclusivePackagesRaw.map((p: any) => {
+      const rate = exclusiveRateByPackageId.get(p.id);
+      return {
+        package_id: p.id,
+        package_code: p.package_code,
+        package_name: p.package_name,
+        total_amount: p.total_amount,
+        validity_days: p.validity_days,
+        description: p.description,
+        tpa_amount: rate ? rate.tpa_amount : p.total_amount,
+        tpa_package_name: rate ? rate.tpa_package_name : null,
+      };
     });
 
     return { success: true, data: { rows: serialize(rows), exclusivePackages: serialize(exclusivePackages) } };
@@ -312,12 +333,28 @@ export async function bulkUpsertPackageTpaRates(
     const { db, organizationId, session } = await requireTenantContext();
     if (session.role !== 'admin') return { success: false, error: 'Admin only' };
 
+    // Packages exclusive to this provider have no cash price and no fallback
+    // rate — their IpdPackageTpaRate row IS their only price. Never let a
+    // cleared input delete it, and keep IpdPackage.total_amount mirroring the
+    // rate (same invariant createExclusivePackage/updateExclusivePackage keep),
+    // so the Package List view doesn't show a stale amount.
+    const packageIds = rates.map((r) => r.package_id);
+    const packages = await db.ipdPackage.findMany({
+      where: { id: { in: packageIds }, organizationId },
+      select: { id: true, exclusive_provider_id: true },
+    });
+    const exclusiveIds = new Set(
+      packages.filter((p: any) => p.exclusive_provider_id === providerId).map((p: any) => p.id),
+    );
+
     let upserted = 0;
     let deleted = 0;
     await db.$transaction(async (tx: any) => {
       for (const r of rates) {
+        const isExclusive = exclusiveIds.has(r.package_id);
         const name = r.tpa_package_name?.trim() || null;
         if (r.tpa_amount === null || r.tpa_amount === undefined) {
+          if (isExclusive) continue;
           const del = await tx.ipdPackageTpaRate.deleteMany({
             where: { package_id: r.package_id, provider_id: providerId, organizationId },
           });
@@ -336,6 +373,9 @@ export async function bulkUpsertPackageTpaRates(
           },
           update: { tpa_amount: r.tpa_amount, tpa_package_name: name },
         });
+        if (isExclusive) {
+          await tx.ipdPackage.update({ where: { id: r.package_id }, data: { total_amount: r.tpa_amount } });
+        }
         upserted += 1;
       }
     });

@@ -108,7 +108,9 @@ export default function ServiceMasterPage() {
   const tpaRateFileRef = useRef<HTMLInputElement>(null);
 
   // ---- Exclusive packages (belong to one TPA only) ----
-  const [tpaExclusiveRows, setTpaExclusiveRows] = useState<{ id: number; package_code: string; package_name: string; total_amount: number; validity_days?: number; description?: string | null }[]>([]);
+  // Shaped like tpaRateRows (package_id/tpa_amount/tpa_package_name) so both
+  // tables share the same inline-edit fields, export rows, and import matching.
+  const [tpaExclusiveRows, setTpaExclusiveRows] = useState<{ package_id: number; package_code: string; package_name: string; total_amount: number; tpa_amount: number | null; tpa_package_name: string | null; validity_days?: number; description?: string | null }[]>([]);
   const [excPkgMode, setExcPkgMode] = useState<'idle' | 'create' | 'edit'>('idle');
   const [excPkgEditingId, setExcPkgEditingId] = useState<number | null>(null);
   const [excPkgForm, setExcPkgForm] = useState({ package_code: '', package_name: '', total_amount: 0, validity_days: 7, description: '' });
@@ -416,7 +418,7 @@ export default function ServiceMasterPage() {
     setTpaRateSaving(true);
     try {
       const packageIds = new Set([...Object.keys(tpaRateEdits), ...Object.keys(tpaNameEdits)].map(Number));
-      const byId = new Map(tpaRateRows.map(r => [r.package_id, r]));
+      const byId = new Map([...tpaRateRows, ...tpaExclusiveRows].map(r => [r.package_id, r]));
       const rates = Array.from(packageIds).map(packageId => {
         const row = byId.get(packageId);
         const rawAmount = tpaRateEdits[packageId] ?? (row?.tpa_amount != null ? String(row.tpa_amount) : '');
@@ -444,7 +446,7 @@ export default function ServiceMasterPage() {
   // ---- Exclusive package handlers ----
   const openCreateExcPkg = () => { setExcPkgForm({ package_code: '', package_name: '', total_amount: 0, validity_days: 7, description: '' }); setExcPkgEditingId(null); setExcPkgMode('create'); };
   const openEditExcPkg = (row: any) => {
-    setExcPkgEditingId(row.id);
+    setExcPkgEditingId(row.package_id);
     setExcPkgForm({
       package_code: row.package_code, package_name: row.package_name,
       total_amount: Number(row.total_amount ?? 0), validity_days: Number(row.validity_days ?? 7),
@@ -493,12 +495,13 @@ export default function ServiceMasterPage() {
   // import format 1:1 (Package Code / Package Name / Cash Rate / TPA Rate) so
   // an exported file can be edited offline and re-imported without remapping.
   const exportTpaRates = () => {
-    if (tpaRateProviderId === '' || tpaRateRows.length === 0) return;
+    const allRows = [...tpaRateRows, ...tpaExclusiveRows];
+    if (tpaRateProviderId === '' || allRows.length === 0) return;
     setTpaRateExporting(true);
     try {
       const provider = tpaProviders.find(p => p.id === Number(tpaRateProviderId));
       const headers = ['Package Code', 'Package Name', 'Cash Rate', 'TPA Rate', 'TPA Package Name'];
-      const data = tpaRateRows.map(r => ({
+      const data = allRows.map(r => ({
         'Package Code': r.package_code,
         'Package Name': r.package_name,
         'Cash Rate': Number(r.total_amount),
@@ -527,7 +530,7 @@ export default function ServiceMasterPage() {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      toast.success(`Exported ${tpaRateRows.length} package rate${tpaRateRows.length !== 1 ? 's' : ''}.`);
+      toast.success(`Exported ${allRows.length} package rate${allRows.length !== 1 ? 's' : ''}.`);
     } catch (e: any) {
       toast.error('Export failed: ' + (e?.message || 'unknown error'));
     } finally {
@@ -553,7 +556,7 @@ export default function ServiceMasterPage() {
       const rows: Record<string, string>[] = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { defval: '', raw: false });
       if (rows.length === 0) throw new Error('The uploaded file contains no data rows');
 
-      const byCode = new Map(tpaRateRows.map(r => [r.package_code.trim().toLowerCase(), r]));
+      const byCode = new Map([...tpaRateRows, ...tpaExclusiveRows].map(r => [r.package_code.trim().toLowerCase(), r]));
       const rateEdits: Record<number, string> = {};
       const nameEdits: Record<number, string> = {};
       const errors: string[] = [];
@@ -1235,7 +1238,7 @@ export default function ServiceMasterPage() {
                     </button>
                     <button
                       onClick={exportTpaRates}
-                      disabled={tpaRateLoading || tpaRateRows.length === 0 || tpaRateExporting}
+                      disabled={tpaRateLoading || (tpaRateRows.length === 0 && tpaExclusiveRows.length === 0) || tpaRateExporting}
                       className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-600 border border-gray-300 rounded-xl hover:bg-gray-50 disabled:opacity-50"
                     >
                       {tpaRateExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
@@ -1273,20 +1276,39 @@ export default function ServiceMasterPage() {
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b border-gray-200 bg-gray-50/80">
-                          {['Code', 'Name', 'Rate', ''].map(h => (
+                          {['Code', 'Name', 'Cash Rate', 'TPA Rate', 'TPA Name', ''].map(h => (
                             <th key={h} className="px-4 py-3 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
                           ))}
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
                         {tpaExclusiveRows.map(r => (
-                          <tr key={r.id} className="hover:bg-gray-50">
+                          <tr key={r.package_id} className="hover:bg-gray-50">
                             <td className="px-4 py-3 font-mono text-xs text-gray-600">{r.package_code}</td>
                             <td className="px-4 py-3 font-semibold text-gray-900">{r.package_name}</td>
-                            <td className="px-4 py-3 text-gray-600">₹{Number(r.total_amount).toFixed(2)}</td>
+                            <td className="px-4 py-3 text-gray-400" title="Not sold to cash patients — exclusive to this TPA">—</td>
+                            <td className="px-4 py-3">
+                              <input
+                                type="number" min={0} step="0.01"
+                                value={tpaRateEdits[r.package_id] ?? (r.tpa_amount != null ? String(r.tpa_amount) : '')}
+                                onChange={e => setTpaRateEdit(r.package_id, e.target.value)}
+                                placeholder={String(Number(r.total_amount).toFixed(2))}
+                                className="w-32 p-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                              />
+                            </td>
+                            <td className="px-4 py-3">
+                              <input
+                                type="text"
+                                value={tpaNameEdits[r.package_id] ?? (r.tpa_package_name || '')}
+                                onChange={e => setTpaNameEdit(r.package_id, e.target.value)}
+                                placeholder={r.package_name}
+                                maxLength={100}
+                                className="w-40 p-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                              />
+                            </td>
                             <td className="px-4 py-3 flex gap-2">
-                              <button onClick={() => openEditExcPkg(r)} className="p-1.5 hover:bg-gray-100 rounded-lg"><Pencil className="h-4 w-4 text-blue-600" /></button>
-                              <button onClick={() => deleteExcPkgHandler(r.id)} className="p-1.5 hover:bg-red-50 rounded-lg" title="Delete permanently"><Trash2 className="h-4 w-4 text-red-500" /></button>
+                              <button onClick={() => openEditExcPkg(r)} className="p-1.5 hover:bg-gray-100 rounded-lg" title="Edit code / description / validity"><Pencil className="h-4 w-4 text-blue-600" /></button>
+                              <button onClick={() => deleteExcPkgHandler(r.package_id)} className="p-1.5 hover:bg-red-50 rounded-lg" title="Delete permanently"><Trash2 className="h-4 w-4 text-red-500" /></button>
                             </td>
                           </tr>
                         ))}
