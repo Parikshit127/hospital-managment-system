@@ -401,13 +401,14 @@ const exclusivePackageSchema = z.object({
   description: z.string().nullish(),
   total_amount: z.number().nonnegative(),
   validity_days: z.number().int().positive().default(7),
+  tpa_package_name: z.string().nullish(),
 });
 
 export async function createExclusivePackage(providerId: number, input: unknown) {
   try {
     const { db, organizationId, session } = await requireTenantContext();
     if (session.role !== 'admin') return { success: false, error: 'Admin only' };
-    const data = exclusivePackageSchema.parse(input);
+    const { tpa_package_name, ...data } = exclusivePackageSchema.parse(input);
 
     const row = await db.$transaction(async (tx: any) => {
       const pkg = await tx.ipdPackage.create({
@@ -416,7 +417,7 @@ export async function createExclusivePackage(providerId: number, input: unknown)
       await tx.ipdPackageTpaRate.create({
         data: {
           package_id: pkg.id, provider_id: providerId, organizationId,
-          tpa_amount: data.total_amount,
+          tpa_amount: data.total_amount, tpa_package_name: tpa_package_name?.trim() || null,
         },
       });
       return pkg;
@@ -432,11 +433,61 @@ export async function createExclusivePackage(providerId: number, input: unknown)
   } catch (e: any) { return { success: false, error: toMessage(e, 'package code') }; }
 }
 
+// Bulk-create exclusive packages from an Excel import — rows whose Package Code
+// didn't match anything existing get created fresh instead of being skipped as
+// "unknown code" (that used to be the only outcome; see importTpaRates in
+// admin/master/services/page.tsx). Codes must be unique per org: any row whose
+// code collides with an existing package (of any kind, for this org) is
+// reported back and skipped rather than silently overwritten.
+export async function bulkImportExclusivePackages(
+  providerId: number,
+  packages: { package_code: string; package_name: string; total_amount: number; tpa_package_name?: string | null }[],
+) {
+  try {
+    const { db, organizationId, session } = await requireTenantContext();
+    if (session.role !== 'admin') return { success: false, error: 'Admin only' };
+    if (packages.length === 0) return { success: true, data: { created: 0, skipped: [] as string[] } };
+
+    const existing = await db.ipdPackage.findMany({
+      where: { organizationId, package_code: { in: packages.map((p) => p.package_code) } },
+      select: { package_code: true },
+    });
+    const existingCodes = new Set(existing.map((e: any) => e.package_code));
+    const toCreate = packages.filter((p) => !existingCodes.has(p.package_code));
+    const skipped = packages.filter((p) => existingCodes.has(p.package_code)).map((p) => p.package_code);
+
+    await db.$transaction(async (tx: any) => {
+      for (const p of toCreate) {
+        const pkg = await tx.ipdPackage.create({
+          data: {
+            package_code: p.package_code, package_name: p.package_name,
+            total_amount: p.total_amount, organizationId, exclusive_provider_id: providerId,
+          },
+        });
+        await tx.ipdPackageTpaRate.create({
+          data: {
+            package_id: pkg.id, provider_id: providerId, organizationId,
+            tpa_amount: p.total_amount, tpa_package_name: p.tpa_package_name?.trim() || null,
+          },
+        });
+      }
+    });
+
+    await db.system_audit_logs.create({ data: {
+      action: 'BULK_IMPORT_EXCLUSIVE_PACKAGES', module: 'master-data',
+      details: `Created ${toCreate.length} exclusive package(s) for provider ${providerId}${skipped.length ? `, skipped ${skipped.length} existing code(s)` : ''}`,
+      organizationId, user_id: session.id, username: session.username, role: session.role,
+    }});
+
+    return { success: true, data: { created: toCreate.length, skipped } };
+  } catch (e: any) { return { success: false, error: toMessage(e, 'package code') }; }
+}
+
 export async function updateExclusivePackage(packageId: number, input: unknown) {
   try {
     const { db, organizationId, session } = await requireTenantContext();
     if (session.role !== 'admin') return { success: false, error: 'Admin only' };
-    const data = exclusivePackageSchema.parse(input);
+    const { tpa_package_name, ...data } = exclusivePackageSchema.parse(input);
 
     const row = await db.$transaction(async (tx: any) => {
       const existing = await tx.ipdPackage.findFirst({ where: { id: packageId, organizationId } });
@@ -444,11 +495,15 @@ export async function updateExclusivePackage(packageId: number, input: unknown) 
       if (!existing.exclusive_provider_id) throw new Error('Not an exclusive package');
 
       const pkg = await tx.ipdPackage.update({ where: { id: packageId }, data });
-      // Keep the linked rate row's tpa_amount in sync — getPackagesForAdmission
-      // resolves exclusive-package price from IpdPackageTpaRate, not total_amount.
+      // Keep the linked rate row's tpa_amount (and name, if this call set one)
+      // in sync — getPackagesForAdmission resolves exclusive-package price from
+      // IpdPackageTpaRate, not total_amount.
       await tx.ipdPackageTpaRate.updateMany({
         where: { package_id: packageId, provider_id: existing.exclusive_provider_id, organizationId },
-        data: { tpa_amount: data.total_amount },
+        data: {
+          tpa_amount: data.total_amount,
+          ...(tpa_package_name !== undefined ? { tpa_package_name: tpa_package_name?.trim() || null } : {}),
+        },
       });
       return pkg;
     });

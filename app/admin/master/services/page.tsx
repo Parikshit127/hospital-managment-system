@@ -9,7 +9,7 @@ import {
   listLabTests, createLabTest, updateLabTest, deleteLabTest,
   listPackages, createPackage, updatePackage, deletePackage,
   listPackageTpaRates, bulkUpsertPackageTpaRates,
-  createExclusivePackage, updateExclusivePackage, deleteExclusivePackage,
+  createExclusivePackage, updateExclusivePackage, deleteExclusivePackage, bulkImportExclusivePackages,
   listRadiologyImaging, createRadiologyImaging, updateRadiologyImaging, deleteRadiologyImaging,
   exportRadiologyImaging,
 } from '@/app/actions/service-master-actions';
@@ -540,8 +540,11 @@ export default function ServiceMasterPage() {
 
   // Import a rate sheet: read the workbook client-side, match each row back to
   // a package by Package Code (not id — ids aren't stable/visible enough for a
-  // human to edit safely offline), stage matches as edits, then reuse the same
-  // saveTpaRates() bulk-upsert path used by manual edits.
+  // human to edit safely offline). A code that matches an existing package (shared
+  // or exclusive) stages a rate/name edit, same as before. A code that matches
+  // nothing is no longer just skipped — it's a new package this TPA sent that
+  // doesn't exist in the master yet, so it's created as an exclusive package for
+  // the selected provider (needs Package Name + TPA Rate to do that).
   const importTpaRates = async (file: File) => {
     if (tpaRateProviderId === '') {
       toast.error('Select a provider before importing.');
@@ -559,6 +562,8 @@ export default function ServiceMasterPage() {
       const byCode = new Map([...tpaRateRows, ...tpaExclusiveRows].map(r => [r.package_code.trim().toLowerCase(), r]));
       const rateEdits: Record<number, string> = {};
       const nameEdits: Record<number, string> = {};
+      const newPackages: { package_code: string; package_name: string; total_amount: number; tpa_package_name: string | null }[] = [];
+      const newCodesSeen = new Set<string>();
       const errors: string[] = [];
       let matched = 0;
 
@@ -566,46 +571,90 @@ export default function ServiceMasterPage() {
         const rowNum = i + 2; // account for header row
         const rawCode = String(row['Package Code'] ?? '').trim();
         if (!rawCode) return; // skip blank rows
-        const pkg = byCode.get(rawCode.toLowerCase());
-        if (!pkg) {
-          errors.push(`Row ${rowNum}: unknown Package Code "${rawCode}"`);
-          return;
-        }
+        const codeKey = rawCode.toLowerCase();
+        const pkg = byCode.get(codeKey);
         const rawRate = String(row['TPA Rate'] ?? '').trim();
         if (rawRate !== '' && Number.isNaN(Number(rawRate))) {
           errors.push(`Row ${rowNum}: "${rawRate}" is not a valid TPA Rate`);
           return;
         }
+
+        if (!pkg) {
+          // Unknown code — create it as a new exclusive package for this TPA.
+          const rawName = String(row['Package Name'] ?? '').trim();
+          if (!rawName) {
+            errors.push(`Row ${rowNum}: "${rawCode}" is a new package — Package Name is required to create it`);
+            return;
+          }
+          if (rawRate === '') {
+            errors.push(`Row ${rowNum}: "${rawCode}" is a new package — TPA Rate is required to create it`);
+            return;
+          }
+          if (newCodesSeen.has(codeKey)) {
+            errors.push(`Row ${rowNum}: duplicate Package Code "${rawCode}" earlier in this file — only the first occurrence was used`);
+            return;
+          }
+          newCodesSeen.add(codeKey);
+          newPackages.push({
+            package_code: rawCode, package_name: rawName, total_amount: Number(rawRate),
+            tpa_package_name: String(row['TPA Package Name'] ?? '').trim() || null,
+          });
+          matched += 1;
+          return;
+        }
+
         rateEdits[pkg.package_id] = rawRate;
         nameEdits[pkg.package_id] = String(row['TPA Package Name'] ?? '').trim();
         matched += 1;
       });
 
-      if (errors.length > 0) {
-        toast.error(`${errors.length} row${errors.length !== 1 ? 's' : ''} skipped: ${errors.slice(0, 3).join('; ')}${errors.length > 3 ? '…' : ''}`);
-      }
       if (matched === 0) {
-        toast.error('No matching packages found in the file.');
+        toast.error(errors.length > 0
+          ? `${errors.length} row${errors.length !== 1 ? 's' : ''} skipped: ${errors.slice(0, 3).join('; ')}${errors.length > 3 ? '…' : ''}`
+          : 'No usable rows found in the file.');
         return;
       }
 
-      // Stage the matches as pending edits, then save immediately — mirrors the
-      // manual-edit flow (edits state -> saveTpaRates) rather than a separate
-      // import codepath, so the same bulk-upsert action and audit log apply.
-      const rates = Object.entries(rateEdits).map(([packageIdStr, raw]) => ({
-        package_id: Number(packageIdStr),
-        tpa_amount: raw.trim() === '' ? null : Number(raw),
-        tpa_package_name: nameEdits[Number(packageIdStr)]?.trim() || null,
-      }));
       setTpaRateSaving(true);
-      const res = await bulkUpsertPackageTpaRates(Number(tpaRateProviderId), rates);
-      if (res.success) {
-        toast.success(`Imported ${matched} rate${matched !== 1 ? 's' : ''} (${(res.data as any).upserted} saved, ${(res.data as any).deleted} cleared).`);
-        setTpaRateEdits({});
-        await loadTpaRates(Number(tpaRateProviderId));
-      } else {
-        toast.error(res.error || 'Failed to save imported rates');
+      let upserted = 0, deleted = 0, created = 0;
+      const skippedCreates: string[] = [];
+
+      if (Object.keys(rateEdits).length > 0) {
+        // Stage the matches as pending edits, then save immediately — mirrors the
+        // manual-edit flow (edits state -> saveTpaRates) rather than a separate
+        // import codepath, so the same bulk-upsert action and audit log apply.
+        const rates = Object.entries(rateEdits).map(([packageIdStr, raw]) => ({
+          package_id: Number(packageIdStr),
+          tpa_amount: raw.trim() === '' ? null : Number(raw),
+          tpa_package_name: nameEdits[Number(packageIdStr)]?.trim() || null,
+        }));
+        const res = await bulkUpsertPackageTpaRates(Number(tpaRateProviderId), rates);
+        if (!res.success) { toast.error(res.error || 'Failed to save imported rates'); setTpaRateSaving(false); return; }
+        upserted = (res.data as any).upserted;
+        deleted = (res.data as any).deleted;
       }
+
+      if (newPackages.length > 0) {
+        const res = await bulkImportExclusivePackages(Number(tpaRateProviderId), newPackages);
+        if (!res.success) { toast.error(res.error || 'Failed to create new packages'); setTpaRateSaving(false); return; }
+        created = (res.data as any).created;
+        skippedCreates.push(...((res.data as any).skipped || []));
+      }
+
+      const parts = [];
+      if (upserted > 0) parts.push(`${upserted} rate${upserted !== 1 ? 's' : ''} updated`);
+      if (created > 0) parts.push(`${created} new package${created !== 1 ? 's' : ''} created`);
+      if (deleted > 0) parts.push(`${deleted} cleared`);
+      toast.success(parts.length > 0 ? `Imported: ${parts.join(', ')}.` : 'Import completed, no changes.');
+
+      const allErrors = [...errors, ...skippedCreates.map(c => `"${c}" already exists — not recreated`)];
+      if (allErrors.length > 0) {
+        toast.error(`${allErrors.length} row${allErrors.length !== 1 ? 's' : ''} skipped: ${allErrors.slice(0, 3).join('; ')}${allErrors.length > 3 ? '…' : ''}`);
+      }
+
+      setTpaRateEdits({});
+      setTpaNameEdits({});
+      await loadTpaRates(Number(tpaRateProviderId));
     } catch (e: any) {
       toast.error('Import failed: ' + (e?.message || 'unknown error'));
     } finally {
@@ -1247,6 +1296,7 @@ export default function ServiceMasterPage() {
                     <button
                       onClick={() => tpaRateFileRef.current?.click()}
                       disabled={tpaRateLoading || tpaRateImporting || tpaRateSaving}
+                      title="Rows with a Package Code that already exists update its rate. Rows with a new code are created as new packages exclusive to this TPA (needs Package Name + TPA Rate)."
                       className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-600 border border-gray-300 rounded-xl hover:bg-gray-50 disabled:opacity-50"
                     >
                       {tpaRateImporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
