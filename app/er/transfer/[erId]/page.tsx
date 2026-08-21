@@ -6,6 +6,7 @@ import { ArrowRightLeft, Loader2 } from "lucide-react";
 import { AppShell } from "@/app/components/layout/AppShell";
 import { getERPatient, transferERtoIP } from "@/app/actions/er-actions";
 import { admitPatientIPD, getWardsWithBeds } from "@/app/actions/ipd-actions";
+import { bedLabel } from "@/app/lib/bed-label";
 
 export default function ERTransferPage() {
   const params = useParams<{ erId: string }>();
@@ -123,7 +124,7 @@ export default function ERTransferPage() {
               <option value="">Select…</option>
               {allBeds.map((b) => (
                 <option key={b.bed_id} value={b.bed_id}>
-                  {b.ward_name} · {b.bed_id} ({b.bed_type})
+                  {b.ward_name} · {bedLabel(b)} ({b.bed_type})
                 </option>
               ))}
             </select>

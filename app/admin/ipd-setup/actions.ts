@@ -94,7 +94,8 @@ export async function bulkAddBeds(data: {
         const uniqueId = `${organizationId}-${ward_id}-${bedLabel}`;
         
         bedsData.push({
-            bed_id: uniqueId, 
+            bed_id: uniqueId,
+            bed_name: bedLabel,
             ward_id,
             status: 'Available',
             bed_category,

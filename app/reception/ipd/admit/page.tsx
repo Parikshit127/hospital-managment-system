@@ -14,6 +14,7 @@ function getLocalDatetimeString(date: Date) {
 import { useRouter } from 'next/navigation';
 import { AppShell } from '@/app/components/layout/AppShell';
 import { PatientNotes } from '@/app/components/patient/PatientNotes';
+import { bedLabel } from '@/app/lib/bed-label';
 import {
   searchPatientsForAdmission,
   getWardsWithBeds,
@@ -35,6 +36,8 @@ type PatientResult = {
 
 type Bed = {
   bed_id: string;
+  bed_name?: string | null;
+  organizationId?: string;
   bed_type: string | null;
   status: string;
   ward_id: number;
@@ -480,7 +483,7 @@ export default function AdmitPatientPage() {
                                   : 'text-gray-600'
                               }`}
                             >
-                              {bed.bed_id}
+                              {bedLabel(bed)}
                             </span>
                             {bed.bed_type && (
                               <span className="text-[10px] font-medium text-gray-400 leading-tight">

@@ -128,9 +128,11 @@ export async function getWardsWithBeds() {
       nursing_charge: Number(ward.nursing_charge || 0),
       beds: ward.beds.map((b: any) => ({
         bed_id: b.bed_id,
+        bed_name: b.bed_name,
         bed_type: b.bed_type,
         status: b.status,
         ward_id: b.ward_id,
+        organizationId: b.organizationId,
       })),
       totalBeds: ward.beds.length,
       available: ward.beds.filter((b: any) => b.status === "Available").length,

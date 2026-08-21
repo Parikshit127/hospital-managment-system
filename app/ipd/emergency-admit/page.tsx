@@ -5,6 +5,7 @@ import { AppShell } from '@/app/components/layout/AppShell';
 import { AlertTriangle, Zap, Search, Bed, User, CheckCircle, UserPlus, Loader2 } from 'lucide-react';
 import { admitEmergency, getAllBeds, searchPatientsForAdmission } from '@/app/actions/ipd-actions';
 import { useRouter } from 'next/navigation';
+import { bedLabel } from '@/app/lib/bed-label';
 
 export default function EmergencyAdmitPage() {
     const router = useRouter();
@@ -328,7 +329,7 @@ export default function EmergencyAdmitPage() {
                                                             ? 'bg-red-600 border-red-600 text-white'
                                                             : 'bg-white border-gray-200 text-gray-700 hover:border-red-400 hover:bg-red-50'
                                                     }`}>
-                                                    {b.bed_id}
+                                                    {bedLabel(b)}
                                                     {b.is_isolation && <span className="ml-1 text-[9px]">🔒</span>}
                                                 </button>
                                             ))}

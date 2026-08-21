@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { BedDouble, Wrench, X, Loader2, ShieldAlert, Trash2 } from 'lucide-react';
 import { updateBedStatus, renameBed, deleteBed } from '@/app/admin/ipd-setup/actions';
+import { bedLabel } from '@/app/lib/bed-label';
 
 const STATUS_OPTIONS = [
     { value: 'Available',   label: 'Available',   color: 'bg-emerald-100 text-emerald-700 border-emerald-300' },
@@ -30,12 +31,6 @@ export function BedGrid({ beds, wardName }: { beds: any[]; wardName: string }) {
     const [saving,  setSaving]      = useState(false);
     const [deleting, setDeleting]   = useState(false);
     const [editForm, setEditForm]   = useState({ bed_name: '', status: '', bed_category: '', pricing_tier: '', is_isolation: false });
-
-    const bedLabel = (bed: any) => {
-        if (bed.bed_name) return bed.bed_name;
-        const prefix = `${bed.organizationId}-${bed.ward_id}-`;
-        return bed.bed_id.startsWith(prefix) ? bed.bed_id.slice(prefix.length) : bed.bed_id;
-    };
 
     const openEdit = (bed: any, e: React.MouseEvent) => {
         e.stopPropagation();

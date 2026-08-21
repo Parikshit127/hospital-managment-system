@@ -70,6 +70,7 @@ import { useToast } from "@/app/components/ui/Toast";
 import { PrintLetterhead } from "@/app/components/print/PrintLetterhead";
 import { fetchBillBranding } from '@/app/actions/branding-actions';
 import type { BillBranding } from '@/app/lib/bill-branding';
+import { bedLabel } from '@/app/lib/bed-label';
 
 export default function DoctorDashboard() {
   // ─── SESSION STATE ───
@@ -1085,7 +1086,7 @@ export default function DoctorDashboard() {
                   >
                     <option value="">-- Select Bed --</option>
                     {admitAvailableBeds.map((b: any) => (
-                      <option key={b.bed_id} value={b.bed_id}>{b.bed_id} - {b.bed_type || "Standard"}</option>
+                      <option key={b.bed_id} value={b.bed_id}>{bedLabel(b)} - {b.bed_type || "Standard"}</option>
                     ))}
                   </select>
                   {admitAvailableBeds.length === 0 && (

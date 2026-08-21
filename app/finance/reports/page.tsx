@@ -225,7 +225,7 @@ export function FinancialReportsContent({ shell = 'app' }: { shell?: 'app' | 'ad
                             methodFilter={methodFilter} setMethodFilter={setMethodFilter}
                         />
                     )}
-                    {activeReport === 'voucher' && <DailySaleVoucherReport data={data} fmt={fmt} from={from} to={to} />}
+                    {activeReport === 'voucher' && <DailySaleVoucherReport data={data} fmt={fmt} from={from} to={to} adminMode={adminMode} />}
                     {activeReport === 'daily' && <DailyActivityReport data={data} fmt={fmt} from={from} to={to} />}
                     {activeReport === 'aging' && <AgingReport data={data} fmt={fmt} />}
                     {activeReport === 'cashflow' && <CashFlowReport data={data} fmt={fmt} from={from} to={to} />}
@@ -1136,7 +1136,7 @@ function depositToDrillRow(d: any): DrillRow {
     };
 }
 
-function DailySaleVoucherReport({ data, fmt, from, to }: { data: any; fmt: (n: number) => string; from: string; to: string }) {
+function DailySaleVoucherReport({ data, fmt, from, to, adminMode }: { data: any; fmt: (n: number) => string; from: string; to: string; adminMode: boolean }) {
     const EPS = 0.5;
     const [drill, setDrill] = useState<Drill | null>(null);
     const payments: any[] = data?.payments || [];
@@ -1158,7 +1158,7 @@ function DailySaleVoucherReport({ data, fmt, from, to }: { data: any; fmt: (n: n
             date: d.dep_date,
             patientName: d.patient_name,
             uhid: d.uhid,
-            reference: `Bill ${d.bill_no} ← Deposit ${d.deposit_number}`,
+            reference: `Bill ${d.bill_no} ← ${d.reference}`,
             mode: d.tender,
             amount: Number(d.amount || 0),
             note: `Bill dated ${fmtDateTime(d.bill_date)}`,
@@ -1392,7 +1392,13 @@ function DailySaleVoucherReport({ data, fmt, from, to }: { data: any; fmt: (n: n
                                         <tr key={idx}>
                                             <td className="px-4 py-2.5 text-gray-600 whitespace-nowrap">{fmtDateTime(r.date)}</td>
                                             <td className="px-4 py-2.5 text-gray-900 font-medium">
-                                                {r.patientName}
+                                                {r.uhid ? (
+                                                    <Link href={`${adminMode ? '/admin' : ''}/billing/patient/${r.uhid}`}
+                                                        target="_blank" rel="noopener noreferrer"
+                                                        className="hover:underline hover:text-emerald-700 transition" title="Open patient's billing profile">
+                                                        {r.patientName}
+                                                    </Link>
+                                                ) : r.patientName}
                                                 {r.uhid && <span className="text-gray-400 font-mono text-xs"> · {r.uhid}</span>}
                                                 {r.note && <div className="text-[11px] text-gray-400">{r.note}</div>}
                                             </td>

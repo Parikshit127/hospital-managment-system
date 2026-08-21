@@ -10,6 +10,7 @@ import { Button } from '@/app/components/ui/Button';
 import { Select } from '@/app/components/ui/Select';
 import Link from 'next/link';
 import { getWardsWithBeds, transferPatient, cancelAdmission } from '@/app/actions/ipd-actions';
+import { bedLabel } from '@/app/lib/bed-label';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 export function AdmissionsDataGrid({ initialData, wards, userRole = '' }: { initialData: any[], wards: any[], userRole?: string }) {
@@ -711,7 +712,7 @@ export function AdmissionsDataGrid({ initialData, wards, userRole = '' }: { init
                                             {!transferForm.ward_id ? 'Select ward first' : currentWardBeds.length === 0 ? 'No beds available' : 'Select Bed'}
                                         </option>
                                         {currentWardBeds.map((b: any) => (
-                                            <option key={b.bed_id} value={b.bed_id}>{b.bed_id}</option>
+                                            <option key={b.bed_id} value={b.bed_id}>{bedLabel(b)}</option>
                                         ))}
                                     </select>
                                 </div>

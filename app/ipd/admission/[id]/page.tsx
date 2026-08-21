@@ -38,6 +38,7 @@ import { getDoctorsForDropdown } from '@/app/actions/admin-actions';
 import { updatePatientField } from '@/app/actions/reception-actions';
 import { useToast } from '@/app/components/ui/Toast';
 import { DISCHARGE_TYPES } from '@/app/lib/discharge-summary';
+import { bedLabel } from '@/app/lib/bed-label';
 import {
     setExpectedDischargeDate, markFitForDischarge,
     getIPDVitalsHistory, recordIPDVitals,
@@ -2914,7 +2915,7 @@ export default function AdmissionDetailPage() {
                                     >
                                         <option value="">{!transferWard ? 'Select ward first' : currentWardBeds.length === 0 ? 'No beds available' : 'Select Bed'}</option>
                                         {currentWardBeds.map((b: any) => (
-                                            <option key={b.bed_id} value={b.bed_id}>{b.bed_id}</option>
+                                            <option key={b.bed_id} value={b.bed_id}>{bedLabel(b)}</option>
                                         ))}
                                     </select>
                                 </div>

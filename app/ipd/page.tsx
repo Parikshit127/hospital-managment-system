@@ -58,6 +58,7 @@ import { getIpdPackages } from "@/app/actions/ipd-master-actions";
 import { applyPackageToAdmission } from "@/app/actions/ipd-finance-actions";
 import { getDoctorsForDropdown } from "@/app/actions/admin-actions";
 import { getMyRole } from "@/app/actions/finance-actions";
+import { bedLabel } from "@/app/lib/bed-label";
 import { AppShell } from "@/app/components/layout/AppShell";
 
 function parseIpdPackageMeta(desc: string | null | undefined): {
@@ -980,7 +981,7 @@ export default function IPDDashboard() {
                           className={`relative group border rounded-xl p-3 text-center cursor-pointer transition-all ${getBedStatusColor(bed.status)}`}
                         >
                           <Bed className="h-5 w-5 mx-auto mb-1 opacity-70" />
-                          <p className="text-[10px] font-black">{bed.bed_id}</p>
+                          <p className="text-[10px] font-black">{bedLabel(bed)}</p>
                           <p className="text-[8px] font-bold opacity-60">
                             {bed.status}
                           </p>
@@ -1388,7 +1389,7 @@ export default function IPDDashboard() {
                             value={b.bed_id}
                             className="bg-white text-gray-900"
                           >
-                            {b.bed_id}
+                            {bedLabel(b)}
                           </option>
                         ))}
                     </select>

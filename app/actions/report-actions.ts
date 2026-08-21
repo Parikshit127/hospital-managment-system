@@ -1024,7 +1024,7 @@ export async function getMISReport(filters: { from: string; to: string; billType
                 },
                 payments: {
                     where: { status: 'Completed' },
-                    select: { amount: true, payment_method: true, payment_type: true, notes: true },
+                    select: { amount: true, payment_method: true, payment_type: true, notes: true, receipt_number: true, created_at: true },
                 },
                 credit_notes: {
                     where: { status: 'Applied' },
@@ -1251,7 +1251,7 @@ export async function getMISReport(filters: { from: string; to: string; billType
         // it came from instead of just the total.
         const advanceDrDetails: Array<{
             patient_name: string; uhid: string; bill_no: string; bill_date: any;
-            deposit_number: string; dep_date: any; tender: string; amount: number;
+            reference: string; dep_date: any; tender: string; amount: number;
         }> = [];
 
         const rows = invoices.map((inv: any) => {
@@ -1432,10 +1432,38 @@ export async function getMISReport(filters: { from: string; to: string; billType
                         uhid: inv.patient?.patient_id || '',
                         bill_no: inv.invoice_number,
                         bill_date: recognizedDate,
-                        deposit_number: dep.deposit_number,
+                        reference: `Deposit ${dep.deposit_number}`,
                         dep_date: dep.created_at,
                         tender: dep.payment_method,
                         amount: dep.amount,
+                    });
+                }
+            }
+            // Same rule, for money collected as a DIRECT payment against this
+            // invoice (not a deposit) before this report's date range — e.g. an
+            // IPD running-bill part-payment taken mid-stay, before the bill's own
+            // recognition (discharge) date. Without this, that cash silently
+            // vanishes from every voucher line: it's excluded from period
+            // `received` (dated outside the range), isn't a deposit so the loop
+            // above misses it, and the invoice's lifetime outstanding_amount is
+            // already 0 (it IS fully paid) so Sundry Debtors doesn't catch it
+            // either — yet the bill's full amount is still recognized as Sales
+            // today, making the voucher silently fail to balance.
+            for (const p of allPayments) {
+                if (isDepositSettlement(p)) continue; // already handled above
+                const payDay = new Date(p.created_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+                if (payDay < filters.from) {
+                    const amt = Number(p.amount || 0);
+                    advanceDrTotal += amt;
+                    advanceDrDetails.push({
+                        patient_name: inv.patient?.full_name || '-',
+                        uhid: inv.patient?.patient_id || '',
+                        bill_no: inv.invoice_number,
+                        bill_date: recognizedDate,
+                        reference: `Receipt ${p.receipt_number}`,
+                        dep_date: p.created_at,
+                        tender: p.payment_method,
+                        amount: amt,
                     });
                 }
             }

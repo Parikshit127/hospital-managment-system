@@ -6,6 +6,7 @@ import { MoveRight, Search, Bed, X } from 'lucide-react';
 import { getIPDAdmissions, getAllBeds, transferPatient } from '@/app/actions/ipd-actions';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/app/components/ui/Toast';
+import { bedLabel } from '@/app/lib/bed-label';
 
 export default function TransferPage() {
     const toast = useToast();
@@ -131,7 +132,7 @@ export default function TransferPage() {
                                 <select required value={newBedId} onChange={e => setNewBedId(e.target.value)} className="w-full p-3 border border-gray-200 rounded-xl bg-white focus:ring-2 focus:ring-orange-500/20 text-sm font-medium outline-none">
                                     <option value="">-- Assign new bed --</option>
                                     {beds.map(b => (
-                                        <option key={b.bed_id} value={b.bed_id}>{b.wards?.ward_name} - {b.bed_id} ({b.wards?.ward_type})</option>
+                                        <option key={b.bed_id} value={b.bed_id}>{b.wards?.ward_name} - {bedLabel(b)} ({b.wards?.ward_type})</option>
                                     ))}
                                 </select>
                             </div>

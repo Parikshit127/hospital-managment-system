@@ -8,6 +8,7 @@ import {
 import Link from 'next/link';
 import { getWardsWithBeds, getAllBeds, markBedAvailable } from '@/app/actions/ipd-actions';
 import { AppShell } from '@/app/components/layout/AppShell';
+import { bedLabel } from '@/app/lib/bed-label';
 
 const statusConfig: Record<string, { color: string; bg: string; border: string; icon: any; label: string }> = {
     Available: { color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/30', icon: CheckCircle, label: 'Available' },
@@ -170,7 +171,7 @@ export default function BedMatrixPage() {
                                                 >
                                                     <div className="flex items-center justify-between mb-2">
                                                         <span className={`text-xs font-black ${cfg.color}`}>
-                                                            {bed.bed_id}
+                                                            {bedLabel(bed)}
                                                         </span>
                                                         <StatusIcon className={`h-3 w-3 ${cfg.color}`} />
                                                     </div>
