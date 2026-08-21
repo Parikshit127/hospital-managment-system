@@ -233,7 +233,15 @@ export async function getPatientFlow(timeRange?: string) {
   try {
     const { db } = await requireTenantContext();
 
-    const { gte: rangeStart } = getDateRange(timeRange);
+    let rangeStart: Date;
+    if (timeRange) {
+      rangeStart = getDateRange(timeRange).gte;
+    } else {
+      const now = new Date();
+      rangeStart = new Date(now);
+      rangeStart.setDate(now.getDate() - 6);
+      rangeStart.setHours(0, 0, 0, 0);
+    }
 
     // Use raw count query grouped by date instead of fetching all rows
     const patients = await db.$queryRaw<{ day: Date; count: bigint }[]>`
