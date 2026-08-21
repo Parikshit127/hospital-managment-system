@@ -179,7 +179,19 @@ export default function StaffManagement() {
 
     const openEdit = (user: any) => {
         setEditingUser(user);
-        setForm({ ...EMPTY_FORM, ...user, password: '', assigned_ward_id: user.assigned_ward_id ? String(user.assigned_ward_id) : '' });
+        // Text fields are commonly null in the DB (e.g. specialty for non-doctor
+        // roles) — coerce to '' so controlled inputs don't warn, and so the
+        // update payload sends '' instead of null (the schema also accepts
+        // null now, but '' is what a human editing the form actually means).
+        setForm({
+            ...EMPTY_FORM, ...user, password: '',
+            specialty: user.specialty ?? '',
+            department: user.department ?? '',
+            designation: user.designation ?? '',
+            employee_code: user.employee_code ?? '',
+            date_of_joining: user.date_of_joining ?? '',
+            assigned_ward_id: user.assigned_ward_id ? String(user.assigned_ward_id) : '',
+        });
         setError('');
         setShowEditModal(true);
     };

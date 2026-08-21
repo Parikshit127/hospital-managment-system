@@ -70,14 +70,18 @@ export const addUserSchema = z.object({
 export const updateUserSchema = z.object({
     name: z.string().min(2).max(200).optional(),
     role: z.enum(staffRoles).optional(),
-    specialty: z.string().optional(),
+    // Editing pre-fills these from the existing record, and most staff have
+    // several of them unset (null in the DB) — .optional() alone only allows
+    // the key to be absent, not null, so submitting an edit with any of these
+    // still empty threw "expected string, received null". Nullable like the DB column.
+    specialty: z.string().nullable().optional(),
     email: z.string().email().optional().or(z.literal('')),
     phone: z.string().optional(),
     // Preferred
-    department: z.string().optional(),
-    employee_code: z.string().optional(),
-    designation: z.string().optional(),
-    date_of_joining: z.string().optional(),
+    department: z.string().nullable().optional(),
+    employee_code: z.string().nullable().optional(),
+    designation: z.string().nullable().optional(),
+    date_of_joining: z.string().nullable().optional(),
     assigned_ward_id: z.number().int().positive().optional().nullable(),
 });
 
