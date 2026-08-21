@@ -138,7 +138,8 @@ export async function getCollectionsReport(filters: { from: string; to: string; 
             return {
                 ...p,
                 cashier_username: username,
-                cashier_name: fullName
+                cashier_name: fullName,
+                tender: canonicalTender(p.payment_method),
             };
         });
 
@@ -184,7 +185,8 @@ export async function getCollectionsReport(filters: { from: string; to: string; 
                 ...d,
                 patient_name: depPatientMap.get(d.patient_id) || '-',
                 cashier_username: username,
-                cashier_name: fullName
+                cashier_name: fullName,
+                tender: canonicalTender(d.payment_method),
             };
         });
 
@@ -336,7 +338,11 @@ export async function getCollectionsReport(filters: { from: string; to: string; 
                 depositsCollected: serialize(depositsCollectedMap),
                 depositsList: serialize(enrichedDeposits),
                 freshAdvance: serialize(freshAdvance),
-                refunds: serialize(enrichedRefunds)
+                refunds: serialize(enrichedRefunds),
+                // Whether deposits are folded into `received` above (see the
+                // Voucher drill-down's tender-line breakdown, which must mirror
+                // this to avoid showing deposits the total doesn't include).
+                includeAdvances,
             }
         };
     } catch (error: any) {
@@ -1121,7 +1127,7 @@ export async function getMISReport(filters: { from: string; to: string; billType
         // own collection date, kept per invoice so it can be compared against that
         // invoice's bill_date below (a deposit's applied_to_invoice may point to a
         // bill outside the report's date range, so this can't be date-filtered).
-        const appliedDepDatesByInvoice: Record<number, Array<{ amount: number; created_at: Date }>> = {};
+        const appliedDepDatesByInvoice: Record<number, Array<{ amount: number; created_at: Date; deposit_number: string; payment_method: string }>> = {};
         type DepositTenderRow = {
             deposit_number: string | null;
             payment_method: string | null;
@@ -1168,7 +1174,10 @@ export async function getMISReport(filters: { from: string; to: string; billType
                 // A deposit cancelled before ever being applied never reaches here
                 // (applied_to_invoice stays null — see cancelDeposit's preconditions),
                 // so no separate Cancelled check is needed for the Dr/Cr Advance split.
-                (appliedDepDatesByInvoice[d.applied_to_invoice] ||= []).push({ amount: applied, created_at: d.created_at });
+                (appliedDepDatesByInvoice[d.applied_to_invoice] ||= []).push({
+                    amount: applied, created_at: d.created_at,
+                    deposit_number: String(d.deposit_number || ''), payment_method: String(d.payment_method || ''),
+                });
             }
         }
 
@@ -1237,6 +1246,13 @@ export async function getMISReport(filters: { from: string; to: string; billType
         // here is already balanced elsewhere (Dr <tender> or Sundry Debtors).
         let advanceDrTotal = 0;
         let advanceCrTotal = 0;
+        // Drill-down detail for the Dr Advance voucher line — one row per
+        // qualifying deposit, so the report UI can show which patient/deposit
+        // it came from instead of just the total.
+        const advanceDrDetails: Array<{
+            patient_name: string; uhid: string; bill_no: string; bill_date: any;
+            deposit_number: string; dep_date: any; tender: string; amount: number;
+        }> = [];
 
         const rows = invoices.map((inv: any) => {
             const items = inv.items || [];
@@ -1409,7 +1425,19 @@ export async function getMISReport(filters: { from: string; to: string; billType
             // money collected — see cancelInvoice), so this list is empty for them.
             for (const dep of appliedDepDatesByInvoice[inv.id] || []) {
                 const depDay = new Date(dep.created_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-                if (depDay < filters.from) advanceDrTotal += dep.amount;
+                if (depDay < filters.from) {
+                    advanceDrTotal += dep.amount;
+                    advanceDrDetails.push({
+                        patient_name: inv.patient?.full_name || '-',
+                        uhid: inv.patient?.patient_id || '',
+                        bill_no: inv.invoice_number,
+                        bill_date: recognizedDate,
+                        deposit_number: dep.deposit_number,
+                        dep_date: dep.created_at,
+                        tender: dep.payment_method,
+                        amount: dep.amount,
+                    });
+                }
             }
             const refundAmount = refundByInvoice[inv.id] || 0;
             // Net refunds off collection figures (floored at 0).
@@ -1507,6 +1535,7 @@ export async function getMISReport(filters: { from: string; to: string; billType
             // Daily Sale Voucher Dr/Cr Advance — see the accumulation above.
             advance_dr: advanceDrTotal,
             advance_cr: advanceCrTotal,
+            advance_dr_details: advanceDrDetails,
         };
 
         return serialize({ success: true, data: { rows, summary } });

@@ -18,6 +18,7 @@ import {
 import { AppShell } from '@/app/components/layout/AppShell';
 import { AdminPage } from '@/app/admin/components/AdminPage';
 import { VoucherModal } from '@/app/components/finance/VoucherModal';
+import { Modal } from '@/app/components/ui/Modal';
 import { canonicalTender, isDepositSettlement } from '@/app/lib/payment-tender';
 import Link from 'next/link';
 
@@ -105,6 +106,9 @@ export function FinancialReportsContent({ shell = 'app' }: { shell?: 'app' | 'ad
                                 // is properly joined to the bill it settled (see that function).
                                 advanceDr: misOk ? (misRes as any).data.summary?.advance_dr ?? 0 : 0,
                                 advanceCr: misOk ? (misRes as any).data.summary?.advance_cr ?? 0 : 0,
+                                // Per-invoice/per-deposit detail for the voucher drill-down modals.
+                                misRows: misOk ? (misRes as any).data.rows ?? [] : [],
+                                advanceDrDetails: misOk ? (misRes as any).data.summary?.advance_dr_details ?? [] : [],
                             },
                         }
                         : collRes;
@@ -1102,8 +1106,94 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
 //                        Dr Debtors: billed today, not fully collected today.
 //                        Cr Debtors: collected today against an older bill.
 // Dr and Cr always tie out by construction (the Debtors line is the balancing figure).
+type DrillRow = { date: any; patientName: string; uhid: string; reference: string; mode: string; amount: number; note?: string };
+type Drill = { title: string; subtitle: string; rows: DrillRow[] };
+
+const fmtDateTime = (d: any) =>
+    d ? new Date(d).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
+
+function paymentToDrillRow(p: any): DrillRow {
+    return {
+        date: p.created_at,
+        patientName: p.invoice?.patient?.full_name || '-',
+        uhid: p.invoice?.patient?.patient_id || '',
+        reference: p.invoice?.invoice_number || p.receipt_number || '-',
+        mode: p.tender || p.payment_method || '-',
+        amount: Number(p.amount || 0),
+        note: p.cashier_name ? `Collected by ${p.cashier_name}` : undefined,
+    };
+}
+
+function depositToDrillRow(d: any): DrillRow {
+    return {
+        date: d.created_at,
+        patientName: d.patient_name || '-',
+        uhid: d.patient_id || '',
+        reference: d.deposit_number || '-',
+        mode: d.tender || d.payment_method || '-',
+        amount: Number(d.amount || 0) - Number(d.refunded_amount || 0),
+        note: d.cashier_name ? `Collected by ${d.cashier_name}` : undefined,
+    };
+}
+
 function DailySaleVoucherReport({ data, fmt, from, to }: { data: any; fmt: (n: number) => string; from: string; to: string }) {
     const EPS = 0.5;
+    const [drill, setDrill] = useState<Drill | null>(null);
+    const payments: any[] = data?.payments || [];
+    const depositsList: any[] = data?.depositsList || [];
+    const misRows: any[] = data?.misRows || [];
+    const advanceDrDetails: any[] = data?.advanceDrDetails || [];
+    const includeAdvances = data?.includeAdvances !== false;
+
+    const openTenderDrill = (tender: string) => {
+        const rows = [
+            ...payments.filter((p) => p.status === 'Completed' && !isDepositSettlement(p) && p.tender === tender).map(paymentToDrillRow),
+            ...(includeAdvances ? depositsList.filter((d) => d.tender === tender).map(depositToDrillRow) : []),
+        ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        setDrill({ title: `Dr ${tender}`, subtitle: 'Payments and advances received in this tender', rows });
+    };
+
+    const openAdvanceDrDrill = () => {
+        const rows: DrillRow[] = advanceDrDetails.map((d: any) => ({
+            date: d.dep_date,
+            patientName: d.patient_name,
+            uhid: d.uhid,
+            reference: `Bill ${d.bill_no} ← Deposit ${d.deposit_number}`,
+            mode: d.tender,
+            amount: Number(d.amount || 0),
+            note: `Bill dated ${fmtDateTime(d.bill_date)}`,
+        }));
+        setDrill({ title: 'Dr Advance', subtitle: 'Earlier-period advances applied to a bill in this range', rows });
+    };
+
+    const openSalesDrill = () => {
+        const rows: DrillRow[] = misRows
+            .filter((r: any) => Math.abs(Number(r.net_amount || 0)) > EPS)
+            .map((r: any) => ({
+                date: r.bill_date, patientName: r.patient_name, uhid: r.uhid,
+                reference: r.bill_no, mode: r.bill_type, amount: Number(r.net_amount || 0),
+            }));
+        setDrill({ title: 'Cr Sales', subtitle: 'Billed amount for the day, by patient', rows });
+    };
+
+    const openDebtorsDrDrill = () => {
+        const rows: DrillRow[] = misRows
+            .filter((r: any) => Number(r.outstanding_amount || 0) > EPS)
+            .map((r: any) => ({
+                date: r.bill_date, patientName: r.patient_name, uhid: r.uhid,
+                reference: r.bill_no, mode: 'Outstanding', amount: Number(r.outstanding_amount || 0),
+            }));
+        setDrill({ title: 'Dr Sundry Debtors', subtitle: "Billed today, not yet fully collected", rows });
+    };
+
+    const openDebtorsCrDrill = () => {
+        const billedInvoiceIds = new Set(misRows.map((r: any) => r.invoice_id));
+        const rows: DrillRow[] = payments
+            .filter((p) => p.status === 'Completed' && !isDepositSettlement(p) && !billedInvoiceIds.has(p.invoice_id))
+            .map(paymentToDrillRow);
+        setDrill({ title: 'Cr Sundry Debtors', subtitle: "Today's collection against an earlier bill", rows });
+    };
+
     const received: Record<string, number> = data?.received || {};
     const debitTenders = Object.entries(received).filter(([, amt]) => Number(amt) !== 0);
     const receivedTotal = Number(data?.receivedTotal || 0);
@@ -1174,7 +1264,12 @@ function DailySaleVoucherReport({ data, fmt, from, to }: { data: any; fmt: (n: n
                             {debitTenders.map(([tender, amt]) => (
                                 <tr key={tender}>
                                     <td className="py-2 font-bold text-gray-700">Dr&nbsp; {tender}</td>
-                                    <td className="py-2 text-right font-mono">{fmt(Number(amt))}</td>
+                                    <td className="py-2 text-right">
+                                        <button type="button" onClick={() => openTenderDrill(tender)}
+                                            className="font-mono hover:underline hover:text-emerald-700 transition cursor-pointer">
+                                            {fmt(Number(amt))}
+                                        </button>
+                                    </td>
                                     <td className="py-2 text-right" />
                                 </tr>
                             ))}
@@ -1183,7 +1278,12 @@ function DailySaleVoucherReport({ data, fmt, from, to }: { data: any; fmt: (n: n
                                     <td className="py-2 font-bold text-gray-700">
                                         Dr&nbsp; Advance <span className="text-gray-400 font-normal">(advance collected in an earlier period, applied to a bill in this range)</span>
                                     </td>
-                                    <td className="py-2 text-right font-mono">{fmt(advanceDr)}</td>
+                                    <td className="py-2 text-right">
+                                        <button type="button" onClick={openAdvanceDrDrill}
+                                            className="font-mono hover:underline hover:text-emerald-700 transition cursor-pointer">
+                                            {fmt(advanceDr)}
+                                        </button>
+                                    </td>
                                     <td className="py-2 text-right" />
                                 </tr>
                             )}
@@ -1192,7 +1292,12 @@ function DailySaleVoucherReport({ data, fmt, from, to }: { data: any; fmt: (n: n
                                     Cr&nbsp; Sales <span className="text-gray-400 font-normal">(billed amount for the day)</span>
                                 </td>
                                 <td className="py-2 text-right" />
-                                <td className="py-2 text-right font-mono">{fmt(sales)}</td>
+                                <td className="py-2 text-right">
+                                    <button type="button" onClick={openSalesDrill}
+                                        className="font-mono hover:underline hover:text-emerald-700 transition cursor-pointer">
+                                        {fmt(sales)}
+                                    </button>
+                                </td>
                             </tr>
                             {advanceCr > 0 && (
                                 <tr>
@@ -1208,7 +1313,12 @@ function DailySaleVoucherReport({ data, fmt, from, to }: { data: any; fmt: (n: n
                                     <td className="py-2 font-bold text-gray-700">
                                         Dr&nbsp; Sundry Debtors <span className="text-gray-400 font-normal">(billed today, not yet fully collected)</span>
                                     </td>
-                                    <td className="py-2 text-right font-mono">{fmt(drDebtors)}</td>
+                                    <td className="py-2 text-right">
+                                        <button type="button" onClick={openDebtorsDrDrill}
+                                            className="font-mono hover:underline hover:text-emerald-700 transition cursor-pointer">
+                                            {fmt(drDebtors)}
+                                        </button>
+                                    </td>
                                     <td className="py-2 text-right" />
                                 </tr>
                             )}
@@ -1218,7 +1328,12 @@ function DailySaleVoucherReport({ data, fmt, from, to }: { data: any; fmt: (n: n
                                         Cr&nbsp; Sundry Debtors <span className="text-gray-400 font-normal">(today's collection against an earlier bill)</span>
                                     </td>
                                     <td className="py-2 text-right" />
-                                    <td className="py-2 text-right font-mono">{fmt(crDebtors)}</td>
+                                    <td className="py-2 text-right">
+                                        <button type="button" onClick={openDebtorsCrDrill}
+                                            className="font-mono hover:underline hover:text-emerald-700 transition cursor-pointer">
+                                            {fmt(crDebtors)}
+                                        </button>
+                                    </td>
                                 </tr>
                             )}
                         </tbody>
@@ -1253,6 +1368,50 @@ function DailySaleVoucherReport({ data, fmt, from, to }: { data: any; fmt: (n: n
                         </tbody>
                     </table>
                 </div>
+            )}
+
+            {drill && (
+                <Modal isOpen onClose={() => setDrill(null)} title={drill.title} icon={<BookOpenCheck className="h-4 w-4" />} maxWidth="3xl">
+                    <p className="text-xs text-gray-400 mb-4">{drill.subtitle}</p>
+                    {drill.rows.length === 0 ? (
+                        <p className="text-sm text-gray-400 py-8 text-center">No underlying transactions found for this line.</p>
+                    ) : (
+                        <div className="rounded-xl border border-gray-200 overflow-hidden">
+                            <table className="w-full text-sm">
+                                <thead className="bg-gray-50 text-[10px] uppercase tracking-wider text-gray-500">
+                                    <tr>
+                                        <th className="px-4 py-2 text-left font-semibold">Date</th>
+                                        <th className="px-4 py-2 text-left font-semibold">Patient</th>
+                                        <th className="px-4 py-2 text-left font-semibold">Reference</th>
+                                        <th className="px-4 py-2 text-left font-semibold">Mode</th>
+                                        <th className="px-4 py-2 text-right font-semibold">Amount</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100">
+                                    {drill.rows.map((r, idx) => (
+                                        <tr key={idx}>
+                                            <td className="px-4 py-2.5 text-gray-600 whitespace-nowrap">{fmtDateTime(r.date)}</td>
+                                            <td className="px-4 py-2.5 text-gray-900 font-medium">
+                                                {r.patientName}
+                                                {r.uhid && <span className="text-gray-400 font-mono text-xs"> · {r.uhid}</span>}
+                                                {r.note && <div className="text-[11px] text-gray-400">{r.note}</div>}
+                                            </td>
+                                            <td className="px-4 py-2.5 text-gray-600 font-mono text-xs">{r.reference}</td>
+                                            <td className="px-4 py-2.5 text-gray-600">{r.mode}</td>
+                                            <td className="px-4 py-2.5 text-right font-mono font-semibold text-gray-900">{fmt(r.amount)}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                                <tfoot>
+                                    <tr className="bg-gray-50 border-t-2 border-gray-200 font-bold text-gray-900">
+                                        <td colSpan={4} className="px-4 py-2.5 text-right">Total</td>
+                                        <td className="px-4 py-2.5 text-right font-mono">{fmt(drill.rows.reduce((s, r) => s + r.amount, 0))}</td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    )}
+                </Modal>
             )}
         </div>
     );
