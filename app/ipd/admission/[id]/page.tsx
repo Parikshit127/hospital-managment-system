@@ -37,6 +37,7 @@ import {
 import { getDoctorsForDropdown } from '@/app/actions/admin-actions';
 import { updatePatientField } from '@/app/actions/reception-actions';
 import { useToast } from '@/app/components/ui/Toast';
+import { DISCHARGE_TYPES } from '@/app/lib/discharge-summary';
 import {
     setExpectedDischargeDate, markFitForDischarge,
     getIPDVitalsHistory, recordIPDVitals,
@@ -1431,7 +1432,7 @@ export default function AdmissionDetailPage() {
                                                     <select value={diagDischargeType} onChange={e => setDiagDischargeType(e.target.value)}
                                                         className="w-full mt-1 text-xs border border-indigo-200 rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400">
                                                         <option value="">— Select —</option>
-                                                        {['Normal', 'LAMA', 'DAMA', 'Absconded', 'Death', 'Transfer'].map(c => <option key={c}>{c}</option>)}
+                                                        {DISCHARGE_TYPES.map(c => <option key={c}>{c}</option>)}
                                                     </select>
                                                 </div>
                                             </div>

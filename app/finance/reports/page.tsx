@@ -95,7 +95,18 @@ export function FinancialReportsContent({ shell = 'app' }: { shell?: 'app' | 'ad
                     ]);
                     const misOk = (misRes as any)?.success;
                     res = collRes?.success
-                        ? { success: true, data: { ...collRes.data, misSales: misOk ? (misRes as any).data.summary?.total_net ?? 0 : null } }
+                        ? {
+                            success: true,
+                            data: {
+                                ...collRes.data,
+                                misSales: misOk ? (misRes as any).data.summary?.total_net ?? 0 : null,
+                                // Dr/Cr Advance for applied deposits, classified against each
+                                // bill's own date — computed in getMISReport where the deposit
+                                // is properly joined to the bill it settled (see that function).
+                                advanceDr: misOk ? (misRes as any).data.summary?.advance_dr ?? 0 : 0,
+                                advanceCr: misOk ? (misRes as any).data.summary?.advance_cr ?? 0 : 0,
+                            },
+                        }
                         : collRes;
                     break;
                 }
@@ -1068,25 +1079,23 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
 // was actually billed today, by the bill's own date) and lays them out as a
 // Dr/Cr journal so the front-desk can copy the figures straight into Tally.
 //   Dr <tender>       = received[tender] — real cash-counter tender payments
-//                        against bills PLUS new advance collected in that same
+//                        against bills PLUS advance collected in that same
 //                        tender (blended, matches how a single Tally line reads).
-//   Dr Advance         = depositApplied, NET of same-period round-trips — advance
-//                        collected in an EARLIER period, now settled against
-//                        today's bill (a non-cash adjustment). Deliberately
-//                        excludes a deposit that was both collected and applied
-//                        within this same date range (e.g. a discharge-day lump
-//                        sum taken as "advance" then immediately applied) — that
-//                        money never sat as real advance, so it's netted out and
-//                        just flows through as ordinary Cash → Sales.
+//                        A fresh/unbilled advance's cash lives here (it has no
+//                        bill to apply against yet); see the Advance memo below
+//                        for how much of this is that vs. a direct bill payment.
+//   Dr Advance         = an applied deposit that was collected BEFORE this
+//                        report's own date range, now recognized against a bill
+//                        dated inside it (a non-cash reclassification — no money
+//                        moved today, only the bookkeeping catches up). A deposit
+//                        collected and applied within this same range is ordinary
+//                        Cash → Sales instead (its cash is already in Dr <tender>
+//                        above; see getMISReport for the exact rule).
 //   Cr Sales           = misSales (getMISReport's total_net) — the bill's OWN
 //                        date (OPD: invoice created_at, IPD: discharge date),
 //                        NOT the date money was collected. Using payment date
 //                        here would overstate Sales on any day a patient pays
 //                        against a bill raised on a different date.
-//   Cr Advance         = depositsCollected.total, NET of the same same-period
-//                        round-trips above — only advance still genuinely
-//                        unapplied (sitting on the books) for an unbilled/
-//                        undischarged patient at the end of this period.
 //   Dr/Cr Sundry Debtors = reconciling line for the gap between "billed today"
 //                        and "collected today" — e.g. an IPD installment paid
 //                        today against a bill dated on an earlier/later day.
@@ -1101,40 +1110,22 @@ function DailySaleVoucherReport({ data, fmt, from, to }: { data: any; fmt: (n: n
     const misSalesAvailable = data?.misSales != null;
     const sales = Number(data?.misSales ?? data?.totals?.total ?? 0);
 
-    // A deposit collected AND applied within this same date range never really
-    // sat as advance — net it out of both Advance lines so it just flows through
-    // as Cash → Sales, instead of inflating both "new advance" and "applied advance".
-    // `p.deposit_tender` is only set (server-side) when the settlement's source
-    // deposit is itself in this period's depositRows — i.e. a same-period round-trip.
-    const paymentsList: any[] = data?.payments || [];
-    const sameSettlements = paymentsList.filter(
-        (p: any) => p.status === 'Completed' && isDepositSettlement(p) && p.deposit_tender != null
-    );
-    const sameSettledTotal = sameSettlements.reduce((s: number, p: any) => s + Number(p.amount), 0);
-    const sameSettledByTender: Record<string, number> = {};
-    sameSettlements.forEach((p: any) => {
-        const t = canonicalTender(p.deposit_tender);
-        sameSettledByTender[t] = (sameSettledByTender[t] || 0) + Number(p.amount);
-    });
+    // Genuinely earlier-period advance now consumed by a bill in this range —
+    // the only case that needs a non-cash Dr Advance adjustment (computed in
+    // getMISReport, which correctly joins each deposit to the bill it settled).
+    const advanceDr = Number(data?.advanceDr || 0);
+    // Structurally always 0 (see getMISReport) — kept for symmetry/future use.
+    const advanceCr = Number(data?.advanceCr || 0);
 
-    // depositsCollectedRaw is already net of refunds (server nets refunded_amount per
-    // deposit), but sameSettledTotal is the gross amount applied — if a same-period
-    // deposit was applied and then partially refunded, the subtraction can go negative.
-    // Don't silently clamp that away: it means real money (the refund) isn't otherwise
-    // visible in this journal, so flag it instead of hiding it.
-    const depositAppliedRaw = Number(data?.depositApplied || 0) - sameSettledTotal;
-    const depositApplied = Math.max(0, depositAppliedRaw);
-    const depositsCollectedRaw: Record<string, number> = data?.depositsCollected || {};
-    const depositCollectedTotalRaw = Number(depositsCollectedRaw.total || 0) - sameSettledTotal;
-    const depositCollectedTotal = Math.max(0, depositCollectedTotalRaw);
-    const nettingOverflow = depositAppliedRaw < -EPS || depositCollectedTotalRaw < -EPS;
-    const depositModes = Object.entries(depositsCollectedRaw)
-        .filter(([mode]) => mode !== 'total')
-        .map(([mode, amt]) => [mode, Number(amt) - (sameSettledByTender[mode] || 0)] as [string, number])
-        .filter(([, amt]) => amt > 0.5);
+    // Fresh advance collected this period, still unbilled — its cash is already
+    // inside Dr <tender> above (server-side blending); this is a memo breakdown
+    // only, not added again into the Debit total, so it doesn't double-count.
+    const freshAdvance: { total: number; byTender: Record<string, number> } =
+        data?.freshAdvance || { total: 0, byTender: {} };
+    const freshAdvanceModes = Object.entries(freshAdvance.byTender || {}).filter(([, amt]) => Number(amt) > 0.5);
 
-    const debitCore = receivedTotal + depositApplied;
-    const creditCore = sales + depositCollectedTotal;
+    const debitCore = receivedTotal + advanceDr;
+    const creditCore = sales + advanceCr;
     const netDebtors = creditCore - debitCore;
     const drDebtors = netDebtors > EPS ? netDebtors : 0;
     const crDebtors = netDebtors < -EPS ? -netDebtors : 0;
@@ -1163,11 +1154,12 @@ function DailySaleVoucherReport({ data, fmt, from, to }: { data: any; fmt: (n: n
                 {!misSalesAvailable && (
                     <p className="text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3">
                         Couldn't load the bill-date Sales figure from the MIS report — showing the payment-date total instead,
-                        which may overstate Sales on days with collections against older bills. Try regenerating.
+                        which may overstate Sales on days with collections against older bills. The Dr Advance line is also
+                        unavailable until this loads (it depends on the same report). Try regenerating.
                     </p>
                 )}
 
-                {debitTenders.length === 0 && sales === 0 && depositCollectedTotal === 0 ? (
+                {debitTenders.length === 0 && sales === 0 && advanceDr === 0 ? (
                     <p className="text-sm text-gray-400 py-6 text-center">No collections recorded for this period.</p>
                 ) : (
                     <table className="w-full text-sm">
@@ -1186,12 +1178,12 @@ function DailySaleVoucherReport({ data, fmt, from, to }: { data: any; fmt: (n: n
                                     <td className="py-2 text-right" />
                                 </tr>
                             ))}
-                            {depositApplied > 0 && (
+                            {advanceDr > 0 && (
                                 <tr>
                                     <td className="py-2 font-bold text-gray-700">
-                                        Dr&nbsp; Advance <span className="text-gray-400 font-normal">(earlier advance applied to today's bills)</span>
+                                        Dr&nbsp; Advance <span className="text-gray-400 font-normal">(advance collected in an earlier period, applied to a bill in this range)</span>
                                     </td>
-                                    <td className="py-2 text-right font-mono">{fmt(depositApplied)}</td>
+                                    <td className="py-2 text-right font-mono">{fmt(advanceDr)}</td>
                                     <td className="py-2 text-right" />
                                 </tr>
                             )}
@@ -1202,13 +1194,13 @@ function DailySaleVoucherReport({ data, fmt, from, to }: { data: any; fmt: (n: n
                                 <td className="py-2 text-right" />
                                 <td className="py-2 text-right font-mono">{fmt(sales)}</td>
                             </tr>
-                            {depositCollectedTotal > 0 && (
+                            {advanceCr > 0 && (
                                 <tr>
                                     <td className="py-2 font-bold text-gray-700">
-                                        Cr&nbsp; Advance <span className="text-gray-400 font-normal">(new — unbilled/undischarged patients)</span>
+                                        Cr&nbsp; Advance
                                     </td>
                                     <td className="py-2 text-right" />
-                                    <td className="py-2 text-right font-mono">{fmt(depositCollectedTotal)}</td>
+                                    <td className="py-2 text-right font-mono">{fmt(advanceCr)}</td>
                                 </tr>
                             )}
                             {drDebtors > 0 && (
@@ -1241,32 +1233,18 @@ function DailySaleVoucherReport({ data, fmt, from, to }: { data: any; fmt: (n: n
                 )}
             </div>
 
-            {sameSettledTotal > 0.5 && (
-                <p className="text-[11px] text-gray-400 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
-                    Note: {fmt(sameSettledTotal)} was collected as advance and applied to a bill within this same period
-                    (e.g. a same-day discharge settlement) — netted out of both Advance lines above and left to flow through
-                    as an ordinary Cash → Sales entry instead of round-tripping through Advance.
-                </p>
-            )}
-
-            {nettingOverflow && (
-                <p className="text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                    A same-period advance was applied to a bill and then partially refunded within this same window —
-                    the Advance lines above have been floored at zero rather than shown negative. Check the Refunds
-                    section of the Collections report for this period to see the missing amount.
-                </p>
-            )}
-
-            {depositModes.length > 0 && (
+            {freshAdvanceModes.length > 0 && (
                 <div className="bg-white border border-gray-200 rounded-xl p-5">
-                    <h4 className="text-xs font-bold text-gray-900 mb-1">Memo — New Advance Collected, by Mode</h4>
+                    <h4 className="text-xs font-bold text-gray-900 mb-1">Memo — Fresh Advance Collected, by Mode</h4>
                     <p className="text-[11px] text-gray-400 mb-3">
-                        Already folded into the Dr tender lines above (for unbilled/undischarged patients) — shown separately only
-                        so you can see how much of today's Cash/UPI/Card was fresh advance vs. bill settlement. Don't add these again.
+                        Money collected as advance this period, still unbilled (no bill to apply against yet) — already
+                        folded into the Dr tender lines above (that's where the physical cash is), shown separately only
+                        so you can see how much of today's Cash/UPI/Card is advance vs. a direct bill payment.
+                        Don't add these again.
                     </p>
                     <table className="w-full text-sm">
                         <tbody className="divide-y divide-gray-100">
-                            {depositModes.map(([mode, amt]) => (
+                            {freshAdvanceModes.map(([mode, amt]) => (
                                 <tr key={mode}>
                                     <td className="py-1.5 text-gray-600">{mode}</td>
                                     <td className="py-1.5 text-right font-mono">{fmt(Number(amt))}</td>

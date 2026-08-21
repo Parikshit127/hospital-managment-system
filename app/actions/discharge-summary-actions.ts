@@ -10,6 +10,7 @@ import {
     renderDischargeSummaryText,
     DEFAULT_DISCHARGE_CONDITION,
     DEFAULT_DISCHARGE_INSTRUCTIONS,
+    DISCHARGE_TYPES,
 } from '@/app/lib/discharge-summary';
 import { ADMISSION_STATUS } from '@/app/lib/admission-status';
 
@@ -45,6 +46,7 @@ function medsFromReconciliation(raw: any): string {
 // Pre-fill the structured fields from the admission record when nothing has been saved yet.
 function defaultsFromAdmission(admission: any): DischargeSummaryData {
     const d = emptyDischargeData();
+    d.discharge_type = admission?.discharge_type || '';
     d.final_diagnosis_primary = admission?.diagnosis || '';
     d.icd_code = admission?.primary_diagnosis_icd || '';
     d.medical_history = [admission?.past_ailments, admission?.other_ailments].filter(Boolean).join('; ') || '';
@@ -147,6 +149,25 @@ export async function saveDischargeSummary(
         }
 
         const data = normalizeDischargeData(input);
+
+        // Discharge type is optional here — blank leaves the admission's existing
+        // value untouched (e.g. set earlier via the admission page). A non-blank
+        // value updates admission.discharge_type so it's reflected everywhere else
+        // that field is read (printed status once fully discharged, MIS, etc.).
+        const dischargeTypeInput = data.discharge_type.trim();
+        if (dischargeTypeInput) {
+            if (!(DISCHARGE_TYPES as readonly string[]).includes(dischargeTypeInput)) {
+                return { success: false, error: `Discharge Type must be one of: ${DISCHARGE_TYPES.join(', ')}` };
+            }
+            if (dischargeTypeInput !== admission.discharge_type) {
+                await db.admissions.update({
+                    where: { admission_id: admissionId },
+                    data: { discharge_type: dischargeTypeInput },
+                });
+                admission.discharge_type = dischargeTypeInput;
+            }
+        }
+
         const header = buildDischargeHeader(admission, data);
         const text = renderDischargeSummaryText(header, data);
         const preparedBy = data.prepared_by || admission.doctor_name || session.username || null;
@@ -190,6 +211,7 @@ export async function saveDischargeSummary(
                     by: session.username,
                     patient_id: admission.patient_id,
                     discharge_date: admission.discharge_date ?? null,
+                    discharge_type: admission.discharge_type ?? null,
                     status: admission.status,
                 }),
                 organizationId,

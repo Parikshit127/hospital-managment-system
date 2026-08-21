@@ -79,9 +79,13 @@ export async function GET(req: NextRequest) {
         });
 
         // 4. Fetch Patient Deposits (Advances)
+        // A Cancelled deposit was voided before ever being applied (see
+        // cancelDeposit's preconditions) — it isn't real advance and must not
+        // inflate collection/advance totals.
         const depositWhere: any = {
             organizationId,
-            created_at: { gte: fromDate, lte: toDate }
+            created_at: { gte: fromDate, lte: toDate },
+            status: { not: 'Cancelled' }
         };
         // Deposits only count as advance collections
         if (methodFilter && methodFilter !== 'all') {

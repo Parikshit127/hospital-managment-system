@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/backend/db';
 import { ReportDefinition, ReportCategory, ValidatedFilters } from '../types';
+import { DISCHARGE_TYPES } from '@/app/lib/discharge-summary';
 
 // ── Timezone-safe date boundary helpers ─────────────────────────────────
 // Problem: new Date('2026-06-15') parses as 2026-06-15T00:00:00.000Z (UTC midnight).
@@ -547,7 +548,7 @@ export const ipDischargeReport: ReportDefinition = {
   // maps naturally to a status dropdown in the filter engine.
   filterSpec: {
     showStatus: true,
-    statusOptions: ['Normal', 'LAMA', 'DAMA', 'Absconded', 'Death', 'Transfer'],
+    statusOptions: [...DISCHARGE_TYPES],
   },
   columns: [
     // Date and time are separate columns so each reads cleanly and can be sorted

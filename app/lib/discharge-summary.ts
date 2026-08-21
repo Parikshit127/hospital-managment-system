@@ -21,11 +21,19 @@ import {
 // admission/patient/bed/ward records at render time so they always stay current. Only the
 // few header values a doctor may need to override are kept (indoor_no, consulting_doctor,
 // class_applicable).
+// Shared with the admission page's "Discharge Type (planned)" selector
+// (app/ipd/admission/[id]/page.tsx) so there's one list, not a duplicate to drift.
+export const DISCHARGE_TYPES = ['Normal', 'LAMA', 'DAMA', 'Absconded', 'Death', 'Transfer'] as const;
+
 export interface DischargeSummaryData {
     // Header overrides (optional — blank falls back to the live chart value)
     indoor_no: string;
     consulting_doctor: string;
     class_applicable: string;
+    // Discharge type/mode — optional; blank leaves the admission's existing value
+    // untouched. One of DISCHARGE_TYPES when set (e.g. "LAMA" for Leave Against
+    // Medical Advice). Saving a non-blank value here updates admission.discharge_type.
+    discharge_type: string;
     // Final diagnosis
     final_diagnosis_primary: string;
     final_diagnosis_secondary: string;
@@ -68,6 +76,7 @@ export function emptyDischargeData(): DischargeSummaryData {
         indoor_no: '',
         consulting_doctor: '',
         class_applicable: '',
+        discharge_type: '',
         final_diagnosis_primary: '',
         final_diagnosis_secondary: '',
         icd_code: '',
@@ -117,6 +126,9 @@ export interface DischargeHeaderContext {
     admission_dt: string;
     discharge_dt: string;
     discharge_status: string;
+    /** Admission's current discharge_type ('Not set' if none) — shown as the
+     *  override field's default; unrelated to discharge_status above. */
+    discharge_type: string;
     /** Raw IST value for a `datetime-local` input ("YYYY-MM-DDTHH:mm"), '' if unset. */
     discharge_dt_input: string;
 }
@@ -163,6 +175,7 @@ export function buildDischargeHeader(admission: any, data?: Partial<DischargeSum
             : isSemiDischarged(admission)
               ? 'Semi Discharged (awaiting approval)'
               : 'Not yet discharged',
+        discharge_type: admission?.discharge_type || 'Not set',
         discharge_dt_input: toIstLocalInput(admission?.discharge_date),
     };
 }
@@ -256,6 +269,7 @@ ${printBar}
             ${infoRow('Admitted', header.admission_dt)}
             ${infoRow('Discharged', header.discharge_dt)}
             ${infoRow('Discharge Status', header.discharge_status)}
+            ${infoRow('Discharge Type', header.discharge_type === 'Not set' ? '—' : header.discharge_type)}
         </table>
     </div>
 
@@ -339,6 +353,7 @@ export function renderDischargeSummaryText(header: DischargeHeaderContext, data:
     L.push(`Admitted: ${header.admission_dt}`);
     L.push(`Discharged: ${header.discharge_dt}`);
     L.push(`Discharge Status: ${header.discharge_status}`);
+    L.push(`Discharge Type: ${header.discharge_type === 'Not set' ? '—' : header.discharge_type}`);
     L.push('');
     L.push('FINAL DIAGNOSIS');
     L.push([data.final_diagnosis_primary, data.final_diagnosis_secondary].filter(Boolean).join('\n') || '—');

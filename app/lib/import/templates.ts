@@ -96,7 +96,7 @@ const doctorMasterColumns: ImportColumn[] = [
 const serviceMasterColumns: ImportColumn[] = [
     { name: 'service_code', required: true, type: 'string', description: 'Unique service code', example: 'SVC-001' },
     { name: 'service_name', required: true, type: 'string', description: 'Service name', example: 'ICU Bed (General)' },
-    { name: 'service_category', required: true, type: 'enum', description: 'Category', example: 'ICU', values: ['OPD Consultation', 'ICU', 'Procedure', 'Room', 'Nursing', 'Diet', 'Consumable', 'Home Care', 'Visit Charges', 'Observation Ward/Bed Charges', 'Misc'] },
+    { name: 'service_category', required: true, type: 'enum', description: 'Category', example: 'ICU', values: ['OPD Consultation', 'ICU', 'Procedure', 'Room', 'Nursing', 'Diet', 'Consumable', 'Home Care', 'Visit Charges', 'Observation Ward/Bed Charges', 'Misc', 'Surgery', 'Operation Theatre', 'Anaesthesia', 'Cardiology', 'Administration'] },
     { name: 'default_rate', required: true, type: 'number', description: 'Default rate (INR)', example: '3500' },
     { name: 'hsn_sac_code', required: false, type: 'string', description: 'HSN/SAC code for GST', example: '9993' },
     { name: 'tax_rate', required: false, type: 'number', description: 'Tax rate (%)', example: '5' },

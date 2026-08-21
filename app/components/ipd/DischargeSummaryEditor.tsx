@@ -8,13 +8,14 @@ import {
     saveDischargeSummary,
     generateDischargeSummaryDraft,
 } from '@/app/actions/discharge-summary-actions';
-import { emptyDischargeData, toIstLocalInput, type DischargeSummaryData } from '@/app/lib/discharge-summary';
+import { emptyDischargeData, toIstLocalInput, DISCHARGE_TYPES, type DischargeSummaryData } from '@/app/lib/discharge-summary';
 import { DischargeMicButton } from './DischargeMicButton';
 
 type Header = {
     patient_name: string; age_gender: string; indoor_no: string; uhid: string;
     consulting_doctor: string; ward: string; bed_no: string; floor: string;
     class_applicable: string; admission_dt: string; discharge_dt: string; discharge_status: string;
+    discharge_type: string;
     discharge_dt_input: string;
 };
 
@@ -188,6 +189,19 @@ export function DischargeSummaryEditor({ admissionId }: { admissionId: string })
                         <Field label={`Indoor No. (default: ${header.indoor_no})`} value={data.indoor_no} onChange={v => set('indoor_no', v)} placeholder={header.indoor_no} />
                         <Field label={`Consulting Doctor (default: ${header.consulting_doctor})`} value={data.consulting_doctor} onChange={v => set('consulting_doctor', v)} placeholder={header.consulting_doctor} />
                         <Field label={`Class Applicable (default: ${header.class_applicable})`} value={data.class_applicable} onChange={v => set('class_applicable', v)} placeholder={header.class_applicable} />
+                        <div>
+                            <label className="flex items-center gap-1.5 text-[11px] font-bold text-gray-600 mb-1">
+                                {`Discharge Type (default: ${header.discharge_type})`}
+                            </label>
+                            <select
+                                value={data.discharge_type}
+                                onChange={e => set('discharge_type', e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                            >
+                                <option value="">— Leave unchanged —</option>
+                                {DISCHARGE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                            </select>
+                        </div>
                     </div>
                 </Section>
             )}
