@@ -1195,29 +1195,30 @@ function DailySaleVoucherReport({ data, fmt, from, to, adminMode }: { data: any;
             .map(paymentToDrillRow);
 
         // Part 2: advance residual — when advanceDr > (sales − receivedTotal) the
-        // balancing figure flips to crDebtors, driven by pre-range cash flows that
-        // are already enumerated in advanceDrDetails (deposits + direct IPD
-        // installments collected before the range, now reclassified against in-range
-        // bills). Include those rows so the drill-down sums to the journal line.
-        // Guard with EPS so no spurious rows appear when crDebtors is purely cash.
+        // crDebtors balancing figure has a residual that comes from the advance
+        // reclassification math, NOT from any specific payment row. The
+        // advanceDrDetails rows total advanceDr (the full Dr Advance amount), which
+        // can be far larger than the residual — adding them all here inflates the
+        // modal total. Instead, represent the residual as a single synthetic summary
+        // row so the modal sum ties exactly to the journal line.
         const directTotal = directRows.reduce((s, r) => s + r.amount, 0);
         const advanceResidual = crDebtors - directTotal;
-        const advanceRows: DrillRow[] = advanceResidual > EPS
-            ? advanceDrDetails.map((d: any): DrillRow => ({
-                date: d.dep_date,
-                patientName: d.patient_name,
-                uhid: d.uhid,
-                reference: `${d.reference} → Bill ${d.bill_no}`,
-                mode: d.tender,
-                amount: Number(d.amount || 0),
-                note: `Prior-period receipt applied to bill dated ${fmtDateTime(d.bill_date)}`,
-            }))
+        const residualRow: DrillRow[] = advanceResidual > EPS
+            ? [{
+                date: null,
+                patientName: '— Prior-period advance reclassification residual —',
+                uhid: '',
+                reference: 'advanceDr exceeds outstanding on in-range bills',
+                mode: '—',
+                amount: advanceResidual,
+                note: 'See Dr Advance drill-down for the individual entries',
+            }]
             : [];
 
         setDrill({
             title: 'Cr Sundry Debtors',
             subtitle: "Today's collection against an earlier bill",
-            rows: [...directRows, ...advanceRows],
+            rows: [...directRows, ...residualRow],
         });
     };
 
