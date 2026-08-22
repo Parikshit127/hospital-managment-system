@@ -1187,11 +1187,38 @@ function DailySaleVoucherReport({ data, fmt, from, to, adminMode }: { data: any;
     };
 
     const openDebtorsCrDrill = () => {
+        // Part 1: in-period cash receipts against bills NOT in this period's MIS
+        // (e.g. a patient paying today against an invoice raised last month).
         const billedInvoiceIds = new Set(misRows.map((r: any) => r.invoice_id));
-        const rows: DrillRow[] = payments
+        const directRows: DrillRow[] = payments
             .filter((p) => p.status === 'Completed' && !isDepositSettlement(p) && !billedInvoiceIds.has(p.invoice_id))
             .map(paymentToDrillRow);
-        setDrill({ title: 'Cr Sundry Debtors', subtitle: "Today's collection against an earlier bill", rows });
+
+        // Part 2: advance residual — when advanceDr > (sales − receivedTotal) the
+        // balancing figure flips to crDebtors, driven by pre-range cash flows that
+        // are already enumerated in advanceDrDetails (deposits + direct IPD
+        // installments collected before the range, now reclassified against in-range
+        // bills). Include those rows so the drill-down sums to the journal line.
+        // Guard with EPS so no spurious rows appear when crDebtors is purely cash.
+        const directTotal = directRows.reduce((s, r) => s + r.amount, 0);
+        const advanceResidual = crDebtors - directTotal;
+        const advanceRows: DrillRow[] = advanceResidual > EPS
+            ? advanceDrDetails.map((d: any): DrillRow => ({
+                date: d.dep_date,
+                patientName: d.patient_name,
+                uhid: d.uhid,
+                reference: `${d.reference} → Bill ${d.bill_no}`,
+                mode: d.tender,
+                amount: Number(d.amount || 0),
+                note: `Prior-period receipt applied to bill dated ${fmtDateTime(d.bill_date)}`,
+            }))
+            : [];
+
+        setDrill({
+            title: 'Cr Sundry Debtors',
+            subtitle: "Today's collection against an earlier bill",
+            rows: [...directRows, ...advanceRows],
+        });
     };
 
     const received: Record<string, number> = data?.received || {};
