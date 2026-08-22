@@ -58,6 +58,29 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       if (admission.patient_id) {
         patient = await (db.oPD_REG as any).findUnique({ where: { patient_id: admission.patient_id } });
       }
+      if (!admission.department) {
+        let doctorUser: any = null;
+        if (admission.attending_doctor_id) {
+          doctorUser = await (db.user as any).findFirst({
+            where: { id: admission.attending_doctor_id, organizationId },
+            select: { department: true, specialty: true },
+          });
+        } else if (admission.doctor_name) {
+          const cleanName = admission.doctor_name.trim();
+          doctorUser = await (db.user as any).findFirst({
+            where: {
+              organizationId,
+              role: 'doctor',
+              OR: [
+                { name: { equals: cleanName, mode: 'insensitive' } },
+                { name: { contains: cleanName.replace(/^(dr|doctor|prof|mr|mrs|ms)\b\.?\s*/i, '').trim(), mode: 'insensitive' } },
+              ],
+            },
+            select: { department: true, specialty: true },
+          });
+        }
+        admission.department = doctorUser?.department || doctorUser?.specialty || patient?.department || null;
+      }
     }
 
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Facesheet</title>

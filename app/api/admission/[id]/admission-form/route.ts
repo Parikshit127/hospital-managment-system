@@ -43,7 +43,53 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
         }
 
         const branding = await getBillBranding(auth.context.organizationId);
-        const html = renderAdmissionFormHtml(admission, branding);
+
+        let doctor: {
+            id: string;
+            name: string | null;
+            specialty: string | null;
+            department: string | null;
+            doctor_registration_no: string | null;
+            employee_code: string | null;
+        } | null = null;
+
+        if (admission.attending_doctor_id) {
+            doctor = await prisma.user.findFirst({
+                where: { id: admission.attending_doctor_id, organizationId: auth.context.organizationId },
+                select: {
+                    id: true,
+                    name: true,
+                    specialty: true,
+                    department: true,
+                    doctor_registration_no: true,
+                    employee_code: true,
+                },
+            });
+        }
+
+        if (!doctor && admission.doctor_name) {
+            const cleanName = admission.doctor_name.trim();
+            doctor = await prisma.user.findFirst({
+                where: {
+                    organizationId: auth.context.organizationId,
+                    role: 'doctor',
+                    OR: [
+                        { name: { equals: cleanName, mode: 'insensitive' } },
+                        { name: { contains: cleanName.replace(/^(dr|doctor|prof|mr|mrs|ms)\b\.?\s*/i, '').trim(), mode: 'insensitive' } },
+                    ],
+                },
+                select: {
+                    id: true,
+                    name: true,
+                    specialty: true,
+                    department: true,
+                    doctor_registration_no: true,
+                    employee_code: true,
+                },
+            });
+        }
+
+        const html = renderAdmissionFormHtml(admission, branding, doctor);
 
         return new NextResponse(html, {
             headers: { 'Content-Type': 'text/html; charset=utf-8' },
@@ -93,7 +139,7 @@ function sectionHeader(title: string, accent: string): string {
     return `<div style="background:${accent};color:#fff;padding:5px 10px;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;margin:14px 0 8px 0;border-radius:3px;">${esc(title)}</div>`;
 }
 
-function renderAdmissionFormHtml(admission: any, b: BillBranding): string {
+function renderAdmissionFormHtml(admission: any, b: BillBranding, doctor?: any): string {
     const p = admission.patient || {};
     const ward = admission.ward || {};
     const bed = admission.bed || {};
@@ -153,7 +199,7 @@ function renderAdmissionFormHtml(admission: any, b: BillBranding): string {
                     ${field('UHID / MRD No.', p.patient_id)}
                     ${field('IPD No.', admission.admission_id)}
                     ${field('Admission Date & Time', admDate)}
-                    ${field('Department / Unit', p.department || admission.line_of_treatment)}
+                    ${field('Department / Unit', doctor?.department || doctor?.specialty || p.department || admission.line_of_treatment)}
                 </div>
                 <div class="grid-3" style="margin-top:4px;">
                     ${field('Ward / Room Type', ward.ward_name || ward.ward_type)}
@@ -224,12 +270,12 @@ function renderAdmissionFormHtml(admission: any, b: BillBranding): string {
 
                 ${sectionHeader('6. Attending Doctor', accent)}
                 <div class="grid-3">
-                    ${field('Admitting Doctor', admission.doctor_name, 2)}
-                    ${field('Reg. No.', '')}
+                    ${field('Admitting Doctor', admission.doctor_name || doctor?.name, 2)}
+                    ${field('Reg. No.', doctor?.doctor_registration_no)}
                 </div>
                 <div class="grid-3" style="margin-top:4px;">
-                    ${field('Attending Doctor ID', admission.attending_doctor_id)}
-                    ${field('Department', p.department)}
+                    ${field('Attending Doctor ID', doctor?.employee_code || admission.attending_doctor_id || doctor?.id)}
+                    ${field('Department', doctor?.department || doctor?.specialty || p.department)}
                     ${field('Expected Discharge', ymd(admission.expected_discharge_date))}
                 </div>
 
