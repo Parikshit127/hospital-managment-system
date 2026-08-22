@@ -1107,7 +1107,16 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
 //                        Cr Debtors: collected today against an older bill.
 // Dr and Cr always tie out by construction (the Debtors line is the balancing figure).
 type DrillRow = { date: any; patientName: string; uhid: string; reference: string; mode: string; amount: number; note?: string };
-type Drill = { title: string; subtitle: string; rows: DrillRow[] };
+type Drill = {
+    title: string; subtitle: string; rows: DrillRow[];
+    // Optional second section shown below the primary rows with its own heading.
+    // Used when the journal line is a net balancing figure whose constituent
+    // details live in a different list (e.g. advanceDrDetails for Cr Sundry Debtors).
+    advanceSection?: { heading: string; rows: DrillRow[] };
+    // When set, the footer Total displays this amount instead of summing the rows.
+    // Use when the rows don't arithmetically add up to the journal line.
+    journalAmount?: number;
+};
 
 const fmtDateTime = (d: any) =>
     d ? new Date(d).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
@@ -1194,31 +1203,36 @@ function DailySaleVoucherReport({ data, fmt, from, to, adminMode }: { data: any;
             .filter((p) => p.status === 'Completed' && !isDepositSettlement(p) && !billedInvoiceIds.has(p.invoice_id))
             .map(paymentToDrillRow);
 
-        // Part 2: advance residual — when advanceDr > (sales − receivedTotal) the
-        // crDebtors balancing figure has a residual that comes from the advance
-        // reclassification math, NOT from any specific payment row. The
-        // advanceDrDetails rows total advanceDr (the full Dr Advance amount), which
-        // can be far larger than the residual — adding them all here inflates the
-        // modal total. Instead, represent the residual as a single synthetic summary
-        // row so the modal sum ties exactly to the journal line.
+        // Part 2: when advanceDr > (sales − receivedTotal), the crDebtors figure
+        // has a residual from the advance reclassification. The advanceDrDetails
+        // entries are the CAUSE (their total = advanceDr, not the residual), so we
+        // show them in a separate labelled section for full transparency. The footer
+        // is pinned to crDebtors (journalAmount) so it always matches the journal line.
         const directTotal = directRows.reduce((s, r) => s + r.amount, 0);
         const advanceResidual = crDebtors - directTotal;
-        const residualRow: DrillRow[] = advanceResidual > EPS
-            ? [{
-                date: null,
-                patientName: '— Prior-period advance reclassification residual —',
-                uhid: '',
-                reference: 'advanceDr exceeds outstanding on in-range bills',
-                mode: '—',
-                amount: advanceResidual,
-                note: 'See Dr Advance drill-down for the individual entries',
-            }]
+        const advanceSectionRows: DrillRow[] = advanceResidual > EPS
+            ? advanceDrDetails.map((d: any): DrillRow => ({
+                date: d.dep_date,
+                patientName: d.patient_name,
+                uhid: d.uhid,
+                reference: `${d.reference} → Bill ${d.bill_no}`,
+                mode: d.tender,
+                amount: Number(d.amount || 0),
+                note: `Applied to bill dated ${fmtDateTime(d.bill_date)}`,
+            }))
             : [];
 
         setDrill({
             title: 'Cr Sundry Debtors',
             subtitle: "Today's collection against an earlier bill",
-            rows: [...directRows, ...residualRow],
+            rows: directRows,
+            ...(advanceSectionRows.length > 0 && {
+                advanceSection: {
+                    heading: 'Prior-period receipts applied to in-range bills (Dr Advance entries)',
+                    rows: advanceSectionRows,
+                },
+                journalAmount: crDebtors,
+            }),
         });
     };
 
@@ -1401,50 +1415,66 @@ function DailySaleVoucherReport({ data, fmt, from, to, adminMode }: { data: any;
             {drill && (
                 <Modal isOpen onClose={() => setDrill(null)} title={drill.title} icon={<BookOpenCheck className="h-4 w-4" />} maxWidth="3xl">
                     <p className="text-xs text-gray-400 mb-4">{drill.subtitle}</p>
-                    {drill.rows.length === 0 ? (
+                    {drill.rows.length === 0 && !drill.advanceSection?.rows.length ? (
                         <p className="text-sm text-gray-400 py-8 text-center">No underlying transactions found for this line.</p>
-                    ) : (
-                        <div className="rounded-xl border border-gray-200 overflow-hidden">
-                            <table className="w-full text-sm">
-                                <thead className="bg-gray-50 text-[10px] uppercase tracking-wider text-gray-500">
-                                    <tr>
-                                        <th className="px-4 py-2 text-left font-semibold">Date</th>
-                                        <th className="px-4 py-2 text-left font-semibold">Patient</th>
-                                        <th className="px-4 py-2 text-left font-semibold">Reference</th>
-                                        <th className="px-4 py-2 text-left font-semibold">Mode</th>
-                                        <th className="px-4 py-2 text-right font-semibold">Amount</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-100">
-                                    {drill.rows.map((r, idx) => (
-                                        <tr key={idx}>
-                                            <td className="px-4 py-2.5 text-gray-600 whitespace-nowrap">{fmtDateTime(r.date)}</td>
-                                            <td className="px-4 py-2.5 text-gray-900 font-medium">
-                                                {r.uhid ? (
-                                                    <Link href={`${adminMode ? '/admin' : ''}/billing/patient/${r.uhid}`}
-                                                        target="_blank" rel="noopener noreferrer"
-                                                        className="hover:underline hover:text-emerald-700 transition" title="Open patient's billing profile">
-                                                        {r.patientName}
-                                                    </Link>
-                                                ) : r.patientName}
-                                                {r.uhid && <span className="text-gray-400 font-mono text-xs"> · {r.uhid}</span>}
-                                                {r.note && <div className="text-[11px] text-gray-400">{r.note}</div>}
-                                            </td>
-                                            <td className="px-4 py-2.5 text-gray-600 font-mono text-xs">{r.reference}</td>
-                                            <td className="px-4 py-2.5 text-gray-600">{r.mode}</td>
-                                            <td className="px-4 py-2.5 text-right font-mono font-semibold text-gray-900">{fmt(r.amount)}</td>
+                    ) : (() => {
+                        const renderRow = (r: DrillRow, idx: number) => (
+                            <tr key={idx}>
+                                <td className="px-4 py-2.5 text-gray-600 whitespace-nowrap">{fmtDateTime(r.date)}</td>
+                                <td className="px-4 py-2.5 text-gray-900 font-medium">
+                                    {r.uhid ? (
+                                        <Link href={`${adminMode ? '/admin' : ''}/billing/patient/${r.uhid}`}
+                                            target="_blank" rel="noopener noreferrer"
+                                            className="hover:underline hover:text-emerald-700 transition" title="Open patient's billing profile">
+                                            {r.patientName}
+                                        </Link>
+                                    ) : r.patientName}
+                                    {r.uhid && <span className="text-gray-400 font-mono text-xs"> · {r.uhid}</span>}
+                                    {r.note && <div className="text-[11px] text-gray-400">{r.note}</div>}
+                                </td>
+                                <td className="px-4 py-2.5 text-gray-600 font-mono text-xs">{r.reference}</td>
+                                <td className="px-4 py-2.5 text-gray-600">{r.mode}</td>
+                                <td className="px-4 py-2.5 text-right font-mono font-semibold text-gray-900">{fmt(r.amount)}</td>
+                            </tr>
+                        );
+                        const footerAmt = drill.journalAmount !== undefined ? drill.journalAmount : drill.rows.reduce((s, r) => s + r.amount, 0);
+                        return (
+                            <div className="rounded-xl border border-gray-200 overflow-hidden">
+                                <table className="w-full text-sm">
+                                    <thead className="bg-gray-50 text-[10px] uppercase tracking-wider text-gray-500">
+                                        <tr>
+                                            <th className="px-4 py-2 text-left font-semibold">Date</th>
+                                            <th className="px-4 py-2 text-left font-semibold">Patient</th>
+                                            <th className="px-4 py-2 text-left font-semibold">Reference</th>
+                                            <th className="px-4 py-2 text-left font-semibold">Mode</th>
+                                            <th className="px-4 py-2 text-right font-semibold">Amount</th>
                                         </tr>
-                                    ))}
-                                </tbody>
-                                <tfoot>
-                                    <tr className="bg-gray-50 border-t-2 border-gray-200 font-bold text-gray-900">
-                                        <td colSpan={4} className="px-4 py-2.5 text-right">Total</td>
-                                        <td className="px-4 py-2.5 text-right font-mono">{fmt(drill.rows.reduce((s, r) => s + r.amount, 0))}</td>
-                                    </tr>
-                                </tfoot>
-                            </table>
-                        </div>
-                    )}
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100">
+                                        {drill.rows.map(renderRow)}
+                                        {drill.advanceSection && drill.advanceSection.rows.length > 0 && (<>
+                                            <tr className="bg-amber-50 border-t border-amber-200">
+                                                <td colSpan={5} className="px-4 py-2 text-[10px] font-black text-amber-700 uppercase tracking-wider">
+                                                    {drill.advanceSection.heading}
+                                                </td>
+                                            </tr>
+                                            {drill.advanceSection.rows.map((r, idx) => renderRow(r, 10000 + idx))}
+                                        </>)}
+                                    </tbody>
+                                    <tfoot>
+                                        <tr className="bg-gray-50 border-t-2 border-gray-200 font-bold text-gray-900">
+                                            <td colSpan={4} className="px-4 py-2.5 text-right">
+                                                {drill.journalAmount !== undefined
+                                                    ? <span>Total <span className="font-normal text-gray-400 text-xs">(journal line)</span></span>
+                                                    : 'Total'}
+                                            </td>
+                                            <td className="px-4 py-2.5 text-right font-mono">{fmt(footerAmt)}</td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                        );
+                    })()}
                 </Modal>
             )}
         </div>
