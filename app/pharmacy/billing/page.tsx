@@ -21,6 +21,7 @@ import type { PharmacyBranding } from '@/app/lib/pharmacy-branding';
 import { formatDoctorName } from '@/app/lib/format-name';
 import { getIPDAdmissions } from '@/app/actions/ipd-actions';
 import { generateInterimBill, postChargeToIpdBill } from '@/app/actions/ipd-finance-actions';
+import { bedLabel } from '@/app/lib/bed-label';
 
 type InventoryItem = {
     batch_id: string;
@@ -694,7 +695,7 @@ export default function PharmacyPage() {
                                         >
                                             <p className="font-bold text-sm text-gray-900 truncate">{a.patient?.full_name}</p>
                                             <p className="text-[10px] font-mono text-gray-400 mt-0.5">{a.admission_id}</p>
-                                            <p className="text-[10px] text-gray-500 mt-0.5">{a.wardName} · Bed {a.bed_id} · Day {a.daysAdmitted}</p>
+                                            <p className="text-[10px] text-gray-500 mt-0.5">{a.wardName} · Bed {bedLabel(a.bed || a.bed_id)} · Day {a.daysAdmitted}</p>
                                         </button>
                                     ))}
                                 </div>
@@ -722,7 +723,7 @@ export default function PharmacyPage() {
                                                     <p className="text-sm text-gray-500 mt-0.5">
                                                         {ipdBillData.admission.admission_id} &nbsp;·&nbsp;
                                                         {formatDoctorName(ipdBillData.admission.doctor_name)} &nbsp;·&nbsp;
-                                                        {ipdBillData.admission.ward_name} / Bed {ipdBillData.admission.bed_id}
+                                                        {ipdBillData.admission.ward_name} / Bed {bedLabel(ipdBillData.admission.bed || ipdBillData.admission.bed_id)}
                                                     </p>
                                                     <p className="text-xs text-gray-400 mt-0.5">Day {ipdBillData.admission.days_admitted} &nbsp;·&nbsp; {ipdBillData.admission.diagnosis || 'No diagnosis'}</p>
                                                 </div>

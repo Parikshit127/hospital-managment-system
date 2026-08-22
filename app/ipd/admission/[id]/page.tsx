@@ -1005,7 +1005,7 @@ export default function AdmissionDetailPage() {
                                 </span>
                                 <span className="flex items-center gap-1.5">
                                     <Bed className="h-3.5 w-3.5 text-indigo-400" />
-                                    {data.bed?.wards?.ward_name || 'Unassigned'} · {data.bed_id || 'No bed'}
+                                    {data.bed?.wards?.ward_name || 'Unassigned'} · {bedLabel(data.bed || data.bed_id)}
                                     {['Admitted', 'Discharged'].includes(data.status) && (
                                         <button
                                             type="button"
@@ -1192,7 +1192,7 @@ export default function AdmissionDetailPage() {
                                 {/* Stats Row */}
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                     <StatCard label="Days Admitted" value={`${daysAdmitted} day${daysAdmitted !== 1 ? 's' : ''}`} icon={<CalendarDays className="h-4 w-4 text-blue-500" />} color="blue" />
-                                    <StatCard label="Ward / Bed" value={data.bed?.wards?.ward_name || 'Unassigned'} sub={data.bed_id || '—'} icon={<Bed className="h-4 w-4 text-indigo-500" />} color="indigo" />
+                                    <StatCard label="Ward / Bed" value={data.bed?.wards?.ward_name || 'Unassigned'} sub={bedLabel(data.bed || data.bed_id)} icon={<Bed className="h-4 w-4 text-indigo-500" />} color="indigo" />
                                     <StatCard label="Est. Bed Cost" value={`₹${estimatedBedCost.toLocaleString()}`} sub={wardCostPerDay ? `₹${wardCostPerDay}/day` : 'Rate not set'} icon={<TrendingUp className="h-4 w-4 text-orange-500" />} color="teal" />
                                     <StatCard label="Nursing Tasks" value={`${data.nursing_tasks?.filter((t: any) => t.status === 'Completed').length || 0} / ${data.nursing_tasks?.length || 0}`} sub="completed" icon={<HeartPulse className="h-4 w-4 text-purple-500" />} color="purple" />
                                 </div>

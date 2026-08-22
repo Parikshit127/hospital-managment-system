@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { generateInterimBill, settleAndDischarge } from '@/app/actions/ipd-finance-actions';
 import { formatDoctorName } from '@/app/lib/format-name';
+import { bedLabel } from '@/app/lib/bed-label';
 
 function getLocalDatetimeString(date: Date) {
     const pad = (n: number) => String(n).padStart(2, '0');
@@ -170,7 +171,7 @@ export function DischargeSettlementContent({ adminMode = false }: { adminMode?: 
                                 UHID: {billData.admission.patient_id} | Admission: {billData.admission.admission_id}
                             </p>
                             <p className="text-sm text-gray-500">
-                                {formatDoctorName(billData.admission.doctor_name)} | {billData.admission.ward_name} | Bed: {billData.admission.bed_id}
+                                {formatDoctorName(billData.admission.doctor_name)} | {billData.admission.ward_name} | Bed: {bedLabel(billData.admission.bed || billData.admission.bed_id)}
                             </p>
                             <p className="text-xs text-gray-400">
                                 Admitted: {new Date(billData.admission.admission_date).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}

@@ -15,6 +15,7 @@ import {
     isFullyDischarged,
     isSemiDischarged,
 } from '@/app/lib/admission-status';
+import { bedLabel } from '@/app/lib/bed-label';
 
 // Doctor-authored, free-text sections of the discharge summary. Header/demographic fields
 // (patient name, UHID, ward, dates, …) are NOT stored here — they are derived live from the
@@ -164,7 +165,7 @@ export function buildDischargeHeader(admission: any, data?: Partial<DischargeSum
         uhid: patient.patient_id || '—',
         consulting_doctor: (data?.consulting_doctor || '').trim() || admission?.doctor_name || '—',
         ward: ward?.ward_name || '—',
-        bed_no: bed?.bed_name || admission?.bed_id || '—',
+        bed_no: bedLabel(bed || admission?.bed_id) || '—',
         floor: ward?.floor_number || '—',
         class_applicable:
             (data?.class_applicable || '').trim() || admission?.patient_class || admission?.billing_category || '—',

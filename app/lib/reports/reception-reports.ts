@@ -1,5 +1,6 @@
 import { prisma } from '@/backend/db';
 import { getBillBranding } from '@/app/lib/bill-branding';
+import { bedLabel } from '@/app/lib/bed-label';
 
 /**
  * Shared data + rendering helpers for the Reception patient reports
@@ -117,7 +118,7 @@ export async function getIpdReportRows(
         ageGender: ageGender(a.patient?.age ?? null, a.patient?.gender ?? null),
         admissionDate: fmtDateTime(a.admission_date),
         ward: a.ward?.ward_name ?? '-',
-        bed: a.bed?.bed_name ?? a.bed_id ?? '-',
+        bed: bedLabel(a.bed || a.bed_id),
         doctor: a.doctor_name ?? '-',
         category: a.admission_category ?? a.admission_type ?? '-',
         diagnosis: a.diagnosis ?? a.primary_diagnosis_icd ?? '-',

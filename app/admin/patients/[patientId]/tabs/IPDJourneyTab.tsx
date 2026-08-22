@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { updateAdmissionDiagnosis } from '@/app/actions/ipd-actions';
 import { useToast } from '@/app/components/ui/Toast';
+import { bedLabel } from '@/app/lib/bed-label';
 
 interface IPDJourneyTabProps {
   admissions: any[];
@@ -177,7 +178,7 @@ export default function IPDJourneyTab({ admissions, onAdmissionUpdated }: IPDJou
                 </span>
                 {admission.bed && (
                   <span>
-                    Bed: {admission.bed.bed_id || 'N/A'} ({admission.bed.bed_category || 'N/A'})
+                    Bed: {bedLabel(admission.bed)} ({admission.bed.bed_category || 'N/A'})
                   </span>
                 )}
                 {admission.ward && <span>Ward: {admission.ward.ward_name || 'N/A'}</span>}
