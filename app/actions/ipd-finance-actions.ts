@@ -1233,45 +1233,44 @@ export async function getPackageUtilization(admissionId: string) {
     try {
         const { db } = await requireTenantContext();
 
-        const admPkg = await db.ipdAdmissionPackage.findFirst({
+        const admPkgs = await db.ipdAdmissionPackage.findMany({
             where: { admission_id: admissionId },
             include: { package: true },
-            orderBy: { created_at: 'desc' },
+            orderBy: { created_at: 'asc' },
         });
 
-        if (!admPkg) return { success: true, data: null };
+        if (admPkgs.length === 0) return { success: true, data: [] };
 
-        const postings = await db.ipdChargePosting.findMany({
-            where: { admission_package_id: admPkg.id },
-            orderBy: { posted_at: 'asc' },
-        });
+        const data = await Promise.all(admPkgs.map(async (admPkg: any) => {
+            const postings = await db.ipdChargePosting.findMany({
+                where: { admission_package_id: admPkg.id },
+                orderBy: { posted_at: 'asc' },
+            });
 
-        const consumedItems = postings.filter((p: any) => p.disposition === CHARGE_DISPOSITION.PACKAGE_CONSUMED);
-        const extraItems = postings.filter((p: any) => p.disposition === CHARGE_DISPOSITION.BILLABLE_EXTRA);
+            const consumedItems = postings.filter((p: any) => p.disposition === CHARGE_DISPOSITION.PACKAGE_CONSUMED);
+            const extraItems = postings.filter((p: any) => p.disposition === CHARGE_DISPOSITION.BILLABLE_EXTRA);
 
-        const consumed = roundMoney(consumedItems.reduce((s: number, p: any) => s + Number(p.amount), 0));
-        const extrasBilled = roundMoney(extraItems.reduce((s: number, p: any) => s + Number(p.amount), 0));
-        const packageAmount = Number(admPkg.applied_amount);
+            const consumed = roundMoney(consumedItems.reduce((s: number, p: any) => s + Number(p.amount), 0));
+            const extrasBilled = roundMoney(extraItems.reduce((s: number, p: any) => s + Number(p.amount), 0));
+            const packageAmount = Number(admPkg.applied_amount);
 
-        const consumedByCategory: Record<string, number> = {};
-        for (const p of consumedItems) {
-            const cat = p.service_category || p.source_module || 'Other';
-            consumedByCategory[cat] = roundMoney((consumedByCategory[cat] || 0) + Number(p.amount));
-        }
+            const consumedByCategory: Record<string, number> = {};
+            for (const p of consumedItems) {
+                const cat = p.service_category || p.source_module || 'Other';
+                consumedByCategory[cat] = roundMoney((consumedByCategory[cat] || 0) + Number(p.amount));
+            }
 
-        const mapItem = (p: any) => ({
-            id: p.id,
-            description: p.description,
-            service_category: p.service_category || p.source_module,
-            source_module: p.source_module,
-            amount: Number(p.amount),
-            quantity: Number(p.quantity) || 1,
-            posted_at: p.posted_at,
-        });
+            const mapItem = (p: any) => ({
+                id: p.id,
+                description: p.description,
+                service_category: p.service_category || p.source_module,
+                source_module: p.source_module,
+                amount: Number(p.amount),
+                quantity: Number(p.quantity) || 1,
+                posted_at: p.posted_at,
+            });
 
-        return {
-            success: true,
-            data: serialize({
+            return {
                 admission_package_id: admPkg.id,
                 package_name: admPkg.applied_package_name || admPkg.package?.package_name,
                 package_amount: packageAmount,
@@ -1284,8 +1283,10 @@ export async function getPackageUtilization(admissionId: string) {
                 extra_items: extraItems.map(mapItem),
                 remaining: roundMoney(packageAmount - consumed),
                 utilization_pct: packageAmount > 0 ? roundMoney((consumed / packageAmount) * 100) : 0,
-            }),
-        };
+            };
+        }));
+
+        return { success: true, data: serialize(data) };
     } catch (error: any) {
         return { success: false, error: error.message };
     }
@@ -1740,9 +1741,10 @@ export async function getAbsorbedCharges(admissionId: string) {
     try {
         const { db } = await requireTenantContext();
 
-        const admPkg = await db.ipdAdmissionPackage.findFirst({
+        const admPkgs = await db.ipdAdmissionPackage.findMany({
             where: { admission_id: admissionId },
             include: { package: true },
+            orderBy: { created_at: 'asc' },
         });
 
         const postings = await db.ipdChargePosting.findMany({
@@ -1750,7 +1752,7 @@ export async function getAbsorbedCharges(admissionId: string) {
             orderBy: { posted_at: 'desc' },
         });
 
-        const items = postings.map((p: any) => ({
+        const mapItem = (p: any) => ({
             id: p.id,
             description: p.description,
             category: p.service_category || p.source_module || 'Other',
@@ -1758,23 +1760,29 @@ export async function getAbsorbedCharges(admissionId: string) {
             unit_price: Number(p.unit_price || 0),
             amount: Number(p.amount || 0),
             posted_at: p.posted_at,
-        }));
+        });
 
-        const total = items.reduce((s: number, i: any) => s + i.amount, 0);
-        const byCategory: Record<string, number> = {};
-        for (const i of items) byCategory[i.category] = (byCategory[i.category] || 0) + i.amount;
-
-        return {
-            success: true,
-            data: serialize({
-                package_name: admPkg?.package?.package_name || null,
-                package_amount: admPkg ? Number(admPkg.applied_amount) : 0,
+        const packages = admPkgs.map((admPkg: any) => {
+            const items = postings
+                .filter((p: any) => p.admission_package_id === admPkg.id)
+                .map(mapItem);
+            const total = items.reduce((s: number, i: any) => s + i.amount, 0);
+            const byCategory: Record<string, number> = {};
+            for (const i of items) byCategory[i.category] = (byCategory[i.category] || 0) + i.amount;
+            return {
+                admission_package_id: admPkg.id,
+                package_name: admPkg.applied_package_name || admPkg.package?.package_name || null,
+                package_amount: Number(admPkg.applied_amount),
                 total,
                 byCategory,
                 items,
                 count: items.length,
-            }),
-        };
+            };
+        }).filter((g: any) => g.count > 0 || g.package_amount > 0);
+
+        const grandTotal = packages.reduce((s: number, g: any) => s + g.total, 0);
+
+        return { success: true, data: serialize({ packages, grandTotal }) };
     } catch (error: any) {
         return { success: false, error: error.message };
     }
