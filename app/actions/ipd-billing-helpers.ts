@@ -253,16 +253,21 @@ export async function ensureIPDRoomChargesAccrued(admissionId: string) {
         // accrual for the days covered by the package — Room Rent + Nursing Care are
         // already included in the package price (per Axten pricelist inclusions).
         // Days BEYOND validity_days still accrue normally per the "extended stay" rule.
-        const activePkg = await db.ipdAdmissionPackage.findFirst({
+        const nonBrokenPkgs = await db.ipdAdmissionPackage.findMany({
             where: { admission_id: admissionId, is_broken_open: false },
             include: { package: { select: { validity_days: true, package_name: true } } },
         });
+        // Latest coverage window across all non-broken packages — a day counts as
+        // covered if ANY of them still includes it.
         let packageCoveredUntil: Date | null = null;
-        if (activePkg) {
-            const validityDays = activePkg.package.validity_days || 7;
-            packageCoveredUntil = new Date(admitDate);
-            packageCoveredUntil.setDate(admitDate.getDate() + validityDays - 1);
-            packageCoveredUntil.setHours(23, 59, 59, 999);
+        for (const pkg of nonBrokenPkgs) {
+            const validityDays = pkg.package.validity_days || 7;
+            const coveredUntil = new Date(admitDate);
+            coveredUntil.setDate(admitDate.getDate() + validityDays - 1);
+            coveredUntil.setHours(23, 59, 59, 999);
+            if (!packageCoveredUntil || coveredUntil > packageCoveredUntil) {
+                packageCoveredUntil = coveredUntil;
+            }
         }
 
         // Fetch existing Room + Nursing items to de-dupe by ISO day.

@@ -852,21 +852,20 @@ export async function accrueIPDDailyCharges(admissionId: string) {
 
     // If an active (non-broken-open) IPD package covers today, skip Room+Nursing
     // accrual — both are included in the package price (per pricelist inclusions).
-    const activePkg = await db.ipdAdmissionPackage.findFirst({
+    const nonBrokenPkgs = await db.ipdAdmissionPackage.findMany({
       where: { admission_id: admissionId, is_broken_open: false },
       include: { package: { select: { validity_days: true } } },
     });
-    let packageCoversToday = false;
-    if (activePkg) {
-      const validityDays = activePkg.package.validity_days || 7;
-      const admitDateMidnight = new Date(admission.admission_date);
-      admitDateMidnight.setHours(0, 0, 0, 0);
+    const admitDateMidnight = new Date(admission.admission_date);
+    admitDateMidnight.setHours(0, 0, 0, 0);
+    const now = new Date();
+    const packageCoversToday = nonBrokenPkgs.some((pkg: any) => {
+      const validityDays = pkg.package.validity_days || 7;
       const coveredUntil = new Date(admitDateMidnight);
       coveredUntil.setDate(admitDateMidnight.getDate() + validityDays - 1);
       coveredUntil.setHours(23, 59, 59, 999);
-      const now = new Date();
-      packageCoversToday = now <= coveredUntil;
-    }
+      return now <= coveredUntil;
+    });
 
     // Determine room GST: ICU/CCU/NICU exempt regardless of rate;
     // other wards 5% if rent > ₹5,000/day (CBIC 03/2022).
