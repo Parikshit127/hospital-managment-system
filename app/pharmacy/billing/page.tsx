@@ -242,11 +242,19 @@ export default function PharmacyPage() {
         return () => clearInterval(interval);
     }, [loadQueue]);
 
-    // ── IPD Bills: load admitted patients when tab is active ────────────────────
+    // ── IPD Bills: load admitted + discharged patients when tab is active ───────
+    // Discharged patients are included because their bill can still be Draft/
+    // unlocked (e.g. after Finance unlocks it for a correction) and pharmacy
+    // needs to reach it to fix a medicine line — the invoice lock, not the
+    // admission status, is what actually governs editability server-side.
     useEffect(() => {
         if (activeTab === 'ipd-bills') {
-            getIPDAdmissions('Admitted').then(r => {
-                if (r.success) setIpdAdmissions(r.data);
+            Promise.all([getIPDAdmissions('Admitted'), getIPDAdmissions('Discharged')]).then(([admitted, discharged]) => {
+                const rows = [
+                    ...(admitted.success ? admitted.data : []),
+                    ...(discharged.success ? discharged.data : []),
+                ].sort((a: any, b: any) => new Date(b.admission_date).getTime() - new Date(a.admission_date).getTime());
+                setIpdAdmissions(rows);
             });
         }
     }, [activeTab]);
@@ -675,13 +683,13 @@ export default function PharmacyPage() {
                                             </button>
                                         )}
                                     </div>
-                                    <p className="text-[10px] font-bold text-blue-600 mt-2 uppercase tracking-wider">Admitted Patients Only</p>
+                                    <p className="text-[10px] font-bold text-blue-600 mt-2 uppercase tracking-wider">Admitted &amp; Recently Discharged</p>
                                 </div>
                                 <div className="space-y-2">
                                     {filteredIpdAdmissions.length === 0 ? (
                                         <div className="text-center py-10 text-gray-400 text-xs font-medium">
                                             <BedDouble className="h-8 w-8 mx-auto text-gray-200 mb-2" />
-                                            No admitted patients found
+                                            No patients found
                                         </div>
                                     ) : filteredIpdAdmissions.map((a: any) => (
                                         <button
@@ -693,7 +701,12 @@ export default function PharmacyPage() {
                                                     : 'border-gray-200 hover:bg-gray-50 hover:border-blue-200'
                                             }`}
                                         >
-                                            <p className="font-bold text-sm text-gray-900 truncate">{a.patient?.full_name}</p>
+                                            <div className="flex items-center gap-1.5">
+                                                <p className="font-bold text-sm text-gray-900 truncate">{a.patient?.full_name}</p>
+                                                {a.status === 'Discharged' && (
+                                                    <span className="shrink-0 px-1.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded text-[9px] font-bold uppercase tracking-wide">Discharged</span>
+                                                )}
+                                            </div>
                                             <p className="text-[10px] font-mono text-gray-400 mt-0.5">{a.admission_id}</p>
                                             <p className="text-[10px] text-gray-500 mt-0.5">{a.wardName} · Bed {bedLabel(a.bed || a.bed_id)} · Day {a.daysAdmitted}</p>
                                         </button>
