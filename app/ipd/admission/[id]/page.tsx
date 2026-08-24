@@ -2342,7 +2342,7 @@ export default function AdmissionDetailPage() {
                                                                         )}
                                                                     </div>
                                                                     <p className="font-black text-gray-900 ml-4">₹{item.net_price.toLocaleString()}</p>
-                                                                    {data.status === 'Admitted' && (
+                                                                    {!bill.invoice.is_locked && (
                                                                         <>
                                                                             {!isPackageLine && (
                                                                                 <button
