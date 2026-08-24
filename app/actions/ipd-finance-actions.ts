@@ -41,13 +41,18 @@ function generateEstimateNumber() {
 // (see IPD_PACKAGE_BILLING_DESIGN.md)
 // ============================================
 
-/** The admission's currently active (non-broken, non-closed) package, if any. */
-async function getActiveAdmissionPackage(client: any, admissionId: string) {
-    return client.ipdAdmissionPackage.findFirst({
+async function getActiveAdmissionPackages(client: any, admissionId: string) {
+    return client.ipdAdmissionPackage.findMany({
         where: { admission_id: admissionId, status: ADMISSION_PACKAGE_STATUS.ACTIVE },
         include: { package: true },
-        orderBy: { created_at: 'desc' },
+        orderBy: { created_at: 'asc' },
     });
+}
+
+/** Returns the active package only when it's unambiguous (0 or 2+ active → null). */
+async function getSoleActiveAdmissionPackage(client: any, admissionId: string) {
+    const active = await getActiveAdmissionPackages(client, admissionId);
+    return active.length === 1 ? active[0] : null;
 }
 
 /** Pre-mutation snapshot so any package migration on an invoice is fully auditable. */
@@ -889,12 +894,6 @@ export async function applyPackageToAdmission(admissionId: string, packageId: nu
                 return { success: false, error: `This package is exclusive to ${provider?.provider_name ?? 'a specific TPA'} patients` };
             }
         }
-
-        // Only one active package per admission (multi-package is a V2 concern).
-        const existing = await db.ipdAdmissionPackage.findFirst({
-            where: { admission_id: admissionId, status: ADMISSION_PACKAGE_STATUS.ACTIVE },
-        });
-        if (existing) return { success: false, error: 'A package is already applied to this admission' };
 
         // The package can only be applied while the bill is still open.
         const openInvoice = await db.invoices.findFirst({
