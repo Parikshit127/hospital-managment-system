@@ -1,6 +1,7 @@
 'use server';
 import { requireTenantContext } from '@/backend/tenant';
 import { z } from 'zod';
+import { SERVICE_MASTER_CATEGORIES } from '@/app/lib/service-categories';
 
 function serialize<T>(d: T): T {
   return JSON.parse(JSON.stringify(d, (_, v) =>
@@ -31,7 +32,7 @@ function toMessage(e: any, duplicateLabel = 'name'): string {
 const serviceSchema = z.object({
   service_code: z.string().min(1),
   service_name: z.string().min(1),
-  service_category: z.enum(['OPD Consultation','ICU','Procedure','Room','Nursing','Diet','Consumable','Home Care','Visit Charges','Observation Ward/Bed Charges','Misc','Surgery','Operation Theatre','Anaesthesia','Cardiology','Administration']),
+  service_category: z.enum(SERVICE_MASTER_CATEGORIES),
   default_rate: z.number().nonnegative(),
   hsn_sac_code: optionalText,
   tax_rate: z.number().nonnegative().default(0),

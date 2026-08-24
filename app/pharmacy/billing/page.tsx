@@ -108,6 +108,8 @@ export default function PharmacyPage() {
     const [ipdAddPrice, setIpdAddPrice] = useState('');
     const [ipdAddDiscount, setIpdAddDiscount] = useState('');
     const [ipdAddDesc, setIpdAddDesc] = useState('');
+    const [ipdAddDisposition, setIpdAddDisposition] = useState<'auto' | 'package_consumed' | 'billable_extra'>('auto');
+    const [ipdAddTargetPkgId, setIpdAddTargetPkgId] = useState<number | ''>('');
     const [selectedOrder, setSelectedOrder] = useState<any>(null);
 
     // Patient search state
@@ -388,6 +390,8 @@ export default function PharmacyPage() {
             unit_price: Number(ipdAddPrice),
             discount: Number(ipdAddDiscount) || 0,
             service_category: 'Pharmacy',
+            ...(ipdAddDisposition !== 'auto' ? { disposition_override: ipdAddDisposition } : {}),
+            ...(ipdAddTargetPkgId !== '' ? { admission_package_id: Number(ipdAddTargetPkgId) } : {}),
         });
         setIpdActionLoading(null);
         if (res.success) {
@@ -400,6 +404,8 @@ export default function PharmacyPage() {
             setIpdAddPrice('');
             setIpdAddDiscount('');
             setIpdAddDesc('');
+            setIpdAddDisposition('auto');
+            setIpdAddTargetPkgId('');
             await refreshIpdBill();
         } else {
             showIpdToast(res.error || 'Failed to add charge', 'error');
@@ -1132,7 +1138,7 @@ export default function PharmacyPage() {
                                                 <h3 className="text-base font-black text-gray-900">Add Pharmacy Charge</h3>
                                                 <p className="text-xs text-gray-500 mt-0.5">Patient: <span className="font-bold text-blue-700">{ipdBillData?.admission?.patient_name}</span></p>
                                             </div>
-                                            <button onClick={() => setShowIpdAddModal(false)}><X className="h-5 w-5 text-gray-400 hover:text-gray-700" /></button>
+                                            <button onClick={() => { setShowIpdAddModal(false); setIpdAddDisposition('auto'); setIpdAddTargetPkgId(''); }}><X className="h-5 w-5 text-gray-400 hover:text-gray-700" /></button>
                                         </div>
                                         <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
                                             {/* Medicine search */}
@@ -1226,6 +1232,50 @@ export default function PharmacyPage() {
                                                 </div>
                                             </div>
 
+                                            {/* Package routing — only when at least one package is active on this admission */}
+                                            {ipdPkgUtils.some((p: any) => p.status === 'active') && (() => {
+                                                const activePkgs = ipdPkgUtils.filter((p: any) => p.status === 'active');
+                                                return (
+                                                <div className="bg-indigo-50/60 border border-indigo-100 rounded-lg p-3 space-y-1.5">
+                                                    <p className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">
+                                                        Package routing{activePkgs.length === 1 ? ` — ${activePkgs[0].package_name}` : ''}
+                                                    </p>
+                                                    {activePkgs.length > 1 && (
+                                                        <div>
+                                                            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Target package</label>
+                                                            <select
+                                                                value={ipdAddTargetPkgId}
+                                                                onChange={e => setIpdAddTargetPkgId(e.target.value ? Number(e.target.value) : '')}
+                                                                className="w-full text-xs p-2 bg-white border border-indigo-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                                                            >
+                                                                <option value="">Select which package this charge belongs to…</option>
+                                                                {activePkgs.map((p: any) => (
+                                                                    <option key={p.admission_package_id} value={p.admission_package_id}>{p.package_name}</option>
+                                                                ))}
+                                                            </select>
+                                                        </div>
+                                                    )}
+                                                    <div className="flex flex-wrap gap-3 text-[11px] font-medium text-gray-700">
+                                                        <label className="flex items-center gap-1.5 cursor-pointer">
+                                                            <input type="radio" name="ipdAddDisposition" checked={ipdAddDisposition === 'auto'}
+                                                                onChange={() => setIpdAddDisposition('auto')} />
+                                                            Auto (exclusion-aware)
+                                                        </label>
+                                                        <label className="flex items-center gap-1.5 cursor-pointer">
+                                                            <input type="radio" name="ipdAddDisposition" checked={ipdAddDisposition === 'package_consumed'}
+                                                                onChange={() => setIpdAddDisposition('package_consumed')} />
+                                                            Within package (absorbed)
+                                                        </label>
+                                                        <label className="flex items-center gap-1.5 cursor-pointer">
+                                                            <input type="radio" name="ipdAddDisposition" checked={ipdAddDisposition === 'billable_extra'}
+                                                                onChange={() => setIpdAddDisposition('billable_extra')} />
+                                                            Billable over package
+                                                        </label>
+                                                    </div>
+                                                </div>
+                                                );
+                                            })()}
+
                                             {/* Line total preview */}
                                             {ipdAddQty > 0 && Number(ipdAddPrice) > 0 && (
                                                 <div className="flex items-center justify-between bg-blue-50 border border-blue-200 rounded-xl px-4 py-2.5">
@@ -1244,7 +1294,7 @@ export default function PharmacyPage() {
 
                                         <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex gap-3 justify-end">
                                             <button
-                                                onClick={() => setShowIpdAddModal(false)}
+                                                onClick={() => { setShowIpdAddModal(false); setIpdAddDisposition('auto'); setIpdAddTargetPkgId(''); }}
                                                 className="px-5 py-2.5 text-sm font-bold text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition-all"
                                             >
                                                 Cancel

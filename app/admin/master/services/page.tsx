@@ -17,13 +17,13 @@ import { getInsuranceProviders } from '@/app/actions/insurance-actions';
 import { ensureIPDDemoMasterData } from '@/app/actions/ipd-billing-helpers';
 import MasterImportButton from '@/app/components/master/MasterImportButton';
 import MasterExportButton from '@/app/components/master/MasterExportButton';
+import { SERVICE_MASTER_CATEGORIES as SERVICE_CATEGORIES } from '@/app/lib/service-categories';
 
 const sanitizeMoney = (value: string) => value.replace(/[^\d.]/g, '');
 const sanitizeInteger = (value: string) => value.replace(/\D/g, '');
 const sanitizeText = (value: string) => value.replace(/[^a-zA-Z0-9\s./,+()%-]/g, '');
 
 const PAGE_LIMIT = 25;
-const SERVICE_CATEGORIES = ['OPD Consultation', 'ICU', 'Procedure', 'Room', 'Nursing', 'Diet', 'Consumable', 'Home Care', 'Visit Charges', 'Observation Ward/Bed Charges', 'Misc', 'Surgery', 'Operation Theatre', 'Anaesthesia', 'Cardiology', 'Administration'] as const;
 
 type SubTab = 'services' | 'labtests' | 'radiology' | 'packages';
 

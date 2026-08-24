@@ -35,9 +35,10 @@ import {
     ensureIPDDemoMasterData,
 } from '@/app/actions/ipd-billing-helpers';
 import { getDoctorsForDropdown } from '@/app/actions/admin-actions';
-import { updatePatientField } from '@/app/actions/reception-actions';
+import { updatePatientField, updatePatient } from '@/app/actions/reception-actions';
 import { useToast } from '@/app/components/ui/Toast';
 import { DISCHARGE_TYPES } from '@/app/lib/discharge-summary';
+import { MANUAL_CHARGE_CATEGORIES } from '@/app/lib/service-categories';
 import { bedLabel } from '@/app/lib/bed-label';
 import {
     setExpectedDischargeDate, markFitForDischarge,
@@ -126,6 +127,10 @@ export default function AdmissionDetailPage() {
     const [showAgeEdit, setShowAgeEdit] = useState(false);
     const [editAge, setEditAge] = useState('');
     const [savingAgeEdit, setSavingAgeEdit] = useState(false);
+
+    // Patient header demographics (age & gender) inline editor
+    const [showHeaderDemographicsEdit, setShowHeaderDemographicsEdit] = useState(false);
+    const [savingDemographics, setSavingDemographics] = useState(false);
 
     // Clinical classification
     const [showDiagnosisForm, setShowDiagnosisForm] = useState(false);
@@ -543,6 +548,31 @@ export default function AdmissionDetailPage() {
             loadData();
         } else {
             toast.error(res.error || 'Failed to update age');
+        }
+    };
+
+    const handleSaveHeaderDemographics = async () => {
+        const trimmedAge = editAge.trim();
+        if (trimmedAge) {
+            const num = Number(trimmedAge);
+            if (isNaN(num) || num < 0 || num > 150 || !Number.isInteger(num)) {
+                toast.error('Enter a valid age (0–150)');
+                return;
+            }
+        }
+        setSavingDemographics(true);
+        const payload: Record<string, string | null> = {
+            age: trimmedAge || null,
+            gender: editGender || null,
+        };
+        const res = await updatePatient(data.patient_id, payload);
+        setSavingDemographics(false);
+        if (res.success) {
+            toast.success('Patient age & gender updated');
+            setShowHeaderDemographicsEdit(false);
+            loadData();
+        } else {
+            toast.error(res.error || 'Failed to update patient details');
         }
     };
 
@@ -1037,10 +1067,70 @@ export default function AdmissionDetailPage() {
                                         </button>
                                     )}
                                 </span>
-                                <span className="flex items-center gap-1.5">
-                                    <User className="h-3.5 w-3.5 text-gray-400" />
-                                    {data.patient?.age ? `${data.patient.age} yrs` : '—'} • {data.patient?.gender || '—'}
-                                </span>
+                                {showHeaderDemographicsEdit ? (
+                                    <div className="inline-flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-lg px-2 py-0.5 shadow-sm">
+                                        <User className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            max="150"
+                                            value={editAge}
+                                            onChange={e => setEditAge(e.target.value)}
+                                            placeholder="Age"
+                                            className="w-14 text-xs border border-gray-300 rounded px-1.5 py-0.5 bg-white focus:outline-none focus:ring-1 focus:ring-orange-500"
+                                            autoFocus
+                                            onKeyDown={e => {
+                                                if (e.key === 'Enter') handleSaveHeaderDemographics();
+                                                if (e.key === 'Escape') setShowHeaderDemographicsEdit(false);
+                                            }}
+                                        />
+                                        <span className="text-xs text-gray-500 font-medium">yrs</span>
+                                        <span className="text-gray-300">•</span>
+                                        <select
+                                            value={editGender}
+                                            onChange={e => setEditGender(e.target.value)}
+                                            className="text-xs border border-gray-300 rounded px-1.5 py-0.5 bg-white focus:outline-none focus:ring-1 focus:ring-orange-500"
+                                        >
+                                            <option value="">Gender…</option>
+                                            <option value="Male">Male</option>
+                                            <option value="Female">Female</option>
+                                            <option value="Other">Other</option>
+                                        </select>
+                                        <button
+                                            type="button"
+                                            onClick={handleSaveHeaderDemographics}
+                                            disabled={savingDemographics}
+                                            className="text-[10px] font-bold text-white bg-orange-600 hover:bg-orange-700 rounded px-2 py-0.5 disabled:opacity-50 transition-colors"
+                                        >
+                                            {savingDemographics ? '…' : 'Save'}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowHeaderDemographicsEdit(false)}
+                                            className="text-[10px] font-bold text-gray-500 hover:text-gray-700 px-1"
+                                        >
+                                            Cancel
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <span className="flex items-center gap-1.5">
+                                        <User className="h-3.5 w-3.5 text-gray-400" />
+                                        {data.patient?.age ? `${data.patient.age} yrs` : '—'} • {data.patient?.gender || '—'}
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setEditAge(data.patient?.age ? String(data.patient.age) : '');
+                                                setEditGender(data.patient?.gender || '');
+                                                setShowHeaderDemographicsEdit(true);
+                                            }}
+                                            className="ml-0.5 p-0.5 rounded hover:bg-gray-100 text-gray-400 hover:text-orange-600"
+                                            title="Edit Age & Gender"
+                                            aria-label="Edit Age & Gender"
+                                        >
+                                            <Pencil className="h-3 w-3" />
+                                        </button>
+                                    </span>
+                                )}
                                 <span className="flex items-center gap-1.5">
                                     <Bed className="h-3.5 w-3.5 text-indigo-400" />
                                     {data.bed?.wards?.ward_name || 'Unassigned'} · {bedLabel(data.bed || data.bed_id)}
@@ -2818,7 +2908,7 @@ export default function AdmissionDetailPage() {
                                                     onChange={e => setChargeCategory(e.target.value)}
                                                     className="col-span-2 text-xs p-2.5 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-400"
                                                 >
-                                                    {['Miscellaneous', 'Package', 'Pharmacy', 'Lab', 'Radiology', 'Procedure', 'DoctorVisit', 'Consultation', 'Room', 'Nursing'].map(c => (
+                                                    {MANUAL_CHARGE_CATEGORIES.map(c => (
                                                         <option key={c}>{c}</option>
                                                     ))}
                                                 </select>
