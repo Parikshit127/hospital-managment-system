@@ -522,6 +522,13 @@ export async function postChargeToIpdBill(data: {
     /** Doctor who rendered this specific service — required when the selected service's requires_rendered_by is set. */
     rendered_by_doctor_id?: string;
     /**
+     * Two-ledger package billing: explicit package targeting when multiple
+     * packages are active. When omitted and exactly one package is active,
+     * behavior is identical to today. When omitted and 2+ packages are active,
+     * the charge posts as a plain billed line (no auto-absorb).
+     */
+    admission_package_id?: number;
+    /**
      * Two-ledger package billing: explicit routing chosen by the user.
      * Omit for automatic resolution (exclusion-aware). Ignored when the
      * admission has no active package.
@@ -601,9 +608,23 @@ export async function postChargeToIpdBill(data: {
         // With an active package, a charge is either consumed under the package
         // (absorbed — never reaches the invoice/claim) or billed over it as a
         // package exclusion. The package line itself is always billed.
-        const activePkg = data.source_module === 'package'
-            ? null
-            : await getActiveAdmissionPackage(db, data.admission_id);
+        //
+        // With 2+ active packages we never guess which one a charge belongs to —
+        // the caller must pass admission_package_id explicitly (UI), otherwise
+        // the charge posts as a plain billed line for a human to route later
+        // via assignChargeToPackage.
+        let activePkg: any = null;
+        if (data.source_module !== 'package') {
+            if (data.admission_package_id) {
+                const candidates = await getActiveAdmissionPackages(db, data.admission_id);
+                activePkg = candidates.find((p: any) => p.id === data.admission_package_id) || null;
+                if (!activePkg) {
+                    return { success: false, error: 'Selected package is not active on this admission' };
+                }
+            } else {
+                activePkg = await getSoleActiveAdmissionPackage(db, data.admission_id);
+            }
+        }
 
         let disposition: ChargeDisposition = CHARGE_DISPOSITION.BILLED;
         let exclusionNote: string | null = null;
