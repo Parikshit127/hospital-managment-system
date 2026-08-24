@@ -1657,13 +1657,15 @@ async function reconcilePackageBillingInternal(
     session: any,
     admissionId: string,
 ) {
-    const admPkg = await getActiveAdmissionPackage(db, admissionId);
-    if (!admPkg) return { success: false as const, error: 'No active package on this admission' };
+    const activePkgs = await getActiveAdmissionPackages(db, admissionId);
+    if (activePkgs.length === 0) return { success: false as const, error: 'No active package on this admission' };
 
-    const ensured = await db.$transaction(async (tx: any) => (
-        ensurePackageInvoiceLineTx(tx, organizationId, session, admissionId, admPkg)
-    ));
-    if (!ensured.success) return ensured;
+    for (const pkg of activePkgs) {
+        const ensured = await db.$transaction(async (tx: any) => (
+            ensurePackageInvoiceLineTx(tx, organizationId, session, admissionId, pkg)
+        ));
+        if (!ensured.success) return ensured;
+    }
 
     const invoice = await db.invoices.findFirst({
         where: { admission_id: admissionId, status: { not: 'Cancelled' } },
@@ -1677,13 +1679,27 @@ async function reconcilePackageBillingInternal(
         };
     }
 
+    // Auto-absorbing stray billed lines into "the" package is only safe when
+    // there's exactly one active package — with 2+, which package a stray
+    // line belongs to is a human call (assignChargeToPackage, Task 5).
+    const solePkg = activePkgs.length === 1 ? activePkgs[0] : null;
+    if (!solePkg) {
+        return {
+            success: true as const,
+            data: {
+                absorbedCount: 0, absorbedAmount: 0, extrasCount: 0,
+                skipped: `${activePkgs.length} active packages — assign strays to a package manually`,
+            },
+        };
+    }
+
     const result = await db.$transaction(async (tx: any) => {
         await createInvoiceSnapshotTx(
             tx, organizationId, session, invoice, invoice.items,
             'Package billing reconciliation — billed services moved to package consumption',
         );
         const migration = await absorbBilledItemsIntoPackageTx(
-            tx, organizationId, session, invoice, admissionId, admPkg,
+            tx, organizationId, session, invoice, admissionId, solePkg,
         );
         await recalculateInvoiceWithGstTx(tx, invoice.id);
         return migration;
@@ -1792,12 +1808,14 @@ export async function generateInterimBill(admissionId: string) {
         //     await accrueIPDDailyCharges(admissionId);
         // }
 
-        const activeAdmPkg = await getActiveAdmissionPackage(db, admissionId);
-        if (activeAdmPkg && admission.status === 'Admitted') {
-            const ensured = await db.$transaction(async (tx: any) => (
-                ensurePackageInvoiceLineTx(tx, organizationId, session, admissionId, activeAdmPkg)
-            ));
-            if (!ensured.success) return ensured;
+        const activeAdmPkgs = await getActiveAdmissionPackages(db, admissionId);
+        if (activeAdmPkgs.length > 0 && admission.status === 'Admitted') {
+            for (const pkg of activeAdmPkgs) {
+                const ensured = await db.$transaction(async (tx: any) => (
+                    ensurePackageInvoiceLineTx(tx, organizationId, session, admissionId, pkg)
+                ));
+                if (!ensured.success) return ensured;
+            }
         }
 
         // Find the IPD invoice
@@ -2285,12 +2303,14 @@ export async function settleAndDischarge(data: {
         // If strays exist (legacy admissions, pre-router charges), reconcile
         // them now — deterministic, idempotent and audited. If the bill is
         // already locked and dirty, block instead of silently altering it.
-        const activeAdmPkg = await getActiveAdmissionPackage(db, data.admission_id);
-        if (activeAdmPkg) {
-            const ensured = await db.$transaction(async (tx: any) => (
-                ensurePackageInvoiceLineTx(tx, organizationId, session, data.admission_id, activeAdmPkg)
-            ));
-            if (!ensured.success) return ensured;
+        const activeAdmPkgs = await getActiveAdmissionPackages(db, data.admission_id);
+        if (activeAdmPkgs.length > 0) {
+            for (const pkg of activeAdmPkgs) {
+                const ensured = await db.$transaction(async (tx: any) => (
+                    ensurePackageInvoiceLineTx(tx, organizationId, session, data.admission_id, pkg)
+                ));
+                if (!ensured.success) return ensured;
+            }
             invoice = await db.invoices.findFirst({
                 where: { admission_id: data.admission_id, status: { not: 'Cancelled' } },
             });
@@ -2308,6 +2328,12 @@ export async function settleAndDischarge(data: {
                 (i: any) => String(i.service_category || '') === LEGACY_PACKAGE_ADJUSTMENT_CATEGORY,
             );
             if (strays.length > 0 || legacyAdjustments.length > 0) {
+                if (activeAdmPkgs.length > 1) {
+                    return {
+                        success: false,
+                        error: `${strays.length} billed service line(s) are pending package assignment across ${activeAdmPkgs.length} active packages. Assign each to the correct package on the billing screen before discharge.`,
+                    };
+                }
                 const reconciled = await reconcilePackageBillingInternal(db, organizationId, session, data.admission_id);
                 if (!reconciled.success) {
                     return {
