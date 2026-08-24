@@ -968,12 +968,20 @@ export async function applyPackageToAdmission(admissionId: string, packageId: nu
         // move into the package consumption ledger (exclusions stay billed as
         // extras). Their original posting dates are preserved — nothing is
         // re-dated, and locked/final invoices are never touched.
+        //
+        // Auto-absorbing stray billed lines is only safe when the package just
+        // applied above is the SOLE active package on the admission — with 2+
+        // active packages, which package a stray line belongs to is a human
+        // call (assignChargeToPackage), never a guess. Same guard as
+        // reconcilePackageBillingInternal.
         let migration = { absorbedCount: 0, absorbedAmount: 0, extrasCount: 0 };
         const invoice = await db.invoices.findFirst({
             where: { admission_id: admissionId, status: { not: 'Cancelled' } },
             include: { items: true },
         });
+        const activePkgsAfterApply = await getActiveAdmissionPackages(db, admissionId);
         if (invoice && invoice.status === 'Draft' && !invoice.is_locked
+            && activePkgsAfterApply.length === 1
             && invoice.items.some((i: any) => isPlainServiceItem(i))) {
             const admPkgFull = { ...admPkg, package: pkg };
             migration = await db.$transaction(async (tx: any) => {
@@ -2409,7 +2417,7 @@ export async function settleAndDischarge(data: {
                 if (activeAdmPkgs.length > 1) {
                     return {
                         success: false,
-                        error: `${strays.length} billed service line(s) are pending package assignment across ${activeAdmPkgs.length} active packages. Assign each to the correct package on the billing screen before discharge.`,
+                        error: `${strays.length} billed service line(s) are pending package assignment across ${activeAdmPkgs.length} active packages and cannot be auto-resolved. Contact admin/finance to reassign these charges before discharge can proceed.`,
                     };
                 }
                 const reconciled = await reconcilePackageBillingInternal(db, organizationId, session, data.admission_id);
