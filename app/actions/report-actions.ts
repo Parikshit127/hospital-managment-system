@@ -1471,6 +1471,53 @@ export async function getMISReport(filters: { from: string; to: string; billType
             // Net refunds off collection figures (floored at 0).
             const receivedAmount = Math.max(0, nonDepositPaid + appliedDep - refundAmount);
             const netPatientReceipt = Math.max(0, patientPayments - refundAmount);
+
+            let inPeriodNonDepositPaid = 0;
+            const laterPayments: Array<{ date: any; amount: number; mode: string; receipt: string }> = [];
+
+            for (const p of allPayments) {
+                if (isDepositSettlement(p)) continue;
+                const payDay = new Date(p.created_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+                const amt = Number(p.amount || 0);
+                if (payDay <= filters.to) {
+                    inPeriodNonDepositPaid += amt;
+                } else {
+                    laterPayments.push({
+                        date: p.created_at,
+                        amount: amt,
+                        mode: p.payment_method || 'Cash',
+                        receipt: p.receipt_number || '',
+                    });
+                }
+            }
+
+            let inPeriodAppliedDep = 0;
+            for (const dep of appliedDepDatesByInvoice[inv.id] || []) {
+                const depDay = new Date(dep.created_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+                if (depDay <= filters.to) {
+                    inPeriodAppliedDep += dep.amount;
+                }
+            }
+
+            // A cancelled bill carries no revenue (cancellation is only permitted
+            // before any money is collected — see cancelInvoice in finance-actions.ts).
+            // Zero out every financial column so it doesn't inflate the gross/net/
+            // outstanding totals; the row still surfaces with its bill number, date,
+            // patient and Status = "Cancelled" so the series stays visible.
+            const isCancelled = inv.status === 'Cancelled';
+            const zeroIfCancelled = (n: number) => (isCancelled ? 0 : n);
+
+            const periodReceivedAmount = Math.max(0, inPeriodNonDepositPaid + inPeriodAppliedDep - refundAmount);
+            const periodOutstandingAmount = zeroIfCancelled(Math.max(0, netAmount - periodReceivedAmount));
+
+            let laterPaidNote: string | undefined;
+            if (laterPayments.length > 0) {
+                const formattedLater = laterPayments.map(
+                    (lp) => `${new Date(lp.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })} via ${lp.mode}${lp.receipt ? ` (${lp.receipt})` : ''}`
+                ).join(', ');
+                laterPaidNote = `Settled later on ${formattedLater}`;
+            }
+
             const paymentBreakup = emptyMISPaymentBreakup();
             for (const p of allPayments) {
                 if (isDepositSettlement(p)) continue;
@@ -1482,14 +1529,6 @@ export async function getMISReport(filters: { from: string; to: string; billType
             paymentBreakup.upi_amount = Math.max(0, paymentBreakup.upi_amount);
             paymentBreakup.card_amount = Math.max(0, paymentBreakup.card_amount);
             paymentBreakup.bank_transfer_amount = Math.max(0, paymentBreakup.bank_transfer_amount);
-
-            // A cancelled bill carries no revenue (cancellation is only permitted
-            // before any money is collected — see cancelInvoice in finance-actions.ts).
-            // Zero out every financial column so it doesn't inflate the gross/net/
-            // outstanding totals; the row still surfaces with its bill number, date,
-            // patient and Status = "Cancelled" so the series stays visible.
-            const isCancelled = inv.status === 'Cancelled';
-            const zeroIfCancelled = (n: number) => (isCancelled ? 0 : n);
 
             return {
                 invoice_id: inv.id,
@@ -1530,6 +1569,9 @@ export async function getMISReport(filters: { from: string; to: string; billType
                 card_amount: zeroIfCancelled(paymentBreakup.card_amount),
                 bank_transfer_amount: zeroIfCancelled(paymentBreakup.bank_transfer_amount),
                 outstanding_amount: zeroIfCancelled(Math.max(0, netAmount - receivedAmount)),
+                period_received_amount: zeroIfCancelled(periodReceivedAmount),
+                period_outstanding_amount: periodOutstandingAmount,
+                later_paid_note: laterPaidNote,
                 patient_receipt: zeroIfCancelled(netPatientReceipt),
                 // TPA sanctioned/approved amount — only meaningful for TPA/Insurance
                 // bills; left at 0 (renders as "-") for Cash/Corporate so the column

@@ -1187,12 +1187,22 @@ function DailySaleVoucherReport({ data, fmt, from, to, adminMode }: { data: any;
 
     const openDebtorsDrDrill = () => {
         const rows: DrillRow[] = misRows
-            .filter((r: any) => Number(r.outstanding_amount || 0) > EPS)
+            .filter((r: any) => Number(r.period_outstanding_amount ?? r.outstanding_amount ?? 0) > EPS)
             .map((r: any) => ({
-                date: r.bill_date, patientName: r.patient_name, uhid: r.uhid,
-                reference: r.bill_no, mode: 'Outstanding', amount: Number(r.outstanding_amount || 0),
+                date: r.bill_date,
+                patientName: r.patient_name,
+                uhid: r.uhid,
+                reference: r.bill_no,
+                mode: r.bill_type === 'IPD' ? 'IPD Bill' : 'OPD Bill',
+                amount: Number(r.period_outstanding_amount ?? r.outstanding_amount ?? 0),
+                note: r.later_paid_note || (Number(r.outstanding_amount || 0) <= EPS ? 'Settled on a later date' : 'Uncollected / Outstanding'),
             }));
-        setDrill({ title: 'Dr Sundry Debtors', subtitle: "Billed today, not yet fully collected", rows });
+        setDrill({
+            title: 'Dr Sundry Debtors',
+            subtitle: "Billed in this period, not yet collected as of range end",
+            rows,
+            journalAmount: drDebtors,
+        });
     };
 
     const openDebtorsCrDrill = () => {
