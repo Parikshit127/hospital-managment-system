@@ -1206,12 +1206,29 @@ function DailySaleVoucherReport({ data, fmt, from, to, adminMode }: { data: any;
     };
 
     const openDebtorsCrDrill = () => {
-        // Part 1: in-period cash receipts against bills NOT in this period's MIS
-        // (e.g. a patient paying today against an invoice raised last month).
+        // Part 1: in-period collections not recognized in this period's MIS:
+        // (a) Cash/UPI/Card receipts against bills NOT in this period's MIS (e.g. paying today against an older bill).
         const billedInvoiceIds = new Set(misRows.map((r: any) => r.invoice_id));
-        const directRows: DrillRow[] = payments
+        const directPaymentRows: DrillRow[] = payments
             .filter((p) => p.status === 'Completed' && !isDepositSettlement(p) && !billedInvoiceIds.has(p.invoice_id))
             .map(paymentToDrillRow);
+
+        // (b) In-period advance deposits that are unbilled (fresh advance) or applied to bills outside this period (e.g. IPD running stays).
+        const unbilledDepositRows: DrillRow[] = depositsList
+            .filter((d: any) => !d.applied_to_invoice || !billedInvoiceIds.has(d.applied_to_invoice))
+            .map((d: any): DrillRow => ({
+                date: d.created_at,
+                patientName: d.patient_name || '-',
+                uhid: d.patient_id || '',
+                reference: d.deposit_number || '-',
+                mode: d.tender || d.payment_method || '-',
+                amount: Number(d.amount || 0) - Number(d.refunded_amount || 0),
+                note: d.applied_to_invoice
+                    ? 'Advance deposit applied to bill outside this period'
+                    : 'Advance deposit (unbilled)',
+            }));
+
+        const directRows: DrillRow[] = [...directPaymentRows, ...unbilledDepositRows];
 
         // Part 2: when advanceDr > (sales − receivedTotal), the crDebtors figure
         // has a residual from the advance reclassification. The advanceDrDetails
@@ -1234,15 +1251,15 @@ function DailySaleVoucherReport({ data, fmt, from, to, adminMode }: { data: any;
 
         setDrill({
             title: 'Cr Sundry Debtors',
-            subtitle: "Today's collection against an earlier bill",
+            subtitle: "Today's collection against an earlier or unbilled patient balance",
             rows: directRows,
             ...(advanceSectionRows.length > 0 && {
                 advanceSection: {
                     heading: 'Prior-period receipts applied to in-range bills (Dr Advance entries)',
                     rows: advanceSectionRows,
                 },
-                journalAmount: crDebtors,
             }),
+            journalAmount: crDebtors,
         });
     };
 
