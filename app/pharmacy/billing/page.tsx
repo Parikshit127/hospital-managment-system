@@ -94,7 +94,7 @@ export default function PharmacyPage() {
     const [ipdToast, setIpdToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
     // Pharmacy charges absorbed under an active package never become invoice_items
     // (they're hospital expense, not billed), so they need their own load/edit state.
-    const [ipdPkgUtil, setIpdPkgUtil] = useState<any>(null);
+    const [ipdPkgUtils, setIpdPkgUtils] = useState<any[]>([]);
     const [ipdAbsorbedEditingId, setIpdAbsorbedEditingId] = useState<number | null>(null);
     const [ipdAbsorbedEditRow, setIpdAbsorbedEditRow] = useState<{ description: string; quantity: number; unit_price: number }>({ description: '', quantity: 1, unit_price: 0 });
     const [ipdAbsorbedSaving, setIpdAbsorbedSaving] = useState<number | null>(null);
@@ -295,7 +295,7 @@ export default function PharmacyPage() {
     async function loadIpdBill(admission: any) {
         setSelectedAdmission(admission);
         setIpdBillData(null);
-        setIpdPkgUtil(null);
+        setIpdPkgUtils([]);
         setIpdEditingId(null);
         setIpdAbsorbedEditingId(null);
         setIpdBillLoading(true);
@@ -304,7 +304,7 @@ export default function PharmacyPage() {
             getPackageUtilization(admission.admission_id),
         ]);
         if (res.success && res.data) setIpdBillData(res.data);
-        setIpdPkgUtil(pkgRes.success ? pkgRes.data : null);
+        setIpdPkgUtils(pkgRes.success ? (pkgRes.data || []) : []);
         setIpdBillLoading(false);
     }
 
@@ -315,7 +315,7 @@ export default function PharmacyPage() {
             getPackageUtilization(selectedAdmission.admission_id),
         ]);
         if (res.success && res.data) setIpdBillData(res.data);
-        setIpdPkgUtil(pkgRes.success ? pkgRes.data : null);
+        setIpdPkgUtils(pkgRes.success ? (pkgRes.data || []) : []);
     }
 
     function startIpdAbsorbedEdit(item: any) {
@@ -1010,11 +1010,11 @@ export default function PharmacyPage() {
                                             package lifecycle state (discharge auto-closes the package) since
                                             the bill's own lock state, enforced server-side, is what actually
                                             governs whether a correction is allowed. */}
-                                        {ipdPkgUtil && ipdPkgUtil.consumed_items?.some((p: any) => (p.service_category || '').toLowerCase() === 'pharmacy') && (
-                                            <div className="bg-white rounded-2xl shadow-sm border border-indigo-100 overflow-hidden">
+                                        {ipdPkgUtils.filter((pkgUtil: any) => pkgUtil.consumed_items?.some((p: any) => (p.service_category || '').toLowerCase() === 'pharmacy')).map((pkgUtil: any) => (
+                                            <div key={pkgUtil.admission_package_id} className="bg-white rounded-2xl shadow-sm border border-indigo-100 overflow-hidden">
                                                 <div className="px-5 py-3 border-b border-indigo-100 flex items-center gap-2 bg-indigo-50/60">
                                                     <Package className="h-4 w-4 text-indigo-400" />
-                                                    <span className="text-xs font-black uppercase tracking-wider text-indigo-700">Pharmacy — Absorbed Under Package</span>
+                                                    <span className="text-xs font-black uppercase tracking-wider text-indigo-700">Pharmacy — Absorbed Under Package{pkgUtil.package_name ? `: ${pkgUtil.package_name}` : ''}</span>
                                                     <span className="ml-auto text-[10px] font-bold text-indigo-400">Hospital expense, not billed to patient</span>
                                                 </div>
                                                 <div className="overflow-x-auto">
@@ -1029,7 +1029,7 @@ export default function PharmacyPage() {
                                                             </tr>
                                                         </thead>
                                                         <tbody className="divide-y divide-gray-100">
-                                                            {ipdPkgUtil.consumed_items
+                                                            {pkgUtil.consumed_items
                                                                 .filter((p: any) => (p.service_category || '').toLowerCase() === 'pharmacy')
                                                                 .map((p: any) => {
                                                                     const isEditing = ipdAbsorbedEditingId === p.id;
@@ -1118,7 +1118,7 @@ export default function PharmacyPage() {
                                                     </table>
                                                 </div>
                                             </div>
-                                        )}
+                                        ))}
                                     </div>
                                 ) : null}
                             </div>
