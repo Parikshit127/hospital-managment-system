@@ -1553,6 +1553,71 @@ export async function removeAbsorbedCharge(postingId: number) {
     }
 }
 
+// Correct an absorbed (package-consumed) charge — quantity/price/description
+// entered wrong at dispense time. Pharmacy items can be corrected by the
+// pharmacist who owns them; any other absorbed charge needs admin/finance.
+// Never touches invoice_items — a package-consumed posting has none.
+export async function updateAbsorbedCharge(postingId: number, patch: {
+    description?: string;
+    quantity?: number;
+    unit_price?: number;
+}) {
+    try {
+        const { db, session } = await requireTenantContext();
+
+        const posting = await db.ipdChargePosting.findUnique({ where: { id: postingId } });
+        if (!posting) return { success: false, error: 'Charge posting not found' };
+        if (posting.disposition !== CHARGE_DISPOSITION.PACKAGE_CONSUMED) {
+            return { success: false, error: 'Only absorbed (package-consumed) charges can be corrected here' };
+        }
+
+        const isPharm = (posting.service_category || '').toLowerCase() === 'pharmacy';
+        const canEdit = (isPharm && session?.role === 'pharmacist') || isPrivilegedBillingRole(session?.role);
+        if (!canEdit) {
+            return { success: false, error: isPharm ? 'Only a pharmacist (or Admin/Finance) can correct this pharmacy charge.' : 'Only Admin/Finance can correct this charge.' };
+        }
+
+        if (!posting.admission_package_id) return { success: false, error: 'This charge is not linked to a package' };
+        const admPkg = await db.ipdAdmissionPackage.findUnique({ where: { id: posting.admission_package_id } });
+        if (!admPkg || admPkg.status !== ADMISSION_PACKAGE_STATUS.ACTIVE) {
+            return { success: false, error: 'The package is no longer active' };
+        }
+
+        const invoice = await db.invoices.findFirst({
+            where: { admission_id: posting.admission_id, status: { not: 'Cancelled' } },
+        });
+        if (isBillClosedForCharges(invoice)) {
+            return { success: false, error: 'The bill is finalized/locked — charges can no longer be corrected.' };
+        }
+
+        const quantity = patch.quantity !== undefined ? Number(patch.quantity) : Number(posting.quantity);
+        const unit_price = patch.unit_price !== undefined ? Number(patch.unit_price) : Number(posting.unit_price);
+        const amount = roundMoney(quantity * unit_price);
+
+        await db.ipdChargePosting.update({
+            where: { id: postingId },
+            data: {
+                description: patch.description ?? posting.description,
+                quantity,
+                unit_price,
+                amount,
+            },
+        });
+
+        await logAudit({
+            action: 'UPDATE_ABSORBED_CHARGE',
+            module: 'ipd',
+            entity_type: 'ipd_charge_posting',
+            entity_id: String(postingId),
+            details: JSON.stringify({ before: { description: posting.description, quantity: Number(posting.quantity), unit_price: Number(posting.unit_price), amount: Number(posting.amount) }, patch }),
+        });
+
+        return { success: true, data: serialize({ posting_id: postingId, amount }) };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
 // Reconcile a package admission's billing (repair / legacy-migration tool).
 //
 // With the two-ledger model, charges posted while a package is active go

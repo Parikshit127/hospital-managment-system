@@ -20,7 +20,7 @@ import type { BillBranding } from '@/app/lib/bill-branding';
 import type { PharmacyBranding } from '@/app/lib/pharmacy-branding';
 import { formatDoctorName } from '@/app/lib/format-name';
 import { getIPDAdmissions } from '@/app/actions/ipd-actions';
-import { generateInterimBill, postChargeToIpdBill } from '@/app/actions/ipd-finance-actions';
+import { generateInterimBill, postChargeToIpdBill, getPackageUtilization, updateAbsorbedCharge } from '@/app/actions/ipd-finance-actions';
 import { bedLabel } from '@/app/lib/bed-label';
 
 type InventoryItem = {
@@ -92,6 +92,12 @@ export default function PharmacyPage() {
     const [ipdEditingId, setIpdEditingId] = useState<number | null>(null);
     const [ipdEditRow, setIpdEditRow] = useState<{ description: string; quantity: number; unit_price: number; discount: number }>({ description: '', quantity: 1, unit_price: 0, discount: 0 });
     const [ipdToast, setIpdToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+    // Pharmacy charges absorbed under an active package never become invoice_items
+    // (they're hospital expense, not billed), so they need their own load/edit state.
+    const [ipdPkgUtil, setIpdPkgUtil] = useState<any>(null);
+    const [ipdAbsorbedEditingId, setIpdAbsorbedEditingId] = useState<number | null>(null);
+    const [ipdAbsorbedEditRow, setIpdAbsorbedEditRow] = useState<{ description: string; quantity: number; unit_price: number }>({ description: '', quantity: 1, unit_price: 0 });
+    const [ipdAbsorbedSaving, setIpdAbsorbedSaving] = useState<number | null>(null);
     // Add-charge modal
     const [showIpdAddModal, setShowIpdAddModal] = useState(false);
     const [ipdAddSearch, setIpdAddSearch] = useState('');
@@ -289,17 +295,49 @@ export default function PharmacyPage() {
     async function loadIpdBill(admission: any) {
         setSelectedAdmission(admission);
         setIpdBillData(null);
+        setIpdPkgUtil(null);
         setIpdEditingId(null);
+        setIpdAbsorbedEditingId(null);
         setIpdBillLoading(true);
-        const res = await generateInterimBill(admission.admission_id);
+        const [res, pkgRes] = await Promise.all([
+            generateInterimBill(admission.admission_id),
+            getPackageUtilization(admission.admission_id),
+        ]);
         if (res.success && res.data) setIpdBillData(res.data);
+        setIpdPkgUtil(pkgRes.success ? pkgRes.data : null);
         setIpdBillLoading(false);
     }
 
     async function refreshIpdBill() {
         if (!selectedAdmission) return;
-        const res = await generateInterimBill(selectedAdmission.admission_id);
+        const [res, pkgRes] = await Promise.all([
+            generateInterimBill(selectedAdmission.admission_id),
+            getPackageUtilization(selectedAdmission.admission_id),
+        ]);
         if (res.success && res.data) setIpdBillData(res.data);
+        setIpdPkgUtil(pkgRes.success ? pkgRes.data : null);
+    }
+
+    function startIpdAbsorbedEdit(item: any) {
+        setIpdAbsorbedEditingId(item.id);
+        setIpdAbsorbedEditRow({ description: item.description, quantity: item.quantity, unit_price: item.amount / (item.quantity || 1) });
+    }
+
+    async function saveIpdAbsorbedEdit(item: any) {
+        setIpdAbsorbedSaving(item.id);
+        const res = await updateAbsorbedCharge(item.id, {
+            description: ipdAbsorbedEditRow.description,
+            quantity: Number(ipdAbsorbedEditRow.quantity),
+            unit_price: Number(ipdAbsorbedEditRow.unit_price),
+        });
+        setIpdAbsorbedSaving(null);
+        if (res.success) {
+            setIpdAbsorbedEditingId(null);
+            showIpdToast('Absorbed charge updated');
+            await refreshIpdBill();
+        } else {
+            showIpdToast(res.error || 'Failed to update charge', 'error');
+        }
     }
 
     async function handleIpdRemove(item: any) {
@@ -964,6 +1002,120 @@ export default function PharmacyPage() {
                                             <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-blue-200 inline-block" /> Pharmacy items — editable</span>
                                             <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-gray-200 inline-block" /> Other charges — read-only</span>
                                         </div>
+
+                                        {/* Pharmacy charges absorbed under an active package — these never
+                                            become invoice_items (they're hospital expense, not billed to the
+                                            patient), so they don't show up in Bill Line Items above. Editable
+                                            here so a dispensing mistake can still be corrected. */}
+                                        {ipdPkgUtil && ipdPkgUtil.status === 'active' && ipdPkgUtil.consumed_items?.some((p: any) => (p.service_category || '').toLowerCase() === 'pharmacy') && (
+                                            <div className="bg-white rounded-2xl shadow-sm border border-indigo-100 overflow-hidden">
+                                                <div className="px-5 py-3 border-b border-indigo-100 flex items-center gap-2 bg-indigo-50/60">
+                                                    <Package className="h-4 w-4 text-indigo-400" />
+                                                    <span className="text-xs font-black uppercase tracking-wider text-indigo-700">Pharmacy — Absorbed Under Package</span>
+                                                    <span className="ml-auto text-[10px] font-bold text-indigo-400">Hospital expense, not billed to patient</span>
+                                                </div>
+                                                <div className="overflow-x-auto">
+                                                    <table className="w-full text-sm">
+                                                        <thead className="bg-gray-50 border-b border-gray-200">
+                                                            <tr>
+                                                                <th className="text-left px-5 py-2.5 text-[10px] font-black uppercase tracking-wider text-gray-400">Description</th>
+                                                                <th className="text-center px-4 py-2.5 text-[10px] font-black uppercase tracking-wider text-gray-400">Qty</th>
+                                                                <th className="text-right px-4 py-2.5 text-[10px] font-black uppercase tracking-wider text-gray-400">Unit Price</th>
+                                                                <th className="text-right px-5 py-2.5 text-[10px] font-black uppercase tracking-wider text-gray-400">Amount</th>
+                                                                <th className="text-center px-4 py-2.5 text-[10px] font-black uppercase tracking-wider text-gray-400">Actions</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody className="divide-y divide-gray-100">
+                                                            {ipdPkgUtil.consumed_items
+                                                                .filter((p: any) => (p.service_category || '').toLowerCase() === 'pharmacy')
+                                                                .map((p: any) => {
+                                                                    const isEditing = ipdAbsorbedEditingId === p.id;
+                                                                    const isSaving = ipdAbsorbedSaving === p.id;
+                                                                    const unitPrice = p.amount / (p.quantity || 1);
+                                                                    return (
+                                                                        <tr key={p.id} className={isEditing ? 'bg-indigo-50' : 'hover:bg-indigo-50/40'}>
+                                                                            <td className="px-5 py-3">
+                                                                                {isEditing ? (
+                                                                                    <input
+                                                                                        value={ipdAbsorbedEditRow.description}
+                                                                                        onChange={e => setIpdAbsorbedEditRow(r => ({ ...r, description: e.target.value }))}
+                                                                                        className="w-full px-2 py-1 border border-indigo-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-400 font-medium"
+                                                                                    />
+                                                                                ) : (
+                                                                                    <span className="font-medium text-gray-800">{p.description}</span>
+                                                                                )}
+                                                                            </td>
+                                                                            <td className="px-4 py-3 text-center">
+                                                                                {isEditing ? (
+                                                                                    <input
+                                                                                        type="number" min="1"
+                                                                                        value={ipdAbsorbedEditRow.quantity}
+                                                                                        onChange={e => setIpdAbsorbedEditRow(r => ({ ...r, quantity: Number(e.target.value) }))}
+                                                                                        className="w-16 text-center px-2 py-1 border border-indigo-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-400 font-bold"
+                                                                                    />
+                                                                                ) : (
+                                                                                    <span className="font-semibold text-gray-700">{p.quantity}</span>
+                                                                                )}
+                                                                            </td>
+                                                                            <td className="px-4 py-3 text-right">
+                                                                                {isEditing ? (
+                                                                                    <div className="flex items-center justify-end gap-1">
+                                                                                        <span className="text-xs text-gray-400">₹</span>
+                                                                                        <input
+                                                                                            type="number" min="0" step="0.01"
+                                                                                            value={ipdAbsorbedEditRow.unit_price}
+                                                                                            onChange={e => setIpdAbsorbedEditRow(r => ({ ...r, unit_price: Number(e.target.value) }))}
+                                                                                            className="w-24 text-right px-2 py-1 border border-indigo-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-400 font-bold"
+                                                                                        />
+                                                                                    </div>
+                                                                                ) : (
+                                                                                    <span className="font-semibold text-gray-700">₹{unitPrice.toFixed(2)}</span>
+                                                                                )}
+                                                                            </td>
+                                                                            <td className="px-5 py-3 text-right">
+                                                                                <span className="font-bold text-gray-900">
+                                                                                    ₹{isEditing
+                                                                                        ? (ipdAbsorbedEditRow.quantity * ipdAbsorbedEditRow.unit_price).toFixed(2)
+                                                                                        : Number(p.amount).toFixed(2)}
+                                                                                </span>
+                                                                            </td>
+                                                                            <td className="px-4 py-3 text-center">
+                                                                                {isEditing ? (
+                                                                                    <div className="flex items-center justify-center gap-1.5">
+                                                                                        <button
+                                                                                            onClick={() => saveIpdAbsorbedEdit(p)}
+                                                                                            disabled={isSaving}
+                                                                                            className="flex items-center gap-1 px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold rounded-lg transition-all disabled:opacity-50"
+                                                                                        >
+                                                                                            {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+                                                                                            Save
+                                                                                        </button>
+                                                                                        <button
+                                                                                            onClick={() => setIpdAbsorbedEditingId(null)}
+                                                                                            disabled={isSaving}
+                                                                                            className="flex items-center gap-1 px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 text-[10px] font-bold rounded-lg transition-all"
+                                                                                        >
+                                                                                            <X className="h-3 w-3" /> Cancel
+                                                                                        </button>
+                                                                                    </div>
+                                                                                ) : (
+                                                                                    <button
+                                                                                        onClick={() => startIpdAbsorbedEdit(p)}
+                                                                                        title="Edit this absorbed charge"
+                                                                                        className="p-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-lg transition-all"
+                                                                                    >
+                                                                                        <Pencil className="h-3.5 w-3.5" />
+                                                                                    </button>
+                                                                                )}
+                                                                            </td>
+                                                                        </tr>
+                                                                    );
+                                                                })}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 ) : null}
                             </div>
