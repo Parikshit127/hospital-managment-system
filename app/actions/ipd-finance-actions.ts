@@ -1520,6 +1520,76 @@ export async function reclassifyChargeDisposition(
     }
 }
 
+// Assign a plain billed charge (not yet linked to any package — e.g. posted
+// while 2+ packages were active and no target was picked) into a specific
+// active package's consumption ledger. The invoice line is removed and the
+// amount moves to the absorbed-cost expense, mirroring the "extra → consumed"
+// half of reclassifyChargeDisposition.
+export async function assignChargeToPackage(postingId: number, admissionPackageId: number) {
+    try {
+        const { db, organizationId } = await requireTenantContext();
+
+        const { session } = await requireTenantContext();
+        const allowed = isPrivilegedBillingRole(session?.role)
+            || ['receptionist', 'reception'].includes(String(session?.role ?? '').toLowerCase());
+        if (!allowed) {
+            return { success: false, error: 'Only reception/admin/finance can assign charges to a package.' };
+        }
+
+        const posting = await db.ipdChargePosting.findUnique({ where: { id: postingId } });
+        if (!posting) return { success: false, error: 'Charge posting not found' };
+        if (posting.admission_package_id) {
+            return { success: false, error: 'This charge is already linked to a package — use the reclassify control instead' };
+        }
+        if (posting.disposition !== CHARGE_DISPOSITION.BILLED) {
+            return { success: false, error: `Charge disposition '${posting.disposition}' cannot be assigned to a package` };
+        }
+
+        const admPkg = await db.ipdAdmissionPackage.findUnique({ where: { id: admissionPackageId } });
+        if (!admPkg || admPkg.admission_id !== posting.admission_id) {
+            return { success: false, error: 'Package not found on this admission' };
+        }
+        if (admPkg.status !== ADMISSION_PACKAGE_STATUS.ACTIVE) {
+            return { success: false, error: 'The package is no longer active' };
+        }
+
+        const invoice = await db.invoices.findFirst({
+            where: { admission_id: posting.admission_id, status: { not: 'Cancelled' } },
+        });
+        if (!invoice) return { success: false, error: 'No IPD invoice found for this admission' };
+        if (invoice.is_locked || invoice.status !== 'Draft') {
+            return { success: false, error: 'The bill is finalized/locked — charges can no longer be reassigned.' };
+        }
+
+        await db.$transaction(async (tx: any) => {
+            if (posting.invoice_item_id) {
+                await tx.invoice_items.deleteMany({ where: { id: posting.invoice_item_id } });
+            }
+            await tx.ipdChargePosting.update({
+                where: { id: posting.id },
+                data: {
+                    disposition: CHARGE_DISPOSITION.PACKAGE_CONSUMED,
+                    invoice_item_id: null,
+                    admission_package_id: admPkg.id,
+                },
+            });
+            await recalculateInvoiceWithGstTx(tx, invoice.id);
+        });
+
+        await logAudit({
+            action: 'ASSIGN_CHARGE_TO_PACKAGE',
+            module: 'ipd',
+            entity_type: 'ipd_charge_posting',
+            entity_id: String(postingId),
+            details: JSON.stringify({ description: posting.description, amount: Number(posting.amount), admission_package_id: admPkg.id }),
+        });
+
+        return { success: true, data: serialize({ posting_id: postingId, admission_package_id: admPkg.id }) };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
 // Delete an absorbed (package-consumed) charge — for entries added by mistake.
 // Removes the consumption-ledger posting (and any linked invoice line) and
 // rebuilds the absorbed-cost expense. Does not touch inventory/stock.
