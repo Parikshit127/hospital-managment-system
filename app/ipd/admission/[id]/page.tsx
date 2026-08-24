@@ -122,6 +122,11 @@ export default function AdmissionDetailPage() {
     const [editGender, setEditGender] = useState('');
     const [savingGenderEdit, setSavingGenderEdit] = useState(false);
 
+    // Patient age correction — fixes wrong entry from registration inline
+    const [showAgeEdit, setShowAgeEdit] = useState(false);
+    const [editAge, setEditAge] = useState('');
+    const [savingAgeEdit, setSavingAgeEdit] = useState(false);
+
     // Clinical classification
     const [showDiagnosisForm, setShowDiagnosisForm] = useState(false);
     const [diagIcd, setDiagIcd] = useState('');
@@ -515,6 +520,25 @@ export default function AdmissionDetailPage() {
             loadData();
         } else {
             toast.error(res.error || 'Failed to update gender');
+        }
+    };
+
+    const handleSaveAgeEdit = async () => {
+        const trimmed = editAge.trim();
+        const num = Number(trimmed);
+        if (!trimmed || isNaN(num) || num < 0 || num > 150 || !Number.isInteger(num)) {
+            toast.error('Enter a valid age (0–150)');
+            return;
+        }
+        setSavingAgeEdit(true);
+        const res = await updatePatientField(data.patient_id, 'age', trimmed);
+        setSavingAgeEdit(false);
+        if (res.success) {
+            toast.success('Age updated');
+            setShowAgeEdit(false);
+            loadData();
+        } else {
+            toast.error(res.error || 'Failed to update age');
         }
     };
 
@@ -1001,7 +1025,7 @@ export default function AdmissionDetailPage() {
                                 </span>
                                 <span className="flex items-center gap-1.5">
                                     <User className="h-3.5 w-3.5 text-gray-400" />
-                                    {data.patient?.age} yrs • {data.patient?.gender}
+                                    {data.patient?.age ? `${data.patient.age} yrs` : '—'} • {data.patient?.gender || '—'}
                                 </span>
                                 <span className="flex items-center gap-1.5">
                                     <Bed className="h-3.5 w-3.5 text-indigo-400" />
@@ -1332,7 +1356,47 @@ export default function AdmissionDetailPage() {
                                         <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Patient Details</h4>
                                         <DetailRow label="Patient ID" value={data.patient_id} mono />
                                         <DetailRow label="Name" value={data.patient?.full_name} />
-                                        <DetailRow label="Age" value={`${data.patient?.age} yrs`} />
+                                        <div className="flex justify-between items-start gap-4">
+                                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide shrink-0">Age</span>
+                                            {showAgeEdit ? (
+                                                <div className="flex items-center gap-1.5">
+                                                    <input
+                                                        type="number"
+                                                        min="0"
+                                                        max="150"
+                                                        value={editAge}
+                                                        onChange={e => setEditAge(e.target.value)}
+                                                        onKeyDown={e => {
+                                                            if (e.key === 'Enter') handleSaveAgeEdit();
+                                                            if (e.key === 'Escape') setShowAgeEdit(false);
+                                                        }}
+                                                        placeholder="Age"
+                                                        className="w-16 text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                                                        autoFocus
+                                                    />
+                                                    <span className="text-xs text-gray-500">yrs</span>
+                                                    <button onClick={handleSaveAgeEdit} disabled={savingAgeEdit}
+                                                        className="text-[10px] font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg px-2 py-1 disabled:opacity-50">
+                                                        {savingAgeEdit ? '…' : 'Save'}
+                                                    </button>
+                                                    <button onClick={() => setShowAgeEdit(false)}
+                                                        className="text-[10px] font-bold text-gray-500 hover:text-gray-700 px-1">
+                                                        Cancel
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <span className="text-xs font-medium text-gray-800 text-right flex items-center gap-1.5">
+                                                    {data.patient?.age ? `${data.patient.age} yrs` : '—'}
+                                                    <button
+                                                        onClick={() => { setEditAge(data.patient?.age ? String(data.patient.age) : ''); setShowAgeEdit(true); }}
+                                                        className="text-gray-400 hover:text-indigo-600"
+                                                        title="Edit age"
+                                                    >
+                                                        <Pencil className="h-3 w-3" />
+                                                    </button>
+                                                </span>
+                                            )}
+                                        </div>
                                         <div className="flex justify-between items-start gap-4">
                                             <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide shrink-0">Gender</span>
                                             {showGenderEdit ? (
