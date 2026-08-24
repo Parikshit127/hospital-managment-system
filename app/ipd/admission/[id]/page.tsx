@@ -187,7 +187,8 @@ export default function AdmissionDetailPage() {
     const [showPkgDropdown, setShowPkgDropdown] = useState(false);
     const [selectedPkgId, setSelectedPkgId] = useState<number | null>(null);
     // Two-ledger package billing
-    const [pkgUtil, setPkgUtil] = useState<any>(null);
+    const [pkgUtils, setPkgUtils] = useState<any[]>([]);
+    const [chargeTargetPkgId, setChargeTargetPkgId] = useState<number | ''>('');
     const [chargeDisposition, setChargeDisposition] = useState<'auto' | 'package_consumed' | 'billable_extra'>('auto');
     const [reclassifyingId, setReclassifyingId] = useState<number | null>(null);
     const [showConsumption, setShowConsumption] = useState(true);
@@ -281,7 +282,7 @@ export default function AdmissionDetailPage() {
         ]);
         if (res.success) setBill(res.data);
         else toast.error('Failed to load bill');
-        setPkgUtil(utilRes.success ? utilRes.data : null);
+        setPkgUtils(utilRes.success ? (utilRes.data || []) : []);
         setLoadingBill(false);
     }, [params.id, bill, demoSeeded, toast]);
 
@@ -293,25 +294,28 @@ export default function AdmissionDetailPage() {
     // absorbed automatically at posting time. Reconcile is an admin repair tool
     // for admissions that predate this (stray billed service lines).
     const [settlingPackage, setSettlingPackage] = useState(false);
-    const [editingPkgAmount, setEditingPkgAmount] = useState(false);
+    // Which package's amount is currently being edited (null = none). Scoped to a
+    // single admission_package_id so editing one card's amount doesn't open the
+    // edit box on every other active package's card too.
+    const [editingPkgAmount, setEditingPkgAmount] = useState<number | null>(null);
     const [pkgAmountInput, setPkgAmountInput] = useState('');
     const [savingPkgAmount, setSavingPkgAmount] = useState(false);
-    const handleSavePkgAmount = useCallback(async () => {
-        if (!pkgUtil?.admission_package_id) return;
+    const handleSavePkgAmount = useCallback(async (admissionPackageId: number) => {
+        if (!admissionPackageId) return;
         const val = parseFloat(pkgAmountInput);
         if (!val || val <= 0) { toast.error('Enter a valid amount'); return; }
         setSavingPkgAmount(true);
-        const res = await updateAdmissionPackageAmount(pkgUtil.admission_package_id, val);
+        const res = await updateAdmissionPackageAmount(admissionPackageId, val);
         setSavingPkgAmount(false);
         if (res.success) {
             toast.success('Package amount updated');
-            setEditingPkgAmount(false);
+            setEditingPkgAmount(null);
             setPkgAmountInput('');
             setBill(null); loadBill();
         } else {
             toast.error(res.error || 'Failed to update package amount');
         }
-    }, [pkgUtil, pkgAmountInput, loadBill]);
+    }, [pkgAmountInput, loadBill]);
     const handleReconcilePackage = useCallback(async () => {
         if (!confirm('Reconcile package billing? Billed service lines that belong inside the package will move to package consumption (hospital expense) and off the patient/TPA bill. Exclusions stay billed as extras. Admin/Finance only.')) return;
         setSettlingPackage(true);
@@ -327,11 +331,11 @@ export default function AdmissionDetailPage() {
     }, [params.id, toast, loadBill]);
 
     const [breakingOpen, setBreakingOpen] = useState(false);
-    const handleBreakOpenPackage = useCallback(async () => {
-        if (!pkgUtil?.admission_package_id) return;
+    const handleBreakOpenPackage = useCallback(async (admissionPackageId: number) => {
+        if (!admissionPackageId) return;
         if (!confirm('Break open the package? Billing reverts to itemized: every consumed service returns to the patient/TPA bill at its recorded rate and original date, the package line is removed, and the absorbed-cost expense is dissolved. This cannot be undone.')) return;
         setBreakingOpen(true);
-        const res = await breakOpenPackage(pkgUtil.admission_package_id);
+        const res = await breakOpenPackage(admissionPackageId);
         setBreakingOpen(false);
         if (res.success) {
             const d: any = res.data;
@@ -340,7 +344,7 @@ export default function AdmissionDetailPage() {
         } else {
             toast.error(res.error || 'Failed to break open package');
         }
-    }, [pkgUtil, toast, loadBill]);
+    }, [toast, loadBill]);
 
     const handleReclassify = useCallback(async (postingId: number, target: 'package_consumed' | 'billable_extra') => {
         setReclassifyingId(postingId);
@@ -784,6 +788,11 @@ export default function AdmissionDetailPage() {
 
         if (!chargeDesc.trim() || !chargeRate) { toast.error('Fill description and rate'); return; }
         if (requiresRenderedBy && !renderedByDoctorId) { toast.error('Select the doctor who rendered this service'); return; }
+        const activeCount = pkgUtils.filter((p: any) => p.status === 'active').length;
+        if (activeCount > 1 && chargeDisposition !== 'auto' && !chargeTargetPkgId) {
+            toast.error('Select which package this charge belongs to');
+            return;
+        }
         setPostingCharge(true);
         const res = await postChargeToIpdBill({
             admission_id: data.admission_id,
@@ -795,8 +804,11 @@ export default function AdmissionDetailPage() {
             service_category: chargeCategory,
             posted_at: chargeDateTime ? new Date(chargeDateTime) : undefined,
             rendered_by_doctor_id: renderedByDoctorId || undefined,
-            disposition_override: pkgUtil?.status === 'active' && chargeDisposition !== 'auto'
+            disposition_override: pkgUtils.length > 0 && chargeDisposition !== 'auto'
                 ? chargeDisposition
+                : undefined,
+            admission_package_id: activeCount > 1
+                ? (chargeTargetPkgId || undefined)
                 : undefined,
         });
         setPostingCharge(false);
@@ -809,6 +821,7 @@ export default function AdmissionDetailPage() {
                     : 'Charge posted');
             setChargeDesc(''); setChargeQty('1'); setChargeRate(''); setChargeCategory('Miscellaneous'); setChargeDateTime('');
             setChargeDisposition('auto');
+            setChargeTargetPkgId('');
             setSelectedServiceId(null); setRequiresRenderedBy(false); setRenderedByDoctorId(''); setPriceLocked(false);
             setBill(null); // reset bill cache so it reloads
             loadBill();
@@ -954,8 +967,9 @@ export default function AdmissionDetailPage() {
         const dept = String(i.department || '');
         return cat !== 'Package' && cat !== 'Package Adjustment' && dept !== 'Discount' && dept !== 'Package';
     });
+    const totalExtraItemsAcrossPackages = pkgUtils.reduce((sum: number, p: any) => sum + (p.extra_items?.length || 0), 0);
     const billHasStrayServiceLines =
-        plainBilledServiceLines.length > (pkgUtil?.extra_items?.length || 0);
+        plainBilledServiceLines.length > totalExtraItemsAcrossPackages;
 
     return (
         <AppShell
@@ -2205,7 +2219,7 @@ export default function AdmissionDetailPage() {
                                                 &nbsp;·&nbsp; Days: {bill.admission.days_admitted}
                                             </p>
                                             <div className="flex items-center gap-3">
-                                                {pkgUtil?.status === 'active' && billHasStrayServiceLines && (
+                                                {pkgUtils.some((p: any) => p.status === 'active') && billHasStrayServiceLines && (
                                                     <button
                                                         onClick={handleReconcilePackage}
                                                         disabled={settlingPackage}
@@ -2215,7 +2229,7 @@ export default function AdmissionDetailPage() {
                                                         {settlingPackage ? 'Reconciling…' : '📦 Reconcile package billing'}
                                                     </button>
                                                 )}
-                                                {pkgUtil && (
+                                                {pkgUtils.length > 0 && (
                                                     <button
                                                         onClick={() => window.open(`/api/ipd/${params.id}/package-annexure`, '_blank')}
                                                         className="text-[10px] text-indigo-700 font-bold hover:underline"
@@ -2239,14 +2253,14 @@ export default function AdmissionDetailPage() {
                                             </div>
                                         </div>
 
-                                        {/* Package banner — two-ledger billing status */}
-                                        {pkgUtil && pkgUtil.status === 'active' && (
-                                            <div className={`rounded-xl border p-4 ${pkgUtil.utilization_pct > 100 ? 'bg-rose-50 border-rose-200' : pkgUtil.utilization_pct >= 90 ? 'bg-amber-50 border-amber-200' : 'bg-indigo-50 border-indigo-100'}`}>
+                                        {/* Package banner(s) — two-ledger billing status, one card per active package */}
+                                        {pkgUtils.filter((p: any) => p.status === 'active').map((pkgUtil: any) => (
+                                            <div key={pkgUtil.admission_package_id} className={`rounded-xl border p-4 ${pkgUtil.utilization_pct > 100 ? 'bg-rose-50 border-rose-200' : pkgUtil.utilization_pct >= 90 ? 'bg-amber-50 border-amber-200' : 'bg-indigo-50 border-indigo-100'}`}>
                                                 <div className="flex flex-wrap items-center justify-between gap-2">
                                                     <div>
                                                         <p className="text-xs font-black text-gray-800 flex items-center gap-2">
                                                             <span>📦 {pkgUtil.package_name} —{' '}
-                                                            {editingPkgAmount ? (
+                                                            {editingPkgAmount === pkgUtil.admission_package_id ? (
                                                                 <span className="inline-flex items-center gap-1">
                                                                     <span className="text-gray-500">₹</span>
                                                                     <input
@@ -2258,12 +2272,12 @@ export default function AdmissionDetailPage() {
                                                                         min={1}
                                                                     />
                                                                     <button
-                                                                        onClick={handleSavePkgAmount}
+                                                                        onClick={() => handleSavePkgAmount(pkgUtil.admission_package_id)}
                                                                         disabled={savingPkgAmount}
                                                                         className="px-2 py-0.5 bg-indigo-600 text-white text-[10px] font-bold rounded disabled:opacity-50"
                                                                     >{savingPkgAmount ? '…' : 'Save'}</button>
                                                                     <button
-                                                                        onClick={() => { setEditingPkgAmount(false); setPkgAmountInput(''); }}
+                                                                        onClick={() => { setEditingPkgAmount(null); setPkgAmountInput(''); }}
                                                                         className="px-2 py-0.5 text-gray-500 text-[10px] font-bold rounded hover:text-gray-800"
                                                                     >Cancel</button>
                                                                 </span>
@@ -2272,7 +2286,7 @@ export default function AdmissionDetailPage() {
                                                                     ₹{Number(pkgUtil.package_amount).toLocaleString('en-IN')}
                                                                     {data.status === 'Admitted' && (
                                                                         <button
-                                                                            onClick={() => { setEditingPkgAmount(true); setPkgAmountInput(String(pkgUtil.package_amount)); }}
+                                                                            onClick={() => { setEditingPkgAmount(pkgUtil.admission_package_id); setPkgAmountInput(String(pkgUtil.package_amount)); }}
                                                                             className="ml-1.5 text-[10px] font-normal text-indigo-500 hover:text-indigo-700 underline"
                                                                             title="Edit package amount for this patient"
                                                                         >Edit</button>
@@ -2301,7 +2315,7 @@ export default function AdmissionDetailPage() {
                                                         </p>
                                                         {data.status === 'Admitted' && (
                                                             <button
-                                                                onClick={handleBreakOpenPackage}
+                                                                onClick={() => handleBreakOpenPackage(pkgUtil.admission_package_id)}
                                                                 disabled={breakingOpen}
                                                                 className="shrink-0 text-[10px] font-bold text-rose-700 border border-rose-300 rounded-md px-2 py-1 hover:bg-rose-100 disabled:opacity-50"
                                                             >
@@ -2318,7 +2332,7 @@ export default function AdmissionDetailPage() {
                                                     />
                                                 </div>
                                             </div>
-                                        )}
+                                        ))}
 
                                         {/* Line Items by Category */}
                                         {Object.keys(billItemsByCategory).length > 0 ? (
@@ -2439,9 +2453,9 @@ export default function AdmissionDetailPage() {
                                             <p className="text-xs text-gray-400 text-center py-4">No charges posted yet.</p>
                                         )}
 
-                                        {/* Package consumption ledger — absorbed services (expense side, NOT billed) */}
-                                        {pkgUtil && (pkgUtil.consumed_items?.length > 0 || pkgUtil.extra_items?.length > 0) && (
-                                            <div className="border border-indigo-100 rounded-xl overflow-hidden">
+                                        {/* Package consumption ledger(s) — absorbed services (expense side, NOT billed) */}
+                                        {pkgUtils.filter((pkgUtil: any) => pkgUtil.consumed_items?.length > 0 || pkgUtil.extra_items?.length > 0).map((pkgUtil: any) => (
+                                            <div key={pkgUtil.admission_package_id} className="border border-indigo-100 rounded-xl overflow-hidden">
                                                 <button
                                                     type="button"
                                                     onClick={() => setShowConsumption(v => !v)}
@@ -2517,7 +2531,7 @@ export default function AdmissionDetailPage() {
                                                     </>
                                                 )}
                                             </div>
-                                        )}
+                                        ))}
 
                                         {/* Payments */}
                                         {bill.payments?.length > 0 && (
@@ -2824,12 +2838,29 @@ export default function AdmissionDetailPage() {
                                                 </div>
                                             </div>
 
-                                            {/* Package routing — only when a package is active on this admission */}
-                                            {chargeMode === 'service' && pkgUtil?.status === 'active' && (
+                                            {/* Package routing — only when at least one package is active on this admission */}
+                                            {chargeMode === 'service' && pkgUtils.some((p: any) => p.status === 'active') && (() => {
+                                                const activePkgs = pkgUtils.filter((p: any) => p.status === 'active');
+                                                return (
                                                 <div className="bg-indigo-50/60 border border-indigo-100 rounded-lg p-3 space-y-1.5">
                                                     <p className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">
-                                                        Package routing — {pkgUtil.package_name}
+                                                        Package routing{activePkgs.length === 1 ? ` — ${activePkgs[0].package_name}` : ''}
                                                     </p>
+                                                    {activePkgs.length > 1 && (
+                                                        <div>
+                                                            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Target package</label>
+                                                            <select
+                                                                value={chargeTargetPkgId}
+                                                                onChange={e => setChargeTargetPkgId(e.target.value ? Number(e.target.value) : '')}
+                                                                className="w-full text-xs p-2 bg-white border border-indigo-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                                                            >
+                                                                <option value="">Select which package this charge belongs to…</option>
+                                                                {activePkgs.map((p: any) => (
+                                                                    <option key={p.admission_package_id} value={p.admission_package_id}>{p.package_name}</option>
+                                                                ))}
+                                                            </select>
+                                                        </div>
+                                                    )}
                                                     <div className="flex flex-wrap gap-3 text-[11px] font-medium text-gray-700">
                                                         <label className="flex items-center gap-1.5 cursor-pointer">
                                                             <input type="radio" name="chargeDisposition" checked={chargeDisposition === 'auto'}
@@ -2849,9 +2880,11 @@ export default function AdmissionDetailPage() {
                                                     </div>
                                                     <p className="text-[10px] text-gray-400">
                                                         Auto absorbs the charge into the package unless it matches a package exclusion. Absorbed charges never appear on the patient/TPA bill.
+                                                        {activePkgs.length > 1 && ' With 2+ active packages, a plain charge with no target and Auto disposition posts as a billed line rather than guessing.'}
                                                     </p>
                                                 </div>
-                                            )}
+                                                );
+                                            })()}
 
                                             <button
                                                 type="submit"
