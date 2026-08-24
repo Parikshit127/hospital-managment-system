@@ -1438,7 +1438,7 @@ export default function IpdBillingPage() {
                                 <h3 className="font-bold text-gray-900">Absorbed Charges (under package)</h3>
                                 <p className="text-xs text-gray-500 mt-0.5">
                                     {selectedAdmission?.patient?.full_name} · {selectedAdmission?.admission_id}
-                                    {absorbedData?.package_name ? ` · ${absorbedData.package_name}` : ''}
+                                    {absorbedData?.packages?.length === 1 ? ` · ${absorbedData.packages[0].package_name}` : ''}
                                 </p>
                                 <p className="text-[11px] text-indigo-600 mt-1">These are NOT on the patient/TPA bill — the hospital absorbs them (booked as expense).</p>
                             </div>
@@ -1448,73 +1448,86 @@ export default function IpdBillingPage() {
                         <div className="p-4 overflow-y-auto flex-1">
                             {absorbedLoading ? (
                                 <p className="text-center text-sm text-gray-400 py-10">Loading…</p>
-                            ) : !absorbedData || absorbedData.count === 0 ? (
+                            ) : !absorbedData || !absorbedData.packages || absorbedData.packages.length === 0 ? (
                                 <p className="text-center text-sm text-gray-400 py-10">No absorbed charges yet for this admission.</p>
                             ) : (
                                 <>
-                                    {/* Category breakup */}
-                                    <div className="flex flex-wrap gap-2 mb-3">
-                                        {Object.entries(absorbedData.byCategory || {}).map(([cat, amt]: any) => (
-                                            <span key={cat} className="text-[11px] font-semibold bg-gray-100 text-gray-700 rounded-full px-2.5 py-1">
-                                                {cat}: ₹{Number(amt).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                                            </span>
-                                        ))}
-                                    </div>
-                                    <div className="border border-gray-200 rounded-xl overflow-hidden">
-                                        <table className="w-full text-sm">
-                                            <thead className="bg-gray-50 text-[10px] text-gray-500 uppercase font-bold">
-                                                <tr>
-                                                    <th className="px-3 py-2 text-left">Date</th>
-                                                    <th className="px-3 py-2 text-left">Description</th>
-                                                    <th className="px-3 py-2 text-left">Category</th>
-                                                    <th className="px-3 py-2 text-center">Qty</th>
-                                                    <th className="px-3 py-2 text-right">Amount</th>
-                                                    <th className="px-3 py-2 text-center"></th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-gray-100">
-                                                {absorbedData.items.map((it: any) => (
-                                                    <tr key={it.id}>
-                                                        <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">{new Date(it.posted_at).toLocaleDateString('en-GB')}</td>
-                                                        <td className="px-3 py-2 text-gray-800">{it.description}</td>
-                                                        <td className="px-3 py-2 text-xs text-gray-500">{it.category}</td>
-                                                        <td className="px-3 py-2 text-center text-gray-600">{it.quantity}</td>
-                                                        <td className="px-3 py-2 text-right font-semibold text-gray-900">₹{Number(it.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                                                        <td className="px-3 py-2 text-center">
-                                                            <button
-                                                                onClick={() => handleRemoveAbsorbed(it.id)}
-                                                                disabled={removingAbsorbedId === it.id}
-                                                                title="Remove (added by mistake)"
-                                                                className="text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded px-1.5 py-0.5 text-sm font-bold disabled:opacity-40"
-                                                            >
-                                                                {removingAbsorbedId === it.id ? '…' : '✕'}
-                                                            </button>
-                                                        </td>
-                                                    </tr>
+                                    {absorbedData.packages.map((pkg: any, pkgIdx: number) => (
+                                        <div key={pkg.admission_package_id ?? pkgIdx} className={pkgIdx > 0 ? 'mt-5' : ''}>
+                                            {pkg.package_name && (
+                                                <h4 className="text-sm font-bold text-gray-800 mb-2">{pkg.package_name}</h4>
+                                            )}
+                                            {/* Category breakup */}
+                                            <div className="flex flex-wrap gap-2 mb-3">
+                                                {Object.entries(pkg.byCategory || {}).map(([cat, amt]: any) => (
+                                                    <span key={cat} className="text-[11px] font-semibold bg-gray-100 text-gray-700 rounded-full px-2.5 py-1">
+                                                        {cat}: ₹{Number(amt).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                                    </span>
                                                 ))}
-                                            </tbody>
-                                            <tfoot className="bg-gray-50">
-                                                <tr>
-                                                    <td colSpan={4} className="px-3 py-2 text-right font-bold text-gray-600 text-xs">Total absorbed:</td>
-                                                    <td className="px-3 py-2 text-right font-black text-gray-900">₹{Number(absorbedData.total).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                                                    <td></td>
-                                                </tr>
-                                                {absorbedData.package_amount > 0 && (
-                                                    <tr>
-                                                        <td colSpan={4} className="px-3 py-1.5 text-right text-[11px] text-gray-500">Package amount (billed):</td>
-                                                        <td className="px-3 py-1.5 text-right text-[11px] font-bold text-emerald-700">₹{Number(absorbedData.package_amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                                                        <td></td>
-                                                    </tr>
-                                                )}
-                                            </tfoot>
-                                        </table>
-                                    </div>
+                                            </div>
+                                            <div className="border border-gray-200 rounded-xl overflow-hidden">
+                                                <table className="w-full text-sm">
+                                                    <thead className="bg-gray-50 text-[10px] text-gray-500 uppercase font-bold">
+                                                        <tr>
+                                                            <th className="px-3 py-2 text-left">Date</th>
+                                                            <th className="px-3 py-2 text-left">Description</th>
+                                                            <th className="px-3 py-2 text-left">Category</th>
+                                                            <th className="px-3 py-2 text-center">Qty</th>
+                                                            <th className="px-3 py-2 text-right">Amount</th>
+                                                            <th className="px-3 py-2 text-center"></th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-gray-100">
+                                                        {pkg.items.map((it: any) => (
+                                                            <tr key={it.id}>
+                                                                <td className="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">{new Date(it.posted_at).toLocaleDateString('en-GB')}</td>
+                                                                <td className="px-3 py-2 text-gray-800">{it.description}</td>
+                                                                <td className="px-3 py-2 text-xs text-gray-500">{it.category}</td>
+                                                                <td className="px-3 py-2 text-center text-gray-600">{it.quantity}</td>
+                                                                <td className="px-3 py-2 text-right font-semibold text-gray-900">₹{Number(it.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                                                                <td className="px-3 py-2 text-center">
+                                                                    <button
+                                                                        onClick={() => handleRemoveAbsorbed(it.id)}
+                                                                        disabled={removingAbsorbedId === it.id}
+                                                                        title="Remove (added by mistake)"
+                                                                        className="text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded px-1.5 py-0.5 text-sm font-bold disabled:opacity-40"
+                                                                    >
+                                                                        {removingAbsorbedId === it.id ? '…' : '✕'}
+                                                                    </button>
+                                                                </td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                    <tfoot className="bg-gray-50">
+                                                        <tr>
+                                                            <td colSpan={4} className="px-3 py-2 text-right font-bold text-gray-600 text-xs">Total absorbed:</td>
+                                                            <td className="px-3 py-2 text-right font-black text-gray-900">₹{Number(pkg.total).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                                                            <td></td>
+                                                        </tr>
+                                                        {pkg.package_amount > 0 && (
+                                                            <tr>
+                                                                <td colSpan={4} className="px-3 py-1.5 text-right text-[11px] text-gray-500">Package amount (billed):</td>
+                                                                <td className="px-3 py-1.5 text-right text-[11px] font-bold text-emerald-700">₹{Number(pkg.package_amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                                                                <td></td>
+                                                            </tr>
+                                                        )}
+                                                    </tfoot>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    ))}
+                                    {absorbedData.packages.length > 1 && (
+                                        <div className="flex justify-between items-center mt-4 pt-3 border-t-2 border-gray-200">
+                                            <span className="text-sm font-bold text-gray-700">Grand total absorbed (all packages):</span>
+                                            <span className="text-base font-black text-gray-900">₹{Number(absorbedData.grandTotal).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                                        </div>
+                                    )}
                                 </>
                             )}
                         </div>
 
                         <div className="p-3 border-t flex justify-end gap-2">
-                            {selectedAdmission && absorbedData && absorbedData.count > 0 && (
+                            {selectedAdmission && absorbedData && absorbedData.packages?.length > 0 && (
                                 <button
                                     onClick={() => window.open(`/api/ipd/${selectedAdmission.admission_id}/absorbed-charges`, '_blank')}
                                     className="px-4 py-2 text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl"

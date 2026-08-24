@@ -24,9 +24,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ adm
         });
         if (!admission) return new NextResponse('Admission not found', { status: 404 });
 
-        const [patient, admPkg, postings, branding] = await Promise.all([
+        const [patient, admPkgs, postings, branding] = await Promise.all([
             prisma.oPD_REG.findFirst({ where: { patient_id: admission.patient_id, organizationId }, select: { full_name: true, patient_id: true } }),
-            prisma.ipdAdmissionPackage.findFirst({ where: { admission_id: admissionId }, include: { package: true } }),
+            prisma.ipdAdmissionPackage.findMany({ where: { admission_id: admissionId }, include: { package: true }, orderBy: { created_at: 'asc' } }),
             prisma.ipdChargePosting.findMany({
                 where: { admission_id: admissionId, disposition: 'package_consumed' },
                 orderBy: { posted_at: 'desc' },
@@ -34,21 +34,29 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ adm
             getBillBranding(organizationId),
         ]);
 
-        const items = postings.map((p: any) => ({
+        const mapItem = (p: any) => ({
             id: p.id,
             date: new Date(p.posted_at).toLocaleDateString('en-GB'),
             description: p.description,
             category: p.service_category || p.source_module || 'Other',
             quantity: Number(p.quantity || 1),
             amount: Number(p.amount || 0),
-        }));
-        const total = items.reduce((s, i) => s + i.amount, 0);
-        const byCategory: Record<string, number> = {};
-        for (const i of items) byCategory[i.category] = (byCategory[i.category] || 0) + i.amount;
-        const packageName = admPkg?.applied_package_name || admPkg?.package?.package_name || '';
-        const packageAmount = admPkg ? Number(admPkg.applied_amount) : 0;
+        });
 
-        const rows = items.map((i, idx) => `
+        const packages = admPkgs.map((admPkg: any) => {
+            const items = postings.filter((p: any) => p.admission_package_id === admPkg.id).map(mapItem);
+            const total = items.reduce((s: number, i: any) => s + i.amount, 0);
+            const byCategory: Record<string, number> = {};
+            for (const i of items) byCategory[i.category] = (byCategory[i.category] || 0) + i.amount;
+            return {
+                package_name: admPkg.applied_package_name || admPkg.package?.package_name || '',
+                package_amount: Number(admPkg.applied_amount),
+                items, total, byCategory,
+            };
+        }).filter((g: any) => g.items.length > 0 || g.package_amount > 0);
+        const grandTotal = packages.reduce((s: number, g: any) => s + g.total, 0);
+
+        const buildRows = (items: ReturnType<typeof mapItem>[]) => items.map((i, idx) => `
             <tr>
                 <td class="c">${idx + 1}</td>
                 <td class="c">${esc(i.date)}</td>
@@ -59,8 +67,22 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ adm
                 <td class="c noprint"><button class="rm" data-id="${i.id}" title="Remove (added by mistake)">✕</button></td>
             </tr>`).join('');
 
-        const catChips = Object.entries(byCategory)
+        const buildChips = (byCategory: Record<string, number>) => Object.entries(byCategory)
             .map(([cat, amt]) => `<span class="chip">${esc(cat)}: ₹${money(amt)}</span>`).join('');
+
+        const packagesHtml = packages.map((pkg: any) => `
+          <div class="pkg-block">
+            ${pkg.package_name ? `<h3 class="pkg-title">${esc(pkg.package_name)}</h3>` : ''}
+            <div class="chips">${buildChips(pkg.byCategory)}</div>
+            <table>
+              <thead><tr><th>Sr</th><th>Date</th><th>Description</th><th>Category</th><th>Qty</th><th>Amount</th><th class="noprint"></th></tr></thead>
+              <tbody>${buildRows(pkg.items)}</tbody>
+              <tfoot>
+                <tr class="totrow"><td colspan="5" class="r">Total Absorbed (hospital expense)</td><td class="r">₹${money(pkg.total)}</td><td class="noprint"></td></tr>
+                ${pkg.package_amount > 0 ? `<tr><td colspan="5" class="r" style="font-weight:600;color:#065f46;">Package amount (billed to patient/TPA)</td><td class="r" style="color:#065f46;">₹${money(pkg.package_amount)}</td><td class="noprint"></td></tr>` : ''}
+              </tfoot>
+            </table>
+          </div>`).join('');
 
         const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Absorbed Charges — ${esc(admissionId)}</title>
 <style>
@@ -75,6 +97,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ adm
   .title { display:inline-block; margin-top:8px; padding:3px 12px; background:#eef2ff; color:#3730a3; font-weight:800; font-size:12px; border-radius:4px; }
   .meta { font-size:11px; color:#374151; margin-top:8px; line-height:1.6; }
   .note { font-size:11px; color:#4f46e5; margin:8px 0; }
+  .pkg-block { margin-bottom:18px; }
+  .pkg-block:last-of-type { margin-bottom:0; }
+  .pkg-title { font-size:13px; font-weight:800; color:#1e3a6e; margin-top:14px; padding-bottom:4px; border-bottom:1px solid #e5e7eb; }
   .chips { margin:10px 0; display:flex; flex-wrap:wrap; gap:6px; }
   .chip { font-size:10.5px; font-weight:600; background:#f3f4f6; color:#374151; border-radius:999px; padding:3px 10px; }
   table { width:100%; border-collapse:collapse; margin-top:6px; }
@@ -95,6 +120,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ adm
     .page { margin:0; box-shadow:none; max-width:none; padding:0; }
     th { background:#1e3a6e !important; color:#fff !important; }
     .totrow td { background:#eef2ff !important; }
+    .pkg-block { break-inside:avoid; page-break-inside:avoid; }
   }
 </style></head><body>
 <div class="toolbar">
@@ -125,21 +151,19 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ adm
     <div class="title">ABSORBED CHARGES (UNDER PACKAGE)</div>
     <div class="meta">
       Patient: <strong>${esc(patient?.full_name || '-')}</strong> &nbsp;·&nbsp; MRN: <strong>${esc(patient?.patient_id || '-')}</strong><br>
-      Admission: <strong>${esc(admissionId)}</strong>${packageName ? ` &nbsp;·&nbsp; Package: <strong>${esc(packageName)}</strong>` : ''}
+      Admission: <strong>${esc(admissionId)}</strong>${packages.length === 1 && packages[0].package_name ? ` &nbsp;·&nbsp; Package: <strong>${esc(packages[0].package_name)}</strong>` : ''}
     </div>
     <div class="note">These charges are absorbed by the hospital under the package and are NOT billed to the patient/TPA (booked as expense).</div>
   </div>
 
-  ${items.length === 0 ? '<p style="text-align:center;color:#9ca3af;padding:30px;">No absorbed charges for this admission.</p>' : `
-  <div class="chips">${catChips}</div>
+  ${packages.length === 0 ? '<p style="text-align:center;color:#9ca3af;padding:30px;">No absorbed charges for this admission.</p>' : `
+  ${packagesHtml}
+  ${packages.length > 1 ? `
   <table>
-    <thead><tr><th>Sr</th><th>Date</th><th>Description</th><th>Category</th><th>Qty</th><th>Amount</th><th class="noprint"></th></tr></thead>
-    <tbody>${rows}</tbody>
     <tfoot>
-      <tr class="totrow"><td colspan="5" class="r">Total Absorbed (hospital expense)</td><td class="r">₹${money(total)}</td><td class="noprint"></td></tr>
-      ${packageAmount > 0 ? `<tr><td colspan="5" class="r" style="font-weight:600;color:#065f46;">Package amount (billed to patient/TPA)</td><td class="r" style="color:#065f46;">₹${money(packageAmount)}</td><td class="noprint"></td></tr>` : ''}
+      <tr class="totrow"><td class="r">Grand Total Absorbed (all packages)</td><td class="r" style="width:140px;">₹${money(grandTotal)}</td></tr>
     </tfoot>
-  </table>`}
+  </table>` : ''}`}
 
   <p style="font-size:9px;color:#9ca3af;margin-top:18px;text-align:center;">Internal document — consumption ledger. Computer-generated, no signature required.</p>
 </div>
