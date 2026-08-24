@@ -1003,11 +1003,14 @@ export default function PharmacyPage() {
                                             <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-gray-200 inline-block" /> Other charges — read-only</span>
                                         </div>
 
-                                        {/* Pharmacy charges absorbed under an active package — these never
-                                            become invoice_items (they're hospital expense, not billed to the
-                                            patient), so they don't show up in Bill Line Items above. Editable
-                                            here so a dispensing mistake can still be corrected. */}
-                                        {ipdPkgUtil && ipdPkgUtil.status === 'active' && ipdPkgUtil.consumed_items?.some((p: any) => (p.service_category || '').toLowerCase() === 'pharmacy') && (
+                                        {/* Pharmacy charges absorbed under a package — these never become
+                                            invoice_items (they're hospital expense, not billed to the patient),
+                                            so they don't show up in Bill Line Items above. Editable here so a
+                                            dispensing mistake can still be corrected — shown regardless of
+                                            package lifecycle state (discharge auto-closes the package) since
+                                            the bill's own lock state, enforced server-side, is what actually
+                                            governs whether a correction is allowed. */}
+                                        {ipdPkgUtil && ipdPkgUtil.consumed_items?.some((p: any) => (p.service_category || '').toLowerCase() === 'pharmacy') && (
                                             <div className="bg-white rounded-2xl shadow-sm border border-indigo-100 overflow-hidden">
                                                 <div className="px-5 py-3 border-b border-indigo-100 flex items-center gap-2 bg-indigo-50/60">
                                                     <Package className="h-4 w-4 text-indigo-400" />

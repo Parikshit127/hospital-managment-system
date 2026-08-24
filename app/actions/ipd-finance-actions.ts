@@ -1578,10 +1578,11 @@ export async function updateAbsorbedCharge(postingId: number, patch: {
         }
 
         if (!posting.admission_package_id) return { success: false, error: 'This charge is not linked to a package' };
-        const admPkg = await db.ipdAdmissionPackage.findUnique({ where: { id: posting.admission_package_id } });
-        if (!admPkg || admPkg.status !== ADMISSION_PACKAGE_STATUS.ACTIVE) {
-            return { success: false, error: 'The package is no longer active' };
-        }
+        // Discharge auto-closes the package (see the discharge/settlement flow),
+        // so requiring it stay 'active' would permanently block the exact
+        // scenario this exists for: Admin/Finance unlocks a post-discharge bill
+        // so a dispensing mistake can be fixed. The unlocked bill IS the
+        // authorization to edit — package lifecycle state doesn't gate this.
 
         const invoice = await db.invoices.findFirst({
             where: { admission_id: posting.admission_id, status: { not: 'Cancelled' } },
