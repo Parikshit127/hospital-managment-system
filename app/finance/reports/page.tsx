@@ -1185,80 +1185,60 @@ function DailySaleVoucherReport({ data, fmt, from, to, adminMode }: { data: any;
         setDrill({ title: 'Cr Sales', subtitle: 'Billed amount for the day, by patient', rows });
     };
 
+    // 1. Dr Sundry Debtors: exact gross uncollected balances on bills in this period
+    const drDebtorsRows: DrillRow[] = misRows
+        .filter((r: any) => Number(r.period_outstanding_amount ?? r.outstanding_amount ?? 0) > EPS)
+        .map((r: any) => ({
+            date: r.bill_date,
+            patientName: r.patient_name,
+            uhid: r.uhid,
+            reference: r.bill_no,
+            mode: r.bill_type === 'IPD' ? 'IPD Bill' : 'OPD Bill',
+            amount: Number(r.period_outstanding_amount ?? r.outstanding_amount ?? 0),
+            note: r.later_paid_note || (Number(r.outstanding_amount || 0) <= EPS ? 'Settled on a later date' : 'Uncollected / Outstanding'),
+        }));
+    const drDebtors = drDebtorsRows.reduce((s, r) => s + r.amount, 0);
+
     const openDebtorsDrDrill = () => {
-        const rows: DrillRow[] = misRows
-            .filter((r: any) => Number(r.period_outstanding_amount ?? r.outstanding_amount ?? 0) > EPS)
-            .map((r: any) => ({
-                date: r.bill_date,
-                patientName: r.patient_name,
-                uhid: r.uhid,
-                reference: r.bill_no,
-                mode: r.bill_type === 'IPD' ? 'IPD Bill' : 'OPD Bill',
-                amount: Number(r.period_outstanding_amount ?? r.outstanding_amount ?? 0),
-                note: r.later_paid_note || (Number(r.outstanding_amount || 0) <= EPS ? 'Settled on a later date' : 'Uncollected / Outstanding'),
-            }));
         setDrill({
             title: 'Dr Sundry Debtors',
             subtitle: "Billed in this period, not yet collected as of range end",
-            rows,
+            rows: drDebtorsRows,
             journalAmount: drDebtors,
         });
     };
 
+    // 2. Cr Sundry Debtors: exact gross collections in this period not tied to period's bills
+    const billedInvoiceIds = new Set(misRows.map((r: any) => r.invoice_id));
+
+    // (a) Direct cash/UPI/Card receipts against bills NOT in this period's MIS (e.g. paying today against an older bill).
+    const directPaymentRows: DrillRow[] = payments
+        .filter((p) => p.status === 'Completed' && !isDepositSettlement(p) && !billedInvoiceIds.has(p.invoice_id))
+        .map(paymentToDrillRow);
+
+    // (b) In-period advance deposits that are unbilled (fresh advance) or applied to bills outside this period (e.g. IPD running stays).
+    const unbilledDepositRows: DrillRow[] = depositsList
+        .filter((d: any) => !d.applied_to_invoice || !billedInvoiceIds.has(d.applied_to_invoice))
+        .map((d: any): DrillRow => ({
+            date: d.created_at,
+            patientName: d.patient_name || '-',
+            uhid: d.patient_id || '',
+            reference: d.deposit_number || '-',
+            mode: d.tender || d.payment_method || '-',
+            amount: Number(d.amount || 0) - Number(d.refunded_amount || 0),
+            note: d.applied_to_invoice
+                ? 'Advance deposit applied to bill outside this period'
+                : 'Advance deposit (unbilled)',
+        }));
+
+    const crDebtorsRows: DrillRow[] = [...directPaymentRows, ...unbilledDepositRows];
+    const crDebtors = crDebtorsRows.reduce((s, r) => s + r.amount, 0);
+
     const openDebtorsCrDrill = () => {
-        // Part 1: in-period collections not recognized in this period's MIS:
-        // (a) Cash/UPI/Card receipts against bills NOT in this period's MIS (e.g. paying today against an older bill).
-        const billedInvoiceIds = new Set(misRows.map((r: any) => r.invoice_id));
-        const directPaymentRows: DrillRow[] = payments
-            .filter((p) => p.status === 'Completed' && !isDepositSettlement(p) && !billedInvoiceIds.has(p.invoice_id))
-            .map(paymentToDrillRow);
-
-        // (b) In-period advance deposits that are unbilled (fresh advance) or applied to bills outside this period (e.g. IPD running stays).
-        const unbilledDepositRows: DrillRow[] = depositsList
-            .filter((d: any) => !d.applied_to_invoice || !billedInvoiceIds.has(d.applied_to_invoice))
-            .map((d: any): DrillRow => ({
-                date: d.created_at,
-                patientName: d.patient_name || '-',
-                uhid: d.patient_id || '',
-                reference: d.deposit_number || '-',
-                mode: d.tender || d.payment_method || '-',
-                amount: Number(d.amount || 0) - Number(d.refunded_amount || 0),
-                note: d.applied_to_invoice
-                    ? 'Advance deposit applied to bill outside this period'
-                    : 'Advance deposit (unbilled)',
-            }));
-
-        const directRows: DrillRow[] = [...directPaymentRows, ...unbilledDepositRows];
-
-        // Part 2: when advanceDr > (sales − receivedTotal), the crDebtors figure
-        // has a residual from the advance reclassification. The advanceDrDetails
-        // entries are the CAUSE (their total = advanceDr, not the residual), so we
-        // show them in a separate labelled section for full transparency. The footer
-        // is pinned to crDebtors (journalAmount) so it always matches the journal line.
-        const directTotal = directRows.reduce((s, r) => s + r.amount, 0);
-        const advanceResidual = crDebtors - directTotal;
-        const advanceSectionRows: DrillRow[] = advanceResidual > EPS
-            ? advanceDrDetails.map((d: any): DrillRow => ({
-                date: d.dep_date,
-                patientName: d.patient_name,
-                uhid: d.uhid,
-                reference: `${d.reference} → Bill ${d.bill_no}`,
-                mode: d.tender,
-                amount: Number(d.amount || 0),
-                note: `Applied to bill dated ${fmtDateTime(d.bill_date)}`,
-            }))
-            : [];
-
         setDrill({
             title: 'Cr Sundry Debtors',
             subtitle: "Today's collection against an earlier or unbilled patient balance",
-            rows: directRows,
-            ...(advanceSectionRows.length > 0 && {
-                advanceSection: {
-                    heading: 'Prior-period receipts applied to in-range bills (Dr Advance entries)',
-                    rows: advanceSectionRows,
-                },
-            }),
+            rows: crDebtorsRows,
             journalAmount: crDebtors,
         });
     };
@@ -1285,9 +1265,6 @@ function DailySaleVoucherReport({ data, fmt, from, to, adminMode }: { data: any;
 
     const debitCore = receivedTotal + advanceDr;
     const creditCore = sales + advanceCr;
-    const netDebtors = creditCore - debitCore;
-    const drDebtors = netDebtors > EPS ? netDebtors : 0;
-    const crDebtors = netDebtors < -EPS ? -netDebtors : 0;
 
     const totalDebit = debitCore + drDebtors;
     const totalCredit = creditCore + crDebtors;
