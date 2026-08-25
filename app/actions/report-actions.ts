@@ -144,7 +144,7 @@ export async function getCollectionsReport(filters: { from: string; to: string; 
         });
 
         const totals = enrichedPayments.reduce((acc: any, p: any) => {
-            if (p.status === 'Completed') {
+            if (p.status === 'Completed' || p.status === 'Refunded') {
                 // Bucket under the 'Deposit' pseudo-tender by receipt number, not the
                 // raw payment_method — the payment-edit screen can change a settlement
                 // row's method after the fact, and this bucket must stay stable so the

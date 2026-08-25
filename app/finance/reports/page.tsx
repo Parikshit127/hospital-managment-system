@@ -279,7 +279,7 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
     // + Advance deposits collected in this period.
     const allPayments = [
         ...(data?.payments || [])
-            .filter((p: any) => p.status === 'Completed' && !isDepositSettlement(p))
+            .filter((p: any) => (p.status === 'Completed' || p.status === 'Refunded') && !isDepositSettlement(p))
             .map((p: any) => ({
                 id: p.id,
                 created_at: p.created_at,
@@ -397,7 +397,7 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
                 const dateStr = dt.toLocaleDateString('en-GB', { timeZone: 'Asia/Kolkata' });
                 const timeStr = dt.toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true });
 
-                if (p.status === 'Completed') {
+                if (p.status === 'Completed' || p.status === 'Refunded') {
                     itemsList.push({
                         srNo: sr++,
                         type: 'Receipt',
