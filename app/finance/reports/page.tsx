@@ -1145,11 +1145,24 @@ function depositToDrillRow(d: any): DrillRow {
     };
 }
 
+function refundToDrillRow(r: any): DrillRow {
+    return {
+        date: r.created_at,
+        patientName: r.patient_name || '-',
+        uhid: r.patient_id || '',
+        reference: `Refund #${r.id}${r.invoice_id ? ` (Bill #${r.invoice_id})` : ''}`,
+        mode: r.tender || r.payment_method || '-',
+        amount: -Math.abs(Number(r.amount || 0)),
+        note: r.cashier_name ? `Processed by ${r.cashier_name}` : (r.reason || 'Refund processed'),
+    };
+}
+
 function DailySaleVoucherReport({ data, fmt, from, to, adminMode }: { data: any; fmt: (n: number) => string; from: string; to: string; adminMode: boolean }) {
     const EPS = 0.5;
     const [drill, setDrill] = useState<Drill | null>(null);
     const payments: any[] = data?.payments || [];
     const depositsList: any[] = data?.depositsList || [];
+    const refundsList: any[] = data?.refunds || [];
     const misRows: any[] = data?.misRows || [];
     const advanceDrDetails: any[] = data?.advanceDrDetails || [];
     const includeAdvances = data?.includeAdvances !== false;
@@ -1158,8 +1171,9 @@ function DailySaleVoucherReport({ data, fmt, from, to, adminMode }: { data: any;
         const rows = [
             ...payments.filter((p) => p.status === 'Completed' && !isDepositSettlement(p) && p.tender === tender).map(paymentToDrillRow),
             ...(includeAdvances ? depositsList.filter((d) => d.tender === tender).map(depositToDrillRow) : []),
+            ...refundsList.filter((r) => (r.tender || r.payment_method) === tender).map(refundToDrillRow),
         ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-        setDrill({ title: `Dr ${tender}`, subtitle: 'Payments and advances received in this tender', rows });
+        setDrill({ title: `Dr ${tender}`, subtitle: 'Payments, advances, and refunds in this tender', rows });
     };
 
     const openAdvanceDrDrill = () => {

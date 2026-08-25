@@ -258,8 +258,6 @@ export async function getCollectionsReport(filters: { from: string; to: string; 
                 received[m] = (received[m] || 0) + (Number(d.amount) - Number(d.refunded_amount || 0));
             }
         }
-        const receivedTotal = Object.values(received).reduce((s, v) => s + v, 0);
-
         // Fetch refunds from Refund table
         const refundRows = await db.refund.findMany({
             where: {
@@ -321,11 +319,24 @@ export async function getCollectionsReport(filters: { from: string; to: string; 
                 cashier_username: username,
                 cashier_name: fullName,
                 payment_method: r.payment_method || linkedPayment?.payment_method || 'Cash',
+                tender: canonicalTender(r.payment_method || linkedPayment?.payment_method || 'Cash'),
                 invoice_type: linkedInvoice?.invoice_type || null,
                 patient_name: linkedInvoice?.patient?.full_name || null,
                 patient_id: linkedInvoice?.patient?.patient_id || null
             };
         });
+
+        // Deduct settled refunds from the actual received tender amounts so that
+        // collections reflect net cash/UPI/card in hand.
+        for (const r of enrichedRefunds) {
+            const m = canonicalTender(r.payment_method || 'Cash');
+            if (filters.method && filters.method !== 'all') {
+                if (filters.method === 'others') { if (['Cash', 'UPI'].includes(m)) continue; }
+                else if (m !== canonicalTender(filters.method)) continue;
+            }
+            received[m] = (received[m] || 0) - Number(r.amount || 0);
+        }
+        const receivedTotal = Object.values(received).reduce((s, v) => s + v, 0);
 
         return {
             success: true,
