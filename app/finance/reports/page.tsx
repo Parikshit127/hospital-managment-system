@@ -1169,7 +1169,7 @@ function DailySaleVoucherReport({ data, fmt, from, to, adminMode }: { data: any;
 
     const openTenderDrill = (tender: string) => {
         const rows = [
-            ...payments.filter((p) => p.status === 'Completed' && !isDepositSettlement(p) && p.tender === tender).map(paymentToDrillRow),
+            ...payments.filter((p) => (p.status === 'Completed' || p.status === 'Refunded') && !isDepositSettlement(p) && p.tender === tender).map(paymentToDrillRow),
             ...(includeAdvances ? depositsList.filter((d) => d.tender === tender).map(depositToDrillRow) : []),
             ...refundsList.filter((r) => (r.tender || r.payment_method) === tender).map(refundToDrillRow),
         ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -1227,7 +1227,7 @@ function DailySaleVoucherReport({ data, fmt, from, to, adminMode }: { data: any;
 
     // (a) Direct cash/UPI/Card receipts against bills NOT in this period's MIS (e.g. paying today against an older bill).
     const directPaymentRows: DrillRow[] = payments
-        .filter((p) => p.status === 'Completed' && !isDepositSettlement(p) && !billedInvoiceIds.has(p.invoice_id))
+        .filter((p) => (p.status === 'Completed' || p.status === 'Refunded') && !isDepositSettlement(p) && !billedInvoiceIds.has(p.invoice_id))
         .map(paymentToDrillRow);
 
     // (b) In-period advance deposits that are unbilled (fresh advance) or applied to bills outside this period (e.g. IPD running stays).

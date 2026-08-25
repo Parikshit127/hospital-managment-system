@@ -67,7 +67,7 @@ export async function getCollectionsReport(filters: { from: string; to: string; 
         const fromDate = new Date(filters.from + 'T00:00:00+05:30');
         const toDate = new Date(filters.to + 'T23:59:59.999+05:30');
         const where: any = {
-            status: { in: ['Completed', 'Reversed'] },
+            status: { in: ['Completed', 'Reversed', 'Refunded'] },
             created_at: { gte: fromDate, lte: toDate },
         };
         if (filters.method && filters.method !== 'others' && filters.method !== 'all') {
@@ -1037,7 +1037,7 @@ export async function getMISReport(filters: { from: string; to: string; billType
                     },
                 },
                 payments: {
-                    where: { status: 'Completed' },
+                    where: { status: { in: ['Completed', 'Refunded'] } },
                     select: { amount: true, payment_method: true, payment_type: true, notes: true, receipt_number: true, created_at: true },
                 },
                 credit_notes: {
