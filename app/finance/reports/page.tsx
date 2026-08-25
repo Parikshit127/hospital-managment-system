@@ -1245,7 +1245,20 @@ function DailySaleVoucherReport({ data, fmt, from, to, adminMode }: { data: any;
                 : 'Advance deposit (unbilled)',
         }));
 
-    const crDebtorsRows: DrillRow[] = [...directPaymentRows, ...unbilledDepositRows];
+    // (c) Refunds in this period on bills NOT in this period's MIS
+    const unbilledRefundRows: DrillRow[] = refundsList
+        .filter((r: any) => !r.invoice_id || !billedInvoiceIds.has(Number(r.invoice_id)))
+        .map((r: any): DrillRow => ({
+            date: r.created_at,
+            patientName: r.patient_name || '-',
+            uhid: r.patient_id || '',
+            reference: `Refund #${r.id}${r.invoice_id ? ` (Bill #${r.invoice_id})` : ''}`,
+            mode: r.tender || r.payment_method || 'Cash',
+            amount: -Math.abs(Number(r.amount || 0)),
+            note: r.cashier_name ? `Processed by ${r.cashier_name}` : (r.reason || 'Refund processed on earlier bill'),
+        }));
+
+    const crDebtorsRows: DrillRow[] = [...directPaymentRows, ...unbilledDepositRows, ...unbilledRefundRows];
     const crDebtors = crDebtorsRows.reduce((s, r) => s + r.amount, 0);
 
     const openDebtorsCrDrill = () => {

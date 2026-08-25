@@ -314,12 +314,14 @@ export async function getCollectionsReport(filters: { from: string; to: string; 
             const fullName = userMap.get(username.toLowerCase()) || username;
             const linkedPayment = refundPaymentMap.get(String(r.payment_id)) || null;
             const linkedInvoice = linkedPayment?.invoice || refundInvoiceMap.get(String(r.invoice_id)) || null;
+            const rawMethod = r.payment_method || (linkedPayment?.payment_method !== 'Deposit' ? linkedPayment?.payment_method : null) || 'Cash';
+            const tender = canonicalTender(rawMethod);
             return {
                 ...r,
                 cashier_username: username,
                 cashier_name: fullName,
-                payment_method: r.payment_method || linkedPayment?.payment_method || 'Cash',
-                tender: canonicalTender(r.payment_method || linkedPayment?.payment_method || 'Cash'),
+                payment_method: rawMethod,
+                tender: tender === 'Deposit' ? 'Cash' : tender,
                 invoice_type: linkedInvoice?.invoice_type || null,
                 patient_name: linkedInvoice?.patient?.full_name || null,
                 patient_id: linkedInvoice?.patient?.patient_id || null
@@ -329,7 +331,8 @@ export async function getCollectionsReport(filters: { from: string; to: string; 
         // Deduct settled refunds from the actual received tender amounts so that
         // collections reflect net cash/UPI/card in hand.
         for (const r of enrichedRefunds) {
-            const m = canonicalTender(r.payment_method || 'Cash');
+            const m = r.tender || canonicalTender(r.payment_method || 'Cash');
+            if (m === 'Deposit') continue;
             if (filters.method && filters.method !== 'all') {
                 if (filters.method === 'others') { if (['Cash', 'UPI'].includes(m)) continue; }
                 else if (m !== canonicalTender(filters.method)) continue;
@@ -1197,11 +1200,11 @@ export async function getMISReport(filters: { from: string; to: string; billType
         // (and correspondingly raises outstanding). Only settled refunds count.
         const refundByInvoice: Record<number, number> = {};
         // invoices.id is Int but refunds.invoice_id is String — match on string keys.
-        type RefundTenderRow = { invoice_id: string | null; payment_id: string | null; amount: unknown };
+        type RefundTenderRow = { invoice_id: string | null; payment_id: string | null; amount: unknown; created_at: Date };
         type RefundPaymentTender = { id: number; payment_method: string | null; notes: string | null };
         const refundRows: RefundTenderRow[] = await db.refund.findMany({
             where: { invoice_id: { in: invoiceIds.map(String) }, status: { in: ['Approved', 'Processed'] } },
-            select: { invoice_id: true, payment_id: true, amount: true },
+            select: { invoice_id: true, payment_id: true, amount: true, created_at: true },
         });
         const refundPaymentIds = [...new Set(
             refundRows
@@ -1218,11 +1221,13 @@ export async function getMISReport(filters: { from: string; to: string; billType
             refundPayments.map((p) => [String(p.id), p])
         );
         const refundBreakupByInvoice: Record<number, MISPaymentBreakup> = {};
+        const refundDatesByInvoice: Record<number, Array<{ amount: number; created_at: Date }>> = {};
         for (const r of refundRows) {
             if (r.invoice_id != null) {
                 const key = Number(r.invoice_id);
                 const refundAmount = Number(r.amount || 0);
                 refundByInvoice[key] = (refundByInvoice[key] || 0) + refundAmount;
+                (refundDatesByInvoice[key] ||= []).push({ amount: refundAmount, created_at: r.created_at });
                 const refundPayment = refundPaymentById.get(String(r.payment_id)) || null;
                 const refundTender = resolvePaymentTender(refundPayment);
                 if (refundTender) {
@@ -1518,7 +1523,15 @@ export async function getMISReport(filters: { from: string; to: string; billType
             const isCancelled = inv.status === 'Cancelled';
             const zeroIfCancelled = (n: number) => (isCancelled ? 0 : n);
 
-            const periodReceivedAmount = Math.max(0, inPeriodNonDepositPaid + inPeriodAppliedDep - refundAmount);
+            let inPeriodRefundAmount = 0;
+            for (const r of refundDatesByInvoice[inv.id] || []) {
+                const refDay = new Date(r.created_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+                if (refDay <= filters.to) {
+                    inPeriodRefundAmount += r.amount;
+                }
+            }
+
+            const periodReceivedAmount = Math.max(0, inPeriodNonDepositPaid + inPeriodAppliedDep - inPeriodRefundAmount);
             const periodOutstandingAmount = zeroIfCancelled(Math.max(0, netAmount - periodReceivedAmount));
 
             let laterPaidNote: string | undefined;
