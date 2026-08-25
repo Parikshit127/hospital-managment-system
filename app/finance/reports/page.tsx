@@ -1258,7 +1258,25 @@ function DailySaleVoucherReport({ data, fmt, from, to, adminMode }: { data: any;
             note: r.cashier_name ? `Processed by ${r.cashier_name}` : (r.reason || 'Refund processed on earlier bill'),
         }));
 
-    const crDebtorsRows: DrillRow[] = [...directPaymentRows, ...unbilledDepositRows, ...unbilledRefundRows];
+    // (d) In-period overpayments on bills recognized in this period (excess collected over net billed)
+    const overpaidBillRows: DrillRow[] = misRows
+        .filter((r: any) => Number(r.period_overpaid_amount || 0) > EPS)
+        .map((r: any): DrillRow => ({
+            date: r.bill_date,
+            patientName: r.patient_name || '-',
+            uhid: r.uhid || '',
+            reference: r.bill_no || '-',
+            mode: r.bill_type === 'IPD' ? 'IPD Bill' : 'OPD Bill',
+            amount: Number(r.period_overpaid_amount || 0),
+            note: `Excess collected / Overpayment (Billed ${fmt(Number(r.net_amount || 0))}, Collected ${fmt(Number(r.period_received_amount || 0))})`,
+        }));
+
+    const crDebtorsRows: DrillRow[] = [
+        ...directPaymentRows,
+        ...unbilledDepositRows,
+        ...unbilledRefundRows,
+        ...overpaidBillRows,
+    ];
     const crDebtors = crDebtorsRows.reduce((s, r) => s + r.amount, 0);
 
     const openDebtorsCrDrill = () => {

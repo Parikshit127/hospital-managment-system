@@ -1532,7 +1532,9 @@ export async function getMISReport(filters: { from: string; to: string; billType
             }
 
             const periodReceivedAmount = Math.max(0, inPeriodNonDepositPaid + inPeriodAppliedDep - inPeriodRefundAmount);
-            const periodOutstandingAmount = zeroIfCancelled(Math.max(0, netAmount - periodReceivedAmount));
+            const periodDiff = netAmount - periodReceivedAmount;
+            const periodOutstandingAmount = zeroIfCancelled(periodDiff > 0.001 ? periodDiff : 0);
+            const periodOverpaidAmount = zeroIfCancelled(periodDiff < -0.001 ? -periodDiff : 0);
 
             let laterPaidNote: string | undefined;
             if (laterPayments.length > 0) {
@@ -1595,6 +1597,7 @@ export async function getMISReport(filters: { from: string; to: string; billType
                 outstanding_amount: zeroIfCancelled(Math.max(0, netAmount - receivedAmount)),
                 period_received_amount: zeroIfCancelled(periodReceivedAmount),
                 period_outstanding_amount: periodOutstandingAmount,
+                period_overpaid_amount: periodOverpaidAmount,
                 later_paid_note: laterPaidNote,
                 patient_receipt: zeroIfCancelled(netPatientReceipt),
                 // TPA sanctioned/approved amount — only meaningful for TPA/Insurance
