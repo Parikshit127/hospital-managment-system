@@ -25,7 +25,7 @@ import {
     generateInterimBill, postChargeToIpdBill, applyPackageToAdmission,
     getPackageUtilization, reconcilePackageBilling, reclassifyChargeDisposition,
     breakOpenPackage, updateAdmissionPackageAmount, removeAdmissionPackage,
-    getPackagesForAdmission,
+    getPackagesForAdmission, removeAbsorbedCharge,
 } from '@/app/actions/ipd-finance-actions';
 import { removeInvoiceItem, updateInvoiceItem } from '@/app/actions/finance-actions';
 import {
@@ -196,6 +196,7 @@ export default function AdmissionDetailPage() {
     const [chargeTargetPkgId, setChargeTargetPkgId] = useState<number | ''>('');
     const [chargeDisposition, setChargeDisposition] = useState<'auto' | 'package_consumed' | 'billable_extra'>('auto');
     const [reclassifyingId, setReclassifyingId] = useState<number | null>(null);
+    const [removingAbsorbedId, setRemovingAbsorbedId] = useState<number | null>(null);
     const [showConsumption, setShowConsumption] = useState(true);
 
     // Transfer
@@ -362,6 +363,19 @@ export default function AdmissionDetailPage() {
             setBill(null); loadBill();
         } else {
             toast.error(res.error || 'Failed to reclassify charge');
+        }
+    }, [toast, loadBill]);
+
+    const handleRemoveAbsorbed = useCallback(async (postingId: number, description: string) => {
+        if (!confirm(`Remove "${description || 'this charge'}" from the package? This deletes it entirely — it will not appear on the bill or the package ledger.`)) return;
+        setRemovingAbsorbedId(postingId);
+        const res = await removeAbsorbedCharge(postingId);
+        setRemovingAbsorbedId(null);
+        if (res.success) {
+            toast.success('Charge removed');
+            setBill(null); loadBill();
+        } else {
+            toast.error(res.error || 'Failed to remove charge');
         }
     }, [toast, loadBill]);
 
@@ -2575,14 +2589,24 @@ export default function AdmissionDetailPage() {
                                                                                 </div>
                                                                                 <p className="font-bold text-gray-700 ml-3">₹{Number(p.amount).toLocaleString('en-IN')}</p>
                                                                                 {data.status === 'Admitted' && pkgUtil.status === 'active' && (
-                                                                                    <button
-                                                                                        onClick={() => handleReclassify(p.id, 'billable_extra')}
-                                                                                        disabled={reclassifyingId === p.id}
-                                                                                        title="Move OUT of the package — bill this to the patient/TPA over the package (Admin/Finance)"
-                                                                                        className="ml-3 shrink-0 text-[10px] font-bold text-indigo-500 hover:text-indigo-700 hover:underline disabled:opacity-40"
-                                                                                    >
-                                                                                        {reclassifyingId === p.id ? '…' : 'Bill as extra'}
-                                                                                    </button>
+                                                                                    <>
+                                                                                        <button
+                                                                                            onClick={() => handleReclassify(p.id, 'billable_extra')}
+                                                                                            disabled={reclassifyingId === p.id || removingAbsorbedId === p.id}
+                                                                                            title="Move OUT of the package — bill this to the patient/TPA over the package (Admin/Finance)"
+                                                                                            className="ml-3 shrink-0 text-[10px] font-bold text-indigo-500 hover:text-indigo-700 hover:underline disabled:opacity-40"
+                                                                                        >
+                                                                                            {reclassifyingId === p.id ? '…' : 'Bill as extra'}
+                                                                                        </button>
+                                                                                        <button
+                                                                                            onClick={() => handleRemoveAbsorbed(p.id, p.description)}
+                                                                                            disabled={reclassifyingId === p.id || removingAbsorbedId === p.id}
+                                                                                            title="Delete this charge entirely — not billed, not absorbed (Admin/Finance)"
+                                                                                            className="ml-2 shrink-0 text-[10px] font-bold text-rose-500 hover:text-rose-700 hover:underline disabled:opacity-40"
+                                                                                        >
+                                                                                            {removingAbsorbedId === p.id ? '…' : 'Delete'}
+                                                                                        </button>
+                                                                                    </>
                                                                                 )}
                                                                             </div>
                                                                         ))}
