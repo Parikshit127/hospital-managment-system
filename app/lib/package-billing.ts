@@ -118,13 +118,22 @@ export function matchExclusion(
  * Invoice items that are plain service charges — i.e. NOT the package line, NOT
  * the legacy adjustment line and NOT a bill-level discount. Used to detect
  * "stray" billed services on a package admission.
+ *
+ * Discounts are identified by sign (negative net amount), not by category —
+ * staff can file a discount under any category label (e.g. "Misc") from the
+ * bill edit screen, so a category-string check alone misses them and lets a
+ * discount line get swept into package consumption at discharge.
  */
 export function isPlainServiceItem(item: {
     service_category?: string | null;
     department?: string | null;
+    net_price?: number | string | null;
+    total_price?: number | string | null;
 }): boolean {
     const cat = String(item.service_category || '');
     const dept = String(item.department || '');
+    const netAmount = Number(item.net_price ?? item.total_price ?? 0);
+    if (netAmount < 0) return false;
     return (
         cat !== PACKAGE_SERVICE_CATEGORY &&
         cat !== LEGACY_PACKAGE_ADJUSTMENT_CATEGORY &&
