@@ -221,7 +221,7 @@ export async function registerPatient(formData: FormData) {
                 const providerId = parseInt(rawData.tpa_provider_id, 10);
                 if (!isNaN(providerId)) {
                     await db.insurance_policies.upsert({
-                        where: { policy_number: rawData.insurance_policy_number },
+                        where: { organizationId_policy_number: { organizationId, policy_number: rawData.insurance_policy_number } },
                         create: {
                             patient_id: agentPatientId,
                             provider_id: providerId,

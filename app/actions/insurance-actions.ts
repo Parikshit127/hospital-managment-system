@@ -346,7 +346,7 @@ export async function addPatientPolicy(data: {
         };
         const policy = policyNumber
             ? await db.insurance_policies.upsert({
-                where: { policy_number: policyNumber },
+                where: { organizationId_policy_number: { organizationId, policy_number: policyNumber } },
                 create: policyData,
                 update: {
                     provider_id: data.provider_id,
@@ -379,6 +379,9 @@ export async function addPatientPolicy(data: {
         return { success: true, data: serialize(policy) };
     } catch (error: any) {
         console.error('addPatientPolicy error:', error);
+        if (error.code === 'P2002' && error.meta?.target?.includes?.('policy_number')) {
+            return { success: false, error: 'This policy number is already registered to another patient. Please verify the number.' };
+        }
         return { success: false, error: error.message };
     }
 }
@@ -445,6 +448,9 @@ export async function updatePatientPolicy(id: number, data: {
         return { success: true, data: serialize(policy) };
     } catch (error: any) {
         console.error('updatePatientPolicy error:', error);
+        if (error.code === 'P2002' && error.meta?.target?.includes?.('policy_number')) {
+            return { success: false, error: 'This policy number is already registered to another patient. Please verify the number.' };
+        }
         return { success: false, error: error.message };
     }
 }

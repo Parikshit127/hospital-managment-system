@@ -389,7 +389,7 @@ export async function admitPatientIPD(data: {
                     const providerId = parseInt(data.tpa_provider_id, 10);
                     if (!isNaN(providerId)) {
                         await tx.insurance_policies.upsert({
-                            where: { policy_number: data.insurance_policy_number },
+                            where: { organizationId_policy_number: { organizationId, policy_number: data.insurance_policy_number } },
                             create: {
                                 patient_id: data.patient_id,
                                 provider_id: providerId,
@@ -2107,7 +2107,7 @@ export async function updateAdmissionPatientCategory(data: {
         const providerId = parseInt(data.tpa_provider_id, 10);
         if (!isNaN(providerId)) {
           await tx.insurance_policies.upsert({
-            where: { policy_number: data.insurance_policy_number },
+            where: { organizationId_policy_number: { organizationId, policy_number: data.insurance_policy_number } },
             create: {
               patient_id: patientId,
               provider_id: providerId,

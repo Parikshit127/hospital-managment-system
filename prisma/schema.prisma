@@ -1434,7 +1434,7 @@ model insurance_policies {
   id                   Int       @id @default(autoincrement())
   patient_id           String
   provider_id          Int
-  policy_number        String?   @unique
+  policy_number        String?
   policy_holder        String?
   plan_name            String?
   member_id            String?
@@ -1460,6 +1460,7 @@ model insurance_policies {
   provider     insurance_providers @relation(fields: [provider_id], references: [id])
   claims       insurance_claims[]
 
+  @@unique([organizationId, policy_number])
   @@index([organizationId])
 }
 
