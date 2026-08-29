@@ -153,14 +153,21 @@ export async function createAdmissionBooking(data: {
   } catch (e: any) { return { success: false, error: e?.message || 'Failed to create booking' }; }
 }
 
-export async function updateAdmissionBookingStatus(id: string, status: 'In Progress' | 'Completed' | 'Cancelled') {
+export async function updateAdmissionBookingStatus(id: string, status: 'In Progress' | 'Completed' | 'Cancelled', reason?: string) {
   try {
-    const { db, organizationId } = await requireTenantContext();
+    const { db, session, organizationId } = await requireTenantContext();
+    const dataToUpdate: any = { status };
+    if (status === 'Cancelled') {
+      dataToUpdate.cancelled_at = new Date();
+      dataToUpdate.cancelled_by = session?.name || session?.username || 'Staff';
+      if (reason) dataToUpdate.cancellation_reason = reason;
+    }
     const booking = await (db.admissionBooking as any).update({
       where: { id, organizationId },
-      data: { status },
+      data: dataToUpdate,
     });
     revalidatePath('/ipd/daycare');
+    revalidatePath('/ipd/pre-admissions');
     return { success: true, data: booking };
   } catch (e: any) {
     return { success: false, error: e?.message || 'Failed to update booking status' };

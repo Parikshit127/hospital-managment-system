@@ -224,8 +224,8 @@ export default function OverviewTab({ patient, patientId, insurancePolicies, pil
     return 'bg-gray-100 text-gray-600 border-gray-200';
   };
 
-  // Shortcut: render an EditableField with shared props
-  const F = (props: Omit<React.ComponentProps<typeof EditableField>, 'isEditing' | 'draft' | 'onChange'>) => (
+  // Shortcut: render an EditableField with shared props (render helper, NOT inline component to preserve focus)
+  const renderF = (props: Omit<React.ComponentProps<typeof EditableField>, 'isEditing' | 'draft' | 'onChange'>) => (
     <EditableField {...props} isEditing={isEditing} draft={draft} onChange={onDraftChange} />
   );
 
@@ -249,8 +249,8 @@ export default function OverviewTab({ patient, patientId, insurancePolicies, pil
                   type="text"
                   value={draft?.full_name ?? ''}
                   onChange={(e) => onDraftChange?.('full_name', e.target.value)}
-                  placeholder="Full name"
-                  className="w-full text-lg font-black text-gray-900 bg-white border border-emerald-200 rounded-md px-2 py-1"
+                  placeholder="Full Name"
+                  className="w-full text-lg font-black text-gray-900 bg-emerald-50/40 border border-emerald-200 rounded-md px-2 py-1"
                 />
               ) : (
                 <p className="text-lg font-black text-gray-900">{patient.full_name || 'N/A'}</p>
@@ -259,11 +259,11 @@ export default function OverviewTab({ patient, patientId, insurancePolicies, pil
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <F label="Age" field="age" value={patient.age ? `${patient.age} years` : 'N/A'} type="text" placeholder="e.g. 35" />
-            <F label="Gender" field="gender" value={patient.gender || 'N/A'} type="select" options={['Male', 'Female', 'Other']} />
-            <F label="Date of Birth" field="date_of_birth" value={fmtDate(patient.date_of_birth)} type="date" />
+            {renderF({ label: "Age", field: "age", value: patient.age ? `${patient.age} years` : 'N/A', type: "text", placeholder: "e.g. 35" })}
+            {renderF({ label: "Gender", field: "gender", value: patient.gender || 'N/A', type: "select", options: ['Male', 'Female', 'Other'] })}
+            {renderF({ label: "Date of Birth", field: "date_of_birth", value: fmtDate(patient.date_of_birth), type: "date" })}
             {isEditing ? (
-              <F label="Blood Group" field="blood_group" value={patient.blood_group || ''} type="select" options={['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-']} />
+              renderF({ label: "Blood Group", field: "blood_group", value: patient.blood_group || '', type: "select", options: ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'] })
             ) : (
               <div className="bg-gray-50 border border-gray-200 rounded-xl p-3">
                 <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Blood Group</p>
@@ -277,12 +277,12 @@ export default function OverviewTab({ patient, patientId, insurancePolicies, pil
               <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Department</p>
               <p className="text-sm font-semibold text-gray-800 mt-0.5">{patient.department || 'General'}</p>
             </div>
-            <F label="Aadhar Card" field="aadhar_card" value={patient.aadhar_card || 'N/A'} placeholder="XXXX-XXXX-XXXX" />
-            <F label="ABHA Number" field="abha_number" value={patient.abha_number || 'N/A'} placeholder="14-digit ABHA" />
-            <F label="PAN Number" field="pan_number" value={patient.pan_number || 'N/A'} placeholder="ABCDE1234F" />
-            <F label="Nationality" field="nationality" value={patient.nationality || 'N/A'} placeholder="e.g. Indian" />
-            <F label="Govt Proof Type" field="govt_id_type" value={patient.govt_id_type || 'N/A'} type="select" options={['Aadhaar', 'PAN', 'Passport', 'Voter ID', 'Driving License']} />
-            <F label="Govt Proof Number" field="govt_id_number" value={patient.govt_id_number || 'N/A'} placeholder="ID number" />
+            {renderF({ label: "Aadhar Card", field: "aadhar_card", value: patient.aadhar_card || 'N/A', placeholder: "XXXX-XXXX-XXXX" })}
+            {renderF({ label: "ABHA Number", field: "abha_number", value: patient.abha_number || 'N/A', placeholder: "14-digit ABHA" })}
+            {renderF({ label: "PAN Number", field: "pan_number", value: patient.pan_number || 'N/A', placeholder: "ABCDE1234F" })}
+            {renderF({ label: "Nationality", field: "nationality", value: patient.nationality || 'N/A', placeholder: "e.g. Indian" })}
+            {renderF({ label: "Govt Proof Type", field: "govt_id_type", value: patient.govt_id_type || 'N/A', type: "select", options: ['Aadhaar', 'PAN', 'Passport', 'Voter ID', 'Driving License'] })}
+            {renderF({ label: "Govt Proof Number", field: "govt_id_number", value: patient.govt_id_number || 'N/A', placeholder: "ID number" })}
             {/* Registration date is system-generated — always read-only */}
             <div className="bg-gray-50 border border-gray-200 rounded-xl p-3">
               <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Registration Date</p>
@@ -298,9 +298,17 @@ export default function OverviewTab({ patient, patientId, insurancePolicies, pil
             Contact Information
           </h3>
           <div className="space-y-3">
-            <F label="Phone" field="phone" value={patient.phone || 'N/A'} placeholder="10-digit mobile" />
-            <F label="Email" field="email" value={patient.email || 'N/A'} placeholder="name@example.com" />
-            <F label="Address" field="address" value={patient.address || 'N/A'} type="textarea" placeholder="Street, City, PIN" />
+            {renderF({ label: "Phone", field: "phone", value: patient.phone || 'N/A', placeholder: "10-digit mobile" })}
+            {renderF({ label: "Email", field: "email", value: patient.email || 'N/A', placeholder: "name@example.com" })}
+            {renderF({ label: "Address", field: "address", value: patient.address || 'N/A', type: "textarea", placeholder: "Street, landmark" })}
+            <div className="grid grid-cols-2 gap-2">
+              {renderF({ label: "City", field: "city", value: patient.city || 'N/A', placeholder: "City" })}
+              {renderF({ label: "State", field: "state", value: patient.state || 'N/A', placeholder: "State" })}
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {renderF({ label: "Pincode", field: "pincode", value: patient.pincode || 'N/A', placeholder: "Pincode / ZIP" })}
+              {renderF({ label: "Country", field: "country", value: patient.country || 'India', placeholder: "Country" })}
+            </div>
           </div>
         </div>
 
@@ -311,9 +319,9 @@ export default function OverviewTab({ patient, patientId, insurancePolicies, pil
             Emergency Contact
           </h3>
           <div className="space-y-3">
-            <F label="Name" field="emergency_contact_name" value={patient.emergency_contact_name || 'N/A'} />
-            <F label="Phone" field="emergency_contact_phone" value={patient.emergency_contact_phone || 'N/A'} placeholder="10-digit mobile" />
-            <F label="Relation" field="emergency_contact_relation" value={patient.emergency_contact_relation || 'N/A'} placeholder="Spouse / Parent / Sibling" />
+            {renderF({ label: "Name", field: "emergency_contact_name", value: patient.emergency_contact_name || 'N/A' })}
+            {renderF({ label: "Phone", field: "emergency_contact_phone", value: patient.emergency_contact_phone || 'N/A', placeholder: "10-digit mobile" })}
+            {renderF({ label: "Relation", field: "emergency_contact_relation", value: patient.emergency_contact_relation || 'N/A', placeholder: "Spouse / Parent / Sibling" })}
           </div>
         </div>
 

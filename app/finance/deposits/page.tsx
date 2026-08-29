@@ -54,6 +54,7 @@ export function DepositsContent({ shell = 'app' }: { shell?: 'app' | 'admin' }) 
     // Refund modal
     const [refundModal, setRefundModal] = useState<any>(null);
     const [refundAmount, setRefundAmount] = useState('');
+    const [refundPaymentMethod, setRefundPaymentMethod] = useState('Cash');
     const [refundLoading, setRefundLoading] = useState(false);
     const [cancelLoading, setCancelLoading] = useState<number | null>(null);
 
@@ -196,9 +197,11 @@ export function DepositsContent({ shell = 'app' }: { shell?: 'app' | 'admin' }) 
     async function handleRefund() {
         if (!refundModal || !refundAmount) return;
         setRefundLoading(true);
-        const res = await refundDeposit(refundModal.id, parseFloat(refundAmount));
+        const res = await refundDeposit(refundModal.id, parseFloat(refundAmount), refundPaymentMethod);
         if (res.success) {
             setRefundModal(null);
+            setRefundAmount('');
+            setRefundPaymentMethod('Cash');
             loadData();
         } else {
             toast.error(res.error || 'Failed to process refund');
@@ -404,7 +407,14 @@ export function DepositsContent({ shell = 'app' }: { shell?: 'app' | 'admin' }) 
                                                 </td>
                                                 <td className="px-5 py-3 text-sm font-semibold text-gray-900 text-right">{fmt(Number(d.amount))}</td>
                                                 <td className="px-5 py-3 text-sm text-orange-600 text-right">{fmt(Number(d.applied_amount || 0))}</td>
-                                                <td className="px-5 py-3 text-sm text-amber-600 text-right">{fmt(Number(d.refunded_amount || 0))}</td>
+                                                <td className="px-5 py-3 text-sm text-amber-600 text-right">
+                                                    {fmt(Number(d.refunded_amount || 0))}
+                                                    {d.refund_payment_method && Number(d.refunded_amount || 0) > 0 && (
+                                                        <span className="block text-[10px] text-amber-700 font-semibold mt-0.5">
+                                                            via {d.refund_payment_method}
+                                                        </span>
+                                                    )}
+                                                </td>
                                                 <td className="px-5 py-3 text-sm font-semibold text-emerald-600 text-right">{fmt(available)}</td>
                                                 <td className="px-5 py-3 text-sm text-gray-600">{d.payment_method}</td>
                                                 <td className="px-5 py-3 text-center">
@@ -663,11 +673,29 @@ export function DepositsContent({ shell = 'app' }: { shell?: 'app' | 'admin' }) 
                                 <span className="font-semibold">{refundModal.deposit_number}</span> — Available: <span className="font-bold">{fmt(getAvailable(refundModal))}</span>
                             </p>
                         </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Refund Amount *</label>
-                            <input type="number" value={refundAmount} onChange={e => setRefundAmount(e.target.value)}
-                                placeholder="0.00" min="1" max={getAvailable(refundModal)}
-                                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500" />
+                        <div className="space-y-3">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Refund Amount *</label>
+                                <input type="number" value={refundAmount} onChange={e => setRefundAmount(e.target.value)}
+                                    placeholder="0.00" min="1" max={getAvailable(refundModal)}
+                                    className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Refund Paid Via *</label>
+                                <select
+                                    value={refundPaymentMethod}
+                                    onChange={e => setRefundPaymentMethod(e.target.value)}
+                                    className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 bg-white"
+                                >
+                                    <option value="Cash">Cash</option>
+                                    <option value="UPI">UPI</option>
+                                    <option value="Card">Card</option>
+                                    <option value="Bank">Bank Transfer</option>
+                                    <option value="NEFT_RTGS">NEFT / RTGS</option>
+                                    <option value="Cheque">Cheque</option>
+                                    <option value="Online">Online</option>
+                                </select>
+                            </div>
                         </div>
                         <div className="flex justify-end gap-3 mt-6">
                             <button onClick={() => setRefundModal(null)} className="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition">Cancel</button>

@@ -326,7 +326,7 @@ export async function applyDepositToInvoice(depositId: number, invoiceId: number
     }
 }
 
-export async function refundDeposit(depositId: number, amount: number) {
+export async function refundDeposit(depositId: number, amount: number, paymentMethod?: string) {
     try {
         const { db, organizationId } = await requireTenantContext();
 
@@ -342,7 +342,11 @@ export async function refundDeposit(depositId: number, amount: number) {
 
         await db.patientDeposit.update({
             where: { id: depositId },
-            data: { refunded_amount: newRefunded, status: newStatus },
+            data: {
+                refunded_amount: newRefunded,
+                status: newStatus,
+                refund_payment_method: paymentMethod || 'Cash',
+            },
         });
 
         await db.system_audit_logs.create({
@@ -351,7 +355,7 @@ export async function refundDeposit(depositId: number, amount: number) {
                 module: 'finance',
                 entity_type: 'deposit',
                 entity_id: deposit.deposit_number,
-                details: JSON.stringify({ amount }),
+                details: JSON.stringify({ amount, payment_method: paymentMethod || 'Cash' }),
                 organizationId,
             },
         });

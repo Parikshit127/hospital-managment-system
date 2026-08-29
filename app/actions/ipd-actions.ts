@@ -495,7 +495,9 @@ export async function getIPDAdmissions(statusFilter?: string) {
         ward: true,
         medical_notes: { orderBy: { created_at: "desc" }, take: 3 },
       },
-      orderBy: { admission_date: "desc" },
+      orderBy: statusFilter === 'Cancelled'
+        ? { cancellation_date: 'desc' }
+        : { admission_date: 'desc' },
       // Safety bound: 'Admitted' is naturally small, but 'All'/'Discharged' grows
       // without limit. Cap at the 1000 most-recent admissions so this list can
       // never load the entire history into memory (a cause of slow loads / restarts).
@@ -2374,7 +2376,14 @@ export async function cancelAdmission(admissionId: string, reason: string, cance
       // 3. Cancel any active invoices for this admission
       await tx.invoices.updateMany({
         where: { admission_id: admissionId, status: { not: 'Cancelled' } },
-        data: { status: 'Cancelled' },
+        data: {
+          status: 'Cancelled',
+          balance_due: 0,
+          cancelled_at: cancelDate,
+          cancelled_by: cancelledBy,
+          cancellation_reason: cancellationReason,
+          notes: `[CANCELLED ${cancelDate.toISOString().slice(0, 10)} by ${cancelledBy}] ${cancellationReason}`,
+        },
       });
 
       // 4. Audit log — stamp WHO cancelled it (user) and WHOSE admission (patient),

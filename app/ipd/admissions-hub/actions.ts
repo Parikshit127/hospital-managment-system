@@ -41,7 +41,9 @@ export async function getAdmissionsHubData(filters?: {
             ward: true,
             bed: true,
         },
-        orderBy: { admission_date: 'desc' },
+        orderBy: filters?.status === 'Cancelled'
+            ? { cancellation_date: 'desc' }
+            : { admission_date: 'desc' },
         take: 100 // High density page, can implement pagination later
     });
 

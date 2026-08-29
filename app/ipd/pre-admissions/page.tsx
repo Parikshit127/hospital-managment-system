@@ -5,7 +5,7 @@ import { DateField } from '@/app/components/ui/DateField';
 import { AppShell } from '@/app/components/layout/AppShell';
 import { CalendarClock, Plus, X } from 'lucide-react';
 import { useToast } from '@/app/components/ui/Toast';
-import { getAdmissionBookings, createAdmissionBooking } from '@/app/actions/ipd-enhancement-actions';
+import { getAdmissionBookings, createAdmissionBooking, updateAdmissionBookingStatus } from '@/app/actions/ipd-enhancement-actions';
 import { getDepartments, getDoctorsForDropdown } from '@/app/actions/admin-actions';
 
 const STATUS_COLORS: Record<string, string> = {
@@ -172,7 +172,7 @@ export default function PreAdmissionsPage() {
                   <td className="px-5 py-3">
                     <span className={`px-2 py-0.5 rounded text-xs font-bold ${STATUS_COLORS[b.status] || 'bg-gray-100 text-gray-600'}`}>{b.status || 'Booked'}</span>
                   </td>
-                  <td className="px-5 py-3">
+                  <td className="px-5 py-3 flex items-center gap-3">
                     <a
                       href={`/api/ipd/facesheet/${b.patient_id}`}
                       target="_blank"
@@ -181,6 +181,25 @@ export default function PreAdmissionsPage() {
                     >
                       Facesheet
                     </a>
+                    {b.status !== 'Cancelled' && b.status !== 'Admitted' && (
+                      <button
+                        onClick={async () => {
+                          const reason = window.prompt("Enter cancellation reason:", "Patient requested cancellation");
+                          if (reason !== null) {
+                            const res = await updateAdmissionBookingStatus(b.id, 'Cancelled', reason);
+                            if (res.success) {
+                              toast.success('Booking cancelled');
+                              loadData();
+                            } else {
+                              toast.error(res.error || 'Failed to cancel booking');
+                            }
+                          }
+                        }}
+                        className="text-rose-600 hover:underline text-xs font-bold"
+                      >
+                        Cancel
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}

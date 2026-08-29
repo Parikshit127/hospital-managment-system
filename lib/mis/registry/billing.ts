@@ -797,7 +797,7 @@ export const billingRefundReport: ReportDefinition = {
         COALESCE(opd.full_name, 'Unknown') as "patient_name",
         r.invoice_id as "original_invoice_number",
         r.amount as "refund_amount",
-        COALESCE(p.payment_method, 'Refund') as "refund_mode",
+        COALESCE(r.payment_method, p.payment_method, 'Cash') as "refund_mode",
         r.reason as "reason",
         COALESCE(r.processed_by, 'System') as "processed_by"
       FROM refunds r
@@ -844,6 +844,7 @@ export const billingOpRefundReport: ReportDefinition = {
     { key: 'patient_name', label: 'Patient Name', type: 'string' },
     { key: 'op_invoice_number', label: 'OP Invoice No', type: 'string' },
     { key: 'refund_amount', label: 'Refund Amount', type: 'currency', total: 'sum' },
+    { key: 'refund_mode', label: 'Refund Mode', type: 'string' },
     { key: 'processed_by', label: 'Processed By', type: 'string' },
   ],
   defaultSort: { column: 'date', direction: 'desc' },
@@ -861,10 +862,12 @@ export const billingOpRefundReport: ReportDefinition = {
         COALESCE(opd.full_name, 'Unknown') as "patient_name",
         COALESCE(i.final_bill_number, i.invoice_number) as "op_invoice_number",
         r.amount as "refund_amount",
+        COALESCE(r.payment_method, p.payment_method, 'Cash') as "refund_mode",
         COALESCE(r.processed_by, 'System') as "processed_by"
       FROM refunds r
       JOIN invoices i ON r.invoice_id = i.id::text AND i."organizationId" = ${orgId}
       LEFT JOIN "OPD_REG" opd ON i.patient_id = opd.patient_id
+      LEFT JOIN payments p ON p.id::text = r.payment_id
       LEFT JOIN "users" u ON i.doctor_id = u.id
       WHERE r."organizationId" = ${orgId}
         AND r.status = 'Processed'
@@ -1617,19 +1620,54 @@ export const billingCancelBillReport: ReportDefinition = {
     const { date_start, date_end } = filters;
     const rows = await prisma.$queryRaw<any[]>`
       SELECT 
-        DATE(i.updated_at) as "cancel_date",
+        DATE(COALESCE(i.cancelled_at, adm.cancellation_date, sal.created_at, i.updated_at)) as "cancel_date",
         COALESCE(i.final_bill_number, i.invoice_number) as "invoice_number",
         COALESCE(opd.full_name, 'Unknown') as "patient_name",
         i.total_amount as "original_amount",
-        COALESCE(i.notes, 'Cancelled') as "cancellation_reason",
-        'System' as "cancelled_by"
+        COALESCE(
+          NULLIF(i.cancellation_reason, ''),
+          NULLIF(adm.cancellation_reason, ''),
+          NULLIF(sal.reason_text, ''),
+          CASE 
+            WHEN i.notes ~* '\\[CANCELLED.*?by\\s+[^\\s\\]]+\\]\\s*(.*)' THEN TRIM(SUBSTRING(i.notes FROM '\\[CANCELLED.*?by\\s+[^\\s\\]]+\\]\\s*(.*)'))
+            ELSE NULLIF(i.notes, '')
+          END,
+          'Cancelled'
+        ) as "cancellation_reason",
+        COALESCE(
+          NULLIF(i.cancelled_by, ''),
+          NULLIF(adm.cancelled_by, ''),
+          NULLIF(sal.username, ''),
+          NULLIF(sal.actor_text, ''),
+          CASE 
+            WHEN i.notes ~* '\\[CANCELLED.*?by\\s+([^\\s\\]]+)\\]' THEN TRIM(SUBSTRING(i.notes FROM '\\[CANCELLED.*?by\\s+([^\\s\\]]+)\\]'))
+            ELSE NULL
+          END,
+          'Admin'
+        ) as "cancelled_by"
       FROM invoices i
       LEFT JOIN "OPD_REG" opd ON i.patient_id = opd.patient_id
+      LEFT JOIN admissions adm ON i.admission_id = adm.admission_id
+      LEFT JOIN LATERAL (
+        SELECT 
+          username, 
+          details::json->>'reason' as reason_text,
+          details::json->>'cancelled_by' as actor_text,
+          created_at
+        FROM system_audit_logs
+        WHERE (
+          (entity_type = 'invoice' AND (entity_id = i.invoice_number OR entity_id = i.id::text OR entity_id = ('draft#' || i.id::text)))
+          OR (entity_type = 'admission' AND entity_id = i.admission_id)
+        )
+        AND action ILIKE '%CANCEL%'
+        ORDER BY created_at DESC
+        LIMIT 1
+      ) sal ON true
       WHERE i."organizationId" = ${orgId}
         AND i.status ILIKE 'cancelled'
-        AND i.updated_at >= ${toStartOfDay(date_start)}
-        AND i.updated_at <= ${toEndOfDay(date_end)}
-      ORDER BY DATE(i.updated_at) DESC
+        AND COALESCE(i.cancelled_at, adm.cancellation_date, sal.created_at, i.updated_at) >= ${toStartOfDay(date_start)}
+        AND COALESCE(i.cancelled_at, adm.cancellation_date, sal.created_at, i.updated_at) <= ${toEndOfDay(date_end)}
+      ORDER BY COALESCE(i.cancelled_at, adm.cancellation_date, sal.created_at, i.updated_at) DESC
     `;
     const totals = rows.reduce((acc, row) => {
       acc.original_amount += Number(row.original_amount || 0);

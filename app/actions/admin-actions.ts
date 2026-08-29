@@ -5,6 +5,12 @@ import { prisma } from "@/backend/db";
 import { addUserSchema, updateUserSchema } from "@/app/lib/validations";
 import * as bcrypt from "bcryptjs";
 
+function serialize<T>(data: T): T {
+  return JSON.parse(JSON.stringify(data, (key, value) =>
+    typeof value === 'bigint' ? value.toString() : value
+  ));
+}
+
 // Helper to get date range from timeRange string
 function getDateRange(timeRange?: string): { gte: Date; lte: Date } {
   const now = new Date();
@@ -1251,7 +1257,7 @@ export async function getAdminPatientFullDetails(patientId: string) {
 
     return {
       success: true,
-      data: {
+      data: serialize({
         patient,
         appointments,
         admissions: admissionsWithCancellationReasons,
@@ -1278,7 +1284,7 @@ export async function getAdminPatientFullDetails(patientId: string) {
           activeAdmission: !!activeAdmission,
         },
         currentUserRole: session.role,
-      },
+      }),
     };
   } catch (error: any) {
     console.error("getAdminPatientFullDetails error:", error);

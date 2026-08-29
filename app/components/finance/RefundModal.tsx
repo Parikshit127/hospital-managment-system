@@ -5,6 +5,7 @@ import {
     ArrowLeft,
     CheckCircle2,
     Loader2,
+    Printer,
     Receipt,
     Search,
     Undo2,
@@ -89,7 +90,17 @@ export function RefundModal({
     const [method, setMethod] = useState("Cash");
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [success, setSuccess] = useState<{ receipt_number: string } | null>(null);
+    const [success, setSuccess] = useState<{
+        refund_id?: number;
+        receipt_number: string;
+        amount?: number;
+        payment_method?: string;
+        reason?: string;
+        patient_name?: string;
+        patient_id?: string;
+        invoice_id?: number;
+        date?: string;
+    } | null>(null);
 
     // Reset whenever opened
     useEffect(() => {
@@ -190,7 +201,17 @@ export function RefundModal({
             setError(res.error || "Refund failed.");
             return;
         }
-        setSuccess({ receipt_number: res.data?.receipt_number || selectedPayment.pay.receipt_number });
+        setSuccess({
+            refund_id: res.data?.refund?.id,
+            receipt_number: res.data?.receipt_number || selectedPayment.pay.receipt_number,
+            amount: amt,
+            payment_method: method,
+            reason: reason.trim(),
+            patient_name: patient?.full_name,
+            patient_id: patient?.patient_id,
+            invoice_id: selectedPayment.inv.id,
+            date: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
+        });
         if (onRefunded) onRefunded();
     }
 
@@ -219,18 +240,68 @@ export function RefundModal({
                 <div className="p-5 overflow-y-auto flex-1">
                     {/* SUCCESS */}
                     {success ? (
-                        <div className="flex flex-col items-center justify-center py-10 text-center">
-                            <CheckCircle2 className="h-12 w-12 text-emerald-500 mb-3" />
-                            <p className="text-base font-bold text-gray-900">Refund processed</p>
-                            <p className="text-sm text-gray-500 mt-1">
-                                Receipt <span className="font-mono">{success.receipt_number}</span> marked refunded and balance updated.
-                            </p>
-                            <button
-                                onClick={onClose}
-                                className="mt-6 px-5 py-2.5 bg-gray-900 text-white text-sm font-bold rounded-xl hover:bg-black"
-                            >
-                                Done
-                            </button>
+                        <div className="space-y-6">
+                            <div className="flex flex-col items-center justify-center py-6 text-center">
+                                <CheckCircle2 className="h-12 w-12 text-emerald-500 mb-3" />
+                                <p className="text-lg font-bold text-gray-900">Refund Processed Successfully</p>
+                                <p className="text-sm text-gray-500 mt-1">
+                                    Receipt <span className="font-mono font-bold text-gray-800">{success.receipt_number}</span> marked refunded and balance updated.
+                                </p>
+                            </div>
+
+                            {/* Refund Receipt Card / Voucher */}
+                            <div className="border border-gray-200 rounded-2xl p-5 bg-gray-50/70 space-y-3 text-sm">
+                                <div className="flex items-center justify-between border-b border-gray-200 pb-2">
+                                    <span className="font-bold text-gray-800">Refund Voucher Details</span>
+                                    <span className="text-xs text-gray-500">{success.date}</span>
+                                </div>
+                                <div className="grid grid-cols-2 gap-3 text-xs">
+                                    <div>
+                                        <span className="text-gray-400 font-medium block">Patient Name</span>
+                                        <span className="font-bold text-gray-800 text-sm">{success.patient_name || patient?.full_name || '—'}</span>
+                                    </div>
+                                    <div>
+                                        <span className="text-gray-400 font-medium block">UHID</span>
+                                        <span className="font-mono font-bold text-gray-800">{success.patient_id || patient?.patient_id || '—'}</span>
+                                    </div>
+                                    <div>
+                                        <span className="text-gray-400 font-medium block">Refund Amount</span>
+                                        <span className="font-bold text-emerald-700 text-base">₹{fmt(success.amount || 0)}</span>
+                                    </div>
+                                    <div>
+                                        <span className="text-gray-400 font-medium block">Refund Mode</span>
+                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full font-bold text-xs bg-emerald-100 text-emerald-800">
+                                            {success.payment_method || 'Cash'}
+                                        </span>
+                                    </div>
+                                    <div className="col-span-2">
+                                        <span className="text-gray-400 font-medium block">Reason</span>
+                                        <span className="text-gray-700">{success.reason || '—'}</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="flex justify-end gap-3 pt-2">
+                                <button
+                                    onClick={() => {
+                                        if (success.refund_id) {
+                                            window.open(`/api/refund/${success.refund_id}/print`, '_blank');
+                                        } else {
+                                            window.print();
+                                        }
+                                    }}
+                                    className="px-4 py-2.5 bg-white border border-gray-300 text-gray-700 text-sm font-bold rounded-xl hover:bg-gray-50 flex items-center gap-2 transition"
+                                >
+                                    <Printer className="h-4 w-4" />
+                                    Print Receipt
+                                </button>
+                                <button
+                                    onClick={onClose}
+                                    className="px-5 py-2.5 bg-gray-900 text-white text-sm font-bold rounded-xl hover:bg-black transition"
+                                >
+                                    Done
+                                </button>
+                            </div>
                         </div>
                     ) : step === "patient" ? (
                         <div className="space-y-3">

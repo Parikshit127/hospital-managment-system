@@ -515,19 +515,46 @@ export const ipCancelReport: ReportDefinition = {
   queryFn: async (filters: ValidatedFilters, orgId: string) => {
     const { date_start, date_end } = filters;
     const rows = await prisma.$queryRaw<any[]>`
-      SELECT 
-        DATE(ab.created_at) as "cancel_date",
-        ab.booking_number as "ip_number",
-        p.full_name as "patient_name",
-        COALESCE(ab.notes, 'N/A') as "cancellation_reason",
-        COALESCE(ab.doctor_name, 'System') as "cancelled_by"
-      FROM "AdmissionBooking" ab
-      LEFT JOIN "OPD_REG" p ON ab.patient_id = p.patient_id
-      WHERE ab."organizationId" = ${orgId}
-        AND ab.status = 'Cancelled'
-        AND ab.created_at >= ${toStartOfDay(date_start)}
-        AND ab.created_at <= ${toEndOfDay(date_end)}
-      ORDER BY ab.created_at DESC
+      SELECT * FROM (
+        SELECT 
+          DATE(COALESCE(a.cancellation_date, a.discharge_date, a.admission_date)) as "cancel_date",
+          a.admission_id as "ip_number",
+          COALESCE(p.full_name, 'Unknown') as "patient_name",
+          COALESCE(NULLIF(a.cancellation_reason, ''), 'Cancelled') as "cancellation_reason",
+          COALESCE(NULLIF(a.cancelled_by, ''), 'Admin') as "cancelled_by",
+          COALESCE(a.cancellation_date, a.discharge_date, a.admission_date) as "sort_date"
+        FROM admissions a
+        LEFT JOIN "OPD_REG" p ON a.patient_id = p.patient_id
+        WHERE a."organizationId" = ${orgId}
+          AND a.status = 'Cancelled'
+          AND COALESCE(a.cancellation_date, a.discharge_date, a.admission_date) >= ${toStartOfDay(date_start)}
+          AND COALESCE(a.cancellation_date, a.discharge_date, a.admission_date) <= ${toEndOfDay(date_end)}
+
+        UNION ALL
+
+        SELECT 
+          DATE(COALESCE(ab.cancelled_at, ab.updated_at, ab.created_at)) as "cancel_date",
+          ab.booking_number as "ip_number",
+          COALESCE(
+            p.full_name,
+            NULLIF(ab.patient_id, ''),
+            CASE 
+              WHEN ab.notes ~* 'Patient:\\s*([^|\\n]+)' THEN TRIM(SUBSTRING(ab.notes FROM 'Patient:\\s*([^|\\n]+)'))
+              ELSE NULL
+            END,
+            'Unknown'
+          ) as "patient_name",
+          COALESCE(NULLIF(ab.cancellation_reason, ''), 'Cancelled') as "cancellation_reason",
+          COALESCE(NULLIF(ab.cancelled_by, ''), 'Admin') as "cancelled_by",
+          COALESCE(ab.cancelled_at, ab.updated_at, ab.created_at) as "sort_date"
+        FROM "AdmissionBooking" ab
+        LEFT JOIN "OPD_REG" p ON ab.patient_id = p.patient_id
+        WHERE ab."organizationId" = ${orgId}
+          AND ab.status = 'Cancelled'
+          AND COALESCE(ab.cancelled_at, ab.updated_at, ab.created_at) >= ${toStartOfDay(date_start)}
+          AND COALESCE(ab.cancelled_at, ab.updated_at, ab.created_at) <= ${toEndOfDay(date_end)}
+      ) combined
+      ORDER BY sort_date DESC
     `;
 
     return { rows, totals: {} };

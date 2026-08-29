@@ -31,7 +31,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ admi
         });
         if (!admission) return NextResponse.json({ error: 'Admission not found' }, { status: 404 });
 
-        const invoice = await prisma.invoices.findFirst({
+        let invoice = await prisma.invoices.findFirst({
             where: { admission_id: admissionId, status: { not: 'Cancelled' } },
             include: {
                 items: true,
@@ -40,7 +40,49 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ admi
             },
             orderBy: { created_at: 'desc' },
         });
-        if (!invoice) return NextResponse.json({ error: 'No invoice found' }, { status: 404 });
+
+        if (!invoice) {
+            invoice = await prisma.invoices.findFirst({
+                where: { admission_id: admissionId },
+                include: {
+                    items: true,
+                    payments: { where: { status: { not: 'Reversed' } } },
+                    credit_notes: { where: { status: { in: ['Approved', 'Applied'] } }, orderBy: { created_at: 'desc' } },
+                },
+                orderBy: { created_at: 'desc' },
+            });
+        }
+
+        if (!invoice) {
+            const html = `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>No Bill Generated</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f8fafc; color: #1e293b; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 20px; }
+  .card { background: white; border-radius: 12px; padding: 32px; max-width: 480px; width: 100%; box-shadow: 0 4px 20px rgba(0,0,0,0.06); text-align: center; border: 1px solid #e2e8f0; }
+  .badge { display: inline-block; padding: 4px 12px; border-radius: 9999px; font-weight: 700; font-size: 12px; text-transform: uppercase; background: #fee2e2; color: #991b1b; margin-bottom: 16px; }
+  h2 { font-size: 20px; font-weight: 700; margin-bottom: 8px; color: #0f172a; }
+  p { font-size: 14px; color: #64748b; margin-bottom: 20px; line-height: 1.5; }
+  .info { background: #f1f5f9; padding: 12px 16px; border-radius: 8px; font-size: 13px; text-align: left; margin-bottom: 24px; }
+  .btn { display: inline-flex; align-items: center; gap: 8px; padding: 8px 20px; background: #2563eb; color: white; border-radius: 6px; text-decoration: none; font-size: 14px; font-weight: 600; cursor: pointer; border: none; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <span class="badge">${admission.status}</span>
+    <h2>No Bill Generated</h2>
+    <p>This admission was marked as <strong>${admission.status}</strong> before an invoice or bill was raised.</p>
+    <div class="info">
+      <div><strong>Admission ID:</strong> ${admission.admission_id}</div>
+      <div style="margin-top:4px;"><strong>Patient:</strong> ${admission.patient?.full_name || 'N/A'} (${admission.patient_id})</div>
+      ${admission.cancellation_reason ? `<div style="margin-top:4px;"><strong>Cancellation Reason:</strong> ${admission.cancellation_reason}</div>` : ''}
+    </div>
+    <button class="btn" onclick="window.close()">Close Window</button>
+  </div>
+</body>
+</html>`;
+            return new NextResponse(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+        }
         // Note: this is a category-LEVEL summary (totals per category, no item names), so
         // there are no individual medicine names to hide — the medicine-name toggle lives
         // on the detailed bills, not here.

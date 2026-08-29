@@ -602,7 +602,7 @@ function DrillDownWrapper({
 
                 {/* Scrollable table container */}
                 <div className="overflow-x-auto" role="region" aria-label={`${reportName} data table`}>
-                    <table className="w-full text-sm border-collapse" style={{ minWidth: `${Math.max(columns.length * 140, 700)}px` }}>
+                    <table className="w-full text-sm border-collapse" style={{ minWidth: columns.length > 8 ? `${columns.length * 120}px` : '100%' }}>
 
                         {/* ── thead ──────────────────────────────────────────── */}
                         <thead>
@@ -615,8 +615,8 @@ function DrillDownWrapper({
                                             key={col.key}
                                             scope="col"
                                             className={`
-                                                px-5 py-3
-                                                text-[10px] font-bold uppercase tracking-widest
+                                                px-3.5 py-3
+                                                text-[10px] font-bold uppercase tracking-wider
                                                 text-gray-500 whitespace-nowrap select-none
                                                 ${ALIGN_CLASS[align]}
                                             `}
@@ -697,7 +697,7 @@ function DrillDownWrapper({
                                             return (
                                                 <td
                                                     key={col.key}
-                                                    className={`px-5 py-3.5 whitespace-nowrap ${ALIGN_CLASS[align]}`}
+                                                    className={`px-3.5 py-3 whitespace-nowrap ${ALIGN_CLASS[align]}`}
                                                 >
                                                     <DataCell
                                                         value={value}

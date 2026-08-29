@@ -60,9 +60,9 @@ export default function DaycarePage() {
     }
   };
 
-  const handleStatusChange = async (id: string, status: 'In Progress' | 'Completed' | 'Cancelled') => {
+  const handleStatusChange = async (id: string, status: 'In Progress' | 'Completed' | 'Cancelled', reason?: string) => {
     setUpdatingId(id);
-    const res = await updateAdmissionBookingStatus(id, status);
+    const res = await updateAdmissionBookingStatus(id, status, reason);
     if (res.success) {
       toast.success(status === 'In Progress' ? 'Procedure started' : status === 'Completed' ? 'Procedure completed' : 'Booking cancelled');
       if (status === 'In Progress') setActiveTab('In Progress');
@@ -241,7 +241,7 @@ export default function DaycarePage() {
                       </span>
                     </td>
                     <td className="px-5 py-3 flex items-center gap-2">
-                      {b.status !== 'In Progress' && b.status !== 'Completed' && (
+                      {b.status !== 'In Progress' && b.status !== 'Completed' && b.status !== 'Cancelled' && (
                         <button
                           title="Start Procedure"
                           disabled={updatingId === b.id}
@@ -259,6 +259,21 @@ export default function DaycarePage() {
                           className="inline-flex items-center gap-1 text-emerald-600 hover:text-emerald-800 text-xs font-bold disabled:opacity-50"
                         >
                           {updatingId === b.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle className="h-3.5 w-3.5" />} Complete
+                        </button>
+                      )}
+                      {b.status !== 'Completed' && b.status !== 'Cancelled' && (
+                        <button
+                          title="Cancel Booking"
+                          disabled={updatingId === b.id}
+                          onClick={() => {
+                            const reason = window.prompt("Enter cancellation reason:", "Patient requested cancellation");
+                            if (reason !== null) {
+                              handleStatusChange(b.id, 'Cancelled', reason);
+                            }
+                          }}
+                          className="inline-flex items-center gap-1 text-rose-600 hover:text-rose-800 text-xs font-bold disabled:opacity-50"
+                        >
+                          <X className="h-3.5 w-3.5" /> Cancel
                         </button>
                       )}
                       {b.status === 'Completed' && (

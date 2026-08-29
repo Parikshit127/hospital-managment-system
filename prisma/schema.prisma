@@ -2665,6 +2665,7 @@ model PatientDeposit {
   applied_to_invoice Int?
   applied_amount     Decimal      @default(0)
   refunded_amount    Decimal      @default(0)
+  refund_payment_method String?
   collected_by       String?
   notes              String?
   // Why a deposit was cancelled, and who did it. Reception asked for this so a
@@ -4454,7 +4455,11 @@ model AdmissionBooking {
   status         String       @default("Booked")
   admission_type String       @default("REGULAR")
   notes          String?
+  cancelled_at   DateTime?
+  cancelled_by   String?
+  cancellation_reason String?
   created_at     DateTime     @default(now())
+  updated_at     DateTime     @updatedAt @default(now())
   organization   Organization @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId])

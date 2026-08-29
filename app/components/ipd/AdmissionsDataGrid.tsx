@@ -172,7 +172,7 @@ export function AdmissionsDataGrid({ initialData, wards, userRole = '' }: { init
     // In a real app we'd fetch this from the server as we type,
     // but for high density fast-switching we'll filter client side for now.
     const filteredAdmissions = useMemo(() => {
-        return initialData.filter(adm => {
+        const list = initialData.filter(adm => {
             // Status match
             if (statusFilter !== 'All' && adm.status !== statusFilter) return false;
             
@@ -210,6 +210,16 @@ export function AdmissionsDataGrid({ initialData, wards, userRole = '' }: { init
             
             return true;
         });
+
+        if (statusFilter === 'Cancelled') {
+            return [...list].sort((a: any, b: any) => {
+                const dateA = a.cancellation_date ? new Date(a.cancellation_date).getTime() : (a.admission_date ? new Date(a.admission_date).getTime() : 0);
+                const dateB = b.cancellation_date ? new Date(b.cancellation_date).getTime() : (b.admission_date ? new Date(b.admission_date).getTime() : 0);
+                return dateB - dateA;
+            });
+        }
+
+        return list;
     }, [initialData, search, statusFilter, wardFilter, doctorFilter, categoryFilter, billingFilter, fromDate, toDate]);
 
     // Active-filter chips (excludes status, which lives in its own toggle)

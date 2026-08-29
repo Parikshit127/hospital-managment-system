@@ -443,7 +443,7 @@ export async function updatePatientField(patientId: string, field: string, value
         const { db } = await requireTenantContext();
 
         const allowedFields = [
-            'full_name', 'phone', 'email', 'address', 'age', 'gender',
+            'full_name', 'phone', 'email', 'address', 'city', 'state', 'pincode', 'country', 'age', 'gender',
             'department', 'blood_group', 'date_of_birth',
             'emergency_contact_name', 'emergency_contact_phone', 'emergency_contact_relation',
             // Identity documents
@@ -507,7 +507,7 @@ export async function updatePatient(patientId: string, payload: Record<string, s
         }
 
         const allowedFields = [
-            'full_name', 'phone', 'email', 'address', 'age', 'gender',
+            'full_name', 'phone', 'email', 'address', 'city', 'state', 'pincode', 'country', 'age', 'gender',
             'department', 'blood_group', 'date_of_birth',
             'emergency_contact_name', 'emergency_contact_phone', 'emergency_contact_relation',
             'aadhar_card', 'abha_number', 'pan_number',
