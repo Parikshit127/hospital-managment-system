@@ -81,3 +81,10 @@ DEPLOYMENT_2026-07-25_nursing_hardening.pdf
 .agents/rules/standing-instructions.md
 design-craft/
 next-build.zip
+
+# test data and observations
+seed-blackbox-test-data.ts
+scripts/seed-blackbox-test-data.ts
+TEST-OBERSERVATIONS.md
+TEST-OBSERVATIONS.md
+docs/testing/
