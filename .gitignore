@@ -85,6 +85,10 @@ next-build.zip
 # test data and observations
 seed-blackbox-test-data.ts
 scripts/seed-blackbox-test-data.ts
+scripts/generate-testing-report-pdf.js
 TEST-OBERSERVATIONS.md
 TEST-OBSERVATIONS.md
-docs/testing/
+docs/testing/
+HospitalOS_BlackBox_Testing_Report.pdf
+*.pdf
+
