@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { getInvestorDashboardData, type InvestorDashboardData, type UnitMetrics } from '@/app/actions/investor-actions';
+import { getInvestorDashboardData, getInvestorDrilldown, type InvestorDashboardData, type UnitMetrics, type DrilldownSection, type DrilldownResult } from '@/app/actions/investor-actions';
 import {
     Activity,
     Users,
@@ -18,13 +18,16 @@ import {
     Award,
     ChevronDown,
     ChevronRight,
-    Check
+    Check,
+    X,
+    Loader2,
+    ExternalLink
 } from 'lucide-react';
 
 const UNIT_OPTIONS = [
-    { code: 'axten', name: 'Axten Hospital (20 Beds)', shortName: 'Axten' },
-    { code: 'avise', name: 'Avise Hospital (50 Beds)', shortName: 'Avise' },
-    { code: 'axtenHq', name: 'Axten HQ (0 Beds)', shortName: 'Axten HQ' },
+    { code: 'axten', name: 'Axten Hospital', shortName: 'Axten' },
+    { code: 'avise', name: 'Avise Hospital', shortName: 'Avise' },
+    { code: 'axtenHq', name: 'Axten HQ', shortName: 'Axten HQ' },
 ] as const;
 
 // Format numbers: default is currency=false (no ₹ symbol) so counts render as pure numbers!
@@ -45,6 +48,33 @@ export default function PromoterDashboardPage() {
     const [fromDate, setFromDate] = useState('2026-04-01');
     const [toDate, setToDate] = useState('2026-07-31');
     const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
+
+    // Drill-down: click any hospital's cell in a real (non-derived) row to see
+    // the actual records behind that number.
+    const [drillTarget, setDrillTarget] = useState<{ section: DrilldownSection; category: string; label: string; unit: 'axten' | 'avise' | 'axtenHq'; unitLabel: string } | null>(null);
+    const [drillLoading, setDrillLoading] = useState(false);
+    const [drillError, setDrillError] = useState<string | null>(null);
+    const [drillResult, setDrillResult] = useState<DrilldownResult | null>(null);
+
+    const openDrilldown = async (section: DrilldownSection, category: string, label: string, unit: 'axten' | 'avise' | 'axtenHq', unitLabel: string) => {
+        setDrillTarget({ section, category, label, unit, unitLabel });
+        setDrillResult(null);
+        setDrillError(null);
+        setDrillLoading(true);
+        try {
+            const res = await getInvestorDrilldown({ section, category, unit, fromDate, toDate });
+            if (res.success && res.data) {
+                setDrillResult(res.data);
+            } else {
+                setDrillError(res.error || 'Failed to load records');
+            }
+        } catch (err: any) {
+            setDrillError(err.message || 'Unexpected error loading records');
+        } finally {
+            setDrillLoading(false);
+        }
+    };
+    const closeDrilldown = () => { setDrillTarget(null); setDrillResult(null); setDrillError(null); };
 
     const isAllUnitsSelected = selectedUnits.length === UNIT_OPTIONS.length;
     const selectedUnitsLabel = isAllUnitsSelected
@@ -207,7 +237,7 @@ export default function PromoterDashboardPage() {
         key: string,
         title: string,
         subtitle: string,
-        rows: Array<{ label: string; data: UnitMetrics; isCurrency?: boolean; isPercentage?: boolean; isTotalRow?: boolean }>
+        rows: Array<{ label: string; data: UnitMetrics; isCurrency?: boolean; isPercentage?: boolean; isTotalRow?: boolean; drillSection?: DrilldownSection; drillCategory?: string }>
     ) => {
         const isExpanded = expandedSections.has(key);
         const totalRow = rows.find((r) => r.isTotalRow) || rows[rows.length - 1];
@@ -280,15 +310,24 @@ export default function PromoterDashboardPage() {
                                         {isTotal && <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 print:hidden" />}
                                         <span>{row.label}</span>
                                     </td>
-                                    <td className={`py-3 px-4 text-right font-mono print:py-1.5 ${selectedUnits.includes('axten') ? (isTotal ? 'bg-[#061329]' : 'bg-emerald-50/70 font-black text-emerald-950') : ''}`}>
-                                        {row.isPercentage ? `${row.data.axten}%` : fmtINR(row.data.axten, row.isCurrency)}
-                                    </td>
-                                    <td className={`py-3 px-4 text-right font-mono print:py-1.5 ${selectedUnits.includes('avise') ? (isTotal ? 'bg-[#061329]' : 'bg-indigo-50/70 font-black text-indigo-950') : ''}`}>
-                                        {row.isPercentage ? `${row.data.avise}%` : fmtINR(row.data.avise, row.isCurrency)}
-                                    </td>
-                                    <td className={`py-3 px-4 text-right font-mono print:py-1.5 ${selectedUnits.includes('axtenHq') ? (isTotal ? 'bg-[#061329]' : 'bg-amber-50/70 font-black text-amber-950') : ''}`}>
-                                        {row.isPercentage ? `${row.data.axtenHq}%` : fmtINR(row.data.axtenHq, row.isCurrency)}
-                                    </td>
+                                    {(['axten', 'avise', 'axtenHq'] as const).map((unit) => {
+                                        const canDrill = !isTotal && !!row.drillSection && row.drillCategory !== 'panel';
+                                        const unitBg = unit === 'axten' ? 'bg-emerald-50/70 font-black text-emerald-950' : unit === 'avise' ? 'bg-indigo-50/70 font-black text-indigo-950' : 'bg-amber-50/70 font-black text-amber-950';
+                                        const cellValue = row.isPercentage ? `${row.data[unit]}%` : fmtINR(row.data[unit], row.isCurrency);
+                                        return (
+                                            <td
+                                                key={unit}
+                                                onClick={canDrill ? () => openDrilldown(row.drillSection!, row.drillCategory!, row.label, unit, UNIT_OPTIONS.find(u => u.code === unit)!.shortName) : undefined}
+                                                title={canDrill ? `View ${row.label} records for ${UNIT_OPTIONS.find(u => u.code === unit)!.shortName}` : undefined}
+                                                className={`py-3 px-4 text-right font-mono print:py-1.5 group ${selectedUnits.includes(unit) ? (isTotal ? 'bg-[#061329]' : unitBg) : ''} ${canDrill ? 'cursor-pointer hover:underline decoration-dotted underline-offset-2' : ''}`}
+                                            >
+                                                <span className="inline-flex items-center gap-1">
+                                                    {cellValue}
+                                                    {canDrill && <ExternalLink className="w-2.5 h-2.5 opacity-0 group-hover:opacity-60 transition-opacity print:hidden" />}
+                                                </span>
+                                            </td>
+                                        );
+                                    })}
                                     <td className={`py-3 px-6 text-right font-mono font-bold border-l print:py-1.5 print:px-4 ${
                                         isTotal
                                             ? 'border-slate-800 text-emerald-400 bg-[#061329]'
@@ -381,7 +420,7 @@ export default function PromoterDashboardPage() {
                                             <span className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${checked ? 'bg-emerald-600 border-emerald-600' : 'border-slate-300'}`}>
                                                 {checked && <Check className="w-3 h-3 text-white" />}
                                             </span>
-                                            <span>{unit.name}</span>
+                                            <span>{unit.name} ({data.units.find(u => u.code === unit.code)?.beds ?? '—'} Beds)</span>
                                         </button>
                                     );
                                 })}
@@ -504,7 +543,7 @@ export default function PromoterDashboardPage() {
                     </div>
                     <div className="text-2xl font-black text-[#0a1e42] font-mono print:text-lg">{arpob.noOfBeds.total} Beds</div>
                     <div className="text-[11px] text-slate-500 mt-2 font-semibold print:text-[9px]">
-                        Axten: 20 • Avise: 50
+                        Axten: {arpob.noOfBeds.axten} • Avise: {arpob.noOfBeds.avise} • HQ: {arpob.noOfBeds.axtenHq}
                     </div>
                 </div>
 
@@ -578,10 +617,10 @@ export default function PromoterDashboardPage() {
                     '1. Current Admitted Patients',
                     'Real-time inpatient count across units by patient category',
                     [
-                        { label: 'Cash', data: currentAdmittedPatients.cash, isCurrency: false },
-                        { label: 'Insurance', data: currentAdmittedPatients.insurance, isCurrency: false },
+                        { label: 'Cash', data: currentAdmittedPatients.cash, isCurrency: false, drillSection: 'admitted', drillCategory: 'cash' },
+                        { label: 'Insurance', data: currentAdmittedPatients.insurance, isCurrency: false, drillSection: 'admitted', drillCategory: 'insurance' },
                         { label: 'Panel', data: currentAdmittedPatients.panel, isCurrency: false },
-                        { label: 'Corporate', data: currentAdmittedPatients.corporate, isCurrency: false },
+                        { label: 'Corporate', data: currentAdmittedPatients.corporate, isCurrency: false, drillSection: 'admitted', drillCategory: 'corporate' },
                         { label: 'Total', data: currentAdmittedPatients.total, isCurrency: false, isTotalRow: true },
                     ]
                 )}
@@ -594,10 +633,10 @@ export default function PromoterDashboardPage() {
                     '2. Admission',
                     'New patient admissions logged within selected period',
                     [
-                        { label: 'Cash', data: admissions.cash, isCurrency: false },
-                        { label: 'Insurance', data: admissions.insurance, isCurrency: false },
+                        { label: 'Cash', data: admissions.cash, isCurrency: false, drillSection: 'admissions', drillCategory: 'cash' },
+                        { label: 'Insurance', data: admissions.insurance, isCurrency: false, drillSection: 'admissions', drillCategory: 'insurance' },
                         { label: 'Panel', data: admissions.panel, isCurrency: false },
-                        { label: 'Corporate', data: admissions.corporate, isCurrency: false },
+                        { label: 'Corporate', data: admissions.corporate, isCurrency: false, drillSection: 'admissions', drillCategory: 'corporate' },
                         { label: 'Total', data: admissions.total, isCurrency: false, isTotalRow: true },
                     ]
                 )}
@@ -610,10 +649,10 @@ export default function PromoterDashboardPage() {
                     '3. Discharge',
                     'Patient discharge volume breakdown',
                     [
-                        { label: 'Cash', data: discharges.cash, isCurrency: false },
-                        { label: 'Insurance', data: discharges.insurance, isCurrency: false },
+                        { label: 'Cash', data: discharges.cash, isCurrency: false, drillSection: 'discharges', drillCategory: 'cash' },
+                        { label: 'Insurance', data: discharges.insurance, isCurrency: false, drillSection: 'discharges', drillCategory: 'insurance' },
                         { label: 'Panel', data: discharges.panel, isCurrency: false },
-                        { label: 'Corporate', data: discharges.corporate, isCurrency: false },
+                        { label: 'Corporate', data: discharges.corporate, isCurrency: false, drillSection: 'discharges', drillCategory: 'corporate' },
                         { label: 'Total', data: discharges.total, isCurrency: false, isTotalRow: true },
                     ]
                 )}
@@ -626,10 +665,10 @@ export default function PromoterDashboardPage() {
                     '4. Revenue Realization',
                     'Gross revenue realization by patient financial class (₹)',
                     [
-                        { label: 'Cash', data: revenue.cash, isCurrency: true },
-                        { label: 'Insurance', data: revenue.insurance, isCurrency: true },
+                        { label: 'Cash', data: revenue.cash, isCurrency: true, drillSection: 'revenue', drillCategory: 'cash' },
+                        { label: 'Insurance', data: revenue.insurance, isCurrency: true, drillSection: 'revenue', drillCategory: 'insurance' },
                         { label: 'Panel', data: revenue.panel, isCurrency: true },
-                        { label: 'Corporate', data: revenue.corporate, isCurrency: true },
+                        { label: 'Corporate', data: revenue.corporate, isCurrency: true, drillSection: 'revenue', drillCategory: 'corporate' },
                         { label: 'Total Revenue', data: revenue.total, isCurrency: true, isTotalRow: true },
                     ]
                 )}
@@ -642,10 +681,10 @@ export default function PromoterDashboardPage() {
                     '5. OPD vs IPD Revenue Breakdown',
                     'Revenue contribution by Outpatient, Inpatient, Pharmacy, and Diagnostics (₹)',
                     [
-                        { label: 'OPD Consultations & Procedures', data: opdVsIpdRevenue.opd, isCurrency: true },
-                        { label: 'IPD Admissions & Surgeries', data: opdVsIpdRevenue.ipd, isCurrency: true },
-                        { label: 'Pharmacy Sales', data: opdVsIpdRevenue.pharmacy, isCurrency: true },
-                        { label: 'Diagnostics & Pathology', data: opdVsIpdRevenue.diagnostics, isCurrency: true },
+                        { label: 'OPD Consultations & Procedures', data: opdVsIpdRevenue.opd, isCurrency: true, drillSection: 'opdVsIpd', drillCategory: 'opd' },
+                        { label: 'IPD Admissions & Surgeries', data: opdVsIpdRevenue.ipd, isCurrency: true, drillSection: 'opdVsIpd', drillCategory: 'ipd' },
+                        { label: 'Pharmacy Sales', data: opdVsIpdRevenue.pharmacy, isCurrency: true, drillSection: 'opdVsIpd', drillCategory: 'pharmacy' },
+                        { label: 'Diagnostics & Pathology', data: opdVsIpdRevenue.diagnostics, isCurrency: true, drillSection: 'opdVsIpd', drillCategory: 'diagnostics' },
                         { label: 'Total Service Revenue', data: opdVsIpdRevenue.total, isCurrency: true, isTotalRow: true },
                     ]
                 )}
@@ -660,7 +699,9 @@ export default function PromoterDashboardPage() {
                     departmentRevenue.map(dept => ({
                         label: dept.name,
                         data: dept.metrics,
-                        isCurrency: true
+                        isCurrency: true,
+                        drillSection: 'department' as DrilldownSection,
+                        drillCategory: dept.name,
                     }))
                 )}
             </div>
@@ -672,10 +713,10 @@ export default function PromoterDashboardPage() {
                     '7. Expenses',
                     'Monthly operational expenditure breakdown (₹)',
                     [
-                        { label: 'April', data: expenses.april, isCurrency: true },
-                        { label: 'May', data: expenses.may, isCurrency: true },
-                        { label: 'June', data: expenses.june, isCurrency: true },
-                        { label: 'July', data: expenses.july, isCurrency: true },
+                        { label: 'April', data: expenses.april, isCurrency: true, drillSection: 'expenses', drillCategory: 'april' },
+                        { label: 'May', data: expenses.may, isCurrency: true, drillSection: 'expenses', drillCategory: 'may' },
+                        { label: 'June', data: expenses.june, isCurrency: true, drillSection: 'expenses', drillCategory: 'june' },
+                        { label: 'July', data: expenses.july, isCurrency: true, drillSection: 'expenses', drillCategory: 'july' },
                         { label: 'Total Expenses', data: expenses.total, isCurrency: true, isTotalRow: true },
                     ]
                 )}
@@ -688,11 +729,11 @@ export default function PromoterDashboardPage() {
                     '8A. Receivables — Yet to Receive',
                     'Outstanding claims, patient balances, and TDS receivables (₹)',
                     [
-                        { label: 'Cash', data: receivables.cash, isCurrency: true },
-                        { label: 'Insurance', data: receivables.insurance, isCurrency: true },
+                        { label: 'Cash', data: receivables.cash, isCurrency: true, drillSection: 'receivables', drillCategory: 'cash' },
+                        { label: 'Insurance', data: receivables.insurance, isCurrency: true, drillSection: 'receivables', drillCategory: 'insurance' },
                         { label: 'Panel', data: receivables.panel, isCurrency: true },
-                        { label: 'Corporate', data: receivables.corporate, isCurrency: true },
-                        { label: 'TDS - Receivables', data: receivables.tdsReceivables, isCurrency: true },
+                        { label: 'Corporate', data: receivables.corporate, isCurrency: true, drillSection: 'receivables', drillCategory: 'corporate' },
+                        { label: 'TDS - Receivables', data: receivables.tdsReceivables, isCurrency: true, drillSection: 'receivables', drillCategory: 'tdsReceivables' },
                         { label: 'Total Receivables', data: receivables.total, isCurrency: true, isTotalRow: true },
                     ]
                 )}
@@ -702,9 +743,9 @@ export default function PromoterDashboardPage() {
                     '8B. Insurance Receivables Aging Analysis',
                     'Outstanding TPA / Insurance claims categorized by days pending (₹)',
                     [
-                        { label: '0 to 30 Days (Current)', data: insuranceAging.days0to30, isCurrency: true },
-                        { label: '31 to 60 Days (Follow-up)', data: insuranceAging.days31to60, isCurrency: true },
-                        { label: '60+ Days (Overdue)', data: insuranceAging.days60Plus, isCurrency: true },
+                        { label: '0 to 30 Days (Current)', data: insuranceAging.days0to30, isCurrency: true, drillSection: 'insuranceAging', drillCategory: 'days0to30' },
+                        { label: '31 to 60 Days (Follow-up)', data: insuranceAging.days31to60, isCurrency: true, drillSection: 'insuranceAging', drillCategory: 'days31to60' },
+                        { label: '60+ Days (Overdue)', data: insuranceAging.days60Plus, isCurrency: true, drillSection: 'insuranceAging', drillCategory: 'days60Plus' },
                         { label: 'Total Outstanding Claims', data: insuranceAging.total, isCurrency: true, isTotalRow: true },
                     ]
                 )}
@@ -717,10 +758,10 @@ export default function PromoterDashboardPage() {
                     '9. Payables — Due for Payments',
                     'Pending vendor bills, doctor payouts, and tax obligations (₹)',
                     [
-                        { label: 'Vendors', data: payables.vendors, isCurrency: true },
-                        { label: 'Doctors - Professional', data: payables.doctorsProfessional, isCurrency: true },
-                        { label: 'TDS - Payable', data: payables.tdsPayable, isCurrency: true },
-                        { label: 'Others', data: payables.others, isCurrency: true },
+                        { label: 'Vendors', data: payables.vendors, isCurrency: true, drillSection: 'payables', drillCategory: 'vendors' },
+                        { label: 'Doctors - Professional', data: payables.doctorsProfessional, isCurrency: true, drillSection: 'payables', drillCategory: 'doctorsProfessional' },
+                        { label: 'TDS - Payable', data: payables.tdsPayable, isCurrency: true, drillSection: 'payables', drillCategory: 'tdsPayable' },
+                        { label: 'Others', data: payables.others, isCurrency: true, drillSection: 'payables', drillCategory: 'others' },
                         { label: 'Total Payables', data: payables.total, isCurrency: true, isTotalRow: true },
                     ]
                 )}
@@ -733,10 +774,10 @@ export default function PromoterDashboardPage() {
                     '10. Salaries',
                     'Monthly staff payroll and employee compensation (₹)',
                     [
-                        { label: 'April', data: salaries.april, isCurrency: true },
-                        { label: 'May', data: salaries.may, isCurrency: true },
-                        { label: 'June', data: salaries.june, isCurrency: true },
-                        { label: 'July', data: salaries.july, isCurrency: true },
+                        { label: 'April', data: salaries.april, isCurrency: true, drillSection: 'salaries', drillCategory: 'april' },
+                        { label: 'May', data: salaries.may, isCurrency: true, drillSection: 'salaries', drillCategory: 'may' },
+                        { label: 'June', data: salaries.june, isCurrency: true, drillSection: 'salaries', drillCategory: 'june' },
+                        { label: 'July', data: salaries.july, isCurrency: true, drillSection: 'salaries', drillCategory: 'july' },
                         { label: 'Total Salaries', data: salaries.total, isCurrency: true, isTotalRow: true },
                     ]
                 )}
@@ -776,6 +817,55 @@ export default function PromoterDashboardPage() {
             <div className="hidden print:block text-center text-[10px] text-slate-500 pt-4 border-t border-slate-300 mt-8">
                 AxtenOS Hospital Systems — Confidential Executive Financial & Operational Audit Report.
             </div>
+
+            {/* Drill-down modal — the actual records behind a clicked cell */}
+            {drillTarget && (
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/50 print:hidden" onClick={closeDrilldown}>
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 shrink-0">
+                            <div>
+                                <h3 className="text-sm font-black text-[#0a1e42]">{drillTarget.label} — {drillTarget.unitLabel}</h3>
+                                <p className="text-xs text-slate-500 mt-0.5">
+                                    {drillLoading ? 'Loading records…' : drillResult ? `${drillResult.totalCount} record${drillResult.totalCount !== 1 ? 's' : ''}${drillResult.truncated ? ` (showing first ${drillResult.rows.length})` : ''}` : ' '}
+                                </p>
+                            </div>
+                            <button onClick={closeDrilldown} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition-colors">
+                                <X className="w-4 h-4" />
+                            </button>
+                        </div>
+                        <div className="overflow-auto flex-1 p-0">
+                            {drillLoading ? (
+                                <div className="flex items-center justify-center py-20">
+                                    <Loader2 className="w-6 h-6 animate-spin text-emerald-600" />
+                                </div>
+                            ) : drillError ? (
+                                <div className="p-8 text-center text-sm text-rose-600 font-medium">{drillError}</div>
+                            ) : !drillResult || drillResult.rows.length === 0 ? (
+                                <div className="p-8 text-center text-sm text-slate-400 font-medium">No records found for this selection.</div>
+                            ) : (
+                                <table className="w-full text-left border-collapse text-xs">
+                                    <thead className="sticky top-0 bg-[#f1f5f9]">
+                                        <tr className="border-b border-[#e2e8f0] text-[10px] font-black text-[#0a1e42] uppercase tracking-wider">
+                                            {drillResult.columns.map((col) => (
+                                                <th key={col} className="py-2.5 px-4">{col}</th>
+                                            ))}
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                        {drillResult.rows.map((row, idx) => (
+                                            <tr key={idx} className="hover:bg-slate-50">
+                                                {row.map((cell, cellIdx) => (
+                                                    <td key={cellIdx} className="py-2 px-4 text-slate-700 font-medium whitespace-nowrap">{cell}</td>
+                                                ))}
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
