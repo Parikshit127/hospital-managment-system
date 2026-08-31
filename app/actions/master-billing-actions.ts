@@ -888,6 +888,11 @@ export async function getPatientFinancialProfile(patientId: string) {
     // carry no financial weight — exclude them from every money total so a cancelled
     // bill never inflates billed/outstanding/tax/discount figures.
     const activeInvoices = invoices.filter((i: any) => i.status !== "Cancelled");
+    // Same for deposits: a Cancelled deposit was voided before ever being applied
+    // (cancelDeposit only allows cancelling one with applied_amount 0), so its
+    // amount-applied-refunded math always nets to the full amount — same as an
+    // Active one — and it was silently counting as still "held" here.
+    const activeDeposits = deposits.filter((d: any) => d.status !== "Cancelled");
 
     const totals = {
       total_billed: activeInvoices.reduce((s: number, i: any) => s + decToNum(i.net_amount), 0),
@@ -901,12 +906,12 @@ export async function getPatientFinancialProfile(patientId: string) {
         (s: number, i: any) => s + decToNum(i.total_discount),
         0,
       ),
-      deposits_held: deposits.reduce(
+      deposits_held: activeDeposits.reduce(
         (s: number, d: any) =>
           s + (decToNum(d.amount) - decToNum(d.applied_amount) - decToNum(d.refunded_amount)),
         0,
       ),
-      deposits_collected: deposits.reduce((s: number, d: any) => s + decToNum(d.amount), 0),
+      deposits_collected: activeDeposits.reduce((s: number, d: any) => s + decToNum(d.amount), 0),
       insurance_approved: claims.reduce(
         (s: number, c: any) => s + decToNum(c.approved_amount),
         0,
@@ -1055,6 +1060,11 @@ export async function getPatientLedger(patientId: string) {
     }
 
     for (const d of deposits) {
+      // A Cancelled deposit was voided before ever being applied — same rule as
+      // Cancelled/Voided invoices just above — so it never had (and never gets)
+      // an "Applied"/"Refunded" reversal entry, and would otherwise sit here as
+      // a permanent, unexplained credit with no offsetting line.
+      if (d.status === "Cancelled") continue;
       events.push({
         date: new Date(d.created_at).toISOString(),
         event: "Deposit Collected",

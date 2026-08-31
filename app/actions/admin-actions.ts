@@ -1248,10 +1248,11 @@ export async function getAdminPatientFullDetails(patientId: string) {
       (sum: number, inv: any) => sum + Number(inv.balance_due || 0),
       0,
     );
-    const totalDeposits = patientDeposits.reduce(
-      (sum: number, d: any) => sum + Number(d.amount || 0),
-      0,
-    );
+    // A Cancelled deposit was voided before ever being applied — exclude it so
+    // it doesn't still count as money on the patient's account.
+    const totalDeposits = patientDeposits
+      .filter((d: any) => d.status !== "Cancelled")
+      .reduce((sum: number, d: any) => sum + Number(d.amount || 0), 0);
     const activeAdmission =
       admissions.find((a: any) => a.status === "Admitted") || null;
 
