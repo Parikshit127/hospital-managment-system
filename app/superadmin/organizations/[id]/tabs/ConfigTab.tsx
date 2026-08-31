@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { getOrganizationConfig, updateOrganizationConfig, updateOrganizationBranding } from '@/app/actions/superadmin-actions';
-import { Save, AlertCircle, CheckCircle, Loader2, Settings, Palette } from 'lucide-react';
+import { Save, AlertCircle, CheckCircle, Loader2, Settings, Palette, Activity } from 'lucide-react';
 
 interface ConfigTabProps {
     orgId: string;
@@ -11,6 +11,9 @@ interface ConfigTabProps {
 export default function ConfigTab({ orgId }: ConfigTabProps) {
     const [config, setConfig] = useState<any>(null);
     const [branding, setBranding] = useState<any>(null);
+    // Environment side of the activity generator's two-key lock. The stored toggle below
+    // is inert unless the deploy also sets SIM_ENABLED / SIM_ORG_ID.
+    const [generatorEnv, setGeneratorEnv] = useState<{ environmentPermitsThisOrg: boolean; environmentConfigured: boolean } | null>(null);
     const [loading, setLoading] = useState(true);
     const [savingConfig, setSavingConfig] = useState(false);
     const [savingBranding, setSavingBranding] = useState(false);
@@ -25,7 +28,9 @@ export default function ConfigTab({ orgId }: ConfigTabProps) {
                 uhid_prefix: 'AVN', timezone: 'Asia/Kolkata', currency: 'INR',
                 date_format: 'DD/MM/YYYY', session_timeout: 15,
                 enable_whatsapp: false, enable_razorpay: false, enable_ai_triage: true,
+                activity_generator_enabled: false, activity_generator_intensity: 'moderate',
             });
+            setGeneratorEnv(res.data?.activityGenerator || null);
             setBranding(res.data?.branding || {
                 primary_color: '#10b981', secondary_color: '#0f172a',
                 logo_url: '', portal_title: 'Hospital OS', portal_subtitle: 'Management System', footer_text: '',
@@ -152,6 +157,63 @@ export default function ConfigTab({ orgId }: ConfigTabProps) {
                                 <span className="text-sm text-gray-300">{feat.label}</span>
                             </label>
                         ))}
+                    </div>
+                </div>
+
+                {/* Background Activity Generator */}
+                <div className="mt-6 pt-4 border-t border-white/5">
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5 flex items-center gap-2">
+                        <Activity className="h-3.5 w-3.5 text-violet-400" /> Background Activity Generator
+                    </p>
+                    <p className="text-xs text-gray-500 mb-3 max-w-2xl">
+                        Continuously creates synthetic patients, OPD visits, lab orders and pharmacy
+                        indents in this organization so the portals stay populated and active. Intended
+                        for staging only.
+                    </p>
+
+                    {/* The stored toggle is one of two keys. Show the environment side explicitly,
+                        so "enabled" is never mistaken for "running". */}
+                    {generatorEnv?.environmentPermitsThisOrg ? (
+                        <div className="mb-3 p-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-lg flex items-start gap-2">
+                            <CheckCircle className="h-3.5 w-3.5 text-emerald-400 shrink-0 mt-0.5" />
+                            <p className="text-xs text-emerald-300">
+                                This deployment is configured to generate activity for this organization.
+                            </p>
+                        </div>
+                    ) : (
+                        <div className="mb-3 p-2.5 bg-amber-500/10 border border-amber-500/20 rounded-lg flex items-start gap-2">
+                            <AlertCircle className="h-3.5 w-3.5 text-amber-400 shrink-0 mt-0.5" />
+                            <p className="text-xs text-amber-300">
+                                {generatorEnv?.environmentConfigured
+                                    ? 'This deployment is configured for a different organization. The settings below will be saved but will have no effect here.'
+                                    : 'This deployment has no generator configuration (SIM_ENABLED / SIM_ORG_ID are unset). The settings below will be saved but will have no effect.'}
+                            </p>
+                        </div>
+                    )}
+
+                    <div className="flex flex-wrap items-end gap-6">
+                        <label className="flex items-center gap-2 cursor-pointer pb-2.5">
+                            <input
+                                type="checkbox"
+                                checked={!!config.activity_generator_enabled}
+                                onChange={e => setConfig({ ...config, activity_generator_enabled: e.target.checked })}
+                                className="rounded border-gray-600 text-violet-600 focus:ring-violet-500 bg-[#161b22]"
+                            />
+                            <span className="text-sm text-gray-300">Generate background activity</span>
+                        </label>
+                        <div className="min-w-[200px]">
+                            <label className={labelClass}>Volume</label>
+                            <select
+                                value={config.activity_generator_intensity || 'moderate'}
+                                onChange={e => setConfig({ ...config, activity_generator_intensity: e.target.value })}
+                                disabled={!config.activity_generator_enabled}
+                                className={`${fieldClass} disabled:opacity-40 disabled:cursor-not-allowed`}
+                            >
+                                <option value="low">Low — occasional arrivals</option>
+                                <option value="moderate">Moderate — typical day</option>
+                                <option value="high">High — busy period</option>
+                            </select>
+                        </div>
                     </div>
                 </div>
             </div>

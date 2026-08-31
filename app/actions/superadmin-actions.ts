@@ -9,6 +9,7 @@ import {
     getSuperAdminSession,
 } from '@/app/lib/session';
 import { superAdminLoginSchema, createOrganizationSchema, organizationProfileSchema, branchSchema } from '@/app/lib/validations';
+import { permittedOrganizationId } from '@/scripts/sim/guard';
 
 // ========================================
 // AUTH
@@ -737,16 +738,42 @@ export async function getOrganizationConfig(orgId: string) {
             prisma.organizationConfig.findUnique({ where: { organizationId: orgId } }),
             prisma.organizationBranding.findUnique({ where: { organizationId: orgId } }),
         ]);
-        return { success: true, data: { config, branding } };
+        // The activity generator needs BOTH the stored toggle and the environment lock.
+        // Report the environment side back so an operator can tell the difference between
+        // "switched off" and "switched on but the environment forbids it" — otherwise the
+        // toggle reads as active while doing nothing.
+        const permittedOrg = permittedOrganizationId();
+
+        return {
+            success: true,
+            data: {
+                config,
+                branding,
+                activityGenerator: {
+                    environmentPermitsThisOrg: permittedOrg !== null && permittedOrg === orgId,
+                    environmentConfigured: permittedOrg !== null,
+                },
+            },
+        };
     } catch (err: any) {
         console.error('getOrganizationConfig error:', err);
         return { success: false, error: 'Failed to fetch config' };
     }
 }
 
+const ACTIVITY_INTENSITIES = ['low', 'moderate', 'high'];
+
 export async function updateOrganizationConfig(orgId: string, configData: any) {
     const session = await requireSuperAdmin();
     try {
+        // Never trust the posted intensity — it drives an arrivals multiplier, and an
+        // unrecognised value would either throw deep in the tick loop or silently pick
+        // a volume nobody asked for.
+        const intensity = ACTIVITY_INTENSITIES.includes(configData.activity_generator_intensity)
+            ? configData.activity_generator_intensity
+            : 'moderate';
+        const generatorEnabled = !!configData.activity_generator_enabled;
+
         const config = await prisma.organizationConfig.upsert({
             where: { organizationId: orgId },
             update: {
@@ -758,6 +785,8 @@ export async function updateOrganizationConfig(orgId: string, configData: any) {
                 enable_whatsapp: !!configData.enable_whatsapp,
                 enable_razorpay: !!configData.enable_razorpay,
                 enable_ai_triage: !!configData.enable_ai_triage,
+                activity_generator_enabled: generatorEnabled,
+                activity_generator_intensity: intensity,
             },
             create: {
                 organizationId: orgId,
@@ -769,6 +798,8 @@ export async function updateOrganizationConfig(orgId: string, configData: any) {
                 enable_whatsapp: !!configData.enable_whatsapp,
                 enable_razorpay: !!configData.enable_razorpay,
                 enable_ai_triage: configData.enable_ai_triage ?? true,
+                activity_generator_enabled: generatorEnabled,
+                activity_generator_intensity: intensity,
             },
         });
 
@@ -781,7 +812,8 @@ export async function updateOrganizationConfig(orgId: string, configData: any) {
                 user_id: session.id,
                 username: session.email,
                 role: session.role,
-                details: `Updated config for organization: ${orgId}`,
+                details: `Updated config for organization: ${orgId}` +
+                    ` | activity generator: ${generatorEnabled ? `on (${intensity})` : 'off'}`,
             },
         });
 
