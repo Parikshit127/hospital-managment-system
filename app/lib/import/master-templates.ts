@@ -47,6 +47,14 @@ const SAMPLE_ROWS: Record<MasterImportType, Record<string, string>> = {
     invoice_number: 'INV-3321',
     acquisition_date: '2026-04-01', acquisition_cost: '55000',
     warranty_expiry: '2029-04-01',
+    assigned_to: 'Front Desk Executive',
+    cpu_details: 'HP CPU (Black) + HP Compaq Silver',
+    hardware_specs: 'Intel Core i5 @ 3.2 GHz, 8 GB RAM, 477 GB HDD',
+    peripherals: 'HP K/B + Mouse, Dell 19" monitor, Intercom 204',
+    printer_details: 'Canon Oplu Printer',
+    ups_network: 'APC 600VA UPS, LAN port 12',
+    notes: 'Working; keyboard replaced Jul-26',
+    access_code: '',
   },
 };
 

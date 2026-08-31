@@ -10,10 +10,10 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { AppShell } from '@/app/components/layout/AppShell';
-import { Package, Plus, Search, Download, Loader2, AlertTriangle, X, ArrowLeftRight, Wrench, History, BarChart3 } from 'lucide-react';
+import { Package, Plus, Search, Download, Loader2, AlertTriangle, X, ArrowLeftRight, Wrench, History, BarChart3, Eye } from 'lucide-react';
 import {
     listAssets, listAssetCategories, addAsset, moveAsset, logMaintenance, retireAsset, getAssetHistory,
-    getAssetDepreciationReport,
+    getAssetDepreciationReport, revealAssetAccessCode,
 } from '@/app/actions/asset-register-actions';
 import { exportAssetRegister, exportAssetDepreciationReport } from '@/app/actions/report-export-actions';
 import MasterImportButton from '@/app/components/master/MasterImportButton';
@@ -40,7 +40,21 @@ const EMPTY_FORM = {
     asset_name: '', category_id: '', location: '', department: '',
     acquisition_date: '', acquisition_cost: '', serial_number: '',
     manufacturer: '', model_number: '', invoice_number: '', warranty_expiry: '',
+    // IT asset inventory sheet columns
+    assigned_to: '', cpu_details: '', hardware_specs: '', peripherals: '',
+    printer_details: '', ups_network: '', notes: '', access_code: '',
 };
+
+/** Long free-text sheet cells: wrap rather than stretch the row to 2000px. */
+const wrapCell = 'px-4 py-3 text-xs text-gray-600 align-top max-w-[200px] whitespace-pre-wrap break-words';
+
+// The IT inventory columns make the row wider than any screen. Freeze the two
+// identity columns and the action buttons so you never lose track of which
+// asset you are looking at, or lose reach of Move / Service / Dispose — the
+// same frozen panes the source spreadsheet uses.
+const stickyNo = 'sticky left-0 z-20 w-14 bg-white group-hover:bg-gray-50';
+const stickyTag = 'sticky left-14 z-20 bg-white group-hover:bg-gray-50 shadow-[1px_0_0_0_rgb(243,244,246)]';
+const stickyActions = 'sticky right-0 z-20 bg-white group-hover:bg-gray-50 shadow-[-1px_0_0_0_rgb(243,244,246)]';
 
 export default function AssetRegisterPage() {
     const [assets, setAssets] = useState<any[]>([]);
@@ -67,6 +81,8 @@ export default function AssetRegisterPage() {
     const [moveError, setMoveError] = useState<string | null>(null);
     const [maintError, setMaintError] = useState<string | null>(null);
     const [historyModal, setHistoryModal] = useState<{ asset: any; events: any[] | null } | null>(null);
+    // asset id -> plaintext code, only for codes the user has explicitly revealed.
+    const [revealed, setRevealed] = useState<Record<string, string>>({});
 
     const [disposeModal, setDisposeModal] = useState<any>(null);
     const [disposeReason, setDisposeReason] = useState('');
@@ -101,7 +117,8 @@ export default function AssetRegisterPage() {
     const filtered = assets.filter(a => {
         const q = search.trim().toLowerCase();
         if (!q) return true;
-        return [a.asset_code, a.asset_name, a.location, a.department, a.serial_number, a.manufacturer]
+        return [a.asset_code, a.asset_name, a.location, a.department, a.serial_number, a.manufacturer,
+            a.assigned_to, a.cpu_details, a.hardware_specs, a.peripherals, a.printer_details, a.ups_network, a.notes]
             .filter(Boolean).some((v: string) => String(v).toLowerCase().includes(q));
     });
 
@@ -121,6 +138,14 @@ export default function AssetRegisterPage() {
             model_number: form.model_number,
             invoice_number: form.invoice_number,
             warranty_expiry: form.warranty_expiry || undefined,
+            assigned_to: form.assigned_to,
+            cpu_details: form.cpu_details,
+            hardware_specs: form.hardware_specs,
+            peripherals: form.peripherals,
+            printer_details: form.printer_details,
+            ups_network: form.ups_network,
+            notes: form.notes,
+            access_code: form.access_code,
         });
         setSaving(false);
         if (res.success) { setShowAdd(false); setForm({ ...EMPTY_FORM }); load(); }
@@ -170,6 +195,12 @@ export default function AssetRegisterPage() {
             setMaintForm({ maintenance_type: 'Preventive', cost: '', description: '', next_maintenance_date: '' });
             load();
         } else setMaintError(res.error || 'Could not record maintenance');
+    }
+
+    async function reveal(id: string) {
+        const res = await revealAssetAccessCode(id);
+        if (res.success && res.data) setRevealed(r => ({ ...r, [id]: res.data as string }));
+        else setError(res.error || 'Could not reveal the code');
     }
 
     async function openHistory(a: any) {
@@ -329,31 +360,40 @@ export default function AssetRegisterPage() {
                         <table className="w-full text-left text-sm">
                             <thead className="bg-gray-50 text-gray-500 text-[10px] uppercase font-bold tracking-widest">
                                 <tr>
-                                    <th className="px-4 py-3">Code</th>
-                                    <th className="px-4 py-3">Asset</th>
-                                    <th className="px-4 py-3">Category</th>
-                                    <th className="px-4 py-3">Location / Dept</th>
-                                    <th className="px-4 py-3">Serial</th>
+                                    <th className={`px-3 py-3 ${stickyNo} !bg-gray-50`}>S.No.</th>
+                                    <th className={`px-4 py-3 whitespace-nowrap ${stickyTag} !bg-gray-50`}>Asset Tag / ID</th>
+                                    <th className="px-4 py-3 whitespace-nowrap">Asset</th>
+                                    <th className="px-4 py-3 whitespace-nowrap">Category</th>
+                                    <th className="px-4 py-3 whitespace-nowrap">Location / Dept</th>
+                                    <th className="px-4 py-3 whitespace-nowrap">User / Role</th>
+                                    <th className="px-4 py-3 whitespace-nowrap">CPU</th>
+                                    <th className="px-4 py-3">Hardware Specs<span className="block font-normal normal-case tracking-normal text-[9px] text-gray-400">CPU / RAM / Storage</span></th>
+                                    <th className="px-4 py-3">Peripherals<span className="block font-normal normal-case tracking-normal text-[9px] text-gray-400">K/B, Mouse, Monitor, Telephone</span></th>
+                                    <th className="px-4 py-3 whitespace-nowrap">Printer Details</th>
+                                    <th className="px-4 py-3 whitespace-nowrap">UPS / Power &amp; Network</th>
+                                    <th className="px-4 py-3 whitespace-nowrap">Serial</th>
                                     <th className="px-4 py-3 text-right">Cost</th>
                                     <th className="px-4 py-3 text-right">Book Value</th>
-                                    <th className="px-4 py-3">Warranty</th>
-                                    <th className="px-4 py-3">Next Service</th>
-                                    <th className="px-4 py-3 text-center">Status</th>
-                                    <th className="px-4 py-3 text-center">Actions</th>
+                                    <th className="px-4 py-3 whitespace-nowrap">Warranty</th>
+                                    <th className="px-4 py-3 whitespace-nowrap">Next Service</th>
+                                    <th className="px-4 py-3 text-center whitespace-nowrap">Status / Notes</th>
+                                    <th className="px-4 py-3 whitespace-nowrap">Password / Code</th>
+                                    <th className={`px-4 py-3 text-center ${stickyActions} !bg-gray-50`}>Actions</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
-                                {loading && <tr><td colSpan={10} className="py-16 text-center text-gray-400"><Loader2 className="h-5 w-5 animate-spin inline" /> Loading…</td></tr>}
+                                {loading && <tr><td colSpan={19} className="py-16 text-center text-gray-400"><Loader2 className="h-5 w-5 animate-spin inline" /> Loading…</td></tr>}
                                 {!loading && filtered.length === 0 && (
-                                    <tr><td colSpan={10} className="py-16 text-center text-gray-400">
+                                    <tr><td colSpan={19} className="py-16 text-center text-gray-400">
                                         No assets yet. Use <span className="font-bold">Add Asset</span> to register IT equipment, housekeeping or reception items.
                                     </td></tr>
                                 )}
-                                {!loading && filtered.map((a: any) => {
+                                {!loading && filtered.map((a: any, i: number) => {
                                     const warrantyGone = a.warranty_expiry && new Date(a.warranty_expiry) < new Date();
                                     return (
-                                        <tr key={a.id} className="hover:bg-gray-50">
-                                            <td className="px-4 py-3 font-mono text-xs font-bold">{a.asset_code}</td>
+                                        <tr key={a.id} className="group hover:bg-gray-50">
+                                            <td className={`px-3 py-3 text-xs text-gray-400 tabular-nums align-top ${stickyNo}`}>{i + 1}</td>
+                                            <td className={`px-4 py-3 font-mono text-xs font-bold align-top ${stickyTag}`}>{a.asset_code}</td>
                                             <td className="px-4 py-3">
                                                 <div className="text-xs font-bold text-gray-900">{a.asset_name}</div>
                                                 {a.manufacturer && <div className="text-[10px] text-gray-400">{a.manufacturer} {a.model_number}</div>}
@@ -363,6 +403,12 @@ export default function AssetRegisterPage() {
                                                 {a.location || '—'}
                                                 {a.department && <div className="text-[10px] text-gray-400">{a.department}</div>}
                                             </td>
+                                            <td className="px-4 py-3 text-xs text-gray-600 align-top">{a.assigned_to || '—'}</td>
+                                            <td className={wrapCell}>{a.cpu_details || '—'}</td>
+                                            <td className={wrapCell}>{a.hardware_specs || '—'}</td>
+                                            <td className={wrapCell}>{a.peripherals || '—'}</td>
+                                            <td className={wrapCell}>{a.printer_details || '—'}</td>
+                                            <td className={wrapCell}>{a.ups_network || '—'}</td>
                                             <td className="px-4 py-3 text-xs font-mono text-gray-500">{a.serial_number || '—'}</td>
                                             <td className="px-4 py-3 text-xs text-right">{money(a.acquisition_cost)}</td>
                                             <td className="px-4 py-3 text-xs text-right font-bold">{money(a.book_value)}</td>
@@ -396,8 +442,27 @@ export default function AssetRegisterPage() {
                                                         {a.disposal_reason}
                                                     </span>
                                                 )}
+                                                {a.notes && (
+                                                    <span className="block mt-1 text-[10px] text-gray-500 max-w-[180px] leading-tight whitespace-pre-wrap break-words text-left">
+                                                        {a.notes}
+                                                    </span>
+                                                )}
                                             </td>
-                                            <td className="px-4 py-3">
+                                            {/* Masked by default. The plaintext only ever arrives from an
+                                                admin-only, audited server round trip — it is not in the
+                                                list payload at all. */}
+                                            <td className="px-4 py-3 text-xs align-top">
+                                                {!a.has_access_code ? <span className="text-gray-300">—</span>
+                                                    : revealed[a.id] ? (
+                                                        <span className="font-mono text-gray-900 break-all">{revealed[a.id]}</span>
+                                                    ) : (
+                                                        <button onClick={() => reveal(a.id)} title="Reveal stored code (logged)"
+                                                            className="flex items-center gap-1 font-mono text-gray-400 hover:text-gray-700">
+                                                            {a.access_code} <Eye className="h-3 w-3 shrink-0" />
+                                                        </button>
+                                                    )}
+                                            </td>
+                                            <td className={`px-4 py-3 align-top ${stickyActions}`}>
                                                 <div className="flex justify-center gap-1 mb-1">
                                                     <button onClick={() => openHistory(a)}
                                                         title="Where it has been, what was serviced, and why"
@@ -489,6 +554,58 @@ export default function AssetRegisterPage() {
                                 <label className={label}>Purchase Invoice No</label>
                                 <input value={form.invoice_number} onChange={e => setForm({ ...form, invoice_number: e.target.value })} className={input} />
                             </div>
+
+                            {/* IT asset inventory sheet columns. Optional for housekeeping
+                                and furniture, so they sit below the common fields. */}
+                            <div className="md:col-span-2 pt-2 border-t border-gray-100">
+                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">IT Inventory Details</p>
+                                <p className="text-[11px] text-gray-400 mt-0.5">Leave blank for non-IT assets.</p>
+                            </div>
+                            <div>
+                                <label className={label}>User / Role</label>
+                                <input value={form.assigned_to} onChange={e => setForm({ ...form, assigned_to: e.target.value })}
+                                    placeholder="e.g. Front Desk Executive" className={input} />
+                            </div>
+                            <div>
+                                <label className={label}>CPU</label>
+                                <input value={form.cpu_details} onChange={e => setForm({ ...form, cpu_details: e.target.value })}
+                                    placeholder="e.g. HP CPU (Black) + HP Compaq Silver" className={input} />
+                            </div>
+                            <div className="md:col-span-2">
+                                <label className={label}>Hardware Specifications (CPU / RAM / Storage)</label>
+                                <textarea rows={2} value={form.hardware_specs} onChange={e => setForm({ ...form, hardware_specs: e.target.value })}
+                                    placeholder="e.g. Intel Core i5 @ 3.2 GHz, 8 GB RAM, 477 GB HDD" className={input} />
+                            </div>
+                            <div className="md:col-span-2">
+                                <label className={label}>Peripherals (K/B, Mouse, Monitor, Telephone)</label>
+                                <textarea rows={2} value={form.peripherals} onChange={e => setForm({ ...form, peripherals: e.target.value })}
+                                    placeholder={'e.g. HP K/B + Mouse, Dell 19" monitor, Intercom 204'} className={input} />
+                            </div>
+                            <div>
+                                <label className={label}>Printer Details</label>
+                                <input value={form.printer_details} onChange={e => setForm({ ...form, printer_details: e.target.value })}
+                                    placeholder="e.g. Canon Oplu Printer" className={input} />
+                            </div>
+                            <div>
+                                <label className={label}>UPS / Power &amp; Network</label>
+                                <input value={form.ups_network} onChange={e => setForm({ ...form, ups_network: e.target.value })}
+                                    placeholder="e.g. APC 600VA UPS, LAN port 12" className={input} />
+                            </div>
+                            <div className="md:col-span-2">
+                                <label className={label}>Status / Notes</label>
+                                <textarea rows={2} value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })}
+                                    placeholder="e.g. Working; keyboard replaced Jul-26" className={input} />
+                            </div>
+                            <div className="md:col-span-2">
+                                <label className={label}>Password / Code</label>
+                                <input type="password" autoComplete="new-password" value={form.access_code}
+                                    onChange={e => setForm({ ...form, access_code: e.target.value })}
+                                    placeholder="BIOS / admin / Wi-Fi code" className={input} />
+                                <p className="text-[11px] text-gray-400 mt-1">
+                                    Encrypted at rest and shown masked in the register. Revealing it is admin-only and recorded in the audit log.
+                                </p>
+                            </div>
+
                             {formError && (
                                 <p className="md:col-span-2 text-xs font-bold text-rose-600 bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">{formError}</p>
                             )}

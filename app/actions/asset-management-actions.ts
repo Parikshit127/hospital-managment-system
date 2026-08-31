@@ -115,6 +115,14 @@ export async function createFixedAsset(data: {
   serial_number?: string;
   manufacturer?: string;
   model_number?: string;
+  assigned_to?: string;
+  cpu_details?: string;
+  hardware_specs?: string;
+  peripherals?: string;
+  printer_details?: string;
+  ups_network?: string;
+  notes?: string;
+  access_code?: string;
   is_capitalized?: boolean;
   capitalization_date?: Date;
 }) {
@@ -144,6 +152,14 @@ export async function createFixedAsset(data: {
         serial_number: data.serial_number,
         manufacturer: data.manufacturer,
         model_number: data.model_number,
+        assigned_to: data.assigned_to,
+        cpu_details: data.cpu_details,
+        hardware_specs: data.hardware_specs,
+        peripherals: data.peripherals,
+        printer_details: data.printer_details,
+        ups_network: data.ups_network,
+        notes: data.notes,
+        access_code: data.access_code,
         is_capitalized: data.is_capitalized ?? true,
         capitalization_date: data.capitalization_date || data.acquisition_date,
       },
@@ -172,6 +188,14 @@ export async function updateFixedAsset(
     serial_number?: string;
     manufacturer?: string;
     model_number?: string;
+    assigned_to?: string;
+    cpu_details?: string;
+    hardware_specs?: string;
+    peripherals?: string;
+    printer_details?: string;
+    ups_network?: string;
+    notes?: string;
+    access_code?: string;
   }
 ) {
   try {

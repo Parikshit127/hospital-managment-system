@@ -3743,6 +3743,20 @@ model FixedAsset {
   serial_number            String?
   manufacturer             String?
   model_number             String?
+  // IT asset inventory sheet columns (Admin -> Asset Register). Free text on
+  // purpose: the source is a spreadsheet whose cells hold things like
+  // "Intel Core i5 @ 3.2 GHz, 8 GB RAM, 477 GB HDD" — normalising those into
+  // structured RAM/storage columns loses the half of them that don't parse.
+  assigned_to              String?
+  cpu_details              String?
+  hardware_specs           String?
+  peripherals              String?
+  printer_details          String?
+  ups_network              String?
+  notes                    String?
+  // Encrypted at rest with app/lib/secure-config.ts (enc:v1: prefix) and
+  // masked everywhere except an explicit admin-only reveal.
+  access_code              String?
   is_capitalized           Boolean             @default(true)
   capitalization_date      DateTime?
   created_at               DateTime            @default(now())

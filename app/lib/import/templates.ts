@@ -171,6 +171,14 @@ const assetMasterColumns: ImportColumn[] = [
     { name: 'acquisition_date', required: true, type: 'date', description: 'Date acquired (YYYY-MM-DD)', example: '2026-04-01' },
     { name: 'acquisition_cost', required: true, type: 'number', description: 'Acquisition cost (INR)', example: '55000' },
     { name: 'warranty_expiry', required: false, type: 'date', description: 'Warranty expiry date (YYYY-MM-DD)', example: '2029-04-01' },
+    { name: 'assigned_to', required: false, type: 'string', description: 'User / role the asset is issued to', example: 'Front Desk Executive' },
+    { name: 'cpu_details', required: false, type: 'string', description: 'CPU unit / cabinet description', example: 'HP CPU (Black) + HP Compaq Silver' },
+    { name: 'hardware_specs', required: false, type: 'string', description: 'CPU / RAM / storage specification', example: 'Intel Core i5 @ 3.2 GHz, 8 GB RAM, 477 GB HDD' },
+    { name: 'peripherals', required: false, type: 'string', description: 'Keyboard, mouse, monitor, telephone', example: 'HP K/B + Mouse, Dell 19" monitor, Intercom 204' },
+    { name: 'printer_details', required: false, type: 'string', description: 'Attached printer make / model', example: 'Canon Oplu Printer' },
+    { name: 'ups_network', required: false, type: 'string', description: 'UPS, power and network details', example: 'APC 600VA UPS, LAN port 12' },
+    { name: 'notes', required: false, type: 'string', description: 'Status notes / remarks', example: 'Working; keyboard replaced Jul-26' },
+    { name: 'access_code', required: false, type: 'string', description: 'Password / code — stored encrypted, shown masked', example: 'BIOS: ****' },
 ];
 
 const TEMPLATES: Record<ImportType, Omit<ImportTemplate, 'import_type'>> = {

@@ -299,6 +299,9 @@ export interface AssetRow {
   invoice_number?: string;
   acquisition_date: string; acquisition_cost: number;
   warranty_expiry?: string;
+  assigned_to?: string; cpu_details?: string; hardware_specs?: string;
+  peripherals?: string; printer_details?: string; ups_network?: string;
+  notes?: string; access_code?: string;
 }
 
 export function validateAssetRows(rows: Record<string, unknown>[]): ValidateResult<AssetRow> {
@@ -324,6 +327,10 @@ export function validateAssetRows(rows: Record<string, unknown>[]): ValidateResu
       acquisition_date: acquisition_date as string,
       acquisition_cost: costRaw as number,
       warranty_expiry,
+      assigned_to: optStr(r.assigned_to), cpu_details: optStr(r.cpu_details),
+      hardware_specs: optStr(r.hardware_specs), peripherals: optStr(r.peripherals),
+      printer_details: optStr(r.printer_details), ups_network: optStr(r.ups_network),
+      notes: optStr(r.notes), access_code: optStr(r.access_code),
     });
   }
   return { valid, errors };

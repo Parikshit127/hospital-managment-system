@@ -11,7 +11,9 @@
  * asked for: a register of IT assets and housekeeping / reception items.
  */
 
-import { requireTenantContext } from '@/backend/tenant';
+import { requireTenantContext, requireRoleAndTenant } from '@/backend/tenant';
+import { encryptSecret, decryptSecret, maskSecret } from '@/app/lib/secure-config';
+import { logAudit } from '@/app/lib/audit';
 import {
     createAssetCategory,
     getAssetCategories,
@@ -69,7 +71,14 @@ export async function listAssets(filters?: { status?: string; category_id?: stri
         const res: any = await getFixedAssets(organizationId, filters);
         if (!res.success) return { success: false, error: res.error };
 
-        const assets = serialize(res.assets) as any[];
+        // The register is a screen anyone with asset access can open; the
+        // stored code never leaves the server in the clear. `revealAssetAccessCode`
+        // is the one admin-only door.
+        const assets = (serialize(res.assets) as any[]).map(a => ({
+            ...a,
+            access_code: a.access_code ? maskSecret(a.access_code) : null,
+            has_access_code: Boolean(a.access_code),
+        }));
         const summary = {
             count: assets.length,
             active: assets.filter(a => a.status === 'Active').length,
@@ -104,6 +113,15 @@ export async function addAsset(input: {
     invoice_number?: string;
     warranty_expiry?: string;
     depreciation_rate?: number;
+    // IT inventory sheet columns
+    assigned_to?: string;
+    cpu_details?: string;
+    hardware_specs?: string;
+    peripherals?: string;
+    printer_details?: string;
+    ups_network?: string;
+    notes?: string;
+    access_code?: string;
 }) {
     try {
         const { organizationId } = await requireTenantContext();
@@ -143,10 +161,19 @@ export async function addAsset(input: {
             serial_number: input.serial_number || undefined,
             manufacturer: input.manufacturer || undefined,
             model_number: input.model_number || undefined,
+            assigned_to: input.assigned_to?.trim() || undefined,
+            cpu_details: input.cpu_details?.trim() || undefined,
+            hardware_specs: input.hardware_specs?.trim() || undefined,
+            peripherals: input.peripherals?.trim() || undefined,
+            printer_details: input.printer_details?.trim() || undefined,
+            ups_network: input.ups_network?.trim() || undefined,
+            notes: input.notes?.trim() || undefined,
+            access_code: encryptSecret(input.access_code?.trim()) || undefined,
         });
 
         if (!res.success) return { success: false, error: res.error };
-        return { success: true, data: serialize(res.asset) };
+        const asset: any = serialize(res.asset);
+        return { success: true, data: { ...asset, access_code: asset.access_code ? maskSecret(asset.access_code) : null } };
     } catch (error: any) {
         return { success: false, error: error.message };
     }
@@ -187,6 +214,14 @@ export async function createAssetFromImportRow(row: Record<string, unknown>) {
             model_number: row.model_number ? String(row.model_number) : undefined,
             invoice_number: row.invoice_number ? String(row.invoice_number) : undefined,
             warranty_expiry: row.warranty_expiry ? String(row.warranty_expiry) : undefined,
+            assigned_to: row.assigned_to ? String(row.assigned_to) : undefined,
+            cpu_details: row.cpu_details ? String(row.cpu_details) : undefined,
+            hardware_specs: row.hardware_specs ? String(row.hardware_specs) : undefined,
+            peripherals: row.peripherals ? String(row.peripherals) : undefined,
+            printer_details: row.printer_details ? String(row.printer_details) : undefined,
+            ups_network: row.ups_network ? String(row.ups_network) : undefined,
+            notes: row.notes ? String(row.notes) : undefined,
+            access_code: row.access_code ? String(row.access_code) : undefined,
         });
     } catch (error: any) {
         return { success: false, error: error.message };
@@ -212,9 +247,18 @@ export async function updateAssetFromImportRow(id: string, row: Record<string, u
             manufacturer: row.manufacturer ? String(row.manufacturer) : undefined,
             model_number: row.model_number ? String(row.model_number) : undefined,
             warranty_expiry: row.warranty_expiry ? new Date(String(row.warranty_expiry)) : undefined,
+            assigned_to: row.assigned_to ? String(row.assigned_to) : undefined,
+            cpu_details: row.cpu_details ? String(row.cpu_details) : undefined,
+            hardware_specs: row.hardware_specs ? String(row.hardware_specs) : undefined,
+            peripherals: row.peripherals ? String(row.peripherals) : undefined,
+            printer_details: row.printer_details ? String(row.printer_details) : undefined,
+            ups_network: row.ups_network ? String(row.ups_network) : undefined,
+            notes: row.notes ? String(row.notes) : undefined,
+            access_code: encryptSecret(row.access_code ? String(row.access_code) : null) || undefined,
         });
         if (!res.success) return { success: false, error: res.error };
-        return { success: true, data: serialize(res.asset) };
+        const updated: any = serialize(res.asset);
+        return { success: true, data: { ...updated, access_code: updated.access_code ? maskSecret(updated.access_code) : null } };
     } catch (error: any) {
         return { success: false, error: error.message };
     }
@@ -268,7 +312,12 @@ export async function getAssetDepreciationReport(filters?: { category_id?: strin
 export async function editAsset(id: string, data: any) {
     try {
         await requireTenantContext();
-        const res: any = await updateFixedAsset(id, data);
+        // `data` comes straight from a client form, so encrypt here rather than
+        // trusting every future caller to remember.
+        const res: any = await updateFixedAsset(id, {
+            ...data,
+            ...(data?.access_code !== undefined && { access_code: encryptSecret(data.access_code) || undefined }),
+        });
         if (!res.success) return { success: false, error: res.error };
         return { success: true, data: serialize(res.asset) };
     } catch (error: any) {
@@ -467,6 +516,34 @@ export async function retireAsset(input: { asset_id: string; disposal_value?: nu
         });
         if (!res.success) return { success: false, error: res.error };
         return { success: true, data: serialize(res) };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * The one place a stored asset password/code is returned in the clear.
+ * Admin-only and audited — everywhere else the register serves the mask.
+ */
+export async function revealAssetAccessCode(assetId: string) {
+    try {
+        const { db, organizationId, session } = await requireRoleAndTenant(['admin']);
+        const asset = await db.fixedAsset.findFirst({
+            where: { id: assetId, organizationId },
+            select: { asset_code: true, access_code: true },
+        });
+        if (!asset) return { success: false, error: 'Asset not found.' };
+        if (!asset.access_code) return { success: false, error: 'No code stored for this asset.' };
+
+        await logAudit({
+            action: 'ASSET_ACCESS_CODE_VIEWED',
+            module: 'Assets',
+            entity_type: 'FixedAsset',
+            entity_id: assetId,
+            details: `Revealed stored code for asset ${asset.asset_code} (by ${session?.username ?? 'unknown'})`,
+        });
+
+        return { success: true, data: decryptSecret(asset.access_code) };
     } catch (error: any) {
         return { success: false, error: error.message };
     }

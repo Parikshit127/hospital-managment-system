@@ -19,6 +19,7 @@ import { getIndentReport, type IndentReportFilters } from '@/app/actions/indent-
 import { getFixedAssets } from '@/app/actions/asset-management-actions';
 import { getAssetDepreciationReport } from '@/app/actions/asset-register-actions';
 import { EDIT_CANCEL_ACTIONS } from '@/app/lib/audit-actions';
+import { maskSecret } from '@/app/lib/secure-config';
 
 function fmtDate(v: any) {
     if (!v) return '';
@@ -168,7 +169,17 @@ export async function exportAssetRegister(filters?: { status?: string; category_
             book_value: Number(a.book_value || 0),
             warranty_expiry: a.warranty_expiry ? dateOnly(a.warranty_expiry) : '',
             next_maintenance: a.next_maintenance_date ? dateOnly(a.next_maintenance_date) : '',
+            assigned_to: a.assigned_to ?? '',
+            cpu_details: a.cpu_details ?? '',
+            hardware_specs: a.hardware_specs ?? '',
+            peripherals: a.peripherals ?? '',
+            printer_details: a.printer_details ?? '',
+            ups_network: a.ups_network ?? '',
             status: a.status ?? '',
+            notes: a.notes ?? '',
+            // Deliberately masked: an asset register .xlsx gets emailed around.
+            // Use Admin -> Asset Register -> Reveal for the real value.
+            access_code: a.access_code ? maskSecret(a.access_code) : '',
             disposal_reason: a.disposal_reason ?? '',
         }));
 
@@ -185,7 +196,15 @@ export async function exportAssetRegister(filters?: { status?: string; category_
             { key: 'book_value', label: 'Book Value', type: 'currency', total: 'sum' },
             { key: 'warranty_expiry', label: 'Warranty Until', type: 'string' },
             { key: 'next_maintenance', label: 'Next Service', type: 'string' },
+            { key: 'assigned_to', label: 'User / Role', type: 'string' },
+            { key: 'cpu_details', label: 'CPU', type: 'string' },
+            { key: 'hardware_specs', label: 'Hardware Specifications (CPU/RAM/Storage)', type: 'string' },
+            { key: 'peripherals', label: 'Peripherals (K/B, Mouse, Monitor, Telephone)', type: 'string' },
+            { key: 'printer_details', label: 'Printer Details', type: 'string' },
+            { key: 'ups_network', label: 'UPS / Power & Network', type: 'string' },
             { key: 'status', label: 'Status', type: 'string' },
+            { key: 'notes', label: 'Notes', type: 'string' },
+            { key: 'access_code', label: 'Password / Code', type: 'string' },
             { key: 'disposal_reason', label: 'Disposal Reason', type: 'string' },
         ];
 
