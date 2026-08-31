@@ -3935,6 +3935,88 @@ export async function getPharmacyOrderDetails(orderId: number) {
 // PHASE 5 PHARMACY ACTIONS
 // ========================================
 
+/**
+ * Cancel an indent that was raised in error.
+ *
+ * There was no cancel/reject/delete path anywhere, so a wrongly-entered indent
+ * stayed in the register for good and the ward's list filled up with them.
+ *
+ * Only Pending / Verified indents may be cancelled. Once an indent is Partial or
+ * Completed some stock has physically left the shelf and the charge is on the
+ * patient's bill — voiding the header would desync both. Those must be reversed
+ * with a return (createIndentReturn), which puts the stock back and credits the
+ * bill, and is why this refuses rather than cascading.
+ *
+ * ponytail: soft-cancel via `status` + `verification_notes`; the model has no
+ * cancelled_at/by/reason columns and this DB carries heavy migration drift
+ * (`prisma migrate dev` offers a reset). Promote to real columns if cancellation
+ * ever needs its own reporting dimension. The audit log is the durable record.
+ */
+export async function cancelPharmacyIndent(orderId: number, reason: string) {
+    // The ward raises indents, so nurses and IPD managers can withdraw their own
+    // mistakes; pharmacy and admin can cancel any.
+    const denied = await denyUnlessPharmacyRole(['admin', 'pharmacist', 'nurse', 'ipd_manager']);
+    if (denied) return denied;
+
+    try {
+        const { db, session } = await requireTenantContext();
+
+        const trimmed = (reason || '').trim();
+        if (trimmed.length < 3) {
+            return { success: false, error: 'Please give a reason for cancelling this indent.' };
+        }
+
+        const order = await db.pharmacy_orders.findUnique({
+            where: { id: orderId },
+            select: {
+                id: true, indent_number: true, status: true, patient_id: true,
+                verification_notes: true,
+            },
+        });
+        if (!order) return { success: false, error: 'Indent not found' };
+
+        if (order.status === 'Cancelled') {
+            return { success: false, error: 'This indent is already cancelled.' };
+        }
+        if (!['Pending', 'Verified'].includes(order.status)) {
+            return {
+                success: false,
+                error: `Cannot cancel a ${order.status.toLowerCase()} indent — medicine has already been dispensed against it. Raise a return instead.`,
+            };
+        }
+
+        const who = session?.name || session?.username || 'Unknown';
+        await db.pharmacy_orders.update({
+            where: { id: orderId },
+            data: {
+                status: 'Cancelled',
+                verified_by: who,
+                verified_at: new Date(),
+                verification_notes: `Cancelled: ${trimmed}`,
+            },
+        });
+
+        await logAudit({
+            action: 'PHARMACY_INDENT_CANCELLED',
+            module: 'Pharmacy',
+            entity_type: 'pharmacy_order',
+            entity_id: String(orderId),
+            details: JSON.stringify({
+                indent_number: order.indent_number,
+                patient_id: order.patient_id,
+                previous_status: order.status,
+                reason: trimmed,
+                cancelled_by: who,
+            }),
+        });
+
+        return { success: true, data: { id: orderId, status: 'Cancelled' } };
+    } catch (error: any) {
+        console.error('cancelPharmacyIndent error:', error);
+        return { success: false, error: error.message || 'Failed to cancel indent' };
+    }
+}
+
 export async function verifyPharmacyOrder(orderId: number, notes?: string) {
     const denied = await denyUnlessPharmacyRole(PHARMACY_OPERATE_ROLES);
     if (denied) return denied;
@@ -4553,6 +4635,8 @@ export async function getPharmacyRevenueReport(filters?: {
         const medMap = new Map<string, { name: string; qty: number; revenue: number; counter: number; opd: number; ipd: number }>();
         const docMap = new Map<string, { name: string; revenue: number; counter: number; opd: number; ipd: number; bills: number }>();
         const docBillKeys = new Map<string, Set<string>>();
+        // doctor -> monthKey -> channel split, for the doctor x month matrix.
+        const docMonthMap = new Map<string, Map<string, { counter: number; opd: number; ipd: number }>>();
         const bills: { id: number; billNo: string; patient: string; patientId: string; admissionId: string | null; channel: Ch; doctor: string; date: string; items: number; revenue: number }[] = [];
 
         const dayKey = (d: Date) => {
@@ -4582,13 +4666,21 @@ export async function getPharmacyRevenueReport(filters?: {
             e.qty += qty; e.revenue += rev; e[ch] += rev;
             medMap.set(name, e);
         };
-        const bumpDoc = (name: string | null | undefined, rev: number, ch: Ch, billKey: string) => {
+        const bumpDoc = (name: string | null | undefined, rev: number, ch: Ch, billKey: string, when: Date) => {
             const key = name || 'Unassigned';
             const e = docMap.get(key) || { name: key, revenue: 0, counter: 0, opd: 0, ipd: 0, bills: 0 };
             e.revenue += rev; e[ch] += rev;
             docMap.set(key, e);
             if (!docBillKeys.has(key)) docBillKeys.set(key, new Set());
             docBillKeys.get(key)!.add(`${ch}:${billKey}`);
+            // Same event feeds the month matrix, so doctor x month always ties back
+            // to both the doctor row total and the month column total.
+            if (!docMonthMap.has(key)) docMonthMap.set(key, new Map());
+            const byM = docMonthMap.get(key)!;
+            const mk = monthKey(when);
+            const me = byM.get(mk) || { counter: 0, opd: 0, ipd: 0 };
+            me[ch] += rev;
+            byM.set(mk, me);
         };
 
         // Counter + OPD
@@ -4600,7 +4692,7 @@ export async function getPharmacyRevenueReport(filters?: {
             channels[ch].billCount += 1;
             channels[ch].itemCount += inv.items.length;
             bumpDay(inv.created_at, ch, rev, billKey);
-            bumpDoc(inv.doctor_name, rev, ch, billKey);
+            bumpDoc(inv.doctor_name, rev, ch, billKey, inv.created_at);
             for (const it of inv.items) {
                 bumpMed(it.description, Number(it.quantity) || 0, (Number(it.net_price) || 0) + (Number(it.tax_amount) || 0), ch);
             }
@@ -4630,7 +4722,7 @@ export async function getPharmacyRevenueReport(filters?: {
             channels.ipd.revenue += rev;
             channels.ipd.itemCount += 1;
             bumpDay(it.created_at, 'ipd', rev, billKey);
-            bumpDoc(docName, rev, 'ipd', billKey);
+            bumpDoc(docName, rev, 'ipd', billKey, it.created_at);
             bumpMed(it.description, Number(it.quantity) || 0, rev, 'ipd');
             const existing = ipdBillMap.get(it.invoice.id);
             if (existing) {
@@ -4727,6 +4819,16 @@ export async function getPharmacyRevenueReport(filters?: {
                 // Separate count so an IPD-only doctor report totals IPD bills alone.
                 ipdBills: Array.from(docBillKeys.get(d.name) || [])
                     .filter(k => k.startsWith('ipd:')).length,
+                // Month matrix cells, keyed by the same `key` byMonth uses.
+                months: Object.fromEntries(
+                    Array.from(docMonthMap.get(d.name) || new Map<string, { counter: number; opd: number; ipd: number }>())
+                        .map(([mk, v]) => [mk, {
+                            ipd: Math.round(activeChannels.includes('ipd') ? v.ipd : 0),
+                            opd: Math.round(activeChannels.includes('opd') ? v.opd : 0),
+                            counter: Math.round(activeChannels.includes('counter') ? v.counter : 0),
+                            total: Math.round(activeChannels.reduce((sum, c) => sum + v[c], 0)),
+                        }])
+                ),
             }))
             .filter(d => d.revenue > 0 || d.bills > 0)
             .sort((a, b) => b.revenue - a.revenue);

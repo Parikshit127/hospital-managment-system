@@ -434,17 +434,28 @@ export async function getInvoices(filters?: {
             // 3b. IPD invoices that have pharmacy line items
             // Exclude Cancelled IPD invoices (they retain net_amount but should not
             // appear in pharmacy sales totals).
+            // An IPD bill is opened once at admission and collects pharmacy lines for
+            // the whole stay, so its created_at is the ADMISSION date, not a
+            // dispensing date. Filtering the invoice by created_at therefore dropped
+            // dispensings made on the chosen day (bill opened earlier) and returned
+            // dispensings from other days. Match on the pharmacy LINE's date instead.
+            const pharmItemOr = [
+                { service_category: { equals: 'Pharmacy', mode: 'insensitive' } },
+                { department: { equals: 'Pharmacy', mode: 'insensitive' } },
+                { description: { startsWith: 'Pharmacy:', mode: 'insensitive' } },
+            ];
+            const itemDateRange: any = {};
+            if (filters?.date_from) itemDateRange.gte = filters.date_from;
+            if (filters?.date_to) itemDateRange.lte = filters.date_to;
+            const hasItemDateFilter = filters?.date_from || filters?.date_to;
+
             const ipdPharmWhere: any = {
                 invoice_type: 'IPD',
                 status: { not: 'Cancelled' },
                 items: {
-                    some: {
-                        OR: [
-                            { service_category: { equals: 'Pharmacy', mode: 'insensitive' } },
-                            { department: { equals: 'Pharmacy', mode: 'insensitive' } },
-                            { description: { startsWith: 'Pharmacy:', mode: 'insensitive' } },
-                        ]
-                    }
+                    some: hasItemDateFilter
+                        ? { AND: [{ OR: pharmItemOr }, { created_at: itemDateRange }] }
+                        : { OR: pharmItemOr },
                 },
             };
             if (filters?.status) ipdPharmWhere.status = filters.status; // caller override
@@ -452,11 +463,7 @@ export async function getInvoices(filters?: {
             if (filters?.mobile_number) {
                 ipdPharmWhere.patient = { phone: { contains: filters.mobile_number } };
             }
-            if (filters?.date_from || filters?.date_to) {
-                ipdPharmWhere.created_at = {};
-                if (filters.date_from) ipdPharmWhere.created_at.gte = filters.date_from;
-                if (filters.date_to) ipdPharmWhere.created_at.lte = filters.date_to;
-            }
+            // NB: deliberately no `ipdPharmWhere.created_at` — see the comment above.
 
             const ipdPharmInvoices = await db.invoices.findMany({
                 where: ipdPharmWhere,
@@ -525,6 +532,10 @@ export async function getInvoices(filters?: {
                 for (const b of bills) {
                     const cover = Math.min(paidPharm, b.gross);
                     paidPharm -= cover;
+                    // The invoice matched because SOME line falls in range; its other
+                    // dispensings must not ride along into a filtered result.
+                    if (filters?.date_from && b.billDate < filters.date_from) continue;
+                    if (filters?.date_to && b.billDate > filters.date_to) continue;
                     ipdPharmBills.push({
                         ...inv,
                         _isIpdPharmacy: true,

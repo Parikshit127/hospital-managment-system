@@ -2,11 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import { AppShell } from '@/app/components/layout/AppShell';
-import { getPharmacyQueue, verifyPharmacyOrder, dispenseIndentManual } from '@/app/actions/pharmacy-actions';
+import { getPharmacyQueue, verifyPharmacyOrder, dispenseIndentManual, cancelPharmacyIndent } from '@/app/actions/pharmacy-actions';
 import { useToast } from '@/app/components/ui/Toast';
 import {
   CheckCircle2, ClipboardList, PackageCheck, Pill, BedDouble, User,
-  AlertTriangle, X, ChevronDown, ChevronUp, FlaskConical,
+  AlertTriangle, X, ChevronDown, ChevronUp, FlaskConical, Ban,
 } from 'lucide-react';
 import { fmtIstDateTime } from '@/app/lib/ist';
 
@@ -64,6 +64,7 @@ const STATUS_COLORS: Record<string, string> = {
   Partial: 'bg-purple-100 text-purple-800',
   Dispensed: 'bg-emerald-100 text-emerald-800',
   Completed: 'bg-emerald-100 text-emerald-800',
+  Cancelled: 'bg-rose-100 text-rose-800',
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -78,6 +79,9 @@ const STOCK_COLORS: Record<string, string> = {
 
 const isVerifiable = (s: string) => s === 'Pending' || s === 'Ordered';
 const isDispensable = (s: string) => s === 'Verified' || s === 'Dispensing' || s === 'Partial';
+// Mirrors the server guard in cancelPharmacyIndent: once anything is dispensed the
+// stock has left the shelf and the charge is on the bill, so it needs a return.
+const isCancellable = (s: string) => s === 'Pending' || s === 'Ordered' || s === 'Verified';
 
 interface DispenseState {
   open: boolean;
@@ -119,6 +123,24 @@ export default function IPMedicationOrdersPage() {
     const timer = window.setTimeout(() => { void loadOrders(); }, 0);
     return () => window.clearTimeout(timer);
   }, []);
+
+  async function handleCancel(order: PharmacyOrder) {
+    const label = order.indent_number || `IND-${order.id}`;
+    const reason = window.prompt(
+      `Cancel indent ${label}?\n\nThis removes it from the pharmacy queue. Give a reason (recorded in the audit log):`,
+    );
+    if (reason === null) return;                       // dismissed
+    if (reason.trim().length < 3) { toast.error('A reason is required to cancel an indent'); return; }
+
+    setActionLoading(order.id);
+    try {
+      const res = await cancelPharmacyIndent(order.id, reason.trim());
+      if (res.success) { toast.success(`Indent ${label} cancelled`); await loadOrders(); }
+      else toast.error(res.error || 'Failed to cancel indent');
+    } finally {
+      setActionLoading(null);
+    }
+  }
 
   async function handleVerify(orderId: number) {
     setActionLoading(orderId);
@@ -342,11 +364,27 @@ export default function IPMedicationOrdersPage() {
                                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-gray-100 hover:bg-gray-200 text-gray-600 transition-colors whitespace-nowrap"
                               >
                                 <ChevronUp className="h-3 w-3" />
-                                Cancel
+                                Close
+                              </button>
+                            )}
+                            {isCancellable(order.status) && (
+                              <button
+                                onClick={() => handleCancel(order)}
+                                disabled={actionLoading === order.id || bulkLoading === sheet.key}
+                                title="Cancel this indent (raised in error)"
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-rose-50 hover:bg-rose-100 text-rose-700 transition-colors disabled:opacity-50 whitespace-nowrap"
+                              >
+                                <Ban className="h-3.5 w-3.5" />
+                                Cancel Indent
                               </button>
                             )}
                             {(order.status === 'Completed' || order.status === 'Dispensed') && (
                               <span className="text-xs text-emerald-600 font-bold">Done</span>
+                            )}
+                            {order.status === 'Partial' && (
+                              <span className="text-[10px] text-gray-400 font-medium max-w-[150px] leading-tight">
+                                Partly dispensed — raise a return to reverse
+                              </span>
                             )}
                           </div>
                         </div>

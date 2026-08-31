@@ -79,11 +79,15 @@ export default function IndentReportPage() {
         <AppShell pageTitle="Indent Report" pageIcon={<ClipboardList className="h-5 w-5" />} onRefresh={load} refreshing={loading}>
             <div className="space-y-5">
                 {/* Summary */}
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
                     {[
                         ['Total Indents', summary?.total ?? 0, 'text-gray-900'],
                         ['Pending', summary?.pending ?? 0, 'text-amber-600'],
                         ['Completed', summary?.completed ?? 0, 'text-emerald-600'],
+                        // Cancelled indents were raised in error; they are excluded
+                        // from Short Supplied and Value so they don't read as unmet
+                        // ward demand.
+                        ['Cancelled', summary?.cancelled ?? 0, 'text-rose-500'],
                         ['Short Supplied', summary?.short_supplied ?? 0, 'text-rose-600'],
                         ['Value', fmtMoney(summary?.total_value ?? 0), 'text-gray-900'],
                     ].map(([label, value, cls]) => (

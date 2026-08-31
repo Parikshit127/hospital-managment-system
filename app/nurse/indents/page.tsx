@@ -9,9 +9,10 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { AppShell } from '@/app/components/layout/AppShell';
 import {
     ClipboardList, Search, Loader2, Clock, User, BedDouble, Package, CheckCircle2,
-    RotateCcw, X,
+    RotateCcw, X, Ban,
 } from 'lucide-react';
 import { getWardPatients, getPatientIndentHistory, createIndentReturn } from '@/app/actions/nurse-actions';
+import { cancelPharmacyIndent } from '@/app/actions/pharmacy-actions';
 import { useToast } from '@/app/components/ui/Toast';
 
 const RETURN_REASONS = ['Unopened / sealed', 'Unused', 'Not administered', 'Excess supplied', 'Other'];
@@ -35,6 +36,10 @@ function statusStyle(status: string) {
     }
 }
 
+// Mirrors the server guard in cancelPharmacyIndent — past Verified, stock has
+// left the shelf and the charge is on the bill, so it needs a return, not a void.
+const isCancellable = (s: string) => ['pending', 'ordered', 'verified'].includes((s || 'Pending').toLowerCase());
+
 export default function NurseIndentsPage() {
     const toast = useToast();
     const [patients, setPatients] = useState<any[]>([]);
@@ -51,11 +56,37 @@ export default function NurseIndentsPage() {
     const [returnReason, setReturnReason] = useState(RETURN_REASONS[0]);
     const [returnNote, setReturnNote] = useState('');
     const [returnSubmitting, setReturnSubmitting] = useState(false);
+    const [cancellingId, setCancellingId] = useState<number | null>(null);
 
     const reloadIndents = useCallback(async (patientId: string) => {
         const res = await getPatientIndentHistory(patientId);
         if (res.success) setIndents(res.data || []);
     }, []);
+
+    // Withdraw an indent raised in error. Nothing has been dispensed at this
+    // point, so there is no stock or bill to reverse — the row is marked
+    // Cancelled and drops off the pharmacy queue.
+    const handleCancelIndent = async (ind: any) => {
+        const label = ind.indent_number || `#${ind.id}`;
+        const reason = window.prompt(
+            `Cancel indent ${label}?
+
+It will be withdrawn from pharmacy. Give a reason (recorded in the audit log):`,
+        );
+        if (reason === null) return;
+        if (reason.trim().length < 3) { toast.error('A reason is required to cancel an indent'); return; }
+
+        setCancellingId(ind.id);
+        try {
+            const res = await cancelPharmacyIndent(ind.id, reason.trim());
+            if (res.success) {
+                toast.success(`Indent ${label} cancelled`);
+                if (selected?.patientId) await reloadIndents(selected.patientId);
+            } else toast.error(res.error || 'Failed to cancel indent');
+        } finally {
+            setCancellingId(null);
+        }
+    };
 
     const openReturn = (item: any, indentNumber: string) => {
         setReturnCtx({ item, indentNumber });
@@ -203,8 +234,23 @@ export default function NurseIndentsPage() {
                                                     <span className="font-bold text-sm text-gray-800 font-mono">{ind.indent_number || `#${ind.id}`}</span>
                                                     <span className={`text-[10px] font-black uppercase tracking-wide border rounded px-1.5 py-0.5 ${statusStyle(ind.status)}`}>{ind.status || 'Pending'}</span>
                                                 </div>
-                                                <span className="text-[11px] text-gray-400 flex items-center gap-1"><Clock className="h-3 w-3" /> {formatWhen(ind.created_at)}</span>
+                                                <div className="flex items-center gap-2 shrink-0">
+                                                    <span className="text-[11px] text-gray-400 flex items-center gap-1"><Clock className="h-3 w-3" /> {formatWhen(ind.created_at)}</span>
+                                                    {isCancellable(ind.status) && (
+                                                        <button
+                                                            onClick={() => handleCancelIndent(ind)}
+                                                            disabled={cancellingId === ind.id}
+                                                            title="Cancel this indent (raised in error)"
+                                                            className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg px-2 py-1 transition-colors disabled:opacity-50"
+                                                        >
+                                                            <Ban className="h-3 w-3" /> {cancellingId === ind.id ? 'Cancelling…' : 'Cancel'}
+                                                        </button>
+                                                    )}
+                                                </div>
                                             </div>
+                                            {String(ind.status || '').toLowerCase() === 'cancelled' && ind.verification_notes && (
+                                                <p className="px-4 py-1.5 text-[11px] text-rose-600 bg-rose-50/50 border-b border-rose-100">{ind.verification_notes}</p>
+                                            )}
                                             <div className="px-4 py-2 divide-y divide-gray-50">
                                                 {(ind.items || []).length === 0 ? (
                                                     <p className="text-xs text-gray-400 py-1.5">No line items.</p>

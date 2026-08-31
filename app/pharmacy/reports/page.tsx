@@ -53,6 +53,7 @@ export default function PharmacyReportsPage() {
     const [search, setSearch] = useState('');
     const [searchInput, setSearchInput] = useState('');
     const [doctorIpdOnly, setDoctorIpdOnly] = useState(false);
+    const [doctorByMonth, setDoctorByMonth] = useState(false);
 
     // IPD bill verification drill-down
     const [billDetail, setBillDetail] = useState<any>(null);
@@ -82,6 +83,15 @@ export default function PharmacyReportsPage() {
         }),
         { ipd: 0, opd: 0, counter: 0, revenue: 0, bills: 0, ipdBills: 0 },
     ), [doctorRows]);
+
+    // Month columns for the matrix; same source as the Monthly Summary table.
+    const monthCols = useMemo(() => (rev?.byMonth || []) as any[], [rev]);
+    // IPD-only mode shows the IPD figure in each cell so the row ties to its total.
+    const cellOf = (d: any, monthKey: string) => {
+        const cell = d.months?.[monthKey];
+        if (!cell) return 0;
+        return doctorIpdOnly ? cell.ipd : cell.total;
+    };
 
     const openBillDetail = async (invoiceId: number) => {
         setBillDetailLoading(true);
@@ -940,6 +950,10 @@ export default function PharmacyReportsPage() {
                                             <input type="checkbox" checked={doctorIpdOnly} onChange={e => setDoctorIpdOnly(e.target.checked)} className="accent-violet-600" />
                                             IPD only
                                         </label>
+                                        <label className="flex items-center gap-1.5 text-[11px] font-bold text-gray-500 cursor-pointer">
+                                            <input type="checkbox" checked={doctorByMonth} onChange={e => setDoctorByMonth(e.target.checked)} className="accent-violet-600" />
+                                            Month-wise
+                                        </label>
                                         <button onClick={printDoctorWise} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-gray-600 text-[11px] font-bold rounded-lg hover:bg-gray-50">
                                             <FileText className="h-3.5 w-3.5" /> Print
                                         </button>
@@ -947,6 +961,52 @@ export default function PharmacyReportsPage() {
                                 </div>
                                 {doctorRows.length === 0 ? (
                                     <div className="text-center py-10 text-gray-400 text-sm">No data</div>
+                                ) : doctorByMonth ? (
+                                    /* Doctor x month matrix. Columns come from byMonth so the
+                                       column totals match the Monthly Summary exactly. */
+                                    <div className="max-h-[420px] overflow-auto">
+                                        <table className="w-full text-left">
+                                            <thead className="bg-gray-50 border-b border-gray-200 sticky top-0">
+                                                <tr>
+                                                    <th className="px-4 py-2.5 text-[10px] font-black text-gray-400 uppercase tracking-wider">#</th>
+                                                    <th className="px-4 py-2.5 text-[10px] font-black text-gray-400 uppercase tracking-wider">Doctor</th>
+                                                    {monthCols.map((m: any) => (
+                                                        <th key={m.key} className="px-4 py-2.5 text-right text-[10px] font-black text-gray-400 uppercase tracking-wider">{m.month}</th>
+                                                    ))}
+                                                    <th className="px-4 py-2.5 text-right text-[10px] font-black text-gray-400 uppercase tracking-wider">Total</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-gray-50">
+                                                {doctorRows.map((d: any, i: number) => (
+                                                    <tr key={i} className="hover:bg-gray-50/50">
+                                                        <td className="px-4 py-2.5 text-xs text-gray-400">{i + 1}</td>
+                                                        <td className="px-4 py-2.5 text-sm font-bold text-gray-700">{d.name}</td>
+                                                        {monthCols.map((m: any) => (
+                                                            <td key={m.key} className="px-4 py-2.5 text-right text-sm text-gray-700">{inr(cellOf(d, m.key))}</td>
+                                                        ))}
+                                                        <td className="px-4 py-2.5 text-right text-sm font-black text-gray-900">
+                                                            {inr(doctorIpdOnly ? d.ipd : d.revenue)}
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                            <tfoot className="bg-gray-50 sticky bottom-0">
+                                                <tr className="border-t-2 border-gray-200">
+                                                    <td className="px-4 py-3 text-sm font-black text-gray-900" colSpan={2}>
+                                                        {doctorIpdOnly ? 'Total IPD' : 'Total'} &mdash; {doctorRows.length} doctors
+                                                    </td>
+                                                    {monthCols.map((m: any) => (
+                                                        <td key={m.key} className="px-4 py-3 text-right text-sm font-black text-gray-900">
+                                                            {inr(doctorRows.reduce((t: number, d: any) => t + cellOf(d, m.key), 0))}
+                                                        </td>
+                                                    ))}
+                                                    <td className="px-4 py-3 text-right text-sm font-black text-gray-900">
+                                                        {inr(doctorIpdOnly ? doctorTotals.ipd : doctorTotals.revenue)}
+                                                    </td>
+                                                </tr>
+                                            </tfoot>
+                                        </table>
+                                    </div>
                                 ) : (
                                     <div className="max-h-[420px] overflow-auto">
                                         <table className="w-full text-left">

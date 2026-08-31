@@ -125,10 +125,14 @@ export default function PharmacyInvoicesPage() {
         const opts: any = { invoice_type: 'PHARMACY', limit: 1000 };
         if (statusFilter) opts.status = statusFilter;
 
-        // For custom range pass dates to server; presets filter client-side from a larger set
-        if (datePreset === 'custom' && customFrom && customTo) {
-            opts.date_from = new Date(customFrom + 'T00:00:00');
-            opts.date_to = new Date(customTo + 'T23:59:59');
+        // For custom range pass dates to server; presets filter client-side from a larger set.
+        // One end is enough — picking a single date means that day only, which
+        // previously fell through and returned an unfiltered list.
+        if (datePreset === 'custom' && (customFrom || customTo)) {
+            const from = customFrom || customTo;
+            const to = customTo || customFrom;
+            opts.date_from = new Date(from + 'T00:00:00');
+            opts.date_to = new Date(to + 'T23:59:59');
         }
 
         const res = await getInvoices(opts);
@@ -189,7 +193,20 @@ export default function PharmacyInvoicesPage() {
         const counter = filtered.filter(inv => !isIpd(inv));
         const receipts = counter.reduce((s, inv) => s + (Number(inv.net_amount || 0) - Number(inv.balance_due || 0)), 0);
         const balanceDue = counter.reduce((s, inv) => s + Number(inv.balance_due || 0), 0);
-        return { totalBills, grossAmount, receipts, balanceDue };
+
+        // Gross split by stream. A registered OPD/counter patient and a walk-in are
+        // both non-IPD, but the ward asked for OPD and counter apart, so a bill
+        // against a real UHID counts as OPD and WALKIN as counter sale.
+        const ipdRows = filtered.filter(isIpd);
+        const opdRows = counter.filter(inv => inv.patient_id !== 'WALKIN');
+        const walkinRows = counter.filter(inv => inv.patient_id === 'WALKIN');
+        const sum = (rows: any[]) => rows.reduce((s, inv) => s + Number(inv.net_amount || 0), 0);
+        return {
+            totalBills, grossAmount, receipts, balanceDue,
+            ipdAmount: sum(ipdRows), ipdBills: ipdRows.length,
+            opdAmount: sum(opdRows), opdBills: opdRows.length,
+            counterAmount: sum(walkinRows), counterBills: walkinRows.length,
+        };
     }, [filtered]);
 
     // ── Payment modal ─────────────────────────────────────────────────────
@@ -425,6 +442,32 @@ export default function PharmacyInvoicesPage() {
                         <div>
                             <p className="text-xs text-gray-500 font-medium">Balance Due</p>
                             <p className="text-lg font-bold text-rose-600">{fmt(summary.balanceDue)}</p>
+                        </div>
+                    </div>
+                </div>
+
+                {/* ── IPD / OPD / Counter split of the Gross figure above ───── */}
+                <div className="bg-white border border-gray-200 rounded-xl px-4 py-3 shadow-sm">
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                        <div>
+                            <p className="text-[11px] text-gray-500 font-semibold uppercase tracking-wide">Total IPD Amount</p>
+                            <p className="text-base font-bold text-violet-700">{fmt(summary.ipdAmount)}</p>
+                            <p className="text-[10px] text-gray-400">{summary.ipdBills} bills</p>
+                        </div>
+                        <div>
+                            <p className="text-[11px] text-gray-500 font-semibold uppercase tracking-wide">Total OPD Amount</p>
+                            <p className="text-base font-bold text-blue-700">{fmt(summary.opdAmount)}</p>
+                            <p className="text-[10px] text-gray-400">{summary.opdBills} bills</p>
+                        </div>
+                        <div>
+                            <p className="text-[11px] text-gray-500 font-semibold uppercase tracking-wide">Counter / Walk-in</p>
+                            <p className="text-base font-bold text-emerald-700">{fmt(summary.counterAmount)}</p>
+                            <p className="text-[10px] text-gray-400">{summary.counterBills} bills</p>
+                        </div>
+                        <div className="lg:border-l lg:border-gray-200 lg:pl-4">
+                            <p className="text-[11px] text-gray-600 font-semibold uppercase tracking-wide">Overall Total</p>
+                            <p className="text-lg font-black text-gray-900">{fmt(summary.grossAmount)}</p>
+                            <p className="text-[10px] text-gray-400">{summary.totalBills} bills</p>
                         </div>
                     </div>
                 </div>

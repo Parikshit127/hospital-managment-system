@@ -104,12 +104,16 @@ export async function getIndentReport(filters?: IndentReportFilters) {
             };
         });
 
+        // A cancelled indent was raised in error and nothing was dispensed against
+        // it, so it must not read as an unfulfilled ward request.
+        const isCancelled = (r: any) => String(r.status).toLowerCase() === 'cancelled';
         const summary = {
             total: rows.length,
             pending: rows.filter((r: any) => String(r.status).toLowerCase() === 'pending').length,
             completed: rows.filter((r: any) => ['completed', 'dispensed', 'paid'].includes(String(r.status).toLowerCase())).length,
-            short_supplied: rows.filter((r: any) => r.qty_short > 0).length,
-            total_value: rows.reduce((s: number, r: any) => s + r.value, 0),
+            cancelled: rows.filter(isCancelled).length,
+            short_supplied: rows.filter((r: any) => r.qty_short > 0 && !isCancelled(r)).length,
+            total_value: rows.filter((r: any) => !isCancelled(r)).reduce((s: number, r: any) => s + r.value, 0),
         };
 
         return { success: true, data: serialize({ rows, summary }) };
