@@ -142,6 +142,27 @@ tick(now) →
 | Finance | IPD final bill — bed-days, nursing, consultant lines + matching payment |
 | Beds | Occupied → Cleaning (`cleaning_started_at` stamped) → Available |
 | Auth / audit | `system_audit_logs` LOGIN/LOGOUT per shift + one row per clinical action |
+| Ward care | `IPDVitals` + `vital_signs` mirror, NEWS scoring, `NursingNote` |
+| eMAR | `ActiveMedication` prescriptions + `MedicationAdministration` (given / refused / omitted) |
+| Deposits | `PatientDeposit` admission advances, `collected_by` set |
+| Insurance / TPA | `insurance_policies` at registration, `insurance_claims` → approved / short-paid / rejected |
+| General Ledger | `GL_JournalEntry` + `GL_JournalLine` — receipts and revenue, always balanced |
+| ER | `triage_results` with Red/Orange/Yellow/Green levels |
+
+### Realism rules
+
+| Rule | Where |
+|---|---|
+| One workstation per person, forever | `workstationIp()` — FNV-1a over the username, `10.20.{vlan}.{host}` |
+| Shift start/end jitter, different each day | `shiftOffsetMinutes(username, dayKey)` — fixed part + per-day part |
+| Busy days and quiet days | `dailyVolumeMultiplier()` — 0.72–1.28, keyed on the date |
+| Plausible role substitution | `ROLE_FALLBACKS` — finance falls back to ipd_manager/reception/admin, never to a pharmacist |
+| Insured patients admit more readily | `P_ADMIT_AFTER_CONSULT × 2.6` for `tpa_insurance` |
+
+**All per-day randomness is derived from `hash(key + dateString)`, never `Math.random()`.** This is
+load-bearing, not neatness: staff session state is read back out of the audit log, so an offset that
+moved between ticks would make users flap between logged-in and logged-out on every tick and write a
+nonsense trail. Stable within a day, different across days.
 
 ### Attribution
 
@@ -250,9 +271,15 @@ From `LLM_INDEX.md` §14–15 and `CLAUDE.local.md`, filtered to what the genera
 
 ### Verification
 
-`npx tsx scratch/t-tick.ts` drives 12 ticks across ~12 simulated hours and asserts 14 invariants —
-all passing as of 2026-08-31 (105 patients, 9 admit→discharge cycles, 108 invoices/payments,
-443 audit rows):
+`npx tsx scratch/t-tick.ts` drives 12 ticks across ~12 simulated hours and asserts **25 invariants —
+all passing** as of 2026-08-31 (104 patients, 10 admit→discharge cycles, 114 invoices/payments,
+70 observation sets, 38 nursing notes, 120 journal entries, 745 audit rows).
+
+`npx tsx app/lib/sim-staff.ts` self-checks the deterministic pieces with no DB: workstation
+stability and uniqueness, shift offsets constant within a day but moving across days, and the daily
+volume multiplier's range and spread.
+
+Invariants asserted:
 
 - every stage advances; lab results populate; beds complete Available → Occupied → Cleaning →
   Available
@@ -262,13 +289,38 @@ all passing as of 2026-08-31 (105 patients, 9 admit→discharge cycles, 108 invo
 - **every non-Auth audit row is attributed to a user with a LOGIN on record**
 - no bed sits Occupied without a live admission
 - no record anywhere carries marker text
+- **every GL journal entry balances**, and its header totals equal its own lines
+- every NEWS score recomputes to the value stored on the observation
+- every claim references a policy that exists
+- each staff member's workstation IP never drifts across sessions
 
 ### Still not generated
 
-Nursing notes, vitals/NEWS2, eMAR administrations, TPA/insurance claims, deposits, GL journal
-entries, OT cases. Nursing and vitals are the most likely next gap if a ward screen is on camera —
-note that vitals must be written through `app/lib/vitals-recording.ts` to dual-write `IPDVitals`
-and `vital_signs`.
+**OT (Operation Theatre) — deliberately excluded.** OT is mid-rebuild on branch `fix/ot-phase0`,
+and `OT_CONTEXT.md` requires reading it before touching anything under `app/ot`,
+`app/actions/ot-actions.ts` or the OT models. Generating against main's OT schema risks writing
+rows the rebuild then has to migrate or discard. Do this once that branch lands, or on that branch.
+
+Also untouched, and not a short list: HR/payroll, asset register, CRM, call centre, counselling,
+radiology, help centre, feedback, budgets, expenses, purchase orders/GRN, doctor commission
+payouts, Tally export, GST returns. "Every module" is a much larger surface than the eight named in
+the brief — those eight are done; the rest are individually small but each needs its own schema
+pass to stay coherent.
+
+### Documentation drift found while building this
+
+`CLAUDE.local.md` §2 and `LLM_INDEX.md` §12 both instruct that clinical logic lives in shared libs
+and must be called rather than duplicated. **Six of those files do not exist on main:**
+`vitals-recording.ts`, `news2.ts`, `medication-safety.ts`, `escalation-policy.ts`,
+`discharge-readiness.ts`, `drug-classes.ts`. They exist only on the unmerged
+`fix/nursing-module-hardening` branch. On main the scoring and dual-write are inline in
+`app/actions/ipd-nursing-actions.ts`.
+
+`sim-ward.ts` therefore mirrors main's inline `calcNEWS()` — including its omission of the +2
+supplemental-oxygen modifier the real RCP score requires. Matching the app beats matching the
+standard here: a ward screen showing a NEWS value the software itself would never compute is worse
+than a slightly wrong one. **When that branch merges, delete `calcNews()` from `sim-ward.ts` and
+call the shared lib.**
 
 ### Reset
 

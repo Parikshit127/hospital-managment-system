@@ -112,6 +112,17 @@ async function main() {
         // Order matters — children before parents, or the FKs reject the delete.
         const o = { organizationId: org.id };
         console.log(`Clearing generated activity for ${ORG.name} (${org.id})…`);
+        await prisma.gL_JournalLine.deleteMany({ where: o });
+        await prisma.gL_JournalEntry.deleteMany({ where: o });
+        await prisma.insurance_claims.deleteMany({ where: o });
+        await prisma.insurance_policies.deleteMany({ where: o });
+        await prisma.patientDeposit.deleteMany({ where: o });
+        await prisma.medicationAdministration.deleteMany({ where: o });
+        await prisma.activeMedication.deleteMany({ where: o });
+        await prisma.nursingNote.deleteMany({ where: o });
+        await prisma.iPDVitals.deleteMany({ where: o });
+        await prisma.vital_signs.deleteMany({ where: o });
+        await prisma.triage_results.deleteMany({ where: o });
         await prisma.payments.deleteMany({ where: o });
         await prisma.invoice_items.deleteMany({ where: o });
         await prisma.invoices.deleteMany({ where: o });
@@ -272,6 +283,49 @@ async function main() {
         medCreated++;
     }
     console.log(`✓ Medicines: ${medCreated} created`);
+
+    // ── Chart of accounts ────────────────────────────────────────────────────
+    // Minimal double-entry chart. The engine posts against these codes; if they are
+    // missing it simply does not post rather than inventing accounts at runtime.
+    const ACCOUNTS = [
+        { account_code: '1100', account_name: 'Cash & Bank', account_type: 'Asset', normal_balance: 'Debit' },
+        { account_code: '1200', account_name: 'Patient Receivables', account_type: 'Asset', normal_balance: 'Debit' },
+        { account_code: '1300', account_name: 'TPA Receivables', account_type: 'Asset', normal_balance: 'Debit' },
+        { account_code: '2100', account_name: 'Patient Advances', account_type: 'Liability', normal_balance: 'Credit' },
+        { account_code: '4000', account_name: 'OPD Revenue', account_type: 'Income', normal_balance: 'Credit' },
+        { account_code: '4100', account_name: 'IPD Revenue', account_type: 'Income', normal_balance: 'Credit' },
+        { account_code: '4200', account_name: 'Pharmacy Revenue', account_type: 'Income', normal_balance: 'Credit' },
+        { account_code: '4300', account_name: 'Laboratory Revenue', account_type: 'Income', normal_balance: 'Credit' },
+    ];
+    let glCreated = 0;
+    for (const a of ACCOUNTS) {
+        const existing = await prisma.gL_Account.findFirst({
+            where: { organizationId: orgId, account_code: a.account_code },
+        });
+        if (existing) continue;
+        await prisma.gL_Account.create({ data: { ...a, organizationId: orgId, is_active: true } as any });
+        glCreated++;
+    }
+    console.log(`✓ GL accounts: ${glCreated} created`);
+
+    // ── TPA providers ────────────────────────────────────────────────────────
+    // provider_name and provider_code are GLOBALLY unique, not per-org, so these names
+    // are deliberately distinctive to avoid colliding with another tenant's providers.
+    const PROVIDERS = [
+        { provider_name: 'Meridian Health Assurance TPA', provider_code: 'MGH-TPA-01', payment_terms_days: 45 },
+        { provider_name: 'Konkan Medicare Services', provider_code: 'MGH-TPA-02', payment_terms_days: 30 },
+        { provider_name: 'Deccan Family Health Cover', provider_code: 'MGH-TPA-03', payment_terms_days: 60 },
+    ];
+    let provCreated = 0;
+    for (const pr of PROVIDERS) {
+        const existing = await prisma.insurance_providers.findFirst({ where: { provider_code: pr.provider_code } });
+        if (existing) continue;
+        await prisma.insurance_providers.create({
+            data: { ...pr, organizationId: orgId, is_active: true, tpa_type: 'tpa' } as any,
+        });
+        provCreated++;
+    }
+    console.log(`✓ TPA providers: ${provCreated} created`);
 
     console.log('\n────────────────────────────────────────────────');
     console.log(`Organization: ${ORG.name}`);

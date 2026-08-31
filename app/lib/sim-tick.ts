@@ -31,7 +31,11 @@ import {
     generateReceiptNumber,
     createWithUniqueRetry,
 } from '@/app/lib/sequence-generator';
-import { loadStaff, syncStaffSessions, actorFor, logSimAudit } from '@/app/lib/sim-staff';
+import {
+    loadStaff, syncStaffSessions, actorFor, logSimAudit, dailyVolumeMultiplier,
+} from '@/app/lib/sim-staff';
+import { runWardCare } from '@/app/lib/sim-ward';
+import { runBackOffice } from '@/app/lib/sim-back-office';
 import { assertActivityTarget } from '@/scripts/sim/guard';
 import { castPerson } from '@/scripts/sim/cast';
 
@@ -187,6 +191,15 @@ export interface TickResult {
     discharged: number;
     ipdBilled: number;
     bedsReleased: number;
+    vitalsRecorded: number;
+    nursingNotes: number;
+    medsPrescribed: number;
+    medsAdministered: number;
+    depositsCollected: number;
+    claimsSubmitted: number;
+    claimsSettled: number;
+    journalEntries: number;
+    erTriaged: number;
 }
 
 const EMPTY: TickResult = {
@@ -195,6 +208,8 @@ const EMPTY: TickResult = {
     indentsRaised: 0, indentsVerified: 0, indentsDispensed: 0,
     staffLoggedIn: 0, staffLoggedOut: 0, opdBilled: 0,
     admitted: 0, discharged: 0, ipdBilled: 0, bedsReleased: 0,
+    vitalsRecorded: 0, nursingNotes: 0, medsPrescribed: 0, medsAdministered: 0,
+    depositsCollected: 0, claimsSubmitted: 0, claimsSettled: 0, journalEntries: 0, erTriaged: 0,
 };
 
 // ---------------------------------------------------------------------------
@@ -263,12 +278,19 @@ export async function runActivityTick(now: Date = new Date()): Promise<TickResul
         : 5;
     result.elapsedMinutes = Number(elapsedMinutes.toFixed(1));
 
+    const tpaProviders: { id: number; provider_code: string }[] =
+        await db.insurance_providers.findMany({ where: { is_active: true }, select: { id: true, provider_code: true } });
+
     const { start: dayStart, end: dayEnd } = getTodayRange(tz);
     const registeredToday = await db.oPD_REG.count({
         where: { created_at: { gte: dayStart, lte: dayEnd } },
     });
 
-    const weight = HOURLY_WEIGHT[hourInTimezone(now, tz)] * DAY_WEIGHT[weekdayInTimezone(now, tz)];
+    // Hour-of-day shape × weekday shape × this particular day's busyness. The last one
+    // is keyed on the date, so two days of reports never look like carbon copies.
+    const weight = HOURLY_WEIGHT[hourInTimezone(now, tz)]
+        * DAY_WEIGHT[weekdayInTimezone(now, tz)]
+        * dailyVolumeMultiplier(now, tz);
     const expected = weight * intensity * PEAK_ARRIVALS_PER_HOUR * (elapsedMinutes / 60);
     // Fractional expectation becomes a probability, so low-rate hours still produce the
     // occasional arrival instead of always flooring to zero.
@@ -282,6 +304,7 @@ export async function runActivityTick(now: Date = new Date()): Promise<TickResul
         const totalSoFar = await db.oPD_REG.count();
         const person = castPerson(totalSoFar + i + 1);
 
+        const patientType = Math.random() < 0.14 ? 'tpa_insurance' : 'cash';
         const patientId = await createWithUniqueRetry(async () => {
             const patientId = await generateUHID(db, config.uhid_prefix || 'AVN');
             await db.oPD_REG.create({
@@ -301,7 +324,7 @@ export async function runActivityTick(now: Date = new Date()): Promise<TickResul
                     emergency_contact_relation: person.emergency_contact_relation,
                     department,
                     registration_consent: true,
-                    patient_type: Math.random() < 0.12 ? 'tpa_insurance' : 'cash',
+                    patient_type: patientType,
                     // Back-date slightly so arrivals within one tick are not all identical.
                     created_at: new Date(now.getTime() - Math.floor(rand(0, elapsedMinutes * 60_000))),
                 } as any,
@@ -323,6 +346,29 @@ export async function runActivityTick(now: Date = new Date()): Promise<TickResul
             });
             return patientId;
         });
+
+        // An insured patient needs a policy on file, or the TPA claim raised against
+        // their bill later would have nothing to attach to and the claim never appears.
+        if (patientType === 'tpa_insurance' && tpaProviders.length) {
+            const provider = pick(tpaProviders);
+            const limit = pick([100000, 200000, 300000, 500000]);
+            await db.insurance_policies.create({
+                data: {
+                    patient_id: patientId,
+                    provider_id: provider.id,
+                    policy_number: `${provider.provider_code}/${new Date().getFullYear()}/${String(Math.floor(rand(10000, 99999)))}`,
+                    policy_holder: person.full_name,
+                    plan_name: 'Family Floater',
+                    policy_type: 'Individual',
+                    coverage_limit: limit,
+                    remaining_limit: limit,
+                    valid_from: new Date(now.getFullYear(), 0, 1),
+                    valid_until: new Date(now.getFullYear(), 11, 31),
+                    status: 'Active',
+                    organizationId: orgId,
+                } as any,
+            });
+        }
 
         await logSimAudit({
             organizationId: orgId,
@@ -471,7 +517,18 @@ export async function runActivityTick(now: Date = new Date()): Promise<TickResul
         // ── Admission ────────────────────────────────────────────────────────
         // Only admits if a bed is genuinely free; the bed is flipped to Occupied in the
         // same step so two admissions can never claim it.
-        if (Math.random() < P_ADMIT_AFTER_CONSULT) {
+        //
+        // Insured patients are admitted more readily — planned and elective admissions
+        // skew heavily towards people with cover. That is realistic on its own, and it
+        // also keeps the TPA pipeline fed: at a flat rate, insured-AND-admitted is ~1% of
+        // arrivals, so whether the claims screens had any data at all came down to luck.
+        const insured = await db.oPD_REG.findFirst({
+            where: { patient_id: appt.patient_id }, select: { patient_type: true },
+        });
+        const admitChance = insured?.patient_type === 'tpa_insurance'
+            ? P_ADMIT_AFTER_CONSULT * 2.6
+            : P_ADMIT_AFTER_CONSULT;
+        if (Math.random() < admitChance) {
             const freeBed = await db.beds.findFirst({
                 where: { status: 'Available' },
                 select: { bed_id: true, ward_id: true, bed_name: true },
@@ -687,6 +744,14 @@ export async function runActivityTick(now: Date = new Date()): Promise<TickResul
         });
     }
 
+    // ── Ward care ────────────────────────────────────────────────────────────
+    // Runs BEFORE discharge, deliberately. Ward care only looks at admissions still in
+    // 'Admitted', so discharging first would mean a patient who arrived and left within
+    // one tick was never observed, never medicated and never charted — leaving a
+    // discharge summary attached to an empty record.
+    const ward = await runWardCare(db, orgId, staff, doctors, now, tz);
+    Object.assign(result, ward);
+
     // ── Discharge ────────────────────────────────────────────────────────────
     // Summary, final bill, payment and bed release happen as one sequence, the way a
     // real discharge does — a discharged admission with no bill, or a freed bed with no
@@ -846,6 +911,12 @@ export async function runActivityTick(now: Date = new Date()): Promise<TickResul
             details: 'Terminal cleaning completed', at: new Date(due),
         });
     }
+
+    // ── Back office ──────────────────────────────────────────────────────────
+    // Runs last: deposits, claims and ledger postings all reference admissions and
+    // invoices created earlier in this same tick.
+    const backOffice = await runBackOffice(db, orgId, staff, now, tz);
+    Object.assign(result, backOffice);
 
     return result;
 }
