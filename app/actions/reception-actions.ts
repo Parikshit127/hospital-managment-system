@@ -8,6 +8,7 @@ import { sendWhatsAppMessage, sendWhatsAppTemplate, formatPhoneNumber } from '@/
 import { appointmentConfirmationMsg, appointmentCancellationMsg } from '@/app/lib/whatsapp-templates';
 import { resolveOPDConfig } from '@/app/lib/opd-config';
 import { formatDoctorName } from '@/app/lib/format-name';
+import { EDITABLE_PATIENT_FIELDS, ALL_EDITABLE_PATIENT_FIELDS } from '@/app/lib/patient-fields';
 import type {
     ActionResponse,
     PaginatedResponse,
@@ -442,18 +443,7 @@ export async function updatePatientField(patientId: string, field: string, value
     try {
         const { db } = await requireTenantContext();
 
-        const allowedFields = [
-            'full_name', 'phone', 'email', 'address', 'city', 'state', 'pincode', 'country', 'age', 'gender',
-            'department', 'blood_group', 'date_of_birth',
-            'emergency_contact_name', 'emergency_contact_phone', 'emergency_contact_relation',
-            // Identity documents
-            'aadhar_card', 'abha_number', 'pan_number',
-            'nationality', 'govt_id_type', 'govt_id_number',
-            // Medical
-            'allergies', 'chronic_conditions',
-        ];
-
-        if (!allowedFields.includes(field)) {
+        if (!(EDITABLE_PATIENT_FIELDS as readonly string[]).includes(field)) {
             return { success: false, error: 'Field not editable' };
         }
 
@@ -506,20 +496,9 @@ export async function updatePatient(patientId: string, payload: Record<string, s
             delete payload.corporate_name;
         }
 
-        const allowedFields = [
-            'full_name', 'phone', 'email', 'address', 'city', 'state', 'pincode', 'country', 'age', 'gender',
-            'department', 'blood_group', 'date_of_birth',
-            'emergency_contact_name', 'emergency_contact_phone', 'emergency_contact_relation',
-            'aadhar_card', 'abha_number', 'pan_number',
-            'nationality', 'govt_id_type', 'govt_id_number',
-            'allergies', 'chronic_conditions',
-            // Billing / payer
-            'patient_type', 'corporate_id', 'corporate_card_number', 'employee_id',
-        ];
-
         const data: Record<string, string | null> = {};
         for (const [k, v] of Object.entries(payload)) {
-            if (!allowedFields.includes(k)) continue;
+            if (!ALL_EDITABLE_PATIENT_FIELDS.includes(k)) continue;
             data[k] = (typeof v === 'string' && v.trim() === '') ? null : v;
         }
 

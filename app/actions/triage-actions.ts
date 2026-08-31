@@ -366,7 +366,8 @@ export async function performTriage(input: TriageInput) {
                     phone: input.phone || null,
                     email: input.email || null, // Allow email tracking from triage if extended later
                     department: result.recommendedDepartment,
-                    address: 'Not provided',
+                    // Null, not placeholder text — see the note in er-actions.ts.
+                    address: null,
                     password: null,
                 },
             });

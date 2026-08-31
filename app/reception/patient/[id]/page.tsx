@@ -85,6 +85,22 @@ function EditableField({
                             className="flex-1 px-2 py-1 text-sm border border-teal-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-orange-500 bg-white"
                             autoFocus
                         />
+                    ) : type === 'textarea' ? (
+                        // Address is a 500-char street/house/landmark line; a
+                        // single-line box hid everything past the first few words.
+                        // Enter inserts a newline here, so Ctrl/Cmd+Enter saves.
+                        <textarea
+                            value={editValue}
+                            rows={3}
+                            maxLength={500}
+                            onChange={e => setEditValue(e.target.value)}
+                            onKeyDown={e => {
+                                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleSave();
+                                if (e.key === 'Escape') setEditing(false);
+                            }}
+                            className="flex-1 px-2 py-1 text-sm border border-teal-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-orange-500 bg-white resize-y"
+                            autoFocus
+                        />
                     ) : (
                         <input
                             type={type}
@@ -116,7 +132,7 @@ function EditableField({
     return (
         <div className="group cursor-pointer" onClick={() => setEditing(true)}>
             <span className="text-[10px] font-semibold text-gray-400 uppercase">{label}</span>
-            <p className="text-sm text-gray-900 flex items-center gap-1">
+            <p className={`text-sm text-gray-900 flex gap-1 ${type === 'textarea' ? 'items-start whitespace-pre-wrap' : 'items-center'}`}>
                 {displayValue || <span className="text-gray-300">-</span>}
                 <Pencil className="h-3 w-3 text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity" />
             </p>
@@ -498,7 +514,7 @@ export default function PatientProfilePage() {
                             <EditableField label="Email" value={patient.email || ''} field="email" patientId={patientId} onSave={loadData} type="email" />
                             <EditableField label="Blood Group" value={patient.blood_group || ''} field="blood_group" patientId={patientId} onSave={loadData} />
                             <EditableField label="Date of Birth" value={patient.date_of_birth || ''} field="date_of_birth" patientId={patientId} onSave={loadData} type="date" />
-                            <EditableField label="Address" value={patient.address || ''} field="address" patientId={patientId} onSave={loadData} />
+                            <EditableField label="Address" value={patient.address || ''} field="address" patientId={patientId} onSave={loadData} type="textarea" />
                             <EditableField label="City" value={patient.city || ''} field="city" patientId={patientId} onSave={loadData} />
                             <EditableField label="State" value={patient.state || ''} field="state" patientId={patientId} onSave={loadData} />
                             <EditableField label="Pincode" value={patient.pincode || ''} field="pincode" patientId={patientId} onSave={loadData} />

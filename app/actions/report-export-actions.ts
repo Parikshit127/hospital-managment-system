@@ -18,7 +18,8 @@ import { getExpenseDashboardStats, getExpenseCategories } from '@/app/actions/ex
 import { getIndentReport, type IndentReportFilters } from '@/app/actions/indent-report-actions';
 import { getFixedAssets } from '@/app/actions/asset-management-actions';
 import { getAssetDepreciationReport } from '@/app/actions/asset-register-actions';
-import { EDIT_CANCEL_ACTIONS } from '@/app/lib/audit-actions';
+import { EDIT_CANCEL_ACTIONS, resolveAuditActionFilter, auditActionLabel } from '@/app/lib/audit-actions';
+import { getDayRange, getOrgTimezone } from '@/app/lib/timezone';
 import { maskSecret } from '@/app/lib/secure-config';
 
 function fmtDate(v: any) {
@@ -54,12 +55,15 @@ export async function exportAuditReport(params: {
         const { db, organizationId, session } = await requireTenantContext();
 
         const where: any = { organizationId };
-        if (params.action) where.action = params.action;
+        if (params.action) where.action = resolveAuditActionFilter(params.action);
         if (params.scope === 'edits' && !params.action) where.action = { in: EDIT_CANCEL_ACTIONS };
         if (params.from || params.to) {
+            // Date-only inputs resolved in the org's timezone — see the same fix
+            // in app/api/ipd/audit-logs/route.ts.
+            const tz = await getOrgTimezone();
             where.created_at = {};
-            if (params.from) where.created_at.gte = new Date(params.from);
-            if (params.to) where.created_at.lte = new Date(new Date(params.to).setHours(23, 59, 59, 999));
+            if (params.from) where.created_at.gte = getDayRange(params.from, tz).start;
+            if (params.to) where.created_at.lte = getDayRange(params.to, tz).end;
         }
         if (params.search) {
             where.OR = [
@@ -100,7 +104,7 @@ export async function exportAuditReport(params: {
             }
             return {
                 timestamp: fmtDate(l.created_at),
-                action: String(l.action ?? '').replace(/_/g, ' '),
+                action: auditActionLabel(l.action),
                 module: l.module ?? '',
                 entity: l.entity_id ? `${l.entity_type ?? ''}/${l.entity_id}` : (l.entity_type ?? ''),
                 user: l.username || u?.name || u?.username || 'System / not recorded',

@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { AppShell } from '@/app/components/layout/AppShell';
 import { Shield, Search, Download, AlertTriangle, Loader2 } from 'lucide-react';
 import { exportAuditReport } from '@/app/actions/report-export-actions';
-import { ENTITY_TYPE_LABELS } from '@/app/lib/audit-actions';
+import { ENTITY_TYPE_LABELS, AUDIT_ACTION_GROUPS, auditActionLabel } from '@/app/lib/audit-actions';
 
 const IPD_ACTION_TYPES = [
   'admission_created', 'admission_discharged', 'ward_round_recorded',
@@ -13,15 +13,6 @@ const IPD_ACTION_TYPES = [
   'bed_transfer', 'diet_plan_assigned', 'nursing_assessment',
   'preauth_created', 'preauth_updated', 'tpa_claim_submitted',
   'tpa_settled', 'handover_saved', 'handover_acknowledged',
-];
-
-// Kept in sync with EDIT_CANCEL_ACTIONS in the audit-logs route — shown as the
-// action dropdown when the Edit / Cancel tab is active.
-const EDIT_CANCEL_ACTIONS = [
-  'UPDATE_PAYMENT', 'REVERSE_PAYMENT', 'VOID_PAYMENT', 'PROCESS_REFUND',
-  'CANCEL_DEPOSIT', 'UPDATE_DEPOSIT', 'CANCEL_INVOICE', 'EDIT_INVOICE',
-  'UPDATE_INVOICE', 'DELETE_INVOICE', 'CANCEL_ADMISSION', 'CANCEL_BILL',
-  'WRITE_OFF', 'DISCOUNT_APPLIED', 'CREDIT_NOTE_CREATED', 'STOCK_ADJUSTED',
 ];
 
 const PAGE_SIZE = 50;
@@ -115,7 +106,11 @@ export default function IPDAuditTrailPage() {
     }
   }
 
-  const actionOptions = tab === 'edits' ? EDIT_CANCEL_ACTIONS : IPD_ACTION_TYPES;
+  // Edit/Cancel tab filters by group key ("bill_cancelled"); the Activity tab
+  // still filters by raw action name. Both are passed straight through as ?action=.
+  const actionOptions = tab === 'edits'
+    ? AUDIT_ACTION_GROUPS.map(g => ({ value: g.key, label: g.label }))
+    : IPD_ACTION_TYPES.map(a => ({ value: a, label: a.replace(/_/g, ' ') }));
 
   return (
     <AppShell>
@@ -169,7 +164,7 @@ export default function IPDAuditTrailPage() {
             <select value={actionFilter} onChange={e => setActionFilter(e.target.value)}
               className="text-xs border border-gray-200 rounded-xl px-3 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-gray-400">
               <option value="">All Actions</option>
-              {actionOptions.map(a => <option key={a} value={a}>{a.replace(/_/g, ' ')}</option>)}
+              {actionOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           </div>
 
@@ -211,8 +206,14 @@ export default function IPDAuditTrailPage() {
                         })}
                       </td>
                       <td className="px-4 py-3">
-                        <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full font-bold text-[10px] uppercase whitespace-nowrap">
-                          {log.action?.replace(/_/g, ' ')}
+                        <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] uppercase whitespace-nowrap ${
+                          // An override bypassed a guard rail — never let it read
+                          // like an ordinary cancellation.
+                          log.action === 'FORCE_CANCEL_ADMISSION'
+                            ? 'bg-rose-100 text-rose-700'
+                            : 'bg-blue-100 text-blue-700'
+                        }`}>
+                          {auditActionLabel(log.action)}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-gray-500 capitalize">{log.module ?? '—'}</td>

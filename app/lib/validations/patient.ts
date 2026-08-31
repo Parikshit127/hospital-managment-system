@@ -50,9 +50,16 @@ export const patientRegistrationSchema = z.object({
         .string()
         .min(2, 'Country is required')
         .max(60, 'Country must be under 60 characters'),
+    // Postal code shape depends on the country — the India-only 6-digit rule is
+    // enforced by the schema-level refine below, not here. The form offers other
+    // countries with a 10-char postal code, and this used to reject every one of
+    // them with "Pincode must be 6 digits".
     pincode: z
         .string()
-        .regex(/^\d{6}$/, 'Pincode must be 6 digits'),
+        .trim()
+        .min(3, 'Postal code is required')
+        .max(10, 'Postal code must be under 10 characters')
+        .regex(/^[A-Za-z0-9][A-Za-z0-9 -]*$/, 'Enter a valid postal code'),
     aadhar: z
         .string()
         .transform(val => val.replace(/[-\s]/g, ''))
@@ -129,7 +136,12 @@ export const patientRegistrationSchema = z.object({
     registration_remarks: z.string().optional().or(z.literal('')),
     distance_from_hospital_km: z.string().optional().or(z.literal('')),
     registration_form_url: z.string().optional().or(z.literal('')),
-});
+}).refine(
+    // Indian PINs stay strictly 6 digits; everything else just has to look like
+    // a postal code.
+    data => data.country?.trim().toLowerCase() !== 'india' || /^\d{6}$/.test(data.pincode),
+    { path: ['pincode'], message: 'Indian pincode must be exactly 6 digits' },
+);
 
 export type PatientRegistrationInput = z.infer<typeof patientRegistrationSchema>;
 

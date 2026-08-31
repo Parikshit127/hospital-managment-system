@@ -28,6 +28,7 @@ import { AdminPage } from "../../components/AdminPage";
 import { getAdminPatientFullDetails, getDoctorsForDropdown } from "@/app/actions/admin-actions";
 import { changeAdmissionDoctor } from "@/app/actions/ipd-actions";
 import { archivePatient, hardDeletePatient, updatePatient } from "@/app/actions/reception-actions";
+import { buildPatientDraft } from "@/app/lib/patient-fields";
 import { useToast } from "@/app/components/ui/Toast";
 
 import OverviewTab from "./tabs/OverviewTab";
@@ -95,34 +96,10 @@ export default function AdminPatientDetailsPage() {
   const startEdit = () => {
     if (!data?.patient) return;
     setActiveTab("overview"); // Edit mode only meaningful on Overview tab
-    const p = data.patient;
-    setDraft({
-      full_name: p.full_name ?? '',
-      phone: p.phone ?? '',
-      email: p.email ?? '',
-      address: p.address ?? '',
-      city: p.city ?? '',
-      state: p.state ?? '',
-      country: p.country ?? 'India',
-      pincode: p.pincode ?? '',
-      age: p.age ?? '',
-      gender: p.gender ?? '',
-      date_of_birth: p.date_of_birth ?? '',
-      blood_group: p.blood_group ?? '',
-      aadhar_card: p.aadhar_card ?? '',
-      abha_number: p.abha_number ?? '',
-      pan_number: p.pan_number ?? '',
-      emergency_contact_name: p.emergency_contact_name ?? '',
-      emergency_contact_phone: p.emergency_contact_phone ?? '',
-      emergency_contact_relation: p.emergency_contact_relation ?? '',
-      allergies: p.allergies ?? '',
-      chronic_conditions: p.chronic_conditions ?? '',
-      // Billing / payer
-      patient_type: p.patient_type ?? 'cash',
-      corporate_id: p.corporate_id ?? '',
-      corporate_card_number: p.corporate_card_number ?? '',
-      employee_id: p.employee_id ?? '',
-    });
+    // Seeded from the shared field list, so a control can never render blank
+    // while the record holds a value. Three fields (nationality, govt_id_type,
+    // govt_id_number) were rendered but missing from a hand-written seed here.
+    setDraft(buildPatientDraft(data.patient));
     setIsEditing(true);
   };
 

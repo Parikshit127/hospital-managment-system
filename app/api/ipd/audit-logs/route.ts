@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireTenantContext } from '@/backend/tenant';
-import { EDIT_CANCEL_ACTIONS } from '@/app/lib/audit-actions';
+import { EDIT_CANCEL_ACTIONS, resolveAuditActionFilter } from '@/app/lib/audit-actions';
+import { getDayRange, getOrgTimezone } from '@/app/lib/timezone';
 
 export async function GET(req: NextRequest) {
   try {
@@ -19,14 +20,18 @@ export async function GET(req: NextRequest) {
     // Audit rows are tenant data — without this filter one org could read
     // another org's activity log.
     const where: any = { organizationId };
-    if (action) where.action = action;
+    if (action) where.action = resolveAuditActionFilter(action);
     if (module) where.module = module;
     if (scope === 'edits' && !action) where.action = { in: [...EDIT_CANCEL_ACTIONS] };
     if (from || to) {
+      // Both inputs are date-only. Resolve them against the ORG's timezone, not
+      // the server's — `new Date('2026-08-31')` is UTC midnight, which on an IST
+      // box silently dropped the first 5.5h of the range and the last 5.5h of
+      // the day the user asked for.
+      const tz = await getOrgTimezone();
       where.created_at = {};
-      if (from) where.created_at.gte = new Date(from);
-      // `to` is a date-only input; include the whole of that day.
-      if (to) where.created_at.lte = new Date(new Date(to).setHours(23, 59, 59, 999));
+      if (from) where.created_at.gte = getDayRange(from, tz).start;
+      if (to) where.created_at.lte = getDayRange(to, tz).end;
     }
     if (search) {
       where.OR = [

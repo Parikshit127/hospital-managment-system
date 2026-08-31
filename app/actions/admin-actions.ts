@@ -3,6 +3,7 @@
 import { requireTenantContext } from "@/backend/tenant";
 import { prisma } from "@/backend/db";
 import { addUserSchema, updateUserSchema } from "@/app/lib/validations";
+import { attachCancellationReasons } from "@/app/lib/admission-cancellation";
 import * as bcrypt from "bcryptjs";
 
 function serialize<T>(data: T): T {
@@ -1203,38 +1204,7 @@ export async function getAdminPatientFullDetails(patientId: string) {
       return { success: false, error: "Patient not found" };
     }
 
-    const cancelledAdmissionIds = admissions
-      .filter((admission: any) => admission.status === "Cancelled")
-      .map((admission: any) => admission.admission_id);
-    const cancellationLogs =
-      cancelledAdmissionIds.length > 0
-        ? await db.system_audit_logs.findMany({
-            where: {
-              action: "CANCEL_ADMISSION",
-              entity_type: "admission",
-              entity_id: { in: cancelledAdmissionIds },
-            },
-            orderBy: { created_at: "desc" },
-            select: { entity_id: true, details: true },
-          })
-        : [];
-    const cancellationReasons = new Map<string, string>();
-    cancellationLogs.forEach((log: any) => {
-      if (!log.entity_id || cancellationReasons.has(log.entity_id) || !log.details) return;
-      try {
-        const reason = JSON.parse(log.details)?.reason;
-        if (typeof reason === "string" && reason.trim()) {
-          cancellationReasons.set(log.entity_id, reason.trim());
-        }
-      } catch {
-        // Ignore malformed historical audit details.
-      }
-    });
-    const admissionsWithCancellationReasons = admissions.map((admission: any) => ({
-      ...admission,
-      cancellation_reason:
-        cancellationReasons.get(admission.admission_id) || null,
-    }));
+    const admissionsWithCancellationReasons = await attachCancellationReasons(db, admissions);
 
     const totalInvoiceAmount = invoices.reduce(
       (sum: number, inv: any) => sum + Number(inv.net_amount || 0),

@@ -100,7 +100,9 @@ export async function POST(request: NextRequest) {
                 age: age ? String(age) : null,
                 gender: gender || 'Male',
                 date_of_birth: date_of_birth || null,
-                address: address?.trim() || 'Self-registered',
+                // Null when the patient did not give one, so the gap is visible
+                // in reception instead of reading as a filled-in address.
+                address: address?.trim() || null,
                 blood_group: blood_group || null,
                 password: passwordHash,
                 emergency_contact_name: emergency_contact_name || null,

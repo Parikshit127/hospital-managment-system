@@ -1042,6 +1042,9 @@ export default function IPDDashboard() {
                             Patient
                           </th>
                           <th className="text-left px-5 py-3.5 text-[10px] font-black text-gray-400 uppercase tracking-wider">
+                            Status
+                          </th>
+                          <th className="text-left px-5 py-3.5 text-[10px] font-black text-gray-400 uppercase tracking-wider">
                             Ward / Bed
                           </th>
                           <th className="text-left px-5 py-3.5 text-[10px] font-black text-gray-400 uppercase tracking-wider">
@@ -1068,7 +1071,7 @@ export default function IPDDashboard() {
                         {admissions.length === 0 ? (
                           <tr>
                             <td
-                              colSpan={8}
+                              colSpan={9}
                               className="px-5 py-16 text-center text-gray-300"
                             >
                               <Users className="h-8 w-8 mx-auto mb-2" />
@@ -1091,6 +1094,25 @@ export default function IPDDashboard() {
                                   {adm.patient?.patient_id}
                                 </p>
                               </td>
+                              <td className="px-5 py-3.5">
+                                <span
+                                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wide whitespace-nowrap ${
+                                    adm.status === "Cancelled"
+                                      ? "bg-rose-100 text-rose-700 border border-rose-200"
+                                      : adm.status === "Discharged"
+                                        ? "bg-gray-100 text-gray-600 border border-gray-200"
+                                        : "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                  }`}
+                                >
+                                  {adm.status === "Cancelled" && <XCircle className="h-3 w-3" />}
+                                  {adm.status}
+                                </span>
+                                {adm.status === "Cancelled" && adm.cancellation_date && (
+                                  <span className="block mt-1 text-[10px] text-gray-400 whitespace-nowrap">
+                                    {new Date(adm.cancellation_date).toLocaleDateString("en-GB")}
+                                  </span>
+                                )}
+                              </td>
                               <td className="px-5 py-3.5 text-xs text-gray-500">
                                 {adm.wardName} / {adm.bed_id || "N/A"}
                               </td>
@@ -1106,14 +1128,19 @@ export default function IPDDashboard() {
                                 {adm.doctor_name || "-"}
                               </td>
                               <td className="px-5 py-3.5 text-center">
-                                <span className="text-xs font-black text-violet-400">
-                                  {adm.daysAdmitted}
+                                <span className={`text-xs font-black ${adm.status === "Cancelled" ? "text-gray-300" : "text-violet-400"}`}>
+                                  {adm.status === "Cancelled" ? "\u2014" : adm.daysAdmitted}
                                 </span>
                               </td>
                               <td className="px-5 py-3.5 text-right text-xs font-bold text-emerald-400">
-                                {"\u20B9"}
-                                {adm.estimatedRoomCharge?.toLocaleString() ||
-                                  "0"}
+                                {adm.status === "Cancelled" ? (
+                                  <span className="text-gray-300">{"\u2014"}</span>
+                                ) : (
+                                  <>
+                                    {"\u20B9"}
+                                    {adm.estimatedRoomCharge?.toLocaleString() || "0"}
+                                  </>
+                                )}
                               </td>
                               <td className="px-5 py-3.5 text-right">
                                 {adm.totalBalance > 0 ? (

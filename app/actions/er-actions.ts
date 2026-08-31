@@ -453,7 +453,9 @@ export async function generateERInvoice(erRegistrationId: string) {
           phone: null, // Unknown patient
           organizationId,
           patient_type: "cash",
-          address: "Registered via Emergency",
+          // Left null, not a placeholder string: a fake address renders as a
+          // real one and hides that reception still has to collect it.
+          address: null,
         },
       });
 

@@ -20,41 +20,43 @@ export async function getOrgTimezone(): Promise<string> {
 }
 
 /**
- * Get today's start and end timestamps in the given timezone.
+ * Get the start and end timestamps of a given YYYY-MM-DD day in a timezone.
  * E.g. for Asia/Kolkata, midnight IST → 18:30 prev day UTC.
+ *
+ * The `Z` on both literals is load-bearing: without it the string parses in the
+ * *server's* zone before the offset is subtracted, so the range was correct on a
+ * UTC deploy box and 5.5h wrong on an IST dev machine.
+ */
+export function getDayRange(dateStr: string, timezone: string = DEFAULT_TIMEZONE): { start: Date; end: Date } {
+    const startLocal = new Date(`${dateStr}T00:00:00.000Z`);
+    const endLocal = new Date(`${dateStr}T23:59:59.999Z`);
+
+    if (isNaN(startLocal.getTime())) {
+        // Unparseable date — fall back to a range that matches nothing rather
+        // than an Invalid Date, which Prisma rejects at query time.
+        return { start: new Date(0), end: new Date(0) };
+    }
+
+    const offsetMs = getTimezoneOffsetMs(timezone, startLocal);
+    return {
+        start: new Date(startLocal.getTime() - offsetMs),
+        end: new Date(endLocal.getTime() - offsetMs),
+    };
+}
+
+/**
+ * Get today's start and end timestamps in the given timezone.
  */
 export function getTodayRange(timezone: string = DEFAULT_TIMEZONE): { start: Date; end: Date } {
-    const now = new Date();
-
-    // Get today's date string in the target timezone (YYYY-MM-DD)
-    const formatter = new Intl.DateTimeFormat('en-CA', {
+    // Today's date in the target timezone (YYYY-MM-DD)
+    const dateStr = new Intl.DateTimeFormat('en-CA', {
         timeZone: timezone,
         year: 'numeric',
         month: '2-digit',
         day: '2-digit',
-    });
-    const dateStr = formatter.format(now); // "2025-03-20"
+    }).format(new Date());
 
-    // Use Intl to get exact midnight and end-of-day in UTC for that timezone
-    const startLocal = new Date(`${dateStr}T00:00:00`);
-    const endLocal = new Date(`${dateStr}T23:59:59.999`);
-
-    // Get timezone offset using a reliable method
-    const offsetMs = getTimezoneOffsetMs(timezone, now);
-    const start = new Date(startLocal.getTime() - offsetMs);
-    const end = new Date(endLocal.getTime() - offsetMs);
-
-    // Safety check
-    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-        // Fallback: plain UTC today
-        const utcStr = now.toISOString().slice(0, 10);
-        return {
-            start: new Date(`${utcStr}T00:00:00.000Z`),
-            end: new Date(`${utcStr}T23:59:59.999Z`),
-        };
-    }
-
-    return { start, end };
+    return getDayRange(dateStr, timezone);
 }
 
 /**

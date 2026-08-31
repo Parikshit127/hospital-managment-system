@@ -7,6 +7,7 @@ import { getPatientBalances } from '@/app/actions/balance-actions';
 import { getRoomGSTRate } from '@/app/lib/gst';
 import { generateInvoiceNumber as genInvNum, generateReceiptNumber as genRcpNum, generateDepositNumber as genDepNum } from '@/app/lib/sequence-generator';
 import { isBillClosedForCharges } from '@/app/lib/bill-status';
+import { attachCancellationReasons } from '@/app/lib/admission-cancellation';
 
 
 function serialize<T>(data: T): T {
@@ -19,19 +20,6 @@ function serialize<T>(data: T): T {
         : value,
     ),
   );
-}
-
-function parseCancellationReason(details?: string | null): string | null {
-  if (!details) return null;
-
-  try {
-    const parsed = JSON.parse(details);
-    return typeof parsed.reason === "string" && parsed.reason.trim()
-      ? parsed.reason.trim()
-      : null;
-  } catch {
-    return null;
-  }
 }
 
 /**
@@ -77,28 +65,6 @@ async function resolveAttendingDoctorId(
     return preferred?.id ?? null;
 }
 
-async function getAdmissionCancellationReasons(db: any, admissionIds: string[]) {
-  const reasons = new Map<string, string>();
-  if (admissionIds.length === 0) return reasons;
-
-  const logs = await db.system_audit_logs.findMany({
-    where: {
-      action: "CANCEL_ADMISSION",
-      entity_type: "admission",
-      entity_id: { in: admissionIds },
-    },
-    orderBy: { created_at: "desc" },
-    select: { entity_id: true, details: true },
-  });
-
-  logs.forEach((log: any) => {
-    if (!log.entity_id || reasons.has(log.entity_id)) return;
-    const reason = parseCancellationReason(log.details);
-    if (reason) reasons.set(log.entity_id, reason);
-  });
-
-  return reasons;
-}
 
 
 export async function getWardsWithBeds() {
@@ -505,12 +471,9 @@ export async function getIPDAdmissions(statusFilter?: string) {
     });
 
     const patientIds = Array.from(new Set(admissions.map((a: any) => a.patient_id).filter(Boolean))) as string[];
-    const cancelledAdmissionIds = admissions
-      .filter((a: any) => a.status === "Cancelled")
-      .map((a: any) => a.admission_id);
-    const [balances, cancellationReasons] = await Promise.all([
+    const [balances, admissionsWithReasons] = await Promise.all([
       getPatientBalances(patientIds),
-      getAdmissionCancellationReasons(db, cancelledAdmissionIds),
+      attachCancellationReasons(db, admissions),
     ]);
 
     // Find all admissions that have postings, lab orders, or pharmacy orders
@@ -560,7 +523,11 @@ export async function getIPDAdmissions(statusFilter?: string) {
         }
     }
 
-    const enriched = admissions.map((a: any) => {
+    // `any`, not `any[]`: db is the untyped tenant client, so this action has
+    // always returned `data: any`. Letting the helper's generic narrow it to a
+    // concrete array makes `res.data` be `any[] | undefined` at the five call
+    // sites that read it, which stops type-checking.
+    const enriched: any = admissionsWithReasons.map((a: any) => {
       // Length of stay: count to the discharge date once discharged, not to now.
       // Measuring against now() kept the counter ticking forever after discharge,
       // so a 4-day stay from three months ago reported ~95 days. Only ever visible
@@ -587,7 +554,7 @@ export async function getIPDAdmissions(statusFilter?: string) {
           daysAdmitted *
           Number(a.ward?.cost_per_day || a.bed?.wards?.cost_per_day || 0),
         totalBalance: balances[a.patient_id]?.totalBalance || 0,
-        cancellation_reason: a.cancellation_reason || cancellationReasons.get(a.admission_id) || null,
+        cancellation_reason: a.cancellation_reason,
         cancellation_date: a.cancellation_date || null,
         cancelled_by: a.cancelled_by || null,
         canCancel,
@@ -773,18 +740,11 @@ export async function getAdmissionDetail(admissionId: string) {
 
     if (!admission) return { success: false, error: "Admission not found" };
 
-    const cancellationReasons = await getAdmissionCancellationReasons(
-      db,
-      admission.status === "Cancelled" ? [admission.admission_id] : [],
-    );
+    const [withReason] = await attachCancellationReasons(db, [admission]);
 
     return {
       success: true,
-      data: serialize({
-        ...admission,
-        cancellation_reason:
-          cancellationReasons.get(admission.admission_id) || null,
-      }),
+      data: serialize(withReason),
     };
   } catch (error: any) {
     console.error("getAdmissionDetail error:", error);
@@ -1628,19 +1588,11 @@ export async function getAdmissionFullDetails(admissionId: string) {
 
     if (!admission) return { success: false, error: "Not found" };
 
-    const cancellationReasons = await getAdmissionCancellationReasons(
-      db,
-      admission.status === "Cancelled" ? [admission.admission_id] : [],
-    );
+    const [withReason] = await attachCancellationReasons(db, [admission]);
 
     return {
       success: true,
-      data: serialize({
-        ...admission,
-        cancellation_reason:
-          cancellationReasons.get(admission.admission_id) || null,
-        viewer_role: session.role,
-      }),
+      data: serialize({ ...withReason, viewer_role: session.role }),
     };
   } catch (error: any) {
     return { success: false, error: error.message };
@@ -2373,7 +2325,16 @@ export async function cancelAdmission(admissionId: string, reason: string, cance
         });
       }
 
-      // 3. Cancel any active invoices for this admission
+      // 3. Cancel any active invoices for this admission.
+      // Read them first: updateMany reports only a count, and each cancelled bill
+      // needs its own CANCEL_INVOICE audit row or it never reaches the Edit/Cancel
+      // report. (Demo DB had 27 cancelled invoices but only 22 audit rows — the
+      // missing 5 were all cascade-cancelled here.)
+      const cascadedInvoices = await tx.invoices.findMany({
+        where: { admission_id: admissionId, status: { not: 'Cancelled' } },
+        select: { id: true, invoice_number: true, status: true },
+      });
+
       await tx.invoices.updateMany({
         where: { admission_id: admissionId, status: { not: 'Cancelled' } },
         data: {
@@ -2385,6 +2346,28 @@ export async function cancelAdmission(admissionId: string, reason: string, cance
           notes: `[CANCELLED ${cancelDate.toISOString().slice(0, 10)} by ${cancelledBy}] ${cancellationReason}`,
         },
       });
+
+      if (cascadedInvoices.length > 0) {
+        await tx.system_audit_logs.createMany({
+          data: cascadedInvoices.map((inv: any) => ({
+            action: 'CANCEL_INVOICE',
+            module: 'finance',
+            entity_type: 'invoice',
+            entity_id: inv.invoice_number || `draft#${inv.id}`,
+            user_id: session.id,
+            username: cancelledBy,
+            role: session.role,
+            details: JSON.stringify({
+              reason: cancellationReason,
+              cancelled_by: cancelledBy,
+              cancelled_at: cancelDate.toISOString(),
+              previous_status: inv.status,
+              cascaded_from_admission: admissionId,
+            }),
+            organizationId,
+          })),
+        });
+      }
 
       // 4. Audit log — stamp WHO cancelled it (user) and WHOSE admission (patient),
       // so the Edit/Cancel audit report can answer "who cancelled this admission".
