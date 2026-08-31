@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireTenantContext } from '@/backend/tenant';
-import { EDIT_CANCEL_ACTIONS, resolveAuditActionFilter } from '@/app/lib/audit-actions';
+import { EDIT_CANCEL_ACTIONS, resolveAuditActionFilter, auditActorFromDetails } from '@/app/lib/audit-actions';
 import { getDayRange, getOrgTimezone } from '@/app/lib/timezone';
 
 export async function GET(req: NextRequest) {
@@ -67,8 +67,10 @@ export async function GET(req: NextRequest) {
       const u = l.user_id ? userMap.get(l.user_id) : null;
       return {
         ...l,
-        // Prefer what was stamped on the row; fall back to the resolved user.
-        user_display: l.username || u?.name || u?.username || null,
+        // Prefer what was stamped on the row, then the resolved user, then the
+        // actor recorded inside `details` — most historical rows predate the
+        // username/user_id columns and only carry the name in the JSON.
+        user_display: l.username || u?.name || u?.username || auditActorFromDetails(l.details) || null,
         user_role: l.role || u?.role || null,
       };
     });

@@ -71,4 +71,38 @@ assert.ok(listed.includes('CANCEL_ADMISSION') && listed.includes('FORCE_CANCEL_A
     'admission cancellation must be reportable however it was cancelled — an admin ' +
     'force-cancel is the row this report exists to surface');
 
-console.log(`audit action check: OK (${listed.length} filter actions, all written somewhere in app/)`);
+// ── The actor fallback ───────────────────────────────────────────────────────
+// Most historical rows have NULL username/user_id and carry the person's name
+// only inside `details`. auditActorFromDetails() is what stops the report
+// showing "not recorded" for all of them, so pin its behaviour down.
+const actorSrc = fs.readFileSync(AUDIT_ACTIONS, 'utf8');
+const keys = [...actorSrc.matchAll(/ACTOR_DETAIL_KEYS = \[([\s\S]*?)\];/g)]
+    .flatMap(m => [...m[1].matchAll(/'([a-z_]+)'/g)].map(x => x[1]));
+assert.ok(keys.includes('cancelled_by'),
+    "'cancelled_by' must be an actor key — it is what CANCEL_INVOICE rows carry");
+assert.ok(keys.includes('by'), "'by' must be an actor key");
+
+// Re-implement the lookup here so the check runs without compiling TS.
+const actorFrom = (details) => {
+    if (!details || typeof details !== 'string') return null;
+    let o; try { o = JSON.parse(details); } catch { return null; }
+    if (!o || typeof o !== 'object') return null;
+    for (const k of keys) {
+        const v = o[k];
+        if (typeof v === 'string' && v.trim() && v.trim().toLowerCase() !== 'system') return v.trim();
+    }
+    return null;
+};
+assert.strictEqual(actorFrom('{"reason":"x","cancelled_by":"Admin.Gauttam"}'), 'Admin.Gauttam');
+assert.strictEqual(actorFrom('{"by":"nurse.anita"}'), 'nurse.anita');
+assert.strictEqual(actorFrom('{"cancelled_by":"  mohitk  "}'), 'mohitk', 'must trim');
+assert.strictEqual(actorFrom('{"cancelled_by":"system"}'), null, '"system" is not a person');
+assert.strictEqual(actorFrom('{"cancelled_by":""}'), null, 'blank is not an actor');
+assert.strictEqual(actorFrom('{"reason":"no actor here"}'), null);
+assert.strictEqual(actorFrom('not json at all'), null, 'free-text details must not throw');
+assert.strictEqual(actorFrom(null), null);
+assert.strictEqual(actorFrom('{"cancelled_by":{"nested":1}}'), null, 'non-string must not leak an object');
+// Priority: an explicit cancelled_by beats a generic `by`.
+assert.strictEqual(actorFrom('{"by":"generic","cancelled_by":"specific"}'), 'specific');
+
+console.log(`audit action check: OK (${listed.length} filter actions, all written somewhere in app/; actor fallback verified)`);

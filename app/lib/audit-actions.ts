@@ -113,6 +113,41 @@ export function auditActionLabel(action?: string | null): string {
 }
 
 /**
+ * Recover the actor from an audit row's `details` JSON.
+ *
+ * The `username` / `user_id` columns were added to system_audit_logs later than
+ * the writers that populate `details`, so most historical rows have NULL in both
+ * columns while the person's name sits inside the JSON — 22 of 23 CANCEL_INVOICE
+ * rows on the demo DB. The report showed "not recorded" for all of them even
+ * though the answer to "who cancelled this bill" was right there.
+ *
+ * Keys in priority order; the first one holding a non-empty string wins.
+ */
+const ACTOR_DETAIL_KEYS = [
+    'cancelled_by', 'reversed_by', 'refunded_by', 'approved_by',
+    'performed_by', 'recorded_by', 'requested_by', 'posted_by',
+    'updated_by', 'created_by', 'actor', 'username', 'user', 'by',
+];
+
+export function auditActorFromDetails(details?: string | null): string | null {
+    if (!details || typeof details !== 'string') return null;
+    let obj: any;
+    try {
+        obj = JSON.parse(details);
+    } catch {
+        return null; // Free-text details, not JSON.
+    }
+    if (!obj || typeof obj !== 'object') return null;
+    for (const key of ACTOR_DETAIL_KEYS) {
+        const v = obj[key];
+        if (typeof v === 'string' && v.trim() && v.trim().toLowerCase() !== 'system') {
+            return v.trim();
+        }
+    }
+    return null;
+}
+
+/**
  * Friendly labels for the audit "Record" column. The raw entity_type is a table
  * name, which means nothing to a biller reading the report.
  */

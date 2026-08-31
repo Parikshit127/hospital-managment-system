@@ -18,7 +18,7 @@ import { getExpenseDashboardStats, getExpenseCategories } from '@/app/actions/ex
 import { getIndentReport, type IndentReportFilters } from '@/app/actions/indent-report-actions';
 import { getFixedAssets } from '@/app/actions/asset-management-actions';
 import { getAssetDepreciationReport } from '@/app/actions/asset-register-actions';
-import { EDIT_CANCEL_ACTIONS, resolveAuditActionFilter, auditActionLabel } from '@/app/lib/audit-actions';
+import { EDIT_CANCEL_ACTIONS, resolveAuditActionFilter, auditActionLabel, auditActorFromDetails } from '@/app/lib/audit-actions';
 import { getDayRange, getOrgTimezone } from '@/app/lib/timezone';
 import { maskSecret } from '@/app/lib/secure-config';
 
@@ -107,7 +107,7 @@ export async function exportAuditReport(params: {
                 action: auditActionLabel(l.action),
                 module: l.module ?? '',
                 entity: l.entity_id ? `${l.entity_type ?? ''}/${l.entity_id}` : (l.entity_type ?? ''),
-                user: l.username || u?.name || u?.username || 'System / not recorded',
+                user: l.username || u?.name || u?.username || auditActorFromDetails(l.details) || 'System / not recorded',
                 role: l.role || u?.role || '',
                 details,
             };
