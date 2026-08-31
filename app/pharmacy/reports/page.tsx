@@ -6,9 +6,9 @@ import { AppShell } from '@/app/components/layout/AppShell';
 import {
     BarChart3, TrendingUp, AlertTriangle, IndianRupee, Package,
     ArrowUpRight, ArrowDownRight, Pill, Clock, RotateCcw, Bed, UserRound, Store, Search,
-    Loader2, FileSpreadsheet, FileCode, FileText
+    Loader2, FileSpreadsheet, FileCode, FileText, Eye, X
 } from 'lucide-react';
-import { getPharmacyAnalytics, getPharmacyRevenueReport, getExpiringBatches, getLowStockAlerts, getInventoryMovements, getNarcoticRegister } from '@/app/actions/pharmacy-actions';
+import { getPharmacyAnalytics, getPharmacyRevenueReport, getExpiringBatches, getLowStockAlerts, getInventoryMovements, getNarcoticRegister, getPharmacyBillLines } from '@/app/actions/pharmacy-actions';
 import { SkeletonCard } from '@/app/components/ui/Skeleton';
 
 type Preset = 'today' | '7d' | '30d' | 'month' | 'custom';
@@ -52,6 +52,11 @@ export default function PharmacyReportsPage() {
     const [doctor, setDoctor] = useState('');
     const [search, setSearch] = useState('');
     const [searchInput, setSearchInput] = useState('');
+    const [doctorIpdOnly, setDoctorIpdOnly] = useState(false);
+
+    // IPD bill verification drill-down
+    const [billDetail, setBillDetail] = useState<any>(null);
+    const [billDetailLoading, setBillDetailLoading] = useState(false);
 
     const dateRange = useMemo(() => rangeForPreset(preset, customFrom, customTo), [preset, customFrom, customTo]);
 
@@ -60,6 +65,32 @@ export default function PharmacyReportsPage() {
         const t = setTimeout(() => setSearch(searchInput), 350);
         return () => clearTimeout(t);
     }, [searchInput]);
+
+    // Doctor-wise rows. "IPD only" re-sorts and hides doctors with no IPD pharmacy
+    // billing, which is the doctor-wise IPD report on its own.
+    const doctorRows = useMemo(() => {
+        const rows = (rev?.byDoctor || []) as any[];
+        if (!doctorIpdOnly) return rows;
+        return rows.filter(d => d.ipd > 0).sort((a, b) => b.ipd - a.ipd);
+    }, [rev, doctorIpdOnly]);
+
+    const doctorTotals = useMemo(() => doctorRows.reduce(
+        (t: any, d: any) => ({
+            ipd: t.ipd + (d.ipd || 0), opd: t.opd + (d.opd || 0),
+            counter: t.counter + (d.counter || 0), revenue: t.revenue + (d.revenue || 0),
+            bills: t.bills + (d.bills || 0), ipdBills: t.ipdBills + (d.ipdBills || 0),
+        }),
+        { ipd: 0, opd: 0, counter: 0, revenue: 0, bills: 0, ipdBills: 0 },
+    ), [doctorRows]);
+
+    const openBillDetail = async (invoiceId: number) => {
+        setBillDetailLoading(true);
+        setBillDetail({ loading: true });
+        const res = await getPharmacyBillLines(invoiceId);
+        setBillDetailLoading(false);
+        if ((res as any).success) setBillDetail((res as any).data);
+        else { setBillDetail(null); alert((res as any).error || 'Could not load bill detail'); }
+    };
 
     const loadStatic = async () => {
         const [analytics, expiring, low] = await Promise.all([
@@ -137,16 +168,36 @@ export default function PharmacyReportsPage() {
             const wsSummary = XLSX.utils.json_to_sheet(summaryRows);
             XLSX.utils.book_append_sheet(wb, wsSummary, 'Summary');
 
-            // Sheet 2: Bills List
-            const billsRows = (rev.bills || []).map((b: any) => ({
+            // Sheet 2: Bills List — with per-channel subtotals and a grand total, so the
+            // exported sheet closes on the same figures the screen shows.
+            const billsRows: any[] = (rev.bills || []).map((b: any) => ({
                 'Bill No': b.billNo,
                 'Patient': b.patient,
+                'UHID': b.patientId === 'WALKIN' ? '' : b.patientId,
                 'Channel': b.channel.toUpperCase(),
                 'Doctor': b.doctor || 'Self',
                 'Date': new Date(b.date).toLocaleDateString('en-GB'),
                 'Items': b.items,
                 'Revenue': b.revenue,
             }));
+            // Summing floats leaves noise (1030504.5040300002); round to paise.
+            const money2 = (v: number) => Math.round(v * 100) / 100;
+            (['ipd', 'opd', 'counter'] as const).forEach(ch => {
+                const g = (rev.bills || []).filter((b: any) => b.channel === ch);
+                if (g.length === 0) return;
+                billsRows.push({
+                    'Bill No': `${ch.toUpperCase()} SUBTOTAL`, 'Patient': '', 'UHID': '', 'Channel': ch.toUpperCase(),
+                    'Doctor': '', 'Date': `${g.length} bills`,
+                    'Items': g.reduce((t: number, b: any) => t + (b.items || 0), 0),
+                    'Revenue': money2(g.reduce((t: number, b: any) => t + (b.revenue || 0), 0)),
+                });
+            });
+            billsRows.push({
+                'Bill No': 'GRAND TOTAL', 'Patient': '', 'UHID': '', 'Channel': '', 'Doctor': '',
+                'Date': `${(rev.bills || []).length} bills`,
+                'Items': (rev.bills || []).reduce((t: number, b: any) => t + (b.items || 0), 0),
+                'Revenue': money2((rev.bills || []).reduce((t: number, b: any) => t + (b.revenue || 0), 0)),
+            });
             const wsBills = XLSX.utils.json_to_sheet(billsRows);
             XLSX.utils.book_append_sheet(wb, wsBills, 'Bills List');
 
@@ -159,13 +210,51 @@ export default function PharmacyReportsPage() {
             const wsMovers = XLSX.utils.json_to_sheet(moversRows);
             XLSX.utils.book_append_sheet(wb, wsMovers, 'Top Movers');
 
-            // Sheet 4: Doctor Revenue Split
-            const doctorRows = (rev.byDoctor || []).map((d: any) => ({
+            // Sheet 4: Doctor-wise split — IPD and OPD as their own columns
+            const doctorSheet: any[] = (rev.byDoctor || []).map((d: any) => ({
                 'Doctor': d.name,
-                'Revenue': d.revenue,
+                'Bills': d.bills,
+                'IPD Amount': d.ipd,
+                'OPD Amount': d.opd,
+                'Counter Amount': d.counter,
+                'Total': d.revenue,
             }));
-            const wsDoctors = XLSX.utils.json_to_sheet(doctorRows);
-            XLSX.utils.book_append_sheet(wb, wsDoctors, 'Doctor Revenue');
+            doctorSheet.push({
+                'Doctor': 'TOTAL',
+                'Bills': (rev.byDoctor || []).reduce((t: number, d: any) => t + (d.bills || 0), 0),
+                'IPD Amount': (rev.byDoctor || []).reduce((t: number, d: any) => t + (d.ipd || 0), 0),
+                'OPD Amount': (rev.byDoctor || []).reduce((t: number, d: any) => t + (d.opd || 0), 0),
+                'Counter Amount': (rev.byDoctor || []).reduce((t: number, d: any) => t + (d.counter || 0), 0),
+                'Total': (rev.byDoctor || []).reduce((t: number, d: any) => t + (d.revenue || 0), 0),
+            });
+            const wsDoctors = XLSX.utils.json_to_sheet(doctorSheet);
+            XLSX.utils.book_append_sheet(wb, wsDoctors, 'Doctor-wise');
+
+            // Sheet 4b: IPD-only doctor split — the doctor-wise IPD pharmacy report
+            const ipdDoctorSheet: any[] = (rev.byDoctor || [])
+                .filter((d: any) => d.ipd > 0)
+                .sort((a: any, b: any) => b.ipd - a.ipd)
+                .map((d: any) => ({ 'Doctor': d.name, 'IPD Bills': d.ipdBills, 'IPD Pharmacy Amount': d.ipd }));
+            ipdDoctorSheet.push({
+                'Doctor': 'TOTAL IPD',
+                'IPD Bills': (rev.byDoctor || []).reduce((t: number, d: any) => t + (d.ipdBills || 0), 0),
+                'IPD Pharmacy Amount': (rev.byDoctor || []).reduce((t: number, d: any) => t + (d.ipd || 0), 0),
+            });
+            XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(ipdDoctorSheet), 'IPD Doctor-wise');
+
+            // Sheet 4c: Monthly summary, ending on the overall total
+            const monthSheet: any[] = (rev.byMonth || []).map((m: any) => ({
+                'Month': m.month, 'Bills': m.bills,
+                'IPD Amount': m.ipd, 'OPD Amount': m.opd, 'Counter Amount': m.counter,
+                'Monthly Total': m.total,
+            }));
+            const gt = rev.grandTotal || { ipd: 0, opd: 0, counter: 0, total: 0, bills: 0 };
+            monthSheet.push({
+                'Month': 'OVERALL TOTAL', 'Bills': gt.bills,
+                'IPD Amount': gt.ipd, 'OPD Amount': gt.opd, 'Counter Amount': gt.counter,
+                'Monthly Total': gt.total,
+            });
+            XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(monthSheet), 'Monthly Summary');
 
             // Sheet 5: Daily Revenue
             const dailyRows = (rev.revenueByDay || []).map((d: any) => ({
@@ -235,15 +324,41 @@ export default function PharmacyReportsPage() {
             });
             xml += `  </TopMovers>\n`;
             
-            // Doctor Revenue
+            // Doctor Revenue — IPD / OPD / Counter split
             xml += `  <DoctorRevenue>\n`;
             (rev.byDoctor || []).forEach((d: any) => {
                 xml += `    <Doctor>\n`;
                 xml += `      <Name>${escapeXML(d.name)}</Name>\n`;
+                xml += `      <Bills>${d.bills}</Bills>\n`;
+                xml += `      <IpdAmount>${d.ipd}</IpdAmount>\n`;
+                xml += `      <OpdAmount>${d.opd}</OpdAmount>\n`;
+                xml += `      <CounterAmount>${d.counter}</CounterAmount>\n`;
                 xml += `      <Revenue>${d.revenue}</Revenue>\n`;
                 xml += `    </Doctor>\n`;
             });
             xml += `  </DoctorRevenue>\n`;
+
+            // Monthly summary + the report's closing totals
+            xml += `  <MonthlySummary>\n`;
+            (rev.byMonth || []).forEach((m: any) => {
+                xml += `    <Month>\n`;
+                xml += `      <Label>${escapeXML(m.month)}</Label>\n`;
+                xml += `      <Bills>${m.bills}</Bills>\n`;
+                xml += `      <IpdAmount>${m.ipd}</IpdAmount>\n`;
+                xml += `      <OpdAmount>${m.opd}</OpdAmount>\n`;
+                xml += `      <CounterAmount>${m.counter}</CounterAmount>\n`;
+                xml += `      <MonthlyTotal>${m.total}</MonthlyTotal>\n`;
+                xml += `    </Month>\n`;
+            });
+            xml += `  </MonthlySummary>\n`;
+            const gtx = rev.grandTotal || { ipd: 0, opd: 0, counter: 0, total: 0, bills: 0 };
+            xml += `  <GrandTotal>\n`;
+            xml += `    <TotalIpdAmount>${gtx.ipd}</TotalIpdAmount>\n`;
+            xml += `    <TotalOpdAmount>${gtx.opd}</TotalOpdAmount>\n`;
+            xml += `    <TotalCounterAmount>${gtx.counter}</TotalCounterAmount>\n`;
+            xml += `    <OverallTotal>${gtx.total}</OverallTotal>\n`;
+            xml += `    <TotalBills>${gtx.bills}</TotalBills>\n`;
+            xml += `  </GrandTotal>\n`;
             
             // Daily Revenue
             xml += `  <DailyRevenue>\n`;
@@ -336,15 +451,26 @@ export default function PharmacyReportsPage() {
         const bills = (rev?.bills || []) as any[];
         if (bills.length === 0) { alert('No bills to print for this period / channel.'); return; }
         const esc = (s: any) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        // Round before formatting — toLocaleString on the raw float printed amounts
+        // like "33,123.006" on the printed bill list.
+        const n = (v: number) => Math.round(v || 0).toLocaleString('en-IN');
         const chLabel = channel === 'all' ? 'All Channels' : channel === 'counter' ? 'Cash / Counter' : channel.toUpperCase();
         const rows = bills.map((b, i) => `<tr>
-            <td>${i + 1}</td><td>${esc(b.billNo)}</td><td>${esc(b.date)}</td><td>${esc(b.patient)}</td>
+            <td>${i + 1}</td><td>${esc(b.billNo || '-')}</td><td>${esc(new Date(b.date).toLocaleDateString('en-GB'))}</td>
+            <td>${esc(b.patient)}</td><td>${esc(b.patientId === 'WALKIN' ? '-' : b.patientId)}</td>
             <td>${b.channel === 'counter' ? 'CASH' : esc(String(b.channel).toUpperCase())}</td>
             <td>${esc(b.doctor || '-')}</td>
             <td style="text-align:right">${esc(b.items)}</td>
-            <td style="text-align:right">${Number(b.revenue || 0).toLocaleString('en-IN')}</td></tr>`).join('');
+            <td style="text-align:right">${n(b.revenue)}</td></tr>`).join('');
         const totalItems = bills.reduce((s, b) => s + (b.items || 0), 0);
         const totalRev = bills.reduce((s, b) => s + (b.revenue || 0), 0);
+        // IPD / OPD / Counter subtotals so the printed list totals each stream separately.
+        const subRows = (['ipd', 'opd', 'counter'] as const)
+            .map(ch => ({ ch, rows: bills.filter(b => b.channel === ch) }))
+            .filter(g => g.rows.length > 0)
+            .map(g => `<tr><td colspan="7">${g.ch === 'counter' ? 'Counter / Cash' : g.ch.toUpperCase()} subtotal — ${g.rows.length} bills</td>
+                <td style="text-align:right">${g.rows.reduce((s, b) => s + (b.items || 0), 0)}</td>
+                <td style="text-align:right">${n(g.rows.reduce((s, b) => s + (b.revenue || 0), 0))}</td></tr>`).join('');
         const html = `<!doctype html><html><head><meta charset="utf-8"><title>Pharmacy Bills — ${esc(chLabel)}</title>
             <style>body{font-family:Arial,sans-serif;padding:24px;color:#111}h1{font-size:18px;margin:0}
             .meta{font-size:12px;color:#555;margin:4px 0 16px}table{width:100%;border-collapse:collapse;font-size:12px}
@@ -352,12 +478,80 @@ export default function PharmacyReportsPage() {
             tfoot td{font-weight:bold;background:#f9fafb}</style></head><body>
             <h1>Pharmacy Bills — ${esc(chLabel)}</h1>
             <div class="meta">Period: ${esc(dateRange.from)} to ${esc(dateRange.to)} · ${bills.length} bills</div>
-            <table><thead><tr><th>#</th><th>Bill No</th><th>Date</th><th>Patient</th><th>Type</th><th>Doctor</th>
+            <table><thead><tr><th>#</th><th>Bill No</th><th>Date</th><th>Patient</th><th>UHID</th><th>Type</th><th>Doctor</th>
             <th style="text-align:right">Items</th><th style="text-align:right">Amount (₹)</th></tr></thead>
             <tbody>${rows}</tbody>
-            <tfoot><tr><td colspan="6">Total — ${bills.length} bills</td>
-            <td style="text-align:right">${totalItems}</td><td style="text-align:right">${totalRev.toLocaleString('en-IN')}</td></tr></tfoot>
+            <tfoot>${subRows}<tr><td colspan="7">GRAND TOTAL — ${bills.length} bills</td>
+            <td style="text-align:right">${totalItems}</td><td style="text-align:right">${n(totalRev)}</td></tr></tfoot>
             </table><script>window.onload=function(){window.print();}</script></body></html>`;
+        const w = window.open('', '_blank');
+        if (!w) { alert('Please allow pop-ups to print the report.'); return; }
+        w.document.write(html);
+        w.document.close();
+    }
+
+    // Doctor-wise print — the deliverable the finance team asks for: one row per
+    // consultant with IPD and OPD totalled separately, closing on a grand total.
+    function printDoctorWise() {
+        const rows = doctorRows as any[];
+        if (rows.length === 0) { alert('No doctor-wise data for this period.'); return; }
+        const esc = (v: any) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const n = (v: number) => Math.round(v || 0).toLocaleString('en-IN');
+        const body = rows.map((d, i) => doctorIpdOnly
+            ? `<tr><td>${i + 1}</td><td>${esc(d.name)}</td>
+               <td style="text-align:right">${d.ipdBills}</td>
+               <td style="text-align:right">${n(d.ipd)}</td></tr>`
+            : `<tr><td>${i + 1}</td><td>${esc(d.name)}</td>
+               <td style="text-align:right">${d.bills}</td>
+               <td style="text-align:right">${n(d.ipd)}</td>
+               <td style="text-align:right">${n(d.opd)}</td>
+               <td style="text-align:right">${n(d.counter)}</td>
+               <td style="text-align:right">${n(d.revenue)}</td></tr>`).join('');
+        const months = ((rev?.byMonth || []) as any[]).map(m => `<tr><td>${esc(m.month)}</td>
+            <td style="text-align:right">${m.bills}</td>
+            <td style="text-align:right">${n(m.ipd)}</td>
+            <td style="text-align:right">${n(m.opd)}</td>
+            <td style="text-align:right">${n(m.counter)}</td>
+            <td style="text-align:right">${n(m.total)}</td></tr>`).join('');
+        const g = rev?.grandTotal || { ipd: 0, opd: 0, counter: 0, total: 0, bills: 0 };
+        const html = `<!doctype html><html><head><meta charset="utf-8"><title>Doctor-wise Pharmacy Billing</title>
+            <style>body{font-family:Arial,sans-serif;padding:24px;color:#111}h1{font-size:18px;margin:0}
+            h2{font-size:14px;margin:22px 0 6px}.meta{font-size:12px;color:#555;margin:4px 0 16px}
+            table{width:100%;border-collapse:collapse;font-size:12px}th,td{border:1px solid #ddd;padding:6px 8px;text-align:left}
+            thead th{background:#f3f4f6}tfoot td{font-weight:bold;background:#f9fafb}
+            .grand{margin-top:18px;border:2px solid #111;padding:10px 12px;font-size:13px}
+            .grand div{display:flex;justify-content:space-between;padding:3px 0}
+            .grand .h{display:block;font-weight:bold;font-size:11px;text-transform:uppercase;
+              letter-spacing:.05em;color:#555;margin-bottom:6px}
+            .grand .t{border-top:1px solid #111;margin-top:6px;padding-top:6px;font-size:15px;font-weight:bold}</style></head><body>
+            <h1>Doctor-wise Pharmacy Billing${doctorIpdOnly ? ' — IPD only' : ''}</h1>
+            <div class="meta">Period: ${esc(dateRange.from)} to ${esc(dateRange.to)} &middot; ${rows.length} doctors
+              &middot; Channel: ${channel === 'all' ? 'All' : channel.toUpperCase()}</div>
+            <table><thead><tr><th>#</th><th>Doctor</th>
+            <th style="text-align:right">${doctorIpdOnly ? 'IPD Bills' : 'Bills'}</th>
+            <th style="text-align:right">IPD (₹)</th>
+            ${doctorIpdOnly ? '' : `<th style="text-align:right">OPD (₹)</th>
+            <th style="text-align:right">Counter (₹)</th><th style="text-align:right">Total (₹)</th>`}</tr></thead>
+            <tbody>${body}</tbody>
+            <tfoot><tr><td colspan="2">${doctorIpdOnly ? 'Total IPD' : 'Total'} — ${rows.length} doctors</td>
+            <td style="text-align:right">${doctorIpdOnly ? doctorTotals.ipdBills : doctorTotals.bills}</td>
+            <td style="text-align:right">${n(doctorTotals.ipd)}</td>
+            ${doctorIpdOnly ? '' : `<td style="text-align:right">${n(doctorTotals.opd)}</td>
+            <td style="text-align:right">${n(doctorTotals.counter)}</td>
+            <td style="text-align:right">${n(doctorTotals.revenue)}</td>`}</tr></tfoot></table>
+            <h2>Monthly Summary</h2>
+            <table><thead><tr><th>Month</th><th style="text-align:right">Bills</th>
+            <th style="text-align:right">IPD (₹)</th><th style="text-align:right">OPD (₹)</th>
+            <th style="text-align:right">Counter (₹)</th><th style="text-align:right">Monthly Total (₹)</th></tr></thead>
+            <tbody>${months || '<tr><td colspan="6">No billing in this period</td></tr>'}</tbody></table>
+            <div class="grand">
+              <div class="h">Period Totals — all channels${channel === 'all' ? '' : ` (channel filter: ${channel.toUpperCase()})`}</div>
+              <div><span>Total IPD Amount</span><span>₹${n(g.ipd)}</span></div>
+              <div><span>Total OPD Amount</span><span>₹${n(g.opd)}</span></div>
+              <div><span>Counter Sales</span><span>₹${n(g.counter)}</span></div>
+              <div class="t"><span>OVERALL TOTAL (${g.bills} bills)</span><span>₹${n(g.total)}</span></div>
+            </div>
+            <script>window.onload=function(){window.print();}</script></body></html>`;
         const w = window.open('', '_blank');
         if (!w) { alert('Please allow pop-ups to print the report.'); return; }
         w.document.write(html);
@@ -732,30 +926,126 @@ export default function PharmacyReportsPage() {
                                 </div>
                             </div>
 
-                            {/* Revenue by doctor */}
-                            <div className="bg-white border border-gray-200 rounded-2xl p-6">
-                                <h3 className="text-sm font-black text-gray-700 mb-4">Revenue by Prescribing Doctor</h3>
-                                {rev.byDoctor?.length === 0 ? (
-                                    <div className="text-center py-8 text-gray-400 text-sm">No data</div>
+                            {/* Doctor-wise revenue — IPD / OPD / Counter split */}
+                            <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
+                                <div className="flex flex-wrap items-center justify-between gap-2 px-6 py-4 border-b border-gray-100">
+                                    <div>
+                                        <h3 className="text-sm font-black text-gray-700">Doctor-wise Pharmacy Billing</h3>
+                                        <p className="text-[11px] text-gray-400 font-medium mt-0.5">
+                                            IPD attributed to the admission&rsquo;s treating consultant &middot; sorted by total
+                                        </p>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <label className="flex items-center gap-1.5 text-[11px] font-bold text-gray-500 cursor-pointer">
+                                            <input type="checkbox" checked={doctorIpdOnly} onChange={e => setDoctorIpdOnly(e.target.checked)} className="accent-violet-600" />
+                                            IPD only
+                                        </label>
+                                        <button onClick={printDoctorWise} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-gray-600 text-[11px] font-bold rounded-lg hover:bg-gray-50">
+                                            <FileText className="h-3.5 w-3.5" /> Print
+                                        </button>
+                                    </div>
+                                </div>
+                                {doctorRows.length === 0 ? (
+                                    <div className="text-center py-10 text-gray-400 text-sm">No data</div>
                                 ) : (
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2">
-                                        {rev.byDoctor?.map((d: any, i: number) => {
-                                            const maxRev = rev.byDoctor[0]?.revenue || 1;
-                                            const pct = (d.revenue / maxRev) * 100;
-                                            return (
-                                                <div key={i}>
-                                                    <div className="flex justify-between items-center mb-1">
-                                                        <span className="text-sm text-gray-700 font-medium truncate max-w-[200px]">{d.name}</span>
-                                                        <span className="text-xs font-bold text-gray-600">{inr(d.revenue)}</span>
-                                                    </div>
-                                                    <div className="w-full bg-gray-100 rounded-full h-1.5">
-                                                        <div className="h-1.5 rounded-full bg-gradient-to-r from-violet-400 to-violet-600" style={{ width: `${pct}%` }} />
-                                                    </div>
-                                                </div>
-                                            );
-                                        })}
+                                    <div className="max-h-[420px] overflow-auto">
+                                        <table className="w-full text-left">
+                                            <thead className="bg-gray-50 border-b border-gray-200 sticky top-0">
+                                                <tr>
+                                                    {(doctorIpdOnly
+                                                        ? ['#', 'Doctor', 'IPD Bills', 'IPD Amount']
+                                                        : ['#', 'Doctor', 'Bills', 'IPD Amount', 'OPD Amount', 'Counter', 'Total']
+                                                    ).map((h, i) => (
+                                                        <th key={i} className={`px-4 py-2.5 text-[10px] font-black text-gray-400 uppercase tracking-wider ${i >= 2 ? 'text-right' : ''}`}>{h}</th>
+                                                    ))}
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-gray-50">
+                                                {doctorRows.map((d: any, i: number) => (
+                                                    <tr key={i} className="hover:bg-gray-50/50">
+                                                        <td className="px-4 py-2.5 text-xs text-gray-400">{i + 1}</td>
+                                                        <td className="px-4 py-2.5 text-sm font-bold text-gray-700">{d.name}</td>
+                                                        {/* In IPD-only mode the OPD/Counter columns are dropped rather than
+                                                            shown alongside a "Total" that silently includes them. */}
+                                                        <td className="px-4 py-2.5 text-right text-xs text-gray-500">{doctorIpdOnly ? d.ipdBills : d.bills}</td>
+                                                        <td className="px-4 py-2.5 text-right text-sm font-bold text-violet-700">{inr(d.ipd)}</td>
+                                                        {!doctorIpdOnly && <td className="px-4 py-2.5 text-right text-sm text-blue-700">{inr(d.opd)}</td>}
+                                                        {!doctorIpdOnly && <td className="px-4 py-2.5 text-right text-sm text-emerald-700">{inr(d.counter)}</td>}
+                                                        {!doctorIpdOnly && <td className="px-4 py-2.5 text-right text-sm font-black text-gray-900">{inr(d.revenue)}</td>}
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                            <tfoot className="bg-gray-50 sticky bottom-0">
+                                                <tr className="border-t-2 border-gray-200">
+                                                    <td className="px-4 py-3 text-sm font-black text-gray-900" colSpan={2}>
+                                                        {doctorIpdOnly ? 'Total IPD' : 'Total'} &mdash; {doctorRows.length} doctors
+                                                    </td>
+                                                    <td className="px-4 py-3 text-right text-sm font-black text-gray-900">{doctorIpdOnly ? doctorTotals.ipdBills : doctorTotals.bills}</td>
+                                                    <td className="px-4 py-3 text-right text-sm font-black text-violet-700">{inr(doctorTotals.ipd)}</td>
+                                                    {!doctorIpdOnly && <td className="px-4 py-3 text-right text-sm font-black text-blue-700">{inr(doctorTotals.opd)}</td>}
+                                                    {!doctorIpdOnly && <td className="px-4 py-3 text-right text-sm font-black text-emerald-700">{inr(doctorTotals.counter)}</td>}
+                                                    {!doctorIpdOnly && <td className="px-4 py-3 text-right text-sm font-black text-gray-900">{inr(doctorTotals.revenue)}</td>}
+                                                </tr>
+                                            </tfoot>
+                                        </table>
                                     </div>
                                 )}
+                            </div>
+
+                            {/* Monthly summary — closes the report on a final total */}
+                            <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
+                                <div className="flex flex-wrap items-center justify-between gap-2 px-6 py-4 border-b border-gray-100">
+                                    <h3 className="text-sm font-black text-gray-700">Monthly Summary &mdash; IPD / OPD / Counter</h3>
+                                    <span className="text-[10px] text-gray-400 font-medium">
+                                        {dateRange.from} to {dateRange.to}
+                                    </span>
+                                </div>
+                                <table className="w-full text-left">
+                                    <thead className="bg-gray-50 border-b border-gray-200">
+                                        <tr>
+                                            {['Month', 'Bills', 'IPD Amount', 'OPD Amount', 'Counter', 'Monthly Total'].map((h, i) => (
+                                                <th key={i} className={`px-4 py-2.5 text-[10px] font-black text-gray-400 uppercase tracking-wider ${i > 0 ? 'text-right' : ''}`}>{h}</th>
+                                            ))}
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-50">
+                                        {(rev.byMonth || []).length === 0 ? (
+                                            <tr><td colSpan={6} className="text-center py-8 text-gray-400 text-sm">No billing in this period</td></tr>
+                                        ) : (rev.byMonth as any[]).map((m, i) => (
+                                            <tr key={i} className="hover:bg-gray-50/50">
+                                                <td className="px-4 py-2.5 text-sm font-bold text-gray-700">{m.month}</td>
+                                                <td className="px-4 py-2.5 text-right text-xs text-gray-500">{m.bills}</td>
+                                                <td className="px-4 py-2.5 text-right text-sm font-bold text-violet-700">{inr(m.ipd)}</td>
+                                                <td className="px-4 py-2.5 text-right text-sm text-blue-700">{inr(m.opd)}</td>
+                                                <td className="px-4 py-2.5 text-right text-sm text-emerald-700">{inr(m.counter)}</td>
+                                                <td className="px-4 py-2.5 text-right text-sm font-black text-gray-900">{inr(m.total)}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                                {/* Grand total block — the final calculation the report ends on */}
+                                <div className="border-t-2 border-gray-200 bg-gray-50 px-6 py-4 grid grid-cols-2 lg:grid-cols-4 gap-4">
+                                    <div>
+                                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Total IPD Amount</p>
+                                        <p className="text-lg font-black text-violet-700">{inr(rev.grandTotal?.ipd ?? rev.byChannel.ipd.revenue)}</p>
+                                        <p className="text-[10px] text-gray-400 font-medium">{rev.grandTotal?.ipdBills ?? rev.byChannel.ipd.billCount} bills</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Total OPD Amount</p>
+                                        <p className="text-lg font-black text-blue-700">{inr(rev.grandTotal?.opd ?? rev.byChannel.opd.revenue)}</p>
+                                        <p className="text-[10px] text-gray-400 font-medium">{rev.grandTotal?.opdBills ?? rev.byChannel.opd.billCount} bills</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider">Counter Sales</p>
+                                        <p className="text-lg font-black text-emerald-700">{inr(rev.grandTotal?.counter ?? rev.byChannel.counter.revenue)}</p>
+                                        <p className="text-[10px] text-gray-400 font-medium">{rev.grandTotal?.counterBills ?? rev.byChannel.counter.billCount} bills</p>
+                                    </div>
+                                    <div className="border-l-2 border-gray-300 pl-4">
+                                        <p className="text-[10px] font-black text-gray-500 uppercase tracking-wider">Overall Total</p>
+                                        <p className="text-2xl font-black text-gray-900">{inr(rev.grandTotal?.total ?? rev.totalRevenue)}</p>
+                                        <p className="text-[10px] text-gray-400 font-medium">{rev.grandTotal?.bills ?? rev.totalBills} bills</p>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     )}
@@ -777,37 +1067,64 @@ export default function PharmacyReportsPage() {
                                             <th className="px-4 py-2 text-left">Bill No</th>
                                             <th className="px-4 py-2 text-left">Date</th>
                                             <th className="px-4 py-2 text-left">Patient</th>
+                                            <th className="px-4 py-2 text-left">UHID</th>
                                             <th className="px-4 py-2 text-left">Type</th>
                                             <th className="px-4 py-2 text-left">Doctor</th>
                                             <th className="px-4 py-2 text-right">Items</th>
                                             <th className="px-4 py-2 text-right">Amount</th>
+                                            <th className="px-4 py-2 text-center">Verify</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-100">
                                         {(rev?.bills || []).length === 0 ? (
-                                            <tr><td colSpan={7} className="text-center py-10 text-gray-400">No bills for this period / channel</td></tr>
+                                            <tr><td colSpan={9} className="text-center py-10 text-gray-400">No bills for this period / channel</td></tr>
                                         ) : (rev.bills as any[]).map((b, i) => (
                                             <tr key={i} className="hover:bg-gray-50">
-                                                <td className="px-4 py-2 font-mono text-gray-800">{b.billNo}</td>
-                                                <td className="px-4 py-2 text-gray-500">{b.date}</td>
+                                                <td className="px-4 py-2 font-mono text-gray-800">{b.billNo || '—'}</td>
+                                                <td className="px-4 py-2 text-gray-500">{new Date(b.date).toLocaleDateString('en-GB')}</td>
                                                 <td className="px-4 py-2 text-gray-800">{b.patient}</td>
+                                                <td className="px-4 py-2 font-mono text-[11px] text-gray-500">{b.patientId === 'WALKIN' ? '—' : b.patientId}</td>
                                                 <td className="px-4 py-2">
-                                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${b.channel === 'ipd' ? 'bg-blue-50 text-blue-700' : b.channel === 'opd' ? 'bg-indigo-50 text-indigo-700' : 'bg-emerald-50 text-emerald-700'}`}>
+                                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${b.channel === 'ipd' ? 'bg-violet-50 text-violet-700' : b.channel === 'opd' ? 'bg-blue-50 text-blue-700' : 'bg-emerald-50 text-emerald-700'}`}>
                                                         {b.channel === 'counter' ? 'CASH' : String(b.channel).toUpperCase()}
                                                     </span>
                                                 </td>
                                                 <td className="px-4 py-2 text-gray-500">{b.doctor || '—'}</td>
                                                 <td className="px-4 py-2 text-right">{b.items}</td>
                                                 <td className="px-4 py-2 text-right font-bold text-gray-900">{inr(b.revenue)}</td>
+                                                <td className="px-4 py-2 text-center">
+                                                    <button onClick={() => openBillDetail(b.id)} title="Verify bill lines"
+                                                        className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-lg hover:bg-indigo-100">
+                                                        <Eye className="h-3 w-3" /> View
+                                                    </button>
+                                                </td>
                                             </tr>
                                         ))}
                                     </tbody>
                                     {(rev?.bills || []).length > 0 && (
                                         <tfoot className="bg-gray-50 font-black text-gray-800">
-                                            <tr>
-                                                <td className="px-4 py-2" colSpan={5}>Total — {(rev.bills as any[]).length} bills</td>
+                                            {/* Per-channel subtotals, so IPD and OPD are totalled separately
+                                                and not just rolled into one figure. */}
+                                            {(['ipd', 'opd', 'counter'] as const)
+                                                .filter(ch => (rev.bills as any[]).some(b => b.channel === ch))
+                                                .map(ch => {
+                                                    const rows = (rev.bills as any[]).filter(b => b.channel === ch);
+                                                    return (
+                                                        <tr key={ch} className="text-gray-600 border-t border-gray-200">
+                                                            <td className="px-4 py-1.5" colSpan={6}>
+                                                                {ch === 'counter' ? 'Counter / Cash' : ch.toUpperCase()} subtotal — {rows.length} bills
+                                                            </td>
+                                                            <td className="px-4 py-1.5 text-right">{rows.reduce((s, b) => s + (b.items || 0), 0)}</td>
+                                                            <td className="px-4 py-1.5 text-right">{inr(rows.reduce((s, b) => s + (b.revenue || 0), 0))}</td>
+                                                            <td />
+                                                        </tr>
+                                                    );
+                                                })}
+                                            <tr className="border-t-2 border-gray-300 text-gray-900">
+                                                <td className="px-4 py-2" colSpan={6}>Grand Total — {(rev.bills as any[]).length} bills</td>
                                                 <td className="px-4 py-2 text-right">{(rev.bills as any[]).reduce((s, b) => s + (b.items || 0), 0)}</td>
                                                 <td className="px-4 py-2 text-right">{inr((rev.bills as any[]).reduce((s, b) => s + (b.revenue || 0), 0))}</td>
+                                                <td />
                                             </tr>
                                         </tfoot>
                                     )}
@@ -979,6 +1296,105 @@ export default function PharmacyReportsPage() {
                         </div>
                     )}
                 </>
+            )}
+
+            {/* ===== IPD / OPD bill verification drill-down ===== */}
+            {billDetail && (
+                <div className="fixed inset-0 z-50 bg-black/40 flex items-start justify-center p-4 overflow-auto"
+                    onClick={() => setBillDetail(null)}>
+                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-4xl my-8" onClick={e => e.stopPropagation()}>
+                        {billDetailLoading || billDetail.loading ? (
+                            <div className="p-10 flex items-center justify-center gap-2 text-gray-500 text-sm font-bold">
+                                <Loader2 className="h-4 w-4 animate-spin" /> Loading bill…
+                            </div>
+                        ) : (
+                            <>
+                                <div className="flex items-start justify-between gap-4 px-6 py-4 border-b border-gray-100">
+                                    <div>
+                                        <div className="flex items-center gap-2">
+                                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${billDetail.channel === 'ipd' ? 'bg-violet-100 text-violet-700' : billDetail.channel === 'opd' ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                                                {billDetail.channel === 'counter' ? 'CASH' : String(billDetail.channel).toUpperCase()}
+                                            </span>
+                                            <h3 className="text-sm font-black text-gray-900">{billDetail.billNo || 'Draft bill (no number yet)'}</h3>
+                                        </div>
+                                        <p className="text-xs text-gray-500 mt-1">
+                                            {billDetail.patientName}
+                                            {billDetail.patientId !== 'WALKIN' && <span className="font-mono text-gray-400"> · {billDetail.patientId}</span>}
+                                            {billDetail.doctor && <span> · {billDetail.doctor}</span>}
+                                        </p>
+                                        {billDetail.channel === 'ipd' && (
+                                            <p className="text-[11px] text-gray-400 mt-0.5">
+                                                {billDetail.ward ? `${billDetail.ward} · ` : ''}{billDetail.bed ? `Bed ${billDetail.bed} · ` : ''}
+                                                Admitted {billDetail.admissionDate ? new Date(billDetail.admissionDate).toLocaleDateString('en-GB') : '—'}
+                                                {' · '}{billDetail.events.length} dispensing{billDetail.events.length === 1 ? '' : 's'}
+                                            </p>
+                                        )}
+                                    </div>
+                                    <button onClick={() => setBillDetail(null)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400">
+                                        <X className="h-4 w-4" />
+                                    </button>
+                                </div>
+
+                                <div className="max-h-[60vh] overflow-auto px-6 py-4 space-y-5">
+                                    {billDetail.events.length === 0 ? (
+                                        <p className="text-center py-8 text-gray-400 text-sm">No pharmacy lines on this bill.</p>
+                                    ) : billDetail.events.map((ev: any, i: number) => (
+                                        <div key={i}>
+                                            <div className="flex items-center justify-between mb-1.5">
+                                                <p className="text-[11px] font-black text-gray-500 uppercase tracking-wider">
+                                                    Dispense {i + 1} · {new Date(ev.at).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                                </p>
+                                                <p className="text-xs font-black text-gray-800">{inr(ev.amount)}</p>
+                                            </div>
+                                            <table className="w-full text-xs border border-gray-100 rounded-lg overflow-hidden">
+                                                <thead className="bg-gray-50 text-gray-500">
+                                                    <tr>
+                                                        <th className="px-3 py-1.5 text-left">Medicine</th>
+                                                        <th className="px-3 py-1.5 text-left">Batch</th>
+                                                        <th className="px-3 py-1.5 text-left">Expiry</th>
+                                                        <th className="px-3 py-1.5 text-right">Qty</th>
+                                                        <th className="px-3 py-1.5 text-right">Rate</th>
+                                                        <th className="px-3 py-1.5 text-right">Amount</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-gray-50">
+                                                    {ev.lines.map((l: any, j: number) => (
+                                                        <tr key={j}>
+                                                            <td className="px-3 py-1.5 text-gray-800 font-medium">{l.medicine}</td>
+                                                            <td className="px-3 py-1.5 font-mono text-[11px] text-gray-500">{l.batchNo || '—'}</td>
+                                                            <td className="px-3 py-1.5 text-[11px] text-gray-500">{l.expiry ? new Date(l.expiry).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }) : '—'}</td>
+                                                            <td className="px-3 py-1.5 text-right text-gray-600">{l.quantity}</td>
+                                                            <td className="px-3 py-1.5 text-right text-gray-600">{inr(l.unitPrice)}</td>
+                                                            <td className="px-3 py-1.5 text-right font-bold text-gray-900">{inr(l.amount)}</td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <div className="border-t-2 border-gray-200 bg-gray-50 px-6 py-4 flex flex-wrap items-end justify-between gap-4 rounded-b-2xl">
+                                    <div className="text-[11px] text-gray-500 font-medium space-y-0.5">
+                                        <p>{billDetail.lineCount} pharmacy line{billDetail.lineCount === 1 ? '' : 's'}</p>
+                                        {billDetail.channel === 'ipd' && (
+                                            // The IPD invoice covers the whole stay; only the pharmacy slice
+                                            // belongs to this report, so both figures are shown side by side.
+                                            <p>Full IPD bill (all departments): <span className="font-bold text-gray-700">{inr(billDetail.invoiceNet)}</span>
+                                                {' · '}Balance due {inr(billDetail.balanceDue)}</p>
+                                        )}
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider">
+                                            {billDetail.channel === 'ipd' ? 'Pharmacy Total (this bill)' : 'Bill Total'}
+                                        </p>
+                                        <p className="text-xl font-black text-gray-900">{inr(billDetail.pharmacyTotal)}</p>
+                                    </div>
+                                </div>
+                            </>
+                        )}
+                    </div>
+                </div>
             )}
         </AppShell>
     );

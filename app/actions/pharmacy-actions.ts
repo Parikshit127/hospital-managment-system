@@ -4454,6 +4454,20 @@ export async function getPharmacyRevenueReport(filters?: {
         const search = filters?.search?.trim().toLowerCase();
         const dateRange = { gte: fromDate, lte: toDate };
 
+        // IPD pharmacy lines hang off the admission's IPD invoice, and that invoice
+        // almost never carries doctor_name (54 of 2,373 lines on the demo DB) because
+        // postChargeToIpdBill creates it with patient + admission only. The treating
+        // consultant lives on `admissions.doctor_name`, which IS populated. Attribute
+        // IPD revenue from there — without it ~98% of IPD pharmacy revenue collapsed
+        // into "Unassigned" and the doctor-wise split was useless.
+        const doctorAdmissionIds = doctor
+            ? (await db.admissions.findMany({
+                where: { doctor_name: doctor },
+                select: { admission_id: true },
+                take: 5000,
+            })).map((a: { admission_id: string }) => a.admission_id)
+            : [];
+
         // a. Counter + OPD — standalone Pharmacy invoices
         const pharmacyInvoicesRaw = await db.invoices.findMany({
             where: {
@@ -4479,7 +4493,9 @@ export async function getPharmacyRevenueReport(filters?: {
                 invoice: {
                     invoice_type: 'IPD',
                     status: { not: 'Cancelled' },
-                    ...(doctor ? { doctor_name: doctor } : {}),
+                    ...(doctor
+                        ? { OR: [{ doctor_name: doctor }, { admission_id: { in: doctorAdmissionIds } }] }
+                        : {}),
                 },
             },
             select: {
@@ -4487,6 +4503,7 @@ export async function getPharmacyRevenueReport(filters?: {
                 invoice: {
                     select: {
                         id: true, invoice_number: true, patient_id: true, doctor_name: true,
+                        admission_id: true,
                         patient: { select: { full_name: true } },
                     },
                 },
@@ -4501,59 +4518,101 @@ export async function getPharmacyRevenueReport(filters?: {
         const pharmacyInvoices = pharmacyInvoicesRaw.slice(0, REPORT_INVOICE_CAP);
         const ipdItems = ipdItemsRaw.slice(0, REPORT_ITEM_CAP);
 
+        // Resolve the treating consultant for every IPD invoice in the result set from
+        // its admission. Fetched as one lookup and stitched in JS — a nested Prisma
+        // `include` would issue a query per invoice against the pooler.
+        const ipdAdmissionIds = Array.from(new Set(
+            ipdItems.map((it: typeof ipdItems[number]) => it.invoice.admission_id)
+                .filter((a: string | null): a is string => !!a)
+        ));
+        const admissionDoctors = ipdAdmissionIds.length
+            ? await db.admissions.findMany({
+                where: { admission_id: { in: ipdAdmissionIds } },
+                select: { admission_id: true, doctor_name: true },
+            })
+            : [];
+        const admissionDoctorMap = new Map<string, string | null>(
+            admissionDoctors.map((a: { admission_id: string; doctor_name: string | null }) => [a.admission_id, a.doctor_name])
+        );
+        const ipdDoctorOf = (inv: { doctor_name: string | null; admission_id: string | null }) =>
+            (inv.admission_id ? admissionDoctorMap.get(inv.admission_id) : null) || inv.doctor_name || null;
+
         // -- Aggregation accumulators --
+        type Ch = 'counter' | 'opd' | 'ipd';
         const channels = {
             counter: { revenue: 0, billCount: 0, itemCount: 0 },
             opd: { revenue: 0, billCount: 0, itemCount: 0 },
             ipd: { revenue: 0, billCount: 0, itemCount: 0 },
         };
         const dayMap = new Map<string, { counter: number; opd: number; ipd: number }>();
-        const medMap = new Map<string, { name: string; qty: number; revenue: number }>();
-        const docMap = new Map<string, { name: string; revenue: number }>();
-        const bills: { billNo: string; patient: string; channel: 'counter' | 'opd' | 'ipd'; doctor: string; date: string; items: number; revenue: number }[] = [];
+        // Monthly buckets are accumulated from the same events as the day buckets (not
+        // from the grouped bill rows) so an IPD stay spanning two months books its
+        // revenue into the month each dispense actually happened.
+        const monthMap = new Map<string, { counter: number; opd: number; ipd: number }>();
+        const monthBillKeys = new Map<string, Set<string>>();
+        const medMap = new Map<string, { name: string; qty: number; revenue: number; counter: number; opd: number; ipd: number }>();
+        const docMap = new Map<string, { name: string; revenue: number; counter: number; opd: number; ipd: number; bills: number }>();
+        const docBillKeys = new Map<string, Set<string>>();
+        const bills: { id: number; billNo: string; patient: string; patientId: string; admissionId: string | null; channel: Ch; doctor: string; date: string; items: number; revenue: number }[] = [];
 
         const dayKey = (d: Date) => {
             const x = new Date(d);
             return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
         };
-        const bumpDay = (d: Date, ch: 'counter' | 'opd' | 'ipd', amt: number) => {
+        const monthKey = (d: Date) => {
+            const x = new Date(d);
+            return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}`;
+        };
+        const bumpDay = (d: Date, ch: Ch, amt: number, billKey: string) => {
             const k = dayKey(d);
             const e = dayMap.get(k) || { counter: 0, opd: 0, ipd: 0 };
             e[ch] += amt;
             dayMap.set(k, e);
+            const mk = monthKey(d);
+            const m = monthMap.get(mk) || { counter: 0, opd: 0, ipd: 0 };
+            m[ch] += amt;
+            monthMap.set(mk, m);
+            if (!monthBillKeys.has(mk)) monthBillKeys.set(mk, new Set());
+            monthBillKeys.get(mk)!.add(`${ch}:${billKey}`);
         };
-        const bumpMed = (desc: string, qty: number, rev: number) => {
+        const bumpMed = (desc: string, qty: number, rev: number, ch: Ch) => {
             const name = extractMedicineName(desc);
             if (search && !name.toLowerCase().includes(search)) return;
-            const e = medMap.get(name) || { name, qty: 0, revenue: 0 };
-            e.qty += qty; e.revenue += rev;
+            const e = medMap.get(name) || { name, qty: 0, revenue: 0, counter: 0, opd: 0, ipd: 0 };
+            e.qty += qty; e.revenue += rev; e[ch] += rev;
             medMap.set(name, e);
         };
-        const bumpDoc = (name: string | null | undefined, rev: number) => {
+        const bumpDoc = (name: string | null | undefined, rev: number, ch: Ch, billKey: string) => {
             const key = name || 'Unassigned';
-            const e = docMap.get(key) || { name: key, revenue: 0 };
-            e.revenue += rev;
+            const e = docMap.get(key) || { name: key, revenue: 0, counter: 0, opd: 0, ipd: 0, bills: 0 };
+            e.revenue += rev; e[ch] += rev;
             docMap.set(key, e);
+            if (!docBillKeys.has(key)) docBillKeys.set(key, new Set());
+            docBillKeys.get(key)!.add(`${ch}:${billKey}`);
         };
 
         // Counter + OPD
         for (const inv of pharmacyInvoices) {
-            const ch: 'counter' | 'opd' = inv.patient_id === 'WALKIN' ? 'counter' : 'opd';
+            const ch: Ch = inv.patient_id === 'WALKIN' ? 'counter' : 'opd';
             const rev = Number(inv.net_amount) || 0;
+            const billKey = String(inv.id);
             channels[ch].revenue += rev;
             channels[ch].billCount += 1;
             channels[ch].itemCount += inv.items.length;
-            bumpDay(inv.created_at, ch, rev);
-            bumpDoc(inv.doctor_name, rev);
+            bumpDay(inv.created_at, ch, rev, billKey);
+            bumpDoc(inv.doctor_name, rev, ch, billKey);
             for (const it of inv.items) {
-                bumpMed(it.description, Number(it.quantity) || 0, (Number(it.net_price) || 0) + (Number(it.tax_amount) || 0));
+                bumpMed(it.description, Number(it.quantity) || 0, (Number(it.net_price) || 0) + (Number(it.tax_amount) || 0), ch);
             }
             const patientName = ch === 'counter'
                 ? (parseWalkinNote(inv.notes).name || 'Walk-in')
                 : ((inv.patient as any)?.full_name || inv.patient_id);
             bills.push({
+                id: inv.id,
                 billNo: inv.invoice_number,
                 patient: patientName,
+                patientId: inv.patient_id,
+                admissionId: null,
                 channel: ch,
                 doctor: inv.doctor_name || '—',
                 date: inv.created_at.toISOString(),
@@ -4563,23 +4622,31 @@ export async function getPharmacyRevenueReport(filters?: {
         }
 
         // IPD — group items by parent invoice (one bill per IPD invoice)
-        const ipdBillMap = new Map<number, { billNo: string; patient: string; doctor: string; date: string; items: number; revenue: number }>();
+        const ipdBillMap = new Map<number, { id: number; billNo: string; patient: string; patientId: string; admissionId: string | null; doctor: string; date: string; items: number; revenue: number }>();
         for (const it of ipdItems) {
             const rev = (Number(it.net_price) || 0) + (Number(it.tax_amount) || 0);
+            const billKey = String(it.invoice.id);
+            const docName = ipdDoctorOf(it.invoice);
             channels.ipd.revenue += rev;
             channels.ipd.itemCount += 1;
-            bumpDay(it.created_at, 'ipd', rev);
-            bumpDoc(it.invoice.doctor_name, rev);
-            bumpMed(it.description, Number(it.quantity) || 0, rev);
+            bumpDay(it.created_at, 'ipd', rev, billKey);
+            bumpDoc(docName, rev, 'ipd', billKey);
+            bumpMed(it.description, Number(it.quantity) || 0, rev, 'ipd');
             const existing = ipdBillMap.get(it.invoice.id);
             if (existing) {
                 existing.items += 1;
                 existing.revenue += rev;
+                // An IPD bill accumulates over the whole stay; show the most recent
+                // dispense so the row isn't dated by whichever line came back first.
+                if (it.created_at.toISOString() > existing.date) existing.date = it.created_at.toISOString();
             } else {
                 ipdBillMap.set(it.invoice.id, {
+                    id: it.invoice.id,
                     billNo: it.invoice.invoice_number,
                     patient: (it.invoice.patient as any)?.full_name || it.invoice.patient_id,
-                    doctor: it.invoice.doctor_name || '—',
+                    patientId: it.invoice.patient_id,
+                    admissionId: it.invoice.admission_id,
+                    doctor: docName || '—',
                     date: it.created_at.toISOString(),
                     items: 1,
                     revenue: rev,
@@ -4634,12 +4701,57 @@ export async function getPharmacyRevenueReport(filters?: {
             });
         }
 
+        // topMovers / byDoctor are accumulated across every channel, so they must be
+        // re-projected onto the active channels — otherwise picking "IPD" left these
+        // two tables showing all-channel figures that never tied back to Total Revenue.
+        const projectChannels = (e: { counter: number; opd: number; ipd: number }) =>
+            activeChannels.reduce((sum, c) => sum + e[c], 0);
+
         const topMovers = Array.from(medMap.values())
+            .map(m => ({ ...m, revenue: projectChannels(m) }))
+            .filter(m => m.revenue > 0)
             .sort((a, b) => b.revenue - a.revenue)
             .slice(0, 10);
+
+        // Doctor-wise split, segmented by channel so an IPD-only doctor report is
+        // possible. Not sliced — a doctor-wise report that hides doctors is not one.
         const byDoctor = Array.from(docMap.values())
-            .sort((a, b) => b.revenue - a.revenue)
-            .slice(0, 10);
+            .map(d => ({
+                name: d.name,
+                ipd: Math.round(d.ipd),
+                opd: Math.round(d.opd),
+                counter: Math.round(d.counter),
+                revenue: Math.round(projectChannels(d)),
+                bills: Array.from(docBillKeys.get(d.name) || [])
+                    .filter(k => activeChannels.includes(k.split(':')[0] as any)).length,
+                // Separate count so an IPD-only doctor report totals IPD bills alone.
+                ipdBills: Array.from(docBillKeys.get(d.name) || [])
+                    .filter(k => k.startsWith('ipd:')).length,
+            }))
+            .filter(d => d.revenue > 0 || d.bills > 0)
+            .sort((a, b) => b.revenue - a.revenue);
+
+        // Month-wise totals with IPD / OPD / Counter split, oldest first, so the report
+        // ends on a final monthly figure instead of only per-day bars.
+        const byMonth = Array.from(monthMap.entries())
+            .map(([key, e]) => {
+                const counter = activeChannels.includes('counter') ? e.counter : 0;
+                const opd = activeChannels.includes('opd') ? e.opd : 0;
+                const ipd = activeChannels.includes('ipd') ? e.ipd : 0;
+                const [y, m] = key.split('-');
+                return {
+                    key,
+                    month: new Date(Number(y), Number(m) - 1, 1)
+                        .toLocaleDateString('en-IN', { month: 'short', year: 'numeric' }),
+                    counter: Math.round(counter),
+                    opd: Math.round(opd),
+                    ipd: Math.round(ipd),
+                    total: Math.round(counter + opd + ipd),
+                    bills: Array.from(monthBillKeys.get(key) || [])
+                        .filter(k => activeChannels.includes(k.split(':')[0] as any)).length,
+                };
+            })
+            .sort((a, b) => a.key.localeCompare(b.key));
 
         // Bills list — respect channel filter, newest first
         const billsList = bills
@@ -4674,6 +4786,18 @@ export async function getPharmacyRevenueReport(filters?: {
                 },
                 totalBills: activeChannels.reduce((s, c) => s + channels[c].billCount, 0),
                 revenueByDay,
+                byMonth,
+                // Final report totals — what the printed/exported report closes with.
+                grandTotal: {
+                    ipd: Math.round(activeChannels.includes('ipd') ? channels.ipd.revenue : 0),
+                    opd: Math.round(activeChannels.includes('opd') ? channels.opd.revenue : 0),
+                    counter: Math.round(activeChannels.includes('counter') ? channels.counter.revenue : 0),
+                    total: Math.round(totalRevenue),
+                    ipdBills: activeChannels.includes('ipd') ? channels.ipd.billCount : 0,
+                    opdBills: activeChannels.includes('opd') ? channels.opd.billCount : 0,
+                    counterBills: activeChannels.includes('counter') ? channels.counter.billCount : 0,
+                    bills: activeChannels.reduce((s, c) => s + channels[c].billCount, 0),
+                },
                 topMovers,
                 byDoctor,
                 bills: billsList,
@@ -4683,6 +4807,116 @@ export async function getPharmacyRevenueReport(filters?: {
     } catch (error) {
         console.error('Pharmacy Revenue Report Error:', error);
         return { success: false, error: 'Failed to load revenue report' };
+    }
+}
+
+// Drill-down behind a row of the revenue report: the pharmacy lines that make up
+// one bill, grouped into dispensing events. Pharmacy staff cannot open the full IPD
+// bill (/api/invoice/[id]/summary-bill excludes the pharmacist role, and that bill
+// carries room / procedure charges outside pharmacy's remit), so verification of an
+// IPD patient's pharmacy charges happens here, against pharmacy lines only.
+export async function getPharmacyBillLines(invoiceId: number) {
+    const denied = await denyUnlessPharmacyRole(PHARMACY_OPERATE_ROLES);
+    if (denied) return denied;
+
+    try {
+        const { db } = await requireTenantContext();
+
+        const invoice = await db.invoices.findFirst({
+            where: { id: invoiceId, status: { not: 'Cancelled' } },
+            select: {
+                id: true, invoice_number: true, invoice_type: true, patient_id: true,
+                doctor_name: true, admission_id: true, created_at: true,
+                net_amount: true, balance_due: true, status: true,
+                patient: { select: { full_name: true, phone: true } },
+            },
+        });
+        if (!invoice) return { success: false, error: 'Bill not found' };
+
+        const isIpd = invoice.invoice_type === 'IPD';
+
+        // IPD bills mix every department; only the pharmacy lines belong in this report.
+        const items = await db.invoice_items.findMany({
+            where: {
+                invoice_id: invoiceId,
+                ...(isIpd ? { service_category: 'Pharmacy' } : {}),
+            },
+            select: {
+                description: true, quantity: true, unit_price: true, discount: true,
+                net_price: true, tax_amount: true, batch_no: true, expiry_date: true,
+                mrp: true, created_at: true,
+            },
+            orderBy: { created_at: 'asc' },
+        });
+
+        // NB: `admissions` has no ward_name column — the ward comes off the relation
+        // (or the bed's ward when the admission's own ward link is unset).
+        let admission: any = null;
+        if (invoice.admission_id) {
+            admission = await db.admissions.findUnique({
+                where: { admission_id: invoice.admission_id },
+                select: {
+                    doctor_name: true, admission_id: true, bed_id: true, admission_date: true,
+                    ward: { select: { ward_name: true } },
+                    bed: { select: { bed_name: true, wards: { select: { ward_name: true } } } },
+                },
+            });
+        }
+
+        // One dispensing = the lines sharing a created_at to the minute (same rule the
+        // returns screen uses), so the IPD bill reads as the sequence of dispenses it is.
+        const eventMap = new Map<string, { at: string; lines: any[]; amount: number }>();
+        for (const it of items) {
+            const key = dispensingKey(it.created_at);
+            const amount = (Number(it.net_price) || 0) + (Number(it.tax_amount) || 0);
+            const line = {
+                medicine: extractMedicineName(it.description),
+                description: it.description,
+                quantity: Number(it.quantity) || 0,
+                unitPrice: Number(it.unit_price) || 0,
+                discount: Number(it.discount) || 0,
+                mrp: it.mrp == null ? null : Number(it.mrp),
+                batchNo: it.batch_no || null,
+                expiry: it.expiry_date ? it.expiry_date.toISOString() : null,
+                tax: Number(it.tax_amount) || 0,
+                amount,
+                at: it.created_at.toISOString(),
+            };
+            const e = eventMap.get(key);
+            if (e) { e.lines.push(line); e.amount += amount; }
+            else eventMap.set(key, { at: line.at, lines: [line], amount });
+        }
+        const events = Array.from(eventMap.values()).sort((a, b) => a.at.localeCompare(b.at));
+        const total = events.reduce((sum, e) => sum + e.amount, 0);
+
+        return {
+            success: true,
+            data: {
+                invoiceId: invoice.id,
+                billNo: invoice.invoice_number,
+                channel: isIpd ? 'ipd' : (invoice.patient_id === 'WALKIN' ? 'counter' : 'opd'),
+                status: invoice.status,
+                patientId: invoice.patient_id,
+                patientName: invoice.patient?.full_name || (invoice.patient_id === 'WALKIN' ? 'Walk-in' : invoice.patient_id),
+                patientPhone: invoice.patient?.phone || null,
+                // Same precedence the report uses: admission consultant first.
+                doctor: (admission?.doctor_name) || invoice.doctor_name || null,
+                admissionId: invoice.admission_id,
+                ward: admission?.ward?.ward_name || admission?.bed?.wards?.ward_name || null,
+                bed: admission?.bed?.bed_name || admission?.bed_id || null,
+                admissionDate: admission?.admission_date ? admission.admission_date.toISOString() : null,
+                billDate: invoice.created_at.toISOString(),
+                // Pharmacy portion only for IPD; the invoice's own net covers the whole stay.
+                pharmacyTotal: Math.round(total),
+                invoiceNet: Number(invoice.net_amount),
+                balanceDue: Number(invoice.balance_due),
+                lineCount: items.length,
+                events,
+            },
+        };
+    } catch (error: any) {
+        console.error('getPharmacyBillLines error:', error);
+        return { success: false, error: error.message || 'Failed to load bill detail' };
     }
 }
 
