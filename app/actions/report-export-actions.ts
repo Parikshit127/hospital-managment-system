@@ -12,6 +12,9 @@
 import { requireTenantContext } from '@/backend/tenant';
 import { generateExcelBuffer } from '@/lib/mis/exporter';
 import type { ColumnSpec } from '@/lib/mis/types';
+import ExcelJS from 'exceljs';
+import { getFinanceDashboardStats } from '@/app/actions/finance-actions';
+import { getExpenseDashboardStats, getExpenseCategories } from '@/app/actions/expense-actions';
 import { getIndentReport, type IndentReportFilters } from '@/app/actions/indent-report-actions';
 import { getFixedAssets } from '@/app/actions/asset-management-actions';
 import { getAssetDepreciationReport } from '@/app/actions/asset-register-actions';
@@ -345,3 +348,432 @@ export async function exportIndentReport(filters: IndentReportFilters) {
         return { success: false, error: error.message };
     }
 }
+
+/** Income & Expense P&L Report → .xlsx with rich styling, cell borders and currency formatting */
+export async function exportIncomeExpenseExcel(params: {
+    period?: 'monthly' | 'quarterly' | 'yearly';
+}) {
+    try {
+        const { db, organizationId, session } = await requireTenantContext();
+        const period = params.period || 'monthly';
+
+        const [org, revRes, expRes, catRes] = await Promise.all([
+            db.organization.findUnique({ where: { id: organizationId }, select: { name: true } }),
+            getFinanceDashboardStats({ period }),
+            getExpenseDashboardStats(period),
+            getExpenseCategories(),
+        ]);
+
+        const revenueStats = revRes.success ? revRes.data : null;
+        const expenseStats = expRes.success ? expRes.data : null;
+        const categories = (catRes.success ? catRes.data : []) as { id: number; name: string }[];
+
+        const allTimeRevenue = Math.round(Number(revenueStats?.totalRevenue || 0));
+        const allTimeExpenses = Math.round(Number(expenseStats?.totalExpenses || 0));
+        const allTimeNetIncome = allTimeRevenue - allTimeExpenses;
+
+        const totalRevenue = Math.round(Number(revenueStats?.periodRevenue || 0));
+        const totalCollection = Math.round(Number(revenueStats?.periodCollection || 0));
+        const totalExpenses = Math.round(Number(expenseStats?.periodExpenses || 0));
+        const netIncome = totalRevenue - totalExpenses;
+
+        const categoryMap = new Map(categories.map(c => [c.id, c.name]));
+        const revByDept: { department: string | null; amount: number }[] = revenueStats?.revenueByDepartment || [];
+        const expByCategory: { category_id: number; amount: number }[] = expenseStats?.byCategory || [];
+
+        const now = new Date();
+        const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+        const currentMonthName = monthNames[now.getMonth()];
+        const currentYear = now.getFullYear();
+        const currentQuarter = Math.floor(now.getMonth() / 3) + 1;
+
+        let periodTitle = '';
+        if (period === 'monthly') {
+            periodTitle = `Monthly (${currentMonthName} ${currentYear})`;
+        } else if (period === 'quarterly') {
+            periodTitle = `Quarterly (Q${currentQuarter} ${currentYear})`;
+        } else {
+            periodTitle = `Yearly (${currentYear})`;
+        }
+
+        const dateStr = now.toISOString().slice(0, 10);
+        const timestampStr = now.toLocaleString('en-IN', {
+            timeZone: 'Asia/Kolkata',
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true,
+        });
+
+        const workbook = new ExcelJS.Workbook();
+        workbook.creator = 'HospitalOS Finance';
+        workbook.created = now;
+
+        const sheet = workbook.addWorksheet('Income & Expense', {
+            views: [{ showGridLines: true }],
+        });
+
+        sheet.columns = [
+            { key: 'particulars', width: 38 },
+            { key: 'category', width: 26 },
+            { key: 'type', width: 20 },
+            { key: 'amount', width: 22 },
+            { key: 'notes', width: 28 },
+        ];
+
+        const thinBorder: Partial<ExcelJS.Borders> = {
+            top: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+            bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+            left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+            right: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        };
+
+        const headerBorder: Partial<ExcelJS.Borders> = {
+            top: { style: 'medium', color: { argb: 'FFCBD5E1' } },
+            bottom: { style: 'medium', color: { argb: 'FFCBD5E1' } },
+            left: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+            right: { style: 'thin', color: { argb: 'FFCBD5E1' } },
+        };
+
+        let rowIdx = 1;
+
+        // ── 0. Cover Header ──
+        sheet.mergeCells(`A${rowIdx}:E${rowIdx}`);
+        const hospCell = sheet.getCell(`A${rowIdx}`);
+        hospCell.value = org?.name || 'HospitalOS Health';
+        hospCell.font = { bold: true, size: 14, color: { argb: 'FF166534' } };
+        hospCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF0FDF4' } };
+        hospCell.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
+        sheet.getRow(rowIdx).height = 28;
+        rowIdx++;
+
+        sheet.mergeCells(`A${rowIdx}:E${rowIdx}`);
+        const titleCell = sheet.getCell(`A${rowIdx}`);
+        titleCell.value = 'INCOME & EXPENSE REPORT (PROFIT & LOSS OVERVIEW)';
+        titleCell.font = { bold: true, size: 12, color: { argb: 'FF0F172A' } };
+        titleCell.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
+        sheet.getRow(rowIdx).height = 22;
+        rowIdx++;
+
+        sheet.mergeCells(`A${rowIdx}:E${rowIdx}`);
+        const metaCell = sheet.getCell(`A${rowIdx}`);
+        metaCell.value = `Period: ${periodTitle}  ·  Generated: ${timestampStr}  ·  By: ${session?.name || session?.username || 'SYSTEM'}`;
+        metaCell.font = { size: 10, color: { argb: 'FF64748B' } };
+        metaCell.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
+        sheet.getRow(rowIdx).height = 18;
+        rowIdx++;
+
+        // Spacer
+        sheet.getRow(rowIdx).height = 10;
+        rowIdx++;
+
+        // ── 1. Executive Summary ──
+        sheet.mergeCells(`A${rowIdx}:E${rowIdx}`);
+        const sec1Header = sheet.getCell(`A${rowIdx}`);
+        sec1Header.value = '1. EXECUTIVE SUMMARY';
+        sec1Header.font = { bold: true, size: 11, color: { argb: 'FFFFFFFF' } };
+        sec1Header.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E293B' } };
+        sec1Header.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
+        sheet.getRow(rowIdx).height = 24;
+        rowIdx++;
+
+        // Table Header
+        const h1Row = sheet.getRow(rowIdx);
+        h1Row.values = ['Metric Name', 'Area', 'Classification', 'Amount (₹)', 'Description'];
+        h1Row.font = { bold: true, size: 10, color: { argb: 'FF334155' } };
+        h1Row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
+        h1Row.height = 22;
+        h1Row.eachCell((c) => { c.border = headerBorder; c.alignment = { vertical: 'middle' }; });
+        rowIdx++;
+
+        const kpis = [
+            ['Revenue (Billed)', 'Billing', 'Billed Revenue', totalRevenue, 'Bills created incl. outstanding'],
+            ['Collection (Received)', 'Cash Inflow', 'Cash Actually Received', totalCollection, 'Payments actually collected'],
+            ['Total Expenses', 'Expenses', 'Operational Cost', totalExpenses, 'Approved & paid expenses'],
+            ['Net Income (All Time)', 'Net Position', 'Cumulative Profit/Loss', allTimeNetIncome, 'Cumulative all-time net income'],
+            [`Net Income (${periodTitle})`, 'Net Position', 'Period P&L', netIncome, 'Period revenue minus expenses'],
+        ];
+
+        kpis.forEach((kpi, idx) => {
+            const r = sheet.getRow(rowIdx);
+            r.values = kpi;
+            r.height = 20;
+            if (idx % 2 === 1) {
+                r.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
+            }
+            r.eachCell((c, colNumber) => {
+                c.border = thinBorder;
+                c.alignment = { vertical: 'middle' };
+                if (colNumber === 4) {
+                    c.numFmt = '₹#,##0';
+                    c.font = { bold: true };
+                }
+            });
+            rowIdx++;
+        });
+
+        // Spacer
+        sheet.getRow(rowIdx).height = 12;
+        rowIdx++;
+
+        // ── 2. Profit & Loss Statement ──
+        sheet.mergeCells(`A${rowIdx}:E${rowIdx}`);
+        const sec2Header = sheet.getCell(`A${rowIdx}`);
+        sec2Header.value = '2. PROFIT & LOSS SUMMARY STATEMENT';
+        sec2Header.font = { bold: true, size: 11, color: { argb: 'FFFFFFFF' } };
+        sec2Header.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF059669' } };
+        sec2Header.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
+        sheet.getRow(rowIdx).height = 24;
+        rowIdx++;
+
+        const h2Row = sheet.getRow(rowIdx);
+        h2Row.values = ['Particulars', 'Department / Category', 'Classification', 'Amount (₹)', 'Share (%)'];
+        h2Row.font = { bold: true, size: 10, color: { argb: 'FF334155' } };
+        h2Row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
+        h2Row.height = 22;
+        h2Row.eachCell((c) => { c.border = headerBorder; c.alignment = { vertical: 'middle' }; });
+        rowIdx++;
+
+        // Revenue Group Header
+        sheet.mergeCells(`A${rowIdx}:E${rowIdx}`);
+        const revGroupCell = sheet.getCell(`A${rowIdx}`);
+        revGroupCell.value = 'A. REVENUE BY DEPARTMENT (COLLECTIONS)';
+        revGroupCell.font = { bold: true, size: 10, color: { argb: 'FF15803D' } };
+        revGroupCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDCFCE7' } };
+        revGroupCell.alignment = { vertical: 'middle', indent: 1 };
+        sheet.getRow(rowIdx).height = 21;
+        rowIdx++;
+
+        revByDept.forEach((dept, idx) => {
+            const pct = totalRevenue > 0 ? ((dept.amount / totalRevenue) * 100).toFixed(1) + '%' : '0.0%';
+            const r = sheet.getRow(rowIdx);
+            r.values = [
+                `   ${dept.department || 'Other'}`,
+                dept.department || 'Other',
+                'Department Revenue',
+                Math.round(dept.amount),
+                pct,
+            ];
+            r.height = 19;
+            if (idx % 2 === 1) r.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
+            r.eachCell((c, colNumber) => {
+                c.border = thinBorder;
+                c.alignment = { vertical: 'middle' };
+                if (colNumber === 4) c.numFmt = '₹#,##0';
+            });
+            rowIdx++;
+        });
+
+        // Revenue Total Row
+        const revTotalRow = sheet.getRow(rowIdx);
+        revTotalRow.values = [
+            'TOTAL REVENUE (COLLECTIONS)',
+            'All Departments',
+            'Revenue Total',
+            totalRevenue,
+            '100.0%',
+        ];
+        revTotalRow.font = { bold: true, size: 10, color: { argb: 'FF166534' } };
+        revTotalRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF0FDF4' } };
+        revTotalRow.height = 22;
+        revTotalRow.eachCell((c, colNumber) => {
+            c.border = headerBorder;
+            c.alignment = { vertical: 'middle' };
+            if (colNumber === 4) c.numFmt = '₹#,##0';
+        });
+        rowIdx++;
+
+        // Expenses Group Header
+        sheet.mergeCells(`A${rowIdx}:E${rowIdx}`);
+        const expGroupCell = sheet.getCell(`A${rowIdx}`);
+        expGroupCell.value = 'B. EXPENSES BY CATEGORY';
+        expGroupCell.font = { bold: true, size: 10, color: { argb: 'FFB91C1C' } };
+        expGroupCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEE2E2' } };
+        expGroupCell.alignment = { vertical: 'middle', indent: 1 };
+        sheet.getRow(rowIdx).height = 21;
+        rowIdx++;
+
+        expByCategory.forEach((cat, idx) => {
+            const catName = categoryMap.get(cat.category_id) || `Category ${cat.category_id}`;
+            const pct = totalExpenses > 0 ? ((cat.amount / totalExpenses) * 100).toFixed(1) + '%' : '0.0%';
+            const r = sheet.getRow(rowIdx);
+            r.values = [
+                `   ${catName}`,
+                catName,
+                'Expense Category',
+                Math.round(cat.amount),
+                pct,
+            ];
+            r.height = 19;
+            if (idx % 2 === 1) r.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
+            r.eachCell((c, colNumber) => {
+                c.border = thinBorder;
+                c.alignment = { vertical: 'middle' };
+                if (colNumber === 4) c.numFmt = '₹#,##0';
+            });
+            rowIdx++;
+        });
+
+        // Expense Total Row
+        const expTotalRow = sheet.getRow(rowIdx);
+        expTotalRow.values = [
+            'TOTAL EXPENSES',
+            'All Categories',
+            'Expense Total',
+            totalExpenses,
+            '100.0%',
+        ];
+        expTotalRow.font = { bold: true, size: 10, color: { argb: 'FF991B1B' } };
+        expTotalRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF2F2' } };
+        expTotalRow.height = 22;
+        expTotalRow.eachCell((c, colNumber) => {
+            c.border = headerBorder;
+            c.alignment = { vertical: 'middle' };
+            if (colNumber === 4) c.numFmt = '₹#,##0';
+        });
+        rowIdx++;
+
+        // Net Income Grand Total Row
+        const netRow = sheet.getRow(rowIdx);
+        netRow.values = [
+            'C. NET INCOME (A - B)',
+            'Net Position',
+            'Net Profit / Loss',
+            netIncome,
+            '-',
+        ];
+        netRow.font = { bold: true, size: 11, color: { argb: netIncome >= 0 ? 'FF14532D' : 'FF7F1D1D' } };
+        netRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: netIncome >= 0 ? 'FFDCFCE7' : 'FFFEE2E2' } };
+        netRow.height = 26;
+        netRow.eachCell((c, colNumber) => {
+            c.border = {
+                top: { style: 'medium', color: { argb: 'FF0F172A' } },
+                bottom: { style: 'double', color: { argb: 'FF0F172A' } },
+                left: { style: 'thin', color: { argb: 'FF0F172A' } },
+                right: { style: 'thin', color: { argb: 'FF0F172A' } },
+            };
+            c.alignment = { vertical: 'middle' };
+            if (colNumber === 4) c.numFmt = '₹#,##0';
+        });
+        rowIdx++;
+
+        // Spacer
+        sheet.getRow(rowIdx).height = 12;
+        rowIdx++;
+
+        // ── 3. Operational & Receivables Metrics ──
+        sheet.mergeCells(`A${rowIdx}:E${rowIdx}`);
+        const sec3Header = sheet.getCell(`A${rowIdx}`);
+        sec3Header.value = '3. OPERATIONAL & CASH FLOW METRICS';
+        sec3Header.font = { bold: true, size: 11, color: { argb: 'FFFFFFFF' } };
+        sec3Header.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF334155' } };
+        sec3Header.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
+        sheet.getRow(rowIdx).height = 24;
+        rowIdx++;
+
+        const h3Row = sheet.getRow(rowIdx);
+        h3Row.values = ['Metric Name', 'Area', 'Classification', 'Amount / Count', 'Description'];
+        h3Row.font = { bold: true, size: 10, color: { argb: 'FF334155' } };
+        h3Row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
+        h3Row.height = 22;
+        h3Row.eachCell((c) => { c.border = headerBorder; c.alignment = { vertical: 'middle' }; });
+        rowIdx++;
+
+        const ops: [string, string, string, number, string, boolean][] = [
+            ["Today's Collections", 'Collections', 'Cash Flow', Math.round(Number(revenueStats?.todayRevenue || 0)), 'Cash collected on current date', true],
+            ['Payments Recorded Today', 'Collections', 'Transaction Count', Number(revenueStats?.totalPaymentsToday || 0), 'Number of completed payment receipts', false],
+            ['Total Outstanding Balance', 'Receivables', 'Pending Dues', Math.round(Number(revenueStats?.pendingBalance || 0)), 'Total uncollected dues across all bills', true],
+            ["Today's Expenses", 'Expenses', 'Cash Flow', Math.round(Number(expenseStats?.todayTotal || 0)), 'Expenses booked on current date', true],
+            [`${periodTitle} Expenses`, 'Expenses', 'Period Expenses', totalExpenses, 'Total operational expenses in period', true],
+            ['Expenses Pending Approval', 'Expenses', 'Pending Count', Number(expenseStats?.pendingApproval || 0), 'Number of expenses awaiting approval', false],
+        ];
+
+        ops.forEach((op, idx) => {
+            const r = sheet.getRow(rowIdx);
+            r.values = [op[0], op[1], op[2], op[3], op[4]];
+            r.height = 20;
+            if (idx % 2 === 1) r.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
+            r.eachCell((c, colNumber) => {
+                c.border = thinBorder;
+                c.alignment = { vertical: 'middle' };
+                if (colNumber === 4) {
+                    c.numFmt = op[5] ? '₹#,##0' : '#,##0';
+                    c.font = { bold: true };
+                }
+            });
+            rowIdx++;
+        });
+
+        // ── 4. Receivables Aging ──
+        if (revenueStats?.aging) {
+            // Spacer
+            sheet.getRow(rowIdx).height = 12;
+            rowIdx++;
+
+            sheet.mergeCells(`A${rowIdx}:E${rowIdx}`);
+            const sec4Header = sheet.getCell(`A${rowIdx}`);
+            sec4Header.value = '4. OUTSTANDING RECEIVABLES AGING';
+            sec4Header.font = { bold: true, size: 11, color: { argb: 'FFFFFFFF' } };
+            sec4Header.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF475569' } };
+            sec4Header.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
+            sheet.getRow(rowIdx).height = 24;
+            rowIdx++;
+
+            const h4Row = sheet.getRow(rowIdx);
+            h4Row.values = ['Aging Bucket', 'Category', 'Risk Level', 'Amount (₹)', 'Share of Outstanding'];
+            h4Row.font = { bold: true, size: 10, color: { argb: 'FF334155' } };
+            h4Row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
+            h4Row.height = 22;
+            h4Row.eachCell((c) => { c.border = headerBorder; c.alignment = { vertical: 'middle' }; });
+            rowIdx++;
+
+            const pendingTotal = Number(revenueStats?.pendingBalance || 0);
+            const ag0 = Math.round(Number(revenueStats.aging.days0to30 || 0));
+            const ag30 = Math.round(Number(revenueStats.aging.days30to60 || 0));
+            const ag60 = Math.round(Number(revenueStats.aging.days60plus || 0));
+
+            const agingRows = [
+                ['0–30 Days', 'Receivables', 'Current Bucket', ag0, pendingTotal > 0 ? ((ag0 / pendingTotal) * 100).toFixed(1) + '%' : '0.0%'],
+                ['30–60 Days', 'Receivables', 'Moderate Aging', ag30, pendingTotal > 0 ? ((ag30 / pendingTotal) * 100).toFixed(1) + '%' : '0.0%'],
+                ['60+ Days', 'Receivables', 'High Risk Overdue', ag60, pendingTotal > 0 ? ((ag60 / pendingTotal) * 100).toFixed(1) + '%' : '0.0%'],
+                ['Total Outstanding', 'Receivables', 'Total Due', Math.round(pendingTotal), '100.0%'],
+            ];
+
+            agingRows.forEach((ar, idx) => {
+                const r = sheet.getRow(rowIdx);
+                r.values = ar;
+                r.height = 20;
+                const isTotal = idx === agingRows.length - 1;
+                if (isTotal) {
+                    r.font = { bold: true };
+                    r.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
+                } else if (idx % 2 === 1) {
+                    r.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
+                }
+                r.eachCell((c, colNumber) => {
+                    c.border = isTotal ? headerBorder : thinBorder;
+                    c.alignment = { vertical: 'middle' };
+                    if (colNumber === 4) {
+                        c.numFmt = '₹#,##0';
+                        c.font = { bold: true };
+                    }
+                });
+                rowIdx++;
+            });
+        }
+
+        const buffer = await workbook.xlsx.writeBuffer();
+
+        return {
+            success: true,
+            base64: Buffer.from(buffer).toString('base64'),
+            filename: `Income-Expense-Report-${period}-${dateStr}.xlsx`,
+        };
+    } catch (error: unknown) {
+        console.error('Income Expense Excel Export Error:', error);
+        return { success: false, error: error instanceof Error ? error.message : 'Failed to generate Excel report' };
+    }
+}
+

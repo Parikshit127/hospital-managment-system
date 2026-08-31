@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { getFinanceDashboardStats } from '@/app/actions/finance-actions';
 import { getExpenseDashboardStats, getExpenseCategories } from '@/app/actions/expense-actions';
+import { exportIncomeExpenseExcel } from '@/app/actions/report-export-actions';
 import { FileSpreadsheet, Printer, Loader2 } from 'lucide-react';
 
 type ViewPeriod = 'monthly' | 'quarterly' | 'yearly';
@@ -72,102 +73,50 @@ export default function IncomeExpensePage() {
         return () => { isMounted = false; };
     }, [viewPeriod]);
 
-    const allTimeRevenue = revenueStats?.totalRevenue || 0;
-    const allTimeExpenses = expenseStats?.totalExpenses || 0;
+    const allTimeRevenue = Math.round(Number(revenueStats?.totalRevenue || 0));
+    const allTimeExpenses = Math.round(Number(expenseStats?.totalExpenses || 0));
     const allTimeNetIncome = allTimeRevenue - allTimeExpenses;
 
-    const totalRevenue = revenueStats?.periodRevenue || 0;
-    const totalCollection = revenueStats?.periodCollection || 0;
-    const totalExpenses = expenseStats?.periodExpenses || 0;
+    const totalRevenue = Math.round(Number(revenueStats?.periodRevenue || 0));
+    const totalCollection = Math.round(Number(revenueStats?.periodCollection || 0));
+    const totalExpenses = Math.round(Number(expenseStats?.periodExpenses || 0));
     const netIncome = totalRevenue - totalExpenses;
 
     // Map category IDs to names
     const categoryMap = new Map(categories.map(c => [c.id, c.name]));
 
-    const revByDept = revenueStats?.revenueByDepartment || [];
-    const expByCategory = expenseStats?.byCategory || [];
+    const revByDept = (revenueStats?.revenueByDepartment || []).map(d => ({
+        department: d.department,
+        amount: Math.round(Number(d.amount || 0)),
+    }));
+    const expByCategory = (expenseStats?.byCategory || []).map(c => ({
+        category_id: c.category_id,
+        amount: Math.round(Number(c.amount || 0)),
+    }));
 
-    const fmt = (n: number) => n.toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 });
+    const fmt = (n: number) => {
+        const val = Math.round(Number(n || 0));
+        return val.toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 });
+    };
 
     async function handleExportExcel() {
-        if (!revenueStats && !expenseStats) return;
         setExportingExcel(true);
         try {
-            const xlsxModule = await import('xlsx');
-            const XLSX = xlsxModule.default ?? xlsxModule;
-
-            const now = new Date();
-            const dateStr = now.toISOString().slice(0, 10);
-            const periodTitle = viewPeriod === 'monthly' ? 'Monthly' : viewPeriod === 'quarterly' ? 'Quarterly' : 'Yearly';
-
-            const aoa: (string | number)[][] = [];
-
-            // Header Section
-            aoa.push(['INCOME & EXPENSE REPORT — PROFIT & LOSS OVERVIEW']);
-            aoa.push([`Period: ${periodTitle}`, '', `Generated On: ${now.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}`]);
-            aoa.push([]);
-
-            // 1. Executive Summary
-            aoa.push(['1. EXECUTIVE SUMMARY']);
-            aoa.push(['Metric', 'Amount (₹)', 'Notes']);
-            aoa.push(['Revenue (Billed)', totalRevenue, 'Bills created incl. outstanding']);
-            aoa.push(['Collection (Received)', totalCollection, 'Cash actually received']);
-            aoa.push(['Total Expenses', totalExpenses, 'Approved & paid expenses']);
-            aoa.push(['Net Income (All Time)', allTimeNetIncome, 'Cumulative net income']);
-            aoa.push([`Net Income (This ${periodTitle})`, netIncome, 'Period revenue minus expenses']);
-            aoa.push([]);
-
-            // 2. Profit & Loss Statement Breakdown
-            aoa.push(['2. PROFIT & LOSS STATEMENT']);
-            aoa.push(['Particulars', 'Classification', 'Amount (₹)', 'Share (%)']);
-            aoa.push(['A. Total Revenue (Collections)', 'Revenue', totalRevenue, '100.0%']);
-            revByDept.forEach((dept) => {
-                const pct = totalRevenue > 0 ? ((dept.amount / totalRevenue) * 100).toFixed(1) + '%' : '0.0%';
-                aoa.push([`   ${dept.department || 'Other'}`, 'Department Revenue', dept.amount, pct]);
-            });
-            aoa.push(['B. Total Expenses', 'Expense', totalExpenses, '100.0%']);
-            expByCategory.forEach((cat) => {
-                const catName = categoryMap.get(cat.category_id) || `Category ${cat.category_id}`;
-                const pct = totalExpenses > 0 ? ((cat.amount / totalExpenses) * 100).toFixed(1) + '%' : '0.0%';
-                aoa.push([`   ${catName}`, 'Expense Category', cat.amount, pct]);
-            });
-            aoa.push(['C. Net Income (A - B)', 'Net Balance', netIncome, '-']);
-            aoa.push([]);
-
-            // 3. Operational Metrics
-            aoa.push(['3. REVENUE & EXPENSE SUMMARY METRICS']);
-            aoa.push(['Revenue Metric', 'Value', '', 'Expense Metric', 'Value']);
-            aoa.push(["Today's Collections", revenueStats?.todayRevenue || 0, '', "Today's Expenses", expenseStats?.todayTotal || 0]);
-            aoa.push(['Payments Today (Count)', revenueStats?.totalPaymentsToday || 0, '', `This ${periodTitle} Expenses`, expenseStats?.periodExpenses || 0]);
-            aoa.push(['Outstanding Balance', revenueStats?.pendingBalance || 0, '', 'Pending Approval (Count)', expenseStats?.pendingApproval || 0]);
-            aoa.push([]);
-
-            // 4. Outstanding Aging
-            if (revenueStats?.aging) {
-                aoa.push(['4. OUTSTANDING RECEIVABLES AGING']);
-                aoa.push(['0–30 Days (₹)', '30–60 Days (₹)', '60+ Days (₹)', 'Total Pending (₹)']);
-                aoa.push([
-                    revenueStats.aging.days0to30 || 0,
-                    revenueStats.aging.days30to60 || 0,
-                    revenueStats.aging.days60plus || 0,
-                    revenueStats.pendingBalance || 0,
-                ]);
+            const res = await exportIncomeExpenseExcel({ period: viewPeriod });
+            if (!res.success || !res.base64) {
+                alert(res.error || 'Failed to export Excel report.');
+                return;
             }
-
-            const ws = XLSX.utils.aoa_to_sheet(aoa);
-
-            // Set column widths for readability
-            ws['!cols'] = [
-                { wch: 38 },
-                { wch: 22 },
-                { wch: 22 },
-                { wch: 24 },
-                { wch: 18 },
-            ];
-
-            const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, 'Income & Expense');
-            XLSX.writeFile(wb, `Income-Expense-Report-${viewPeriod}-${dateStr}.xlsx`);
+            const bytes = Uint8Array.from(atob(res.base64), c => c.charCodeAt(0));
+            const blob = new Blob([bytes], {
+                type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = res.filename || `Income-Expense-Report-${viewPeriod}.xlsx`;
+            a.click();
+            URL.revokeObjectURL(url);
         } catch (err) {
             console.error('Excel export failed:', err);
             alert('Failed to export Excel report. Please try again.');
@@ -271,7 +220,7 @@ export default function IncomeExpensePage() {
                     {/* Revenue Section */}
                     <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-4 print:shadow-none print:border-gray-200">
                         <h2 className="font-semibold text-sm mb-3 text-green-700">Revenue by Department</h2>
-                        <div className="space-y-2">
+                        <div className="space-y-2 max-h-[480px] overflow-y-auto pr-1">
                             {revByDept.length > 0 ? revByDept.map((dept, i) => {
                                 const pct = totalRevenue > 0 ? (dept.amount / totalRevenue) * 100 : 0;
                                 return (
@@ -310,7 +259,7 @@ export default function IncomeExpensePage() {
                     {/* Expense Section */}
                     <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-4 print:shadow-none print:border-gray-200">
                         <h2 className="font-semibold text-sm mb-3 text-red-700">Expenses by Category</h2>
-                        <div className="space-y-2">
+                        <div className="space-y-2 max-h-[480px] overflow-y-auto pr-1">
                             {expByCategory.length > 0 ? expByCategory.map((cat, i) => {
                                 const catName = categoryMap.get(cat.category_id) || `Category ${cat.category_id}`;
                                 const pct = totalExpenses > 0 ? (cat.amount / totalExpenses) * 100 : 0;
