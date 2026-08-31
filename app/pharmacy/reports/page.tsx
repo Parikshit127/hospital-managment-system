@@ -159,9 +159,40 @@ export default function PharmacyReportsPage() {
             const XLSX = xlsxModule.default ?? xlsxModule;
             const wb = XLSX.utils.book_new();
 
+            // json_to_sheet emits no column widths and no cell formats, so headers
+            // were clipped and money rendered as raw floats (19944.86303). Size each
+            // column to its widest value and stamp an Indian money format on the
+            // amount columns.
+            const MONEY_COLS = /amount|revenue|value|total|cogs|counter|ipd|opd/i;
+            const addSheet = (name: string, rows: any[], headers?: string[]) => {
+                const ws = XLSX.utils.json_to_sheet(rows, headers ? { header: headers } : undefined);
+                const cols = headers || Object.keys(rows[0] || {});
+                ws['!cols'] = cols.map(c => ({
+                    wch: Math.min(38, Math.max(
+                        String(c).length + 2,
+                        ...rows.map(r => String(r[c] ?? '').length + 2),
+                    )),
+                }));
+                // Money format, header row skipped. Text cells are left alone by the
+                // `t === 'n'` check below, so only count-like numeric columns need
+                // excluding by name.
+                const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+                cols.forEach((c, ci) => {
+                    // Word boundaries matter: "Counter Amount" must not be excluded
+                    // by a bare /count/.
+                    if (!MONEY_COLS.test(String(c)) || /(bills|count|qty|units)/i.test(String(c))) return;
+                    for (let r = range.s.r + 1; r <= range.e.r; r++) {
+                        const cell = ws[XLSX.utils.encode_cell({ r, c: ci })];
+                        if (cell && cell.t === 'n') cell.z = '#,##0.00';
+                    }
+                });
+                XLSX.utils.book_append_sheet(wb, ws, name);
+                return ws;
+            };
+
             // Sheet 1: Summary
             const summaryRows = [
-                { Metric: 'Total Revenue', Value: rev.totalRevenue },
+                { Metric: 'Total Revenue', Value: Math.round(rev.totalRevenue * 100) / 100 },
                 { Metric: 'Total Bills Issued', Value: rev.totalBills },
                 { Metric: 'IPD Pharmacy Revenue', Value: rev.byChannel.ipd.revenue },
                 { Metric: 'IPD Bills Count', Value: rev.byChannel.ipd.billCount },
@@ -175,8 +206,7 @@ export default function PharmacyReportsPage() {
                 { Metric: 'Expired Batches Count', Value: data?.expiredCount || 0 },
                 { Metric: 'Total Stock Asset Value', Value: data?.totalStockValue || 0 },
             ];
-            const wsSummary = XLSX.utils.json_to_sheet(summaryRows);
-            XLSX.utils.book_append_sheet(wb, wsSummary, 'Summary');
+            addSheet('Summary', summaryRows);
 
             // Sheet 2: Bills List — with per-channel subtotals and a grand total, so the
             // exported sheet closes on the same figures the screen shows.
@@ -208,8 +238,7 @@ export default function PharmacyReportsPage() {
                 'Items': (rev.bills || []).reduce((t: number, b: any) => t + (b.items || 0), 0),
                 'Revenue': money2((rev.bills || []).reduce((t: number, b: any) => t + (b.revenue || 0), 0)),
             });
-            const wsBills = XLSX.utils.json_to_sheet(billsRows);
-            XLSX.utils.book_append_sheet(wb, wsBills, 'Bills List');
+            addSheet('Bills List', billsRows);
 
             // Sheet 3: Top Movers
             const moversRows = (rev.topMovers || []).map((m: any) => ({
@@ -217,8 +246,7 @@ export default function PharmacyReportsPage() {
                 'Units Sold': m.qty,
                 'Revenue': m.revenue,
             }));
-            const wsMovers = XLSX.utils.json_to_sheet(moversRows);
-            XLSX.utils.book_append_sheet(wb, wsMovers, 'Top Movers');
+            addSheet('Top Movers', moversRows);
 
             // Sheet 4: Doctor-wise split — IPD and OPD as their own columns
             const doctorSheet: any[] = (rev.byDoctor || []).map((d: any) => ({
@@ -237,8 +265,7 @@ export default function PharmacyReportsPage() {
                 'Counter Amount': (rev.byDoctor || []).reduce((t: number, d: any) => t + (d.counter || 0), 0),
                 'Total': (rev.byDoctor || []).reduce((t: number, d: any) => t + (d.revenue || 0), 0),
             });
-            const wsDoctors = XLSX.utils.json_to_sheet(doctorSheet);
-            XLSX.utils.book_append_sheet(wb, wsDoctors, 'Doctor-wise');
+            addSheet('Doctor-wise', doctorSheet);
 
             // Sheet 4b: IPD-only doctor split — the doctor-wise IPD pharmacy report
             const ipdDoctorSheet: any[] = (rev.byDoctor || [])
@@ -250,7 +277,7 @@ export default function PharmacyReportsPage() {
                 'IPD Bills': (rev.byDoctor || []).reduce((t: number, d: any) => t + (d.ipdBills || 0), 0),
                 'IPD Pharmacy Amount': (rev.byDoctor || []).reduce((t: number, d: any) => t + (d.ipd || 0), 0),
             });
-            XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(ipdDoctorSheet), 'IPD Doctor-wise');
+            addSheet('IPD Doctor-wise', ipdDoctorSheet);
 
             // Sheet 4c: Monthly summary, ending on the overall total
             const monthSheet: any[] = (rev.byMonth || []).map((m: any) => ({
@@ -264,7 +291,7 @@ export default function PharmacyReportsPage() {
                 'IPD Amount': gt.ipd, 'OPD Amount': gt.opd, 'Counter Amount': gt.counter,
                 'Monthly Total': gt.total,
             });
-            XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(monthSheet), 'Monthly Summary');
+            addSheet('Monthly Summary', monthSheet);
 
             // Sheet 5: Daily Revenue
             const dailyRows = (rev.revenueByDay || []).map((d: any) => ({
@@ -274,8 +301,7 @@ export default function PharmacyReportsPage() {
                 'OPD Revenue': d.opd,
                 'Counter Revenue': d.counter,
             }));
-            const wsDaily = XLSX.utils.json_to_sheet(dailyRows);
-            XLSX.utils.book_append_sheet(wb, wsDaily, 'Daily Revenue');
+            addSheet('Daily Revenue', dailyRows);
 
             XLSX.writeFile(wb, `pharmacy-finance-report-${dateRange.from}-to-${dateRange.to}.xlsx`);
         } catch (err) {

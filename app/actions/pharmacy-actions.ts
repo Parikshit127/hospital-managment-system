@@ -4502,6 +4502,19 @@ export async function getPharmacyAnalytics() {
 const REPORT_INVOICE_CAP = 5000;
 const REPORT_ITEM_CAP = 10000;
 
+// Some dispense paths record the batch inside the description text — e.g.
+// "Pharmacy: SYRINGE 10 -ML (Batch 032610-05) x 3" — instead of, or as well as,
+// the invoice_items.batch_no column (which postChargeToIpdBill does populate, but
+// which is null on every IPD pharmacy line written so far). Recover it so the bill
+// detail can still show a batch rather than a dash. Returns null for the literal
+// "N/A" the older writer used when it could not resolve one.
+function extractBatchNo(desc: string): string | null {
+    const m = /\(Batch[:\s]+([^)]+)\)/i.exec(desc || '');
+    const val = m?.[1]?.trim();
+    if (!val || /^n\/?a$/i.test(val)) return null;
+    return val;
+}
+
 // Strip "Pharmacy: " prefix and "(Batch ...)" suffix to recover the medicine name
 function extractMedicineName(desc: string): string {
     const raw = desc || '';
@@ -4978,7 +4991,7 @@ export async function getPharmacyBillLines(invoiceId: number) {
                 unitPrice: Number(it.unit_price) || 0,
                 discount: Number(it.discount) || 0,
                 mrp: it.mrp == null ? null : Number(it.mrp),
-                batchNo: it.batch_no || null,
+                batchNo: it.batch_no || extractBatchNo(it.description),
                 expiry: it.expiry_date ? it.expiry_date.toISOString() : null,
                 tax: Number(it.tax_amount) || 0,
                 amount,
