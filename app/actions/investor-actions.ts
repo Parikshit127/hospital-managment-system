@@ -62,10 +62,7 @@ export interface InvestorDashboardData {
         metrics: UnitMetrics;
     }>;
     expenses: {
-        april: UnitMetrics;
-        may: UnitMetrics;
-        june: UnitMetrics;
-        july: UnitMetrics;
+        byMonth: Array<{ label: string; data: UnitMetrics }>;
         total: UnitMetrics;
     };
     receivables: {
@@ -90,18 +87,12 @@ export interface InvestorDashboardData {
         total: UnitMetrics;
     };
     salaries: {
-        april: UnitMetrics;
-        may: UnitMetrics;
-        june: UnitMetrics;
-        july: UnitMetrics;
+        byMonth: Array<{ label: string; data: UnitMetrics }>;
         total: UnitMetrics;
     };
     arpob: {
         noOfBeds: UnitMetrics;
-        april: UnitMetrics;
-        may: UnitMetrics;
-        june: UnitMetrics;
-        july: UnitMetrics;
+        byMonth: Array<{ label: string; data: UnitMetrics }>;
         average: UnitMetrics;
     };
     profitLoss: {
@@ -177,8 +168,27 @@ function resolvePeriod(params?: { fromDate?: string; toDate?: string }) {
     return { start, end, fyStartYear };
 }
 
-const MONTH_KEYS = ['april', 'may', 'june', 'july'] as const;
-const MONTH_DAYS = [30, 31, 30, 31]; // Apr, May, Jun, Jul (fyStartYear is never a Feb-adjacent edge case here)
+const MONTH_LABELS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const daysInMonth = (year: number, monthIndex: number) => new Date(year, monthIndex + 1, 0).getDate();
+
+// Every month of the fiscal year (Apr 1 start) from April through the current
+// month, inclusive — so "latest month" always shows up as soon as it starts,
+// not just once a full quarter has passed. Handles the Jan-Mar rollover into
+// fyStartYear + 1.
+function fyMonthsToDate(fyStartYear: number): Array<{ year: number; monthIndex: number; label: string }> {
+    const now = new Date();
+    const monthsElapsed = now.getFullYear() > fyStartYear || (now.getFullYear() === fyStartYear && now.getMonth() >= 3)
+        ? now.getMonth() - 3 + 1
+        : now.getMonth() + 9 + 1; // Jan-Mar of fyStartYear+1: month 0/1/2 -> 10th/11th/12th FY month
+    const months: Array<{ year: number; monthIndex: number; label: string }> = [];
+    for (let m = 0; m < Math.max(1, monthsElapsed); m++) {
+        const absoluteMonth = 3 + m; // 3 = April
+        const year = fyStartYear + Math.floor(absoluteMonth / 12);
+        const monthIndex = absoluteMonth % 12;
+        months.push({ year, monthIndex, label: MONTH_LABELS[monthIndex] });
+    }
+    return months;
+}
 
 export async function getInvestorDashboardData(params?: {
     filterType?: 'day' | 'month' | 'year' | 'custom';
@@ -194,6 +204,15 @@ export async function getInvestorDashboardData(params?: {
 
         const selectedUnit = params?.selectedUnit || 'all';
         const { start, end, fyStartYear } = resolvePeriod(params);
+        // Shared month list for every "monthly breakdown" section (Expenses,
+        // Salaries, ARPOB) — April through whichever month is current right now,
+        // so a new month shows up the moment it starts rather than waiting for a
+        // hardcoded window to be manually extended.
+        const fyMonths = fyMonthsToDate(fyStartYear);
+        const fyMonthKey = (y: number, m: number) => y * 12 + m;
+        const fyMonthIndexByKey = new Map(fyMonths.map((mo, i) => [fyMonthKey(mo.year, mo.monthIndex), i]));
+        const fyRangeStart = new Date(fyMonths[0].year, fyMonths[0].monthIndex, 1);
+        const fyRangeEnd = new Date(fyMonths[fyMonths.length - 1].year, fyMonths[fyMonths.length - 1].monthIndex + 1, 1);
 
         // ---- Real operational bed counts per hospital (drives bed occupancy + ARPOB) ----
         const bedRows = await prisma.beds.groupBy({
@@ -267,22 +286,17 @@ export async function getInvestorDashboardData(params?: {
         const disTotal = sumUnits(disCash, disInsurance, disPanel, disCorporate);
 
         // ---- 4. Revenue by payer category (real, within period) ----
-        // Revenue = Final (finalized/billed) invoices only — Draft bills are still
-        // being edited and Cancelled ones carry no financial weight, matching the
-        // rule the rest of finance (getMISReport, getFinanceDashboardStats) uses.
-        // IPD revenue is recognized on the admission's discharge date, not the
-        // invoice's created_at, same convention getMISReport uses — an IPD bill
-        // opened in one month but the patient discharged (and the revenue
-        // actually earned) the next belongs to the discharge month.
+        // Revenue = Final (finalized/billed) invoices only, dated by created_at —
+        // Draft bills are still being edited and Cancelled ones carry no financial
+        // weight. Deliberately matches getFinanceDashboardStats's definition
+        // (the screen finance staff already use daily) rather than getMISReport's
+        // discharge-date recognition for IPD — an earlier version of this
+        // dashboard used the discharge-date convention instead, which made its
+        // Revenue number not reconcile against the Finance Dashboard's Total
+        // Revenue for the same hospital. Consistency across the app's own
+        // screens matters more here than which convention is theoretically purer.
         const revenueInvoices = await prisma.invoices.findMany({
-            where: {
-                organizationId: { in: ALL_ORG_IDS },
-                status: 'Final',
-                OR: [
-                    { invoice_type: { notIn: ['IPD'] }, created_at: { gte: start, lt: end } },
-                    { invoice_type: 'IPD', admission: { discharge_date: { gte: start, lt: end } } },
-                ],
-            },
+            where: { organizationId: { in: ALL_ORG_IDS }, status: 'Final', created_at: { gte: start, lt: end } },
             select: { organizationId: true, net_amount: true, paid_amount: true, billing_patient_type: true, invoice_type: true, doctor_id: true, id: true },
         }).catch((err) => { console.error('investor: revenue invoices', err); return [] as Array<{ organizationId: string; net_amount: unknown; paid_amount: unknown; billing_patient_type: string | null; invoice_type: string; doctor_id: string | null; id: number }>; });
 
@@ -358,20 +372,19 @@ export async function getInvestorDashboardData(params?: {
 
         // ---- 5. Expenses (real, monthly, Approved/Paid only) ----
         const expenseRows = await prisma.expense.findMany({
-            where: { organizationId: { in: ALL_ORG_IDS }, status: { in: ['Approved', 'Paid'] }, created_at: { gte: new Date(fyStartYear, 3, 1), lt: new Date(fyStartYear, 7, 1) } },
+            where: { organizationId: { in: ALL_ORG_IDS }, status: { in: ['Approved', 'Paid'] }, created_at: { gte: fyRangeStart, lt: fyRangeEnd } },
             select: { organizationId: true, total_amount: true, created_at: true },
         }).catch((err) => { console.error('investor: expenses', err); return [] as Array<{ organizationId: string; total_amount: unknown; created_at: Date }>; });
 
-        const expApr = zeroUnit(), expMay = zeroUnit(), expJun = zeroUnit(), expJul = zeroUnit();
-        const expByMonthIndex: UnitMetrics[] = [expApr, expMay, expJun, expJul];
+        const expByMonth: UnitMetrics[] = fyMonths.map(() => zeroUnit());
         for (const row of expenseRows) {
             const unitKey = orgToUnitKey[row.organizationId];
             if (!unitKey) continue;
-            const bucket = expByMonthIndex[row.created_at.getMonth() - 3];
-            if (!bucket) continue;
-            addTo(bucket, unitKey, Number(row.total_amount));
+            const idx = fyMonthIndexByKey.get(fyMonthKey(row.created_at.getFullYear(), row.created_at.getMonth()));
+            if (idx === undefined) continue;
+            addTo(expByMonth[idx], unitKey, Number(row.total_amount));
         }
-        const expTotal = sumUnits(expApr, expMay, expJun, expJul);
+        const expTotal = sumUnits(...expByMonth);
 
         // ---- 6. Receivables — yet to receive (real, point-in-time balance) ----
         // Final bills only — a Draft is still being edited, not a committed
@@ -483,37 +496,33 @@ export async function getInvestorDashboardData(params?: {
             select: { organizationId: true, salary_basic: true, date_of_joining: true },
         }).catch((err) => { console.error('investor: salaries', err); return [] as Array<{ organizationId: string; salary_basic: number; date_of_joining: Date }>; });
 
-        const salByMonthIndex: UnitMetrics[] = [zeroUnit(), zeroUnit(), zeroUnit(), zeroUnit()];
-        for (let m = 0; m < 4; m++) {
-            const monthEnd = new Date(fyStartYear, 3 + m + 1, 1); // exclusive end of this month
+        const salByMonth: UnitMetrics[] = fyMonths.map(() => zeroUnit());
+        fyMonths.forEach((mo, m) => {
+            const monthEnd = new Date(mo.year, mo.monthIndex + 1, 1); // exclusive end of this month
             for (const e of employees) {
                 const unitKey = orgToUnitKey[e.organizationId];
                 if (!unitKey) continue;
                 if (new Date(e.date_of_joining) < monthEnd) {
-                    addTo(salByMonthIndex[m], unitKey, Number(e.salary_basic || 0));
+                    addTo(salByMonth[m], unitKey, Number(e.salary_basic || 0));
                 }
             }
-        }
-        const [salApr, salMay, salJun, salJul] = salByMonthIndex;
-        const salTotal = sumUnits(salApr, salMay, salJun, salJul);
+        });
+        const salTotal = sumUnits(...salByMonth);
 
         // ---- 9. ARPOB — Average Revenue Per Operational Bed (real, monthly, IPD revenue only) ----
-        // Same Final-status + discharge-date recognition as the main Revenue
-        // section — bucketed by the admission's discharge month.
+        // Same Final-status + created_at dating as the main Revenue section (see
+        // that section's comment for why created_at, not discharge_date).
         const ipdMonthlyRevenue = await prisma.invoices.findMany({
-            where: {
-                organizationId: { in: ALL_ORG_IDS }, invoice_type: 'IPD', status: 'Final',
-                admission: { discharge_date: { gte: new Date(fyStartYear, 3, 1), lt: new Date(fyStartYear, 7, 1) } },
-            },
-            select: { organizationId: true, net_amount: true, admission: { select: { discharge_date: true } } },
-        }).catch((err) => { console.error('investor: arpob', err); return [] as Array<{ organizationId: string; net_amount: unknown; admission: { discharge_date: Date | null } | null }>; });
-        const ipdRevByMonthIndex: UnitMetrics[] = [zeroUnit(), zeroUnit(), zeroUnit(), zeroUnit()];
+            where: { organizationId: { in: ALL_ORG_IDS }, invoice_type: 'IPD', status: 'Final', created_at: { gte: fyRangeStart, lt: fyRangeEnd } },
+            select: { organizationId: true, net_amount: true, created_at: true },
+        }).catch((err) => { console.error('investor: arpob', err); return [] as Array<{ organizationId: string; net_amount: unknown; created_at: Date }>; });
+        const ipdRevByMonth: UnitMetrics[] = fyMonths.map(() => zeroUnit());
         for (const inv of ipdMonthlyRevenue) {
             const unitKey = orgToUnitKey[inv.organizationId];
-            const dischargeDate = inv.admission?.discharge_date;
-            if (!unitKey || !dischargeDate) continue;
-            const bucket = ipdRevByMonthIndex[new Date(dischargeDate).getMonth() - 3];
-            if (bucket) addTo(bucket, unitKey, Number(inv.net_amount));
+            if (!unitKey) continue;
+            const idx = fyMonthIndexByKey.get(fyMonthKey(inv.created_at.getFullYear(), inv.created_at.getMonth()));
+            if (idx === undefined) continue;
+            addTo(ipdRevByMonth[idx], unitKey, Number(inv.net_amount));
         }
         const arpobFor = (revBucket: UnitMetrics, days: number): UnitMetrics => ({
             axten: bedCounts.axten > 0 ? Math.round(revBucket.axten / (bedCounts.axten * days)) : 0,
@@ -521,15 +530,20 @@ export async function getInvestorDashboardData(params?: {
             axtenHq: bedCounts.axtenHq > 0 ? Math.round(revBucket.axtenHq / (bedCounts.axtenHq * days)) : 0,
             total: bedCounts.total > 0 ? Math.round(revBucket.total / (bedCounts.total * days)) : 0,
         });
-        const arpobApr = arpobFor(ipdRevByMonthIndex[0], MONTH_DAYS[0]);
-        const arpobMay = arpobFor(ipdRevByMonthIndex[1], MONTH_DAYS[1]);
-        const arpobJun = arpobFor(ipdRevByMonthIndex[2], MONTH_DAYS[2]);
-        const arpobJul = arpobFor(ipdRevByMonthIndex[3], MONTH_DAYS[3]);
+        // The current (still in-progress) month divides by days elapsed so far,
+        // not the full month length — otherwise a partial month's revenue would
+        // look artificially diluted against days that haven't happened yet.
+        const todayForArpob = new Date();
+        const arpobByMonth: UnitMetrics[] = fyMonths.map((mo, i) => {
+            const isCurrentMonth = mo.year === todayForArpob.getFullYear() && mo.monthIndex === todayForArpob.getMonth();
+            const days = isCurrentMonth ? todayForArpob.getDate() : daysInMonth(mo.year, mo.monthIndex);
+            return arpobFor(ipdRevByMonth[i], days);
+        });
         const arpobAvg = {
-            axten: Math.round((arpobApr.axten + arpobMay.axten + arpobJun.axten + arpobJul.axten) / 4),
-            avise: Math.round((arpobApr.avise + arpobMay.avise + arpobJun.avise + arpobJul.avise) / 4),
-            axtenHq: Math.round((arpobApr.axtenHq + arpobMay.axtenHq + arpobJun.axtenHq + arpobJul.axtenHq) / 4),
-            total: Math.round((arpobApr.total + arpobMay.total + arpobJun.total + arpobJul.total) / 4),
+            axten: Math.round(arpobByMonth.reduce((s, m) => s + m.axten, 0) / arpobByMonth.length),
+            avise: Math.round(arpobByMonth.reduce((s, m) => s + m.avise, 0) / arpobByMonth.length),
+            axtenHq: Math.round(arpobByMonth.reduce((s, m) => s + m.axtenHq, 0) / arpobByMonth.length),
+            total: Math.round(arpobByMonth.reduce((s, m) => s + m.total, 0) / arpobByMonth.length),
         };
 
         // ---- 10. Status of Profit/Loss (derived — real now that every input is real) ----
@@ -618,10 +632,7 @@ export async function getInvestorDashboardData(params?: {
                 },
                 departmentRevenue,
                 expenses: {
-                    april: expApr,
-                    may: expMay,
-                    june: expJun,
-                    july: expJul,
+                    byMonth: fyMonths.map((mo, i) => ({ label: mo.label, data: expByMonth[i] })),
                     total: expTotal,
                 },
                 receivables: {
@@ -646,18 +657,12 @@ export async function getInvestorDashboardData(params?: {
                     total: payTotal,
                 },
                 salaries: {
-                    april: salApr,
-                    may: salMay,
-                    june: salJun,
-                    july: salJul,
+                    byMonth: fyMonths.map((mo, i) => ({ label: mo.label, data: salByMonth[i] })),
                     total: salTotal,
                 },
                 arpob: {
                     noOfBeds: bedCounts,
-                    april: arpobApr,
-                    may: arpobMay,
-                    june: arpobJun,
-                    july: arpobJul,
+                    byMonth: fyMonths.map((mo, i) => ({ label: mo.label, data: arpobByMonth[i] })),
                     average: arpobAvg,
                 },
                 profitLoss: {
@@ -709,6 +714,8 @@ export async function getInvestorDrilldown(params: {
             return { success: true, data: { columns: [], rows: [], totalCount: 0, truncated: false } };
         }
         const { start, end, fyStartYear } = resolvePeriod(params);
+        const fyMonths = fyMonthsToDate(fyStartYear);
+        const monthByLabel = new Map(fyMonths.map((mo) => [mo.label.toLowerCase(), mo]));
 
         switch (params.section) {
             case 'admitted':
@@ -742,13 +749,7 @@ export async function getInvestorDrilldown(params: {
 
             case 'revenue': {
                 const rows = await prisma.invoices.findMany({
-                    where: {
-                        organizationId: orgId, status: 'Final',
-                        OR: [
-                            { invoice_type: { notIn: ['IPD'] }, created_at: { gte: start, lt: end } },
-                            { invoice_type: 'IPD', admission: { discharge_date: { gte: start, lt: end } } },
-                        ],
-                    },
+                    where: { organizationId: orgId, status: 'Final', created_at: { gte: start, lt: end } },
                     select: { id: true, invoice_number: true, patient_id: true, net_amount: true, billing_patient_type: true, invoice_type: true, created_at: true },
                     orderBy: { created_at: 'desc' },
                     take: 5000,
@@ -766,13 +767,7 @@ export async function getInvestorDrilldown(params: {
 
             case 'opdVsIpd': {
                 const invoices = await prisma.invoices.findMany({
-                    where: {
-                        organizationId: orgId, status: 'Final',
-                        OR: [
-                            { invoice_type: { notIn: ['IPD'] }, created_at: { gte: start, lt: end } },
-                            { invoice_type: 'IPD', admission: { discharge_date: { gte: start, lt: end } } },
-                        ],
-                    },
+                    where: { organizationId: orgId, status: 'Final', created_at: { gte: start, lt: end } },
                     select: { id: true, invoice_number: true, patient_id: true, invoice_type: true, created_at: true },
                 });
                 const invMetaById = new Map(invoices.map((i) => [i.id, i]));
@@ -806,13 +801,7 @@ export async function getInvestorDrilldown(params: {
 
             case 'department': {
                 const invoices = await prisma.invoices.findMany({
-                    where: {
-                        organizationId: orgId, status: 'Final', doctor_id: { not: null },
-                        OR: [
-                            { invoice_type: { notIn: ['IPD'] }, created_at: { gte: start, lt: end } },
-                            { invoice_type: 'IPD', admission: { discharge_date: { gte: start, lt: end } } },
-                        ],
-                    },
+                    where: { organizationId: orgId, status: 'Final', doctor_id: { not: null }, created_at: { gte: start, lt: end } },
                     select: { invoice_number: true, patient_id: true, net_amount: true, created_at: true, doctor_id: true, id: true },
                 });
                 const doctorIds = Array.from(new Set(invoices.map((i) => i.doctor_id).filter((d): d is string => !!d)));
@@ -833,10 +822,10 @@ export async function getInvestorDrilldown(params: {
             }
 
             case 'expenses': {
-                const monthIdx = MONTH_KEYS.indexOf(params.category as any);
-                if (monthIdx === -1) return { success: true, data: { columns: [], rows: [], totalCount: 0, truncated: false } };
-                const monthStart = new Date(fyStartYear, 3 + monthIdx, 1);
-                const monthEnd = new Date(fyStartYear, 3 + monthIdx + 1, 1);
+                const mo = monthByLabel.get(params.category.toLowerCase());
+                if (!mo) return { success: true, data: { columns: [], rows: [], totalCount: 0, truncated: false } };
+                const monthStart = new Date(mo.year, mo.monthIndex, 1);
+                const monthEnd = new Date(mo.year, mo.monthIndex + 1, 1);
                 const rows = await prisma.expense.findMany({
                     where: { organizationId: orgId, status: { in: ['Approved', 'Paid'] }, created_at: { gte: monthStart, lt: monthEnd } },
                     select: { expense_number: true, description: true, total_amount: true, created_at: true, status: true, vendor: { select: { vendor_name: true } } },
@@ -963,9 +952,9 @@ export async function getInvestorDrilldown(params: {
             }
 
             case 'salaries': {
-                const monthIdx = MONTH_KEYS.indexOf(params.category as any);
-                if (monthIdx === -1) return { success: true, data: { columns: [], rows: [], totalCount: 0, truncated: false } };
-                const monthEnd = new Date(fyStartYear, 3 + monthIdx + 1, 1);
+                const mo = monthByLabel.get(params.category.toLowerCase());
+                if (!mo) return { success: true, data: { columns: [], rows: [], totalCount: 0, truncated: false } };
+                const monthEnd = new Date(mo.year, mo.monthIndex + 1, 1);
                 const rows = await prisma.employee.findMany({
                     where: { organizationId: orgId, is_active: true, date_of_joining: { lt: monthEnd } },
                     select: { employee_code: true, name: true, designation: true, salary_basic: true, date_of_joining: true },

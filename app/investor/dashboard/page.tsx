@@ -37,6 +37,16 @@ function fmtINR(n: number, isCurrency = false): string {
     return `₹${n.toLocaleString('en-IN')}`;
 }
 
+const toISODate = (d: Date) => d.toISOString().slice(0, 10);
+// Default window = current fiscal year (Apr 1 start) to date, so the picker
+// always opens on "this FY so far" — including whatever month is current —
+// instead of a hardcoded date that goes stale every month.
+function defaultFYRange(): { from: string; to: string } {
+    const now = new Date();
+    const fyStartYear = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
+    return { from: toISODate(new Date(fyStartYear, 3, 1)), to: toISODate(now) };
+}
+
 export default function PromoterDashboardPage() {
     const [data, setData] = useState<InvestorDashboardData | null>(null);
     const [loading, setLoading] = useState(true);
@@ -45,8 +55,8 @@ export default function PromoterDashboardPage() {
     const [selectedUnits, setSelectedUnits] = useState<string[]>(UNIT_OPTIONS.map(u => u.code));
     const [unitMenuOpen, setUnitMenuOpen] = useState(false);
     const unitMenuRef = useRef<HTMLDivElement>(null);
-    const [fromDate, setFromDate] = useState('2026-04-01');
-    const [toDate, setToDate] = useState('2026-07-31');
+    const [fromDate, setFromDate] = useState(() => defaultFYRange().from);
+    const [toDate, setToDate] = useState(() => defaultFYRange().to);
     const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
 
     // Drill-down: click any hospital's cell in a real (non-derived) row to see
@@ -713,10 +723,7 @@ export default function PromoterDashboardPage() {
                     '7. Expenses',
                     'Monthly operational expenditure breakdown (₹)',
                     [
-                        { label: 'April', data: expenses.april, isCurrency: true, drillSection: 'expenses', drillCategory: 'april' },
-                        { label: 'May', data: expenses.may, isCurrency: true, drillSection: 'expenses', drillCategory: 'may' },
-                        { label: 'June', data: expenses.june, isCurrency: true, drillSection: 'expenses', drillCategory: 'june' },
-                        { label: 'July', data: expenses.july, isCurrency: true, drillSection: 'expenses', drillCategory: 'july' },
+                        ...expenses.byMonth.map(m => ({ label: m.label, data: m.data, isCurrency: true, drillSection: 'expenses' as DrilldownSection, drillCategory: m.label })),
                         { label: 'Total Expenses', data: expenses.total, isCurrency: true, isTotalRow: true },
                     ]
                 )}
@@ -774,10 +781,7 @@ export default function PromoterDashboardPage() {
                     '10. Salaries',
                     'Monthly staff payroll and employee compensation (₹)',
                     [
-                        { label: 'April', data: salaries.april, isCurrency: true, drillSection: 'salaries', drillCategory: 'april' },
-                        { label: 'May', data: salaries.may, isCurrency: true, drillSection: 'salaries', drillCategory: 'may' },
-                        { label: 'June', data: salaries.june, isCurrency: true, drillSection: 'salaries', drillCategory: 'june' },
-                        { label: 'July', data: salaries.july, isCurrency: true, drillSection: 'salaries', drillCategory: 'july' },
+                        ...salaries.byMonth.map(m => ({ label: m.label, data: m.data, isCurrency: true, drillSection: 'salaries' as DrilldownSection, drillCategory: m.label })),
                         { label: 'Total Salaries', data: salaries.total, isCurrency: true, isTotalRow: true },
                     ]
                 )}
@@ -791,10 +795,7 @@ export default function PromoterDashboardPage() {
                     'Operational bed capacity and average daily revenue yield (₹/Bed/Day)',
                     [
                         { label: 'No. of Beds', data: arpob.noOfBeds, isCurrency: false },
-                        { label: 'April ARPOB', data: arpob.april, isCurrency: true },
-                        { label: 'May ARPOB', data: arpob.may, isCurrency: true },
-                        { label: 'June ARPOB', data: arpob.june, isCurrency: true },
-                        { label: 'July ARPOB', data: arpob.july, isCurrency: true },
+                        ...arpob.byMonth.map(m => ({ label: `${m.label} ARPOB`, data: m.data, isCurrency: true })),
                         { label: 'Average ARPOB', data: arpob.average, isCurrency: true, isTotalRow: true },
                     ]
                 )}
