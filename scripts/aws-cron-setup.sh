@@ -52,17 +52,20 @@ sudo tee "$RUNNER" > /dev/null <<SCRIPT
 # Called by crontab — first arg is the API path.
 #
 # Writes exactly one line per run: UTC timestamp, the path, then the response body.
-# curl emits no trailing newline, so without the closing printf every response would be
-# concatenated into one unreadable line.
+#
+# The line is assembled in memory and appended with a SINGLE printf. That matters:
+# several jobs share the */5 slot and fire at the same instant, and separate writes from
+# concurrent processes interleave inside the file — producing lines with one job's
+# timestamp followed by another job's body. One write per run keeps each entry intact.
 #
 # "-f" makes curl print nothing at all on an HTTP error, which is how a 401 used to
-# leave no trace whatsoever; the "||" branch records the exit code so a failing job is
+# leave no trace whatsoever; the fallback records the exit code so a failing job is
 # visible in the log instead of looking like it never ran.
-{
-    printf '%s %s ' "\$(date -u +%Y-%m-%dT%H:%M:%SZ)" "\$1"
-    curl -sf -X GET -H "Authorization: Bearer $CRON_SECRET" "$APP_URL\$1" || printf '{"error":"curl failed, exit %s"}' "\$?"
-    printf '\n'
-} >> $LOG 2>&1
+path="\$1"
+body="\$(curl -sf -X GET -H "Authorization: Bearer $CRON_SECRET" "$APP_URL\$path")" \\
+    || body="{\\"error\\":\\"curl failed, exit \$?\\"}"
+body="\${body//\$'\\n'/ }"
+printf '%s %s %s\\n' "\$(date -u +%Y-%m-%dT%H:%M:%SZ)" "\$path" "\$body" >> $LOG 2>&1
 SCRIPT
 sudo chmod +x "$RUNNER"
 
