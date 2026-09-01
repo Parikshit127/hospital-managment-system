@@ -55,6 +55,16 @@ curl -sf -X GET \\
 SCRIPT
 sudo chmod +x "$RUNNER"
 
+# Create the log file up front, owned by the user whose crontab this installs into.
+#
+# This is not cosmetic. cron runs the runner as that user, /var/log is root-owned, and
+# the runner appends with ">>". If the file does not exist the redirect fails and the
+# shell aborts the line BEFORE curl runs — so every job dies silently, with no log to
+# explain why, because the log is the thing that could not be written.
+LOG=/var/log/hospitalos-cron.log
+sudo touch "$LOG"
+sudo chown "$(id -u):$(id -g)" "$LOG"
+
 # Install crontab (preserves existing non-hospitalos lines)
 EXISTING=$(crontab -l 2>/dev/null | grep -v "hospitalos-cron" || true)
 
