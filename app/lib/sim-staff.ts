@@ -25,6 +25,10 @@ export interface StaffMember {
     name: string | null;
     role: string;
     specialty: string | null;
+    /** "09:00-17:00" on the User record. Falls back to the role table when unparseable. */
+    working_hours?: string | null;
+    /** Comma or space separated day names, e.g. "Mon,Tue,Wed". Empty means all days. */
+    working_days?: string | null;
 }
 
 /**
@@ -116,13 +120,59 @@ export function minutesIntoDay(at: Date, timezone: string): number {
     return (get('hour') % 24) * 60 + get('minute');
 }
 
-/** Whether this person should be on shift at this moment. */
+const DAY_NAMES = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+
+/**
+ * Parse a `User.working_hours` value ("09:00-17:00") into start/end minutes.
+ *
+ * Returns null on anything unparseable so the caller can fall back to the role table —
+ * the column is free text and a partially-filled roster must not silently mean
+ * "on duty from 00:00 to 00:00".
+ */
+function parseWorkingHours(value: string | null | undefined): [number, number] | null {
+    const m = /^\s*(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})\s*$/.exec(value ?? '');
+    if (!m) return null;
+    const [sh, sm, eh, em] = [Number(m[1]), Number(m[2]), Number(m[3]), Number(m[4])];
+    if (sh > 23 || eh > 23 || sm > 59 || em > 59) return null;
+    const start = sh * 60 + sm;
+    const end = eh * 60 + em;
+    if (start === end) return null;
+    return [start, end];
+}
+
+/** Whether `working_days` (if set) includes this weekday. Empty means every day. */
+function worksToday(member: StaffMember, at: Date, timezone: string): boolean {
+    const raw = member.working_days?.trim();
+    if (!raw) return true;
+    const wanted = DAY_NAMES[weekdayIndex(at, timezone)];
+    return raw.toLowerCase().split(/[,\s]+/).filter(Boolean).some(d => d.startsWith(wanted));
+}
+
+function weekdayIndex(at: Date, timezone: string): number {
+    const name = new Intl.DateTimeFormat('en-US', { timeZone: timezone, weekday: 'short' }).format(at);
+    return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(name);
+}
+
+/**
+ * Whether this person should be on shift at this moment.
+ *
+ * Prefers the person's own `working_hours`, which is what makes cloned staff inherit the
+ * source hospital's real roster instead of a generic per-role guess. The role table is
+ * the fallback for accounts whose column is blank or malformed.
+ */
 export function isOnDuty(member: StaffMember, at: Date, timezone: string): boolean {
-    const [startHour, endHour] = SHIFTS[member.role] ?? DEFAULT_SHIFT;
+    if (!worksToday(member, at, timezone)) return false;
+
+    const parsed = parseWorkingHours(member.working_hours);
+    const [startMin, endMin] = parsed ?? (() => {
+        const [sh, eh] = SHIFTS[member.role] ?? DEFAULT_SHIFT;
+        return [sh * 60, eh * 60] as [number, number];
+    })();
+
     const offset = shiftOffsetMinutes(member.username, dayKeyFor(at, timezone));
     const nowMin = minutesIntoDay(at, timezone);
-    const start = startHour * 60 + offset;
-    const end = endHour * 60 + offset;
+    const start = startMin + offset;
+    const end = endMin + offset;
     // Overnight shifts wrap around midnight.
     return start <= end ? nowMin >= start && nowMin < end : nowMin >= start || nowMin < end;
 }
@@ -130,7 +180,10 @@ export function isOnDuty(member: StaffMember, at: Date, timezone: string): boole
 export async function loadStaff(organizationId: string): Promise<StaffMember[]> {
     return prisma.user.findMany({
         where: { organizationId, is_active: true },
-        select: { id: true, username: true, name: true, role: true, specialty: true },
+        select: {
+            id: true, username: true, name: true, role: true, specialty: true,
+            working_hours: true, working_days: true,
+        },
     });
 }
 
@@ -278,8 +331,38 @@ function selfCheck(): void {
     const ips = new Set(users.map(workstationIp));
     assert(ips.size === users.length, `workstation collision among bootstrap staff: ${[...ips].join(', ')}`);
 
-    const member = (username: string, role: string): StaffMember =>
-        ({ id: `id-${username}`, username, name: username, role, specialty: null });
+    const member = (username: string, role: string, hours?: string, days?: string): StaffMember =>
+        ({ id: `id-${username}`, username, name: username, role, specialty: null, working_hours: hours, working_days: days });
+
+    // working_hours must win over the role table — this is what makes cloned staff
+    // inherit the source hospital's roster rather than a generic per-role guess.
+    const TZ_ = 'Asia/Kolkata';
+    const night = new Date('2026-09-01T18:30:00Z'); // 00:00 IST
+    const noon = new Date('2026-09-01T06:30:00Z');  // 12:00 IST
+    const nightOwl = member('night.owl', 'receptionist', '22:00-06:00');
+    const dayShift = member('day.shift', 'receptionist', '09:00-17:00');
+    assert(isOnDuty(nightOwl, night, TZ_), 'overnight working_hours must span midnight');
+    assert(!isOnDuty(nightOwl, noon, TZ_), 'overnight worker must be off at midday');
+    assert(isOnDuty(dayShift, noon, TZ_), 'day working_hours must be on at midday');
+    assert(!isOnDuty(dayShift, night, TZ_), 'day worker must be off at midnight');
+
+    // Malformed or blank values fall back to the role table rather than reading as
+    // "never on duty" — the column is free text on a real roster.
+    for (const bad of ['', 'whenever', '9 to 5', '99:00-17:00', '09:00-09:00']) {
+        const fallback = member(`bad.${bad.length}`, 'receptionist', bad);
+        const roleOnly = member(`bad.${bad.length}`, 'receptionist');
+        assert(
+            isOnDuty(fallback, noon, TZ_) === isOnDuty(roleOnly, noon, TZ_),
+            `unparseable working_hours "${bad}" must fall back to the role shift`,
+        );
+    }
+
+    // working_days gates the whole day.
+    const sunday = new Date('2026-09-06T06:30:00Z'); // Sunday noon IST
+    assert(!isOnDuty(member('weekday.only', 'receptionist', '09:00-17:00', 'Mon,Tue,Wed,Thu,Fri'), sunday, TZ_),
+        'working_days must exclude a day not listed');
+    assert(isOnDuty(member('weekday.only', 'receptionist', '09:00-17:00', 'Mon,Tue,Wed,Thu,Fri,Sat,Sun'), sunday, TZ_),
+        'working_days must include a listed day');
 
     // Shift offsets: identical for every instant within a day, different across days.
     // If this ever regresses, session state derived from the audit log starts flapping.

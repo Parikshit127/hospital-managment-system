@@ -36,7 +36,7 @@ import {
 } from '@/app/lib/sim-staff';
 import { runWardCare } from '@/app/lib/sim-ward';
 import { runBackOffice } from '@/app/lib/sim-back-office';
-import { assertActivityTarget } from '@/scripts/sim/guard';
+import { assertActivityTarget, resolveActivityTarget } from '@/scripts/sim/guard';
 import { castPerson } from '@/scripts/sim/cast';
 
 // ---------------------------------------------------------------------------
@@ -222,12 +222,15 @@ const EMPTY: TickResult = {
  * from an assumed interval, so calling every minute and calling every ten minutes
  * produce the same rate.
  */
-export async function runActivityTick(now: Date = new Date()): Promise<TickResult> {
-    const orgId = process.env.SIM_ORG_ID?.trim() ?? '';
+export async function runActivityTick(now: Date = new Date(), targetOrgId?: string): Promise<TickResult> {
+    // Resolve from the SIM_ORG_ID pin or the single flagged simulation environment.
+    // Passing an explicit id is for callers driving several environments in one process.
+    const orgId = targetOrgId?.trim() || await resolveActivityTarget();
 
-    // Throws unless the environment explicitly permits this org. Never soften this into
-    // a silent return — a misconfigured deploy should fail loudly, not quietly write.
-    assertActivityTarget(orgId);
+    // Throws unless the environment AND the organization's own flag permit this write.
+    // Never soften this into a silent return — a misconfigured deploy should fail loudly,
+    // not quietly write clinical-shaped rows somewhere unintended.
+    await assertActivityTarget(orgId);
 
     // OrganizationConfig is not tenant-scoped, so it is read on the global client.
     const config = await prisma.organizationConfig.findUnique({

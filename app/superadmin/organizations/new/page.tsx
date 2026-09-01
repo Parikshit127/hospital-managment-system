@@ -1,10 +1,15 @@
-import { requireSuperAdmin } from '@/app/actions/superadmin-actions';
+import { requireSuperAdmin, listCloneableOrganizations } from '@/app/actions/superadmin-actions';
 import OnboardingWizard from '../../components/OnboardingWizard';
 
 export const dynamic = 'force-dynamic';
 
 export default async function NewOrganizationPage() {
     await requireSuperAdmin();
+
+    // Fetched here rather than in the client component: the wizard needs the list the
+    // moment the staff-source picker is revealed, and a server fetch means no loading
+    // state, no useEffect and no extra round trip on mount.
+    const sources = await listCloneableOrganizations();
 
     return (
         <div className="max-w-2xl mx-auto">
@@ -14,7 +19,7 @@ export default async function NewOrganizationPage() {
                     Register a new hospital on the platform
                 </p>
             </div>
-            <OnboardingWizard />
+            <OnboardingWizard cloneSources={sources.success ? sources.data ?? [] : []} />
         </div>
     );
 }

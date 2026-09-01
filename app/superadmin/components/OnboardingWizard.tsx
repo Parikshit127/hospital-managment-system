@@ -21,12 +21,21 @@ const HOSPITAL_TYPES = ['General', 'Multi-Specialty', 'Super-Specialty', 'Clinic
 const COMMON_SPECIALTIES = ['Cardiology', 'Orthopedics', 'Pediatrics', 'Gynecology', 'Neurology', 'Dermatology', 'ENT', 'Ophthalmology', 'Urology', 'Oncology', 'Gastroenterology', 'Pulmonology', 'Nephrology', 'Psychiatry', 'General Surgery', 'General Medicine'];
 const ACCREDITATION_BODIES = ['NABH', 'NABL', 'JCI', 'ISO 9001', 'ISO 15189'];
 
-export default function OnboardingWizard() {
+export interface CloneSource {
+    id: string;
+    name: string;
+    code: string;
+    staffCount: number;
+}
+
+export default function OnboardingWizard({ cloneSources = [] }: { cloneSources?: CloneSource[] }) {
     const router = useRouter();
     const [step, setStep] = useState(0);
     const [state, formAction, pending] = useActionState(async (prevState: any, formData: FormData) => {
         const result = await createOrganization(prevState, formData);
-        if (result.success) {
+        // A simulation environment returns a credential sheet worth reading before
+        // navigating away, so only the plain path redirects immediately.
+        if (result.success && !result.simulation) {
             router.push('/superadmin/organizations');
         }
         return result;
@@ -65,6 +74,10 @@ export default function OnboardingWizard() {
         admin_password: '',
         // Step 5: Plan
         plan: 'free',
+        // Simulation provisioning. Both are mirrored into FormData by the hidden-input
+        // loop below, so nothing extra is needed to submit them.
+        simulation_enabled: '',
+        clone_staff_from: '',
     });
 
     const [specialtiesList, setSpecialtiesList] = useState<string[]>([]);
@@ -106,9 +119,17 @@ export default function OnboardingWizard() {
         setFormValues(prev => ({ ...prev, specialties: updated.join(',') }));
     }
 
+    const isSimulation = formValues.simulation_enabled === 'true';
+
     const canProceed = () => {
         if (step === 0) return formValues.name && formValues.slug && formValues.code;
-        if (step === 3) return formValues.admin_name && formValues.admin_username && formValues.admin_password && formValues.admin_email;
+        if (step === 3) {
+            const adminReady = formValues.admin_name && formValues.admin_username
+                && formValues.admin_password && formValues.admin_email;
+            // A simulation environment with no staff source would provision an empty
+            // hospital, so block the step rather than fail server-side.
+            return adminReady && (!isSimulation || !!formValues.clone_staff_from);
+        }
         return true;
     };
 
@@ -150,6 +171,39 @@ export default function OnboardingWizard() {
                 <div className="mb-6 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3 flex items-start gap-2">
                     <AlertCircle className="h-4 w-4 text-red-400 mt-0.5 shrink-0" />
                     <p className="text-sm text-red-400">{state.error}</p>
+                </div>
+            )}
+
+            {state?.success && state?.simulation && (
+                <div className="mb-6 bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-4 py-4">
+                    <div className="flex items-start gap-2 mb-3">
+                        <Check className="h-4 w-4 text-emerald-400 mt-0.5 shrink-0" />
+                        <p className="text-sm text-emerald-300">
+                            Simulation environment created — {state.simulation.clonedCount} staff account(s)
+                            cloned from {state.simulation.sourceName}.
+                        </p>
+                    </div>
+                    <div className="text-xs text-gray-300 space-y-1 pl-6">
+                        <p>
+                            Usernames: original prefixed with{' '}
+                            <span className="font-mono text-white">{state.simulation.usernamePrefix}</span>
+                            {' '}(e.g. <span className="font-mono text-white">{state.simulation.usernamePrefix}dr.sharma</span>)
+                        </p>
+                        <p>
+                            Shared password:{' '}
+                            <span className="font-mono text-white">{state.simulation.password}</span>
+                        </p>
+                        <p className="text-gray-500 pt-1">
+                            Background activity is off. Enable it in this hospital&rsquo;s Config tab.
+                        </p>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => router.push('/superadmin/organizations')}
+                        className="mt-4 ml-6 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-lg transition"
+                    >
+                        Done
+                    </button>
                 </div>
             )}
 
@@ -363,6 +417,57 @@ export default function OnboardingWizard() {
                             <div>
                                 <label className={labelClass}>Password *</label>
                                 <input type="password" value={formValues.admin_password} onChange={e => updateField('admin_password', e.target.value)} className={inputClass} placeholder="Minimum 6 characters" />
+                            </div>
+
+                            {/* Simulation environment */}
+                            <div className="pt-5 mt-1 border-t border-white/5">
+                                <label className="flex items-start gap-3 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={isSimulation}
+                                        onChange={e => setFormValues(prev => ({
+                                            ...prev,
+                                            simulation_enabled: e.target.checked ? 'true' : '',
+                                            // Clear the source in the same update, so an
+                                            // id cannot survive the toggle being switched
+                                            // off and get submitted anyway.
+                                            clone_staff_from: e.target.checked ? prev.clone_staff_from : '',
+                                        }))}
+                                        className="mt-0.5 rounded border-gray-600 text-violet-600 focus:ring-violet-500 bg-white/5"
+                                    />
+                                    <span>
+                                        <span className="block text-sm font-medium text-gray-200">Create as Simulation Environment</span>
+                                        <span className="block text-xs text-gray-500 mt-0.5">
+                                            Provisions this hospital for automated background activity instead of live use.
+                                        </span>
+                                    </span>
+                                </label>
+
+                                {isSimulation && (
+                                    <div className="mt-4 pl-7 space-y-3">
+                                        <div>
+                                            <label className={labelClass}>Clone Staff From *</label>
+                                            <select
+                                                value={formValues.clone_staff_from}
+                                                onChange={e => updateField('clone_staff_from', e.target.value)}
+                                                className={selectClass}
+                                            >
+                                                <option value="">Select a hospital…</option>
+                                                {cloneSources.map(src => (
+                                                    <option key={src.id} value={src.id}>
+                                                        {src.name} ({src.code}) — {src.staffCount} staff
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <p className="text-xs text-gray-500 leading-relaxed">
+                                            Staff are copied with their roles, shift hours and consultation fees.
+                                            Usernames are prefixed <span className="text-gray-300 font-mono">sim.</span> and
+                                            all cloned accounts share one temporary password, shown after provisioning.
+                                            Contact details are not copied, so nothing can reach the original staff.
+                                        </p>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     )}

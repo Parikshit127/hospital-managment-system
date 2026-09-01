@@ -349,10 +349,16 @@ model OrganizationConfig {
   // accrual in app/lib/doctor-commission.ts.
   default_doctor_commission_percent Float @default(0)
 
+  // Marks this organization as a simulation environment rather than a real hospital.
+  // Set once at provisioning (Superadmin → Add Hospital) and not normally changed.
+  // Distinct from activity_generator_enabled: this classifies WHAT the org is, that one
+  // controls WHETHER the engine is currently running against it.
+  simulation_enabled           Boolean @default(false)
+
   // Operator controls for the synthetic background activity generator (staging only).
-  // These are one of TWO required keys — the engine also requires SIM_ENABLED=1 and a
-  // matching SIM_ORG_ID in the environment (scripts/sim/guard.ts). Enabling these on a
-  // deploy without those variables is inert by design.
+  // These are one of TWO required keys — the engine also requires SIM_ENABLED=1 in the
+  // environment (scripts/sim/guard.ts). Enabling these on a deploy without that variable
+  // is inert by design.
   // See docs/claude/SIM_ENGINE_PLAN.md.
   activity_generator_enabled   Boolean @default(false)
   activity_generator_intensity String  @default("moderate") // low | moderate | high

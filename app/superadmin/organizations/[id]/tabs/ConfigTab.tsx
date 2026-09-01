@@ -13,7 +13,12 @@ export default function ConfigTab({ orgId }: ConfigTabProps) {
     const [branding, setBranding] = useState<any>(null);
     // Environment side of the activity generator's two-key lock. The stored toggle below
     // is inert unless the deploy also sets SIM_ENABLED / SIM_ORG_ID.
-    const [generatorEnv, setGeneratorEnv] = useState<{ environmentPermitsThisOrg: boolean; environmentConfigured: boolean } | null>(null);
+    const [generatorEnv, setGeneratorEnv] = useState<{
+        environmentPermitsThisOrg: boolean;
+        environmentConfigured: boolean;
+        isSimulationEnvironment: boolean;
+        pinnedElsewhere: boolean;
+    } | null>(null);
     const [loading, setLoading] = useState(true);
     const [savingConfig, setSavingConfig] = useState(false);
     const [savingBranding, setSavingBranding] = useState(false);
@@ -184,9 +189,11 @@ export default function ConfigTab({ orgId }: ConfigTabProps) {
                         <div className="mb-3 p-2.5 bg-amber-500/10 border border-amber-500/20 rounded-lg flex items-start gap-2">
                             <AlertCircle className="h-3.5 w-3.5 text-amber-400 shrink-0 mt-0.5" />
                             <p className="text-xs text-amber-300">
-                                {generatorEnv?.environmentConfigured
-                                    ? 'This deployment is configured for a different organization. The settings below will be saved but will have no effect here.'
-                                    : 'This deployment has no generator configuration (SIM_ENABLED / SIM_ORG_ID are unset). The settings below will be saved but will have no effect.'}
+                                {!generatorEnv?.environmentConfigured
+                                    ? 'This deployment does not run the activity generator (SIM_ENABLED is unset). The settings below will be saved but will have no effect.'
+                                    : !generatorEnv?.isSimulationEnvironment
+                                        ? 'This hospital is not a simulation environment, so the generator will not run against it. Simulation environments are created from Add Hospital.'
+                                        : 'This deployment is pinned to a different organization via SIM_ORG_ID. The settings below will be saved but will have no effect here.'}
                             </p>
                         </div>
                     )}

@@ -9,7 +9,7 @@ import {
     getSuperAdminSession,
 } from '@/app/lib/session';
 import { superAdminLoginSchema, createOrganizationSchema, organizationProfileSchema, branchSchema } from '@/app/lib/validations';
-import { permittedOrganizationId } from '@/scripts/sim/guard';
+import { isActivityGeneratorPermitted, pinnedOrganizationId } from '@/scripts/sim/guard';
 
 // ========================================
 // AUTH
@@ -126,6 +126,34 @@ export async function listOrganizations() {
     }
 }
 
+/**
+ * Organizations that can act as a staff template when provisioning a simulation
+ * environment. Returns the staff head-count so the picker can show how many accounts
+ * would be cloned before anyone commits to it.
+ */
+export async function listCloneableOrganizations() {
+    await requireSuperAdmin();
+    try {
+        const orgs = await prisma.organization.findMany({
+            where: { is_active: true },
+            orderBy: { name: 'asc' },
+            select: {
+                id: true,
+                name: true,
+                code: true,
+                _count: { select: { users: true } },
+            },
+        });
+        return {
+            success: true,
+            data: orgs.map(o => ({ id: o.id, name: o.name, code: o.code, staffCount: o._count.users })),
+        };
+    } catch (err: any) {
+        console.error('listCloneableOrganizations error:', err);
+        return { success: false, error: 'Failed to list organizations' };
+    }
+}
+
 export async function getOrganizationDetail(id: string) {
     await requireSuperAdmin();
 
@@ -226,12 +254,18 @@ export async function createOrganization(prevState: any, formData: FormData) {
                 },
             });
 
+            const asSimulation = data.simulation_enabled === 'true';
+
             // Create config
             await tx.organizationConfig.create({
                 data: {
                     organizationId: org.id,
                     uhid_prefix: data.code,
                     enable_ai_triage: true,
+                    simulation_enabled: asSimulation,
+                    // Provisioning marks the environment but never starts the engine —
+                    // that stays a deliberate, separate action in the Config tab.
+                    activity_generator_enabled: false,
                 },
             });
 
@@ -258,24 +292,112 @@ export async function createOrganization(prevState: any, formData: FormData) {
                 },
             });
 
+            // Clone staff into the simulation environment
+            let clonedCount = 0;
+            let sourceName: string | null = null;
+            if (asSimulation && data.clone_staff_from) {
+                const source = await tx.organization.findUnique({
+                    where: { id: data.clone_staff_from },
+                    select: { id: true, name: true },
+                });
+                if (!source) throw new Error('Source hospital for staff cloning not found');
+                sourceName = source.name;
+
+                const sourceStaff = await tx.user.findMany({
+                    where: { organizationId: source.id, is_active: true },
+                });
+
+                // ONE shared, known password for every cloned account — deliberately not
+                // the source users' hashes. Copying those would hand a film crew working
+                // credentials for real employees' accounts, which exist with the same
+                // password on the production database this staging DB was cloned from.
+                // A generated credential serves the same purpose with none of that.
+                const simPassword = await bcrypt.hash(SIMULATION_STAFF_PASSWORD, 10);
+
+                for (const u of sourceStaff) {
+                    const username = `${SIMULATION_USERNAME_PREFIX}${u.username}`;
+                    // Usernames are globally unique. Skip rather than abort so re-cloning
+                    // from a source that was already used does not lose the whole batch.
+                    const taken = await tx.user.findUnique({ where: { username }, select: { id: true } });
+                    if (taken) continue;
+
+                    await tx.user.create({
+                        data: {
+                            username,
+                            password: simPassword,
+                            role: u.role,
+                            name: u.name,
+                            specialty: u.specialty,
+                            designation: u.designation,
+                            department: u.department,
+                            gender: u.gender,
+                            // Shift data drives the engine's login/logout timing and its
+                            // on-duty attribution — see app/lib/sim-staff.ts.
+                            working_hours: u.working_hours,
+                            working_days: u.working_days,
+                            slot_duration: u.slot_duration,
+                            max_patients_per_day: u.max_patients_per_day,
+                            max_overbooking_per_slot: u.max_overbooking_per_slot,
+                            // Fees drive generated OPD billing amounts.
+                            consultation_fee: u.consultation_fee,
+                            follow_up_fee: u.follow_up_fee,
+                            // Dropped on purpose: real contact details, so nothing the
+                            // engine does can reach an actual member of staff by SMS,
+                            // WhatsApp or email.
+                            email: null,
+                            phone: null,
+                            // Dropped on purpose: these are foreign keys into the SOURCE
+                            // organization's wards, branches and reporting lines. Copying
+                            // them verbatim would point simulated staff at another
+                            // hospital's rows.
+                            branch_id: null,
+                            assigned_ward_id: null,
+                            supervisor_id: null,
+                            doctor_group_id: null,
+                            // Dropped on purpose: identifiers belonging to a real person.
+                            employee_code: null,
+                            doctor_registration_no: null,
+                            qualifications: u.qualifications,
+                            organizationId: org.id,
+                            is_active: true,
+                        },
+                    });
+                    clonedCount++;
+                }
+            }
+
             // Audit log
             await tx.system_audit_logs.create({
                 data: {
-                    action: 'CREATE_ORGANIZATION',
+                    action: asSimulation ? 'CREATE_SIMULATION_ORGANIZATION' : 'CREATE_ORGANIZATION',
                     module: 'superadmin',
                     entity_type: 'organization',
                     entity_id: org.id,
                     user_id: session.id,
                     username: session.email,
                     role: session.role,
-                    details: `Created organization: ${data.name} (${data.slug})`,
+                    details: asSimulation
+                        ? `Created simulation environment: ${data.name} (${data.slug}); ` +
+                          `cloned ${clonedCount} staff account(s) from ${sourceName ?? 'unknown'}`
+                        : `Created organization: ${data.name} (${data.slug})`,
                 },
             });
 
-            return org;
+            return { org, asSimulation, clonedCount, sourceName };
         });
 
-        return { success: true, data: result };
+        return {
+            success: true,
+            data: result.org,
+            simulation: result.asSimulation
+                ? {
+                    clonedCount: result.clonedCount,
+                    sourceName: result.sourceName,
+                    usernamePrefix: SIMULATION_USERNAME_PREFIX,
+                    password: SIMULATION_STAFF_PASSWORD,
+                }
+                : null,
+        };
     } catch (error: any) {
         console.error('createOrganization error:', error);
         if (['Organization slug already exists', 'Organization code already exists', 'Admin username already exists'].includes(error.message)) {
@@ -742,7 +864,12 @@ export async function getOrganizationConfig(orgId: string) {
         // Report the environment side back so an operator can tell the difference between
         // "switched off" and "switched on but the environment forbids it" — otherwise the
         // toggle reads as active while doing nothing.
-        const permittedOrg = permittedOrganizationId();
+        // The engine needs SIM_ENABLED=1, the org's own simulation_enabled flag, and any
+        // SIM_ORG_ID pin to agree. Report all three so an operator can tell "switched
+        // off" apart from "switched on but this deploy will not run it".
+        const envOptedIn = isActivityGeneratorPermitted();
+        const pin = pinnedOrganizationId();
+        const flagged = !!config?.simulation_enabled;
 
         return {
             success: true,
@@ -750,8 +877,10 @@ export async function getOrganizationConfig(orgId: string) {
                 config,
                 branding,
                 activityGenerator: {
-                    environmentPermitsThisOrg: permittedOrg !== null && permittedOrg === orgId,
-                    environmentConfigured: permittedOrg !== null,
+                    environmentPermitsThisOrg: envOptedIn && flagged && (!pin || pin === orgId),
+                    environmentConfigured: envOptedIn,
+                    isSimulationEnvironment: flagged,
+                    pinnedElsewhere: envOptedIn && !!pin && pin !== orgId,
                 },
             },
         };
@@ -760,6 +889,21 @@ export async function getOrganizationConfig(orgId: string) {
         return { success: false, error: 'Failed to fetch config' };
     }
 }
+
+/**
+ * Cloned simulation staff share one known credential.
+ *
+ * Not exported — this file is 'use server', where only async functions may be exported.
+ * The provisioning action returns these in its result so the wizard can show the
+ * credential sheet; nothing else needs them.
+ *
+ * The password deliberately does not meet the admin password policy above. It is a
+ * shared prop-environment credential handed to a film crew, not a real account: the
+ * accounts it unlocks exist only in an organization flagged simulation_enabled, which
+ * the guard refuses to let hold anything but generated data.
+ */
+const SIMULATION_STAFF_PASSWORD = 'user@123';
+const SIMULATION_USERNAME_PREFIX = 'sim.';
 
 const ACTIVITY_INTENSITIES = ['low', 'moderate', 'high'];
 

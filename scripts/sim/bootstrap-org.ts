@@ -174,11 +174,14 @@ async function main() {
 
     await prisma.organizationConfig.upsert({
         where: { organizationId: orgId },
-        update: {},
+        // simulation_enabled is set on re-run too: the guard requires it, and this org
+        // may predate the flag existing.
+        update: { simulation_enabled: true },
         create: {
             organizationId: orgId,
             uhid_prefix: ORG.code,
             timezone: 'Asia/Kolkata',
+            simulation_enabled: true,
             // Generation stays OFF until someone turns it on in Superadmin → Config.
             // Creating the stage should never start the activity.
             activity_generator_enabled: false,

@@ -196,7 +196,13 @@ export const createOrganizationSchema = z.object({
     plan: z.enum(['free', 'starter', 'pro', 'enterprise']).default('free'),
     appointment_duration: z.string().optional(),
     fiscal_year_start: z.string().optional(),
-});
+    // Simulation provisioning. Both arrive from FormData as strings.
+    simulation_enabled: z.string().optional(),
+    clone_staff_from: z.string().optional(),
+}).refine(
+    d => d.simulation_enabled !== 'true' || !!d.clone_staff_from?.trim(),
+    { message: 'Select a hospital to clone staff from', path: ['clone_staff_from'] },
+);
 
 export const organizationProfileSchema = z.object({
     name: z.string().min(2, 'Hospital name is required').max(200),

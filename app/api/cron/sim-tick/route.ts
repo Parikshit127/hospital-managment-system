@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { runActivityTick } from '@/app/lib/sim-tick';
-import { isActivityGeneratorPermitted, ActivityGeneratorDisabledError } from '@/scripts/sim/guard';
+import {
+    isActivityGeneratorPermitted, eligibleOrganizationIds, ActivityGeneratorDisabledError,
+} from '@/scripts/sim/guard';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -12,11 +14,15 @@ export const dynamic = 'force-dynamic';
  * minutes is a good default:
  *   { "path": "/api/cron/sim-tick", "schedule": "*\/5 * * * *" }
  *
- * Two independent gates, both required:
- *   1. SIM_ENABLED=1 + SIM_ORG_ID  — absent on real deploys, so this route does not
- *      exist there. It returns 404 rather than 403 deliberately: a deploy that never
- *      opted in should not advertise that the endpoint is implemented.
- *   2. The organization's own activity_generator_enabled toggle, checked inside the tick.
+ * Three independent gates, all required:
+ *   1. SIM_ENABLED=1 — absent on real deploys, so this route does not exist there. It
+ *      returns 404 rather than 403 deliberately: a deploy that never opted in should not
+ *      advertise that the endpoint is implemented.
+ *   2. The target organization's simulation_enabled flag, checked by the guard.
+ *   3. The organization's own activity_generator_enabled toggle, checked inside the tick.
+ *
+ * With no SIM_ORG_ID pin the route advances every eligible simulation environment, so a
+ * deploy hosting several film environments needs one cron entry, not one per org.
  *
  * /api/cron/* is already bypassed in proxy.ts, so no route-guard change is needed —
  * auth is the CRON_SECRET bearer token below.
@@ -39,8 +45,17 @@ export async function GET(request: Request) {
     }
 
     try {
-        const result = await runActivityTick();
-        return NextResponse.json(result);
+        const targets = await eligibleOrganizationIds();
+        if (!targets.length) {
+            return NextResponse.json({ ran: false, reason: 'no eligible simulation environments' });
+        }
+        // Sequential, not Promise.all: these share a connection pool, and a burst of
+        // parallel ticks against the pooler is how one slow environment starves the rest.
+        const results: Record<string, unknown> = {};
+        for (const orgId of targets) {
+            results[orgId] = await runActivityTick(new Date(), orgId);
+        }
+        return NextResponse.json({ ran: true, organizations: results });
     } catch (err) {
         // A guard failure means the environment is pointed somewhere it should not be.
         // Surface it as a hard error rather than an empty success.

@@ -79,18 +79,54 @@ The only schema change is the operator config on `organization_configs`.
 
 ---
 
-## 4. Two-key control
+## 4. Three-key control
 
-The generator requires **both** keys. Either alone is inert.
+All three must agree. Any one of them failing stops the engine.
 
 | Key | Set by | Purpose |
 |---|---|---|
-| `SIM_ENABLED=1` + `SIM_ORG_ID=<uuid>` | Deploy environment | Infrastructure lock. Absent in every real deploy, so the engine cannot run there at all. |
-| `activity_generator_enabled` + `activity_generator_intensity` | Superadmin → Organization → Config | Operator control. Lets staging admins start/stop and set volume without a redeploy. |
+| `SIM_ENABLED=1` | Deploy environment | Master switch. Absent in every real deploy, so the engine cannot run there whatever the database says. |
+| `organization_configs.simulation_enabled` | Superadmin → Add Hospital | Classifies the org as a simulation environment. Lets several exist without pinning a UUID into the deploy. |
+| `activity_generator_enabled` + `_intensity` | Superadmin → Organization → Config | Operator control. Start/stop and volume, no redeploy. |
 
-The Config tab reads back the live environment state so an operator can see whether the
-infrastructure lock actually permits this org — a DB toggle on an org the environment forbids
-would otherwise look enabled while doing nothing.
+`SIM_ORG_ID` is now an **optional pin**: set it and the engine is restricted to that one org even
+if others carry the flag; leave it unset and every flagged org is eligible. The cron route advances
+all eligible environments in one pass, sequentially — parallel ticks against the shared pooler
+would let one slow environment starve the rest.
+
+`PROTECTED_ORG_IDS` is checked **before and independently of** the flag. A restored production
+snapshot carries both the organization and its config row, so a flag alone must never be able to
+authorise writes to a real hospital's tenant.
+
+The Config tab reads all three back, so an operator can tell "switched off" from "switched on but
+this deploy will not run it".
+
+## 4b. Provisioning a simulation environment
+
+**Superadmin → Add Hospital → step 4 (Admin Account) → "Create as Simulation Environment"**, then
+pick a hospital under "Clone Staff From". On submit, `createOrganization()`:
+
+1. creates the org, config (`simulation_enabled: true`, generation **off**) and branding;
+2. clones every active user from the source hospital.
+
+| Field | Cloned as |
+|---|---|
+| `username` | `sim.` + original — usernames are globally unique |
+| `password` | **one generated hash shared by all clones** (`user@123`) |
+| `role`, `name`, `specialty`, `designation`, `department`, `gender`, `qualifications` | copied |
+| `working_hours`, `working_days`, `slot_duration`, `max_patients_per_day` | copied — drives the engine's shift timing |
+| `consultation_fee`, `follow_up_fee` | copied — drives generated OPD billing |
+| `email`, `phone` | **null** — nothing the engine does can reach real staff |
+| `branch_id`, `assigned_ward_id`, `supervisor_id`, `doctor_group_id` | **null** — FKs into the *source* org's rows |
+| `employee_code`, `doctor_registration_no` | **null** — identifiers belonging to a real person |
+
+**Source password hashes are deliberately not copied.** Cloning them would hand a film crew working
+credentials for real employees, whose accounts carry the same password on the production database
+this staging DB was cloned from. The shared generated credential serves the same purpose — the
+wizard shows it once, after provisioning.
+
+Existing clone usernames are skipped rather than aborting the batch, so re-cloning from a source
+already used does not lose everything.
 
 Intensity maps to an arrivals multiplier applied to the hourly curve:
 `low ×0.4 · moderate ×1.0 · high ×2.5`.
@@ -153,6 +189,7 @@ tick(now) →
 
 | Rule | Where |
 |---|---|
+| Shifts follow the person, not the role | `isOnDuty()` parses `User.working_hours` ("09:00-17:00"), honours `working_days`, falls back to the role table when blank or malformed — this is what makes cloned staff inherit the source hospital's real roster |
 | One workstation per person, forever | `workstationIp()` — FNV-1a over the username, `10.20.{vlan}.{host}` |
 | Shift start/end jitter, different each day | `shiftOffsetMinutes(username, dayKey)` — fixed part + per-day part |
 | Busy days and quiet days | `dailyVolumeMultiplier()` — 0.72–1.28, keyed on the date |
