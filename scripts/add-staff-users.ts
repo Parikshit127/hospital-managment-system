@@ -16,10 +16,10 @@ const ORG = process.env.ORGANIZATION_ID;
 
 // ── Edit these four accounts before running ──────────────────────────
 const USERS = [
-    { username: 'nurse1',      password: 'ChangeMe123!', name: 'Nurse Name',      role: 'nurse' },
-    { username: 'pharmacist1', password: 'ChangeMe123!', name: 'Pharmacist Name', role: 'pharmacist' },
-    { username: 'finance1',    password: 'ChangeMe123!', name: 'Finance Name',    role: 'finance' },
-    { username: 'doctor1',     password: 'ChangeMe123!', name: 'Doctor Name',     role: 'doctor' },
+    { username: 'nurse1',      password: 'Nurse@2026Xk',      name: 'Nurse Staff',      role: 'nurse' },
+    { username: 'pharmacist1', password: 'Pharma@2026Qz',     name: 'Pharmacist Staff', role: 'pharmacist' },
+    { username: 'finance1',    password: 'Finance@2026Rt',    name: 'Finance Staff',    role: 'finance' },
+    { username: 'doctor1',     password: 'Doctor@2026Mn',     name: 'Doctor Staff',     role: 'doctor' },
 ];
 // ──────────────────────────────────────────────────────────────────────
 
