@@ -3,19 +3,45 @@
 # Run once on the EC2 instance to register all cron jobs.
 #
 # Prerequisites:
-#   export VERCEL_URL=https://your-app.vercel.app
+#   export APP_BASE_URL=http://localhost:3000     # or https://your-domain
 #   export CRON_SECRET=your-cron-secret-here
 #
 # Then run: bash scripts/aws-cron-setup.sh
+#
+# Nothing here is Vercel-specific. APP_BASE_URL is simply the address these jobs curl,
+# and it matches the variable the app itself prefers (see getAppBaseUrl() in
+# app/lib/password-setup.ts and backend/email.ts). When the app runs on this same box,
+# http://localhost:3000 is the best choice — the request never leaves the machine.
 
 set -e
 
-if [ -z "$VERCEL_URL" ] || [ -z "$CRON_SECRET" ]; then
-    echo "ERROR: Set VERCEL_URL and CRON_SECRET before running."
-    echo "  export VERCEL_URL=https://your-app.vercel.app"
+# Resolve the base URL the same way the application does, so one value works for both.
+# VERCEL_URL is still honoured for servers already configured that way, but note the app
+# treats it as a BARE HOSTNAME and prefixes https:// itself — so a scheme is added here
+# only when it is missing, never doubled.
+APP_URL="${APP_BASE_URL:-}"
+if [ -z "$APP_URL" ] && [ -n "${VERCEL_URL:-}" ]; then
+    case "$VERCEL_URL" in
+        http://*|https://*) APP_URL="$VERCEL_URL" ;;
+        *)                  APP_URL="https://$VERCEL_URL" ;;
+    esac
+fi
+if [ -z "$APP_URL" ]; then
+    APP_URL="${NEXT_PUBLIC_APP_URL:-}"
+fi
+APP_URL="${APP_URL%/}"   # strip any trailing slash so paths do not become //api/...
+
+if [ -z "$APP_URL" ] || [ -z "$CRON_SECRET" ]; then
+    echo "ERROR: Set APP_BASE_URL and CRON_SECRET before running."
+    echo "  export APP_BASE_URL=http://localhost:3000"
     echo "  export CRON_SECRET=your-secret"
+    echo ""
+    echo "Both can be read straight out of .env:"
+    echo "  export \$(grep -E '^(APP_BASE_URL|NEXT_PUBLIC_APP_URL|CRON_SECRET)=' .env | sed 's/\"//g' | xargs)"
     exit 1
 fi
+
+echo "Base URL: $APP_URL"
 
 # Write cron calls to a helper script so the crontab stays readable
 RUNNER=/usr/local/bin/hospitalos-cron.sh
@@ -24,7 +50,7 @@ sudo tee "$RUNNER" > /dev/null <<SCRIPT
 # Called by crontab — first arg is the API path
 curl -sf -X GET \\
   -H "Authorization: Bearer $CRON_SECRET" \\
-  "$VERCEL_URL\$1" \
+  "$APP_URL\$1" \
   >> /var/log/hospitalos-cron.log 2>&1
 SCRIPT
 sudo chmod +x "$RUNNER"
