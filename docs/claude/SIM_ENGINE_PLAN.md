@@ -101,6 +101,28 @@ authorise writes to a real hospital's tenant.
 The Config tab reads all three back, so an operator can tell "switched off" from "switched on but
 this deploy will not run it".
 
+## 4a. Running it
+
+The engine has no internal loop — it advances only when something calls it. `scripts/aws-cron-setup.sh`
+registers `*/5 * * * * /api/cron/sim-tick`, so a server that has run that script pokes it every five
+minutes for as long as the instance lives. Re-run the setup script only when the instance is
+rebuilt.
+
+Cron calls unconditionally; the tick itself decides whether to do anything. With the toggle off it
+returns `{ ran: false, reason: 'disabled…' }`. **Start and stop from Superadmin → Config, never by
+editing the crontab.**
+
+Manual poke, for testing:
+
+```bash
+curl -H "Authorization: Bearer $CRON_SECRET" https://<server>/api/cron/sim-tick
+```
+
+Roughly 9 arrivals/hour at the busiest hour on `moderate`, near zero overnight, ±30% by day.
+First completed consultation ~50 min after switch-on; first discharge with a final bill ~2.5 h.
+There is no historical backfill, so aged reports stay thin until the engine has been running for a
+while — switch it on well before a shoot.
+
 ## 4b. Provisioning a simulation environment
 
 **Superadmin → Add Hospital → step 4 (Admin Account) → "Create as Simulation Environment"**, then

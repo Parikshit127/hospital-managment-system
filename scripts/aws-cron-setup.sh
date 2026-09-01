@@ -57,6 +57,13 @@ NEW_CRONTAB="$EXISTING
 
 # Email outbox dispatch — every 2 minutes (v4 Addendum)
 */2 * * * *  $RUNNER /api/cron/email-dispatch
+
+# Background activity generator — every 5 minutes.
+# Harmless on a normal server: the route returns 404 unless SIM_ENABLED=1 is set in the
+# environment, and even then it only advances organizations explicitly flagged as
+# simulation environments. Start/stop is controlled per hospital from
+# Superadmin -> Organizations -> Config, not by editing this crontab.
+*/5 * * * *  $RUNNER /api/cron/sim-tick
 "
 
 echo "$NEW_CRONTAB" | crontab -
