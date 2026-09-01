@@ -586,24 +586,32 @@ export async function addUser(data: {
 
     const hashedPassword = await bcrypt.hash(validated.password, 10);
 
-    const user = await db.user.create({
-      data: {
-        username: validated.username,
-        password: hashedPassword,
-        name: validated.name,
-        role: validated.role,
-        specialty: validated.role === "doctor" ? validated.specialty || null : null,
-        email: validated.email || null,
-        phone: validated.phone || null,
-        assigned_ward_id: validated.assigned_ward_id || null,
-        organizationId,
-        is_active: true,
-      },
-      select: {
-        id: true, username: true, name: true, role: true,
-        specialty: true, email: true, phone: true, is_active: true,
-      },
-    });
+    let user;
+    try {
+      user = await db.user.create({
+        data: {
+          username: validated.username,
+          password: hashedPassword,
+          name: validated.name,
+          role: validated.role,
+          specialty: validated.role === "doctor" ? validated.specialty || null : null,
+          email: validated.email || null,
+          phone: validated.phone || null,
+          assigned_ward_id: validated.assigned_ward_id || null,
+          organizationId,
+          is_active: true,
+        },
+        select: {
+          id: true, username: true, name: true, role: true,
+          specialty: true, email: true, phone: true, is_active: true,
+        },
+      });
+    } catch (e: any) {
+      if (e.code === "P2002") {
+        return { success: false, error: "Username already exists" };
+      }
+      throw e;
+    }
 
     // Create linked Employee record for HR fields (preferred fields)
     if (validated.employee_code || validated.designation || validated.date_of_joining) {
