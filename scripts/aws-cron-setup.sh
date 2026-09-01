@@ -45,13 +45,24 @@ echo "Base URL: $APP_URL"
 
 # Write cron calls to a helper script so the crontab stays readable
 RUNNER=/usr/local/bin/hospitalos-cron.sh
+LOG=/var/log/hospitalos-cron.log
+
 sudo tee "$RUNNER" > /dev/null <<SCRIPT
 #!/bin/bash
-# Called by crontab — first arg is the API path
-curl -sf -X GET \\
-  -H "Authorization: Bearer $CRON_SECRET" \\
-  "$APP_URL\$1" \
-  >> /var/log/hospitalos-cron.log 2>&1
+# Called by crontab — first arg is the API path.
+#
+# Writes exactly one line per run: UTC timestamp, the path, then the response body.
+# curl emits no trailing newline, so without the closing printf every response would be
+# concatenated into one unreadable line.
+#
+# "-f" makes curl print nothing at all on an HTTP error, which is how a 401 used to
+# leave no trace whatsoever; the "||" branch records the exit code so a failing job is
+# visible in the log instead of looking like it never ran.
+{
+    printf '%s %s ' "\$(date -u +%Y-%m-%dT%H:%M:%SZ)" "\$1"
+    curl -sf -X GET -H "Authorization: Bearer $CRON_SECRET" "$APP_URL\$1" || printf '{"error":"curl failed, exit %s"}' "\$?"
+    printf '\n'
+} >> $LOG 2>&1
 SCRIPT
 sudo chmod +x "$RUNNER"
 
@@ -61,7 +72,6 @@ sudo chmod +x "$RUNNER"
 # the runner appends with ">>". If the file does not exist the redirect fails and the
 # shell aborts the line BEFORE curl runs — so every job dies silently, with no log to
 # explain why, because the log is the thing that could not be written.
-LOG=/var/log/hospitalos-cron.log
 sudo touch "$LOG"
 sudo chown "$(id -u):$(id -g)" "$LOG"
 
