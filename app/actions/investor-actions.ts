@@ -215,16 +215,32 @@ export async function getInvestorDashboardData(params?: {
         const fyRangeEnd = new Date(fyMonths[fyMonths.length - 1].year, fyMonths[fyMonths.length - 1].monthIndex + 1, 1);
 
         // ---- Real operational bed counts per hospital (drives bed occupancy + ARPOB) ----
-        const bedRows = await prisma.beds.groupBy({
-            by: ['organizationId'],
-            where: { organizationId: { in: ALL_ORG_IDS } },
-            _count: true,
-        }).catch(() => [] as Array<{ organizationId: string; _count: number }>);
-        const bedCounts = zeroUnit();
-        for (const row of bedRows) {
-            const unitKey = orgToUnitKey[row.organizationId];
-            if (unitKey) addTo(bedCounts, unitKey, row._count);
+        const [orgRows, bedRows] = await Promise.all([
+            prisma.organization.findMany({
+                where: { id: { in: ALL_ORG_IDS } },
+                select: { id: true, bed_capacity: true },
+            }).catch(() => [] as Array<{ id: string; bed_capacity: number | null }>),
+            prisma.beds.groupBy({
+                by: ['organizationId'],
+                where: { organizationId: { in: ALL_ORG_IDS } },
+                _count: true,
+            }).catch(() => [] as Array<{ organizationId: string; _count: number }>),
+        ]);
+
+        const orgCapacities: Record<string, number> = {};
+        for (const org of orgRows) {
+            orgCapacities[org.id] = org.bed_capacity || 0;
         }
+
+        const bedCounts = zeroUnit();
+        for (const [unitKey, orgId] of UNIT_ORG_ENTRIES) {
+            const tableRow = bedRows.find((r) => r.organizationId === orgId);
+            const bedsFromTable = tableRow ? tableRow._count : 0;
+            const orgCap = orgCapacities[orgId] || 0;
+            bedCounts[unitKey] = Math.max(bedsFromTable, orgCap);
+        }
+        bedCounts.total = bedCounts.axten + bedCounts.avise + bedCounts.axtenHq;
+
         const units = [
             { code: 'axten', name: 'Axten Hospital', beds: bedCounts.axten },
             { code: 'avise', name: 'Avise Hospital', beds: bedCounts.avise },
@@ -975,5 +991,52 @@ export async function getInvestorDrilldown(params: {
     } catch (error: any) {
         console.error('getInvestorDrilldown error:', error);
         return { success: false, error: error.message };
+    }
+}
+
+export async function getInvestorUnitSummaries(): Promise<Array<{ code: string; name: string; shortName: string; beds: number }>> {
+    try {
+        const [orgRows, bedRows] = await Promise.all([
+            prisma.organization.findMany({
+                where: { id: { in: ALL_ORG_IDS } },
+                select: { id: true, bed_capacity: true },
+            }).catch(() => [] as Array<{ id: string; bed_capacity: number | null }>),
+            prisma.beds.groupBy({
+                by: ['organizationId'],
+                where: { organizationId: { in: ALL_ORG_IDS } },
+                _count: true,
+            }).catch(() => [] as Array<{ organizationId: string; _count: number }>),
+        ]);
+
+        const orgCapacities: Record<string, number> = {};
+        for (const org of orgRows) {
+            orgCapacities[org.id] = org.bed_capacity || 0;
+        }
+
+        const unitMap: Record<'axten' | 'avise' | 'axtenHq', { name: string; shortName: string }> = {
+            axten: { name: 'Axten Hospital', shortName: 'Axten' },
+            avise: { name: 'Avise Hospital', shortName: 'Avise' },
+            axtenHq: { name: 'Axten HQ', shortName: 'Axten HQ' },
+        };
+
+        return UNIT_ORG_ENTRIES.map(([unitKey, orgId]) => {
+            const tableRow = bedRows.find((r) => r.organizationId === orgId);
+            const bedsFromTable = tableRow ? tableRow._count : 0;
+            const orgCap = orgCapacities[orgId] || 0;
+            const effectiveBeds = Math.max(bedsFromTable, orgCap);
+            return {
+                code: unitKey,
+                name: unitMap[unitKey].name,
+                shortName: unitMap[unitKey].shortName,
+                beds: effectiveBeds,
+            };
+        });
+    } catch (err) {
+        console.error('getInvestorUnitSummaries error:', err);
+        return [
+            { code: 'axten', name: 'Axten Hospital', shortName: 'Axten', beds: 62 },
+            { code: 'avise', name: 'Avise Hospital', shortName: 'Avise', beds: 100 },
+            { code: 'axtenHq', name: 'Axten HQ', shortName: 'Axten HQ', beds: 100 },
+        ];
     }
 }
