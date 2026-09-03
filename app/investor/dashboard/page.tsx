@@ -276,76 +276,64 @@ export default function PromoterDashboardPage() {
               );
 
         return (
-        <div className={`rounded-3xl overflow-hidden shadow-xl mb-8 border transition-all duration-300 print:bg-white print:border-slate-300 print:shadow-none print:mb-6 print:break-inside-avoid ${
+        <div className={`rounded-3xl overflow-hidden shadow-lg mb-8 border transition-all duration-300 print:bg-white print:border-slate-300 print:shadow-none print:mb-6 print:break-inside-avoid ${
             isDark
-                ? 'bg-slate-900/60 border-slate-800/80 backdrop-blur-md'
-                : 'bg-white border-orange-200/80 shadow-orange-500/5'
+                ? 'bg-slate-900/80 border-slate-800 backdrop-blur-md'
+                : 'bg-white border-slate-200 shadow-slate-200/50'
         }`}>
             <button
                 type="button"
                 onClick={() => toggleSection(key)}
-                className={`w-full text-left px-6 py-4 flex items-center justify-between transition-colors print:bg-slate-100 print:py-2 print:px-4 cursor-pointer print:pointer-events-none group border-b ${
-                    isDark
-                        ? 'bg-[#0c162d]/90 border-slate-800/80 hover:bg-slate-800/60'
-                        : 'bg-gradient-to-r from-orange-500 via-orange-600 to-amber-600 text-white border-orange-600 hover:from-orange-600 hover:to-amber-700'
-                }`}
+                className="w-full text-left px-6 py-4 flex items-center justify-between transition-colors bg-[#0f172a] text-white border-b border-slate-800 cursor-pointer print:pointer-events-none group"
             >
                 <div>
-                    <h3 className={`text-sm font-black tracking-wide uppercase flex items-center gap-2.5 print:text-xs print:text-slate-900 ${
-                        isDark ? 'text-white' : 'text-white'
-                    }`}>
-                        <span className={`w-2.5 h-2.5 rounded-full shadow-sm print:hidden ${isDark ? 'bg-orange-400 shadow-orange-400/50' : 'bg-white shadow-white/50'}`} />
+                    <h3 className="text-sm font-black tracking-wide uppercase flex items-center gap-2.5 print:text-xs print:text-slate-900 text-white">
+                        <span className="w-2.5 h-2.5 rounded-full bg-orange-500 shadow-sm shadow-orange-500/50" />
                         {title}
                     </h3>
-                    <p className={`text-xs font-medium mt-0.5 print:text-[10px] print:text-slate-600 ${
-                        isDark ? 'text-slate-400' : 'text-orange-100'
-                    }`}>{subtitle}</p>
+                    <p className="text-xs text-slate-400 font-medium mt-0.5 print:text-[10px] print:text-slate-600">{subtitle}</p>
                     {!isExpanded && (
-                        <p className={`text-xs font-mono font-bold mt-2 print:hidden ${
-                            isDark ? 'text-orange-400' : 'text-white'
-                        }`}>
+                        <p className="text-xs font-mono font-bold mt-2 text-orange-400 print:hidden">
                             {isAllUnitsSelected ? 'Consolidated Total' : 'Selected Units Total'}: {totalDisplay}
                         </p>
                     )}
                 </div>
                 <div className="flex items-center gap-3">
-                    <span className={`text-xs font-mono font-bold hidden sm:inline-block print:hidden ${
-                        isDark ? 'text-slate-400' : 'text-orange-100'
-                    }`}>
+                    <span className="text-xs font-mono font-bold hidden sm:inline-block text-slate-400 print:hidden">
                         {rows.length} categories
                     </span>
                     {isExpanded ? (
-                        <ChevronDown className="w-4 h-4 text-white/80 shrink-0 print:hidden group-hover:text-white transition-colors" />
+                        <ChevronDown className="w-4 h-4 text-slate-400 shrink-0 print:hidden group-hover:text-white transition-colors" />
                     ) : (
-                        <ChevronRight className="w-4 h-4 text-white/80 shrink-0 print:hidden group-hover:text-white transition-colors" />
+                        <ChevronRight className="w-4 h-4 text-slate-400 shrink-0 print:hidden group-hover:text-white transition-colors" />
                     )}
                 </div>
             </button>
             <div className={`overflow-x-auto ${isExpanded ? '' : 'hidden print:block'}`}>
                 <table className="w-full text-left border-collapse">
                     <thead>
-                        <tr className={`text-[11px] font-black uppercase tracking-wider border-b print:bg-slate-200 print:text-slate-900 print:text-[10px] ${
-                            isDark ? 'bg-slate-950/70 border-slate-800 text-slate-300' : 'bg-orange-50/80 border-orange-200 text-orange-950'
+                        <tr className={`text-[11px] font-extrabold uppercase tracking-wider border-b print:bg-slate-200 print:text-slate-900 print:text-[10px] ${
+                            isDark ? 'bg-slate-950/90 border-slate-800 text-slate-300' : 'bg-slate-100/90 border-slate-200 text-slate-700'
                         }`}>
                             <th className="py-3.5 px-6 min-w-[220px] print:py-2 print:px-4">Category / Line Item</th>
-                            <th className={`py-3.5 px-4 text-right min-w-[130px] print:py-2 ${selectedUnits.includes('axten') ? (isDark ? 'bg-orange-950/40 text-orange-300 font-black' : 'bg-orange-100/60 text-orange-900 font-black') : (isDark ? 'text-slate-400' : 'text-slate-500')}`}>
+                            <th className={`py-3.5 px-4 text-right min-w-[130px] print:py-2 ${selectedUnits.includes('axten') ? 'font-black text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400'}`}>
                                 Axten Hospital
                             </th>
-                            <th className={`py-3.5 px-4 text-right min-w-[130px] print:py-2 ${selectedUnits.includes('avise') ? (isDark ? 'bg-amber-950/40 text-amber-300 font-black' : 'bg-amber-100/60 text-amber-900 font-black') : (isDark ? 'text-slate-400' : 'text-slate-500')}`}>
+                            <th className={`py-3.5 px-4 text-right min-w-[130px] print:py-2 ${selectedUnits.includes('avise') ? 'font-black text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400'}`}>
                                 Avise Hospital
                             </th>
-                            <th className={`py-3.5 px-4 text-right min-w-[130px] print:py-2 ${selectedUnits.includes('axtenHq') ? (isDark ? 'bg-slate-900 text-slate-200 font-black' : 'bg-slate-100 text-slate-900 font-black') : (isDark ? 'text-slate-400' : 'text-slate-500')}`}>
+                            <th className={`py-3.5 px-4 text-right min-w-[130px] print:py-2 ${selectedUnits.includes('axtenHq') ? 'font-black text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400'}`}>
                                 Axten HQ
                             </th>
                             <th className={`py-3.5 px-6 text-right min-w-[160px] font-black border-l print:py-2 print:px-4 print:bg-orange-100 print:text-orange-950 ${
-                                isDark ? 'border-slate-800 bg-orange-950/60 text-orange-300' : 'border-orange-200 bg-orange-500 text-white'
+                                isDark ? 'border-slate-800 bg-orange-950/40 text-orange-300' : 'border-slate-200 bg-orange-50/80 text-orange-950'
                             }`}>
                                 {isAllUnitsSelected ? 'Consolidated Total' : 'Selected Total'}
                             </th>
                         </tr>
                     </thead>
                     <tbody className={`divide-y text-xs print:text-[11px] print:divide-slate-200 ${
-                        isDark ? 'divide-slate-800/60' : 'divide-orange-100/60'
+                        isDark ? 'divide-slate-800/60' : 'divide-slate-100'
                     }`}>
                         {rows.map((row, idx) => {
                             const isTotal = row.isTotalRow || row.label.toLowerCase() === 'total';
@@ -354,26 +342,29 @@ export default function PromoterDashboardPage() {
                                     key={idx}
                                     className={`transition-colors ${
                                         isTotal
-                                            ? (isDark ? 'bg-slate-950 text-white font-black print:bg-slate-900 print:text-white' : 'bg-orange-500 text-white font-black print:bg-orange-600')
-                                            : (isDark ? 'hover:bg-slate-800/40 text-slate-200 font-semibold print:text-slate-800' : 'hover:bg-orange-50/70 text-slate-800 font-medium')
+                                            ? (isDark ? 'bg-slate-950 text-white font-black print:bg-slate-900 print:text-white' : 'bg-slate-900 text-white font-black print:bg-slate-900')
+                                            : (isDark ? 'hover:bg-slate-800/40 text-slate-200 font-semibold print:text-slate-800 bg-slate-900/30' : 'hover:bg-slate-50 text-slate-800 font-medium bg-white')
                                     }`}
                                 >
-                                    <td className="py-3 px-6 font-bold flex items-center gap-2 print:py-1.5 print:px-4">
-                                        {isTotal && <CheckCircle2 className={`w-4 h-4 shrink-0 print:hidden ${isDark ? 'text-orange-400' : 'text-white'}`} />}
-                                        <span className={isTotal ? (isDark ? 'text-orange-300 font-extrabold tracking-wide' : 'text-white font-black tracking-wide') : (isDark ? 'text-slate-200' : 'text-slate-900')}>{row.label}</span>
+                                    <td className="py-3.5 px-6 font-bold flex items-center gap-2 print:py-1.5 print:px-4">
+                                        {isTotal && <CheckCircle2 className="w-4 h-4 shrink-0 text-orange-400 print:hidden" />}
+                                        <span className={isTotal ? 'text-white font-black tracking-wide' : (isDark ? 'text-slate-200' : 'text-slate-900')}>{row.label}</span>
                                     </td>
                                     {(['axten', 'avise', 'axtenHq'] as const).map((unit) => {
                                         const canDrill = !isTotal && !!row.drillSection && row.drillCategory !== 'panel';
-                                        const unitBg = isDark
-                                            ? (unit === 'axten' ? 'bg-orange-950/20 text-orange-200 font-semibold' : unit === 'avise' ? 'bg-amber-950/20 text-amber-200 font-semibold' : 'bg-slate-900 text-slate-200 font-semibold')
-                                            : (unit === 'axten' ? 'bg-orange-50/40 text-slate-900 font-semibold' : unit === 'avise' ? 'bg-amber-50/40 text-slate-900 font-semibold' : 'bg-slate-50 text-slate-900 font-semibold');
                                         const cellValue = row.isPercentage ? `${row.data[unit]}%` : fmtINR(row.data[unit], row.isCurrency);
                                         return (
                                             <td
                                                 key={unit}
                                                 onClick={canDrill ? () => openDrilldown(row.drillSection!, row.drillCategory!, row.label, unit, UNIT_OPTIONS.find(u => u.code === unit)!.shortName) : undefined}
                                                 title={canDrill ? `View ${row.label} records for ${UNIT_OPTIONS.find(u => u.code === unit)!.shortName}` : undefined}
-                                                className={`py-3 px-4 text-right font-mono text-xs print:py-1.5 group ${selectedUnits.includes(unit) ? (isTotal ? (isDark ? 'bg-slate-950 font-bold' : 'bg-orange-500 font-bold text-white') : unitBg) : (isDark ? 'text-slate-500' : 'text-slate-400')} ${canDrill ? (isDark ? 'cursor-pointer hover:bg-orange-500/10 hover:text-orange-300 transition-colors' : 'cursor-pointer hover:bg-orange-100 hover:text-orange-900 transition-colors') : ''}`}
+                                                className={`py-3.5 px-4 text-right font-mono text-xs print:py-1.5 group ${
+                                                    isTotal
+                                                        ? 'text-white font-black font-mono'
+                                                        : (selectedUnits.includes(unit)
+                                                            ? (isDark ? 'text-slate-100 font-semibold' : 'text-slate-900 font-semibold')
+                                                            : (isDark ? 'text-slate-500' : 'text-slate-400'))
+                                                } ${canDrill ? (isDark ? 'cursor-pointer hover:bg-orange-500/10 hover:text-orange-300 transition-colors' : 'cursor-pointer hover:bg-orange-50 hover:text-orange-700 transition-colors') : ''}`}
                                             >
                                                 <span className="inline-flex items-center gap-1">
                                                     {cellValue}
@@ -382,10 +373,10 @@ export default function PromoterDashboardPage() {
                                             </td>
                                         );
                                     })}
-                                    <td className={`py-3 px-6 text-right font-mono font-bold border-l print:py-1.5 print:px-4 ${
+                                    <td className={`py-3.5 px-6 text-right font-mono font-bold border-l print:py-1.5 print:px-4 ${
                                         isTotal
-                                            ? (isDark ? 'border-slate-800 text-orange-400 bg-slate-950 font-black text-sm' : 'border-orange-600 text-white bg-orange-600 font-black text-sm')
-                                            : (isDark ? 'border-slate-800/80 text-orange-300 bg-orange-950/20 font-black' : 'border-orange-200 text-orange-950 bg-orange-500/10 font-black')
+                                            ? 'border-slate-800 text-white bg-gradient-to-r from-orange-600 to-amber-600 font-black text-sm'
+                                            : (isDark ? 'border-slate-800 text-orange-300 bg-orange-950/20 font-black' : 'border-slate-200 text-orange-950 bg-orange-50/50 font-black')
                                     }`}>
                                         {row.isPercentage
                                             ? `${row.data.total}%`
@@ -424,10 +415,10 @@ export default function PromoterDashboardPage() {
             </div>
 
             {/* Title Bar & Executive Filter Toolbar (Hidden in Print) */}
-            <div className={`flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-6 rounded-3xl shadow-2xl transition-all border print:hidden ${
+            <div className={`flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-6 rounded-3xl transition-all border shadow-sm print:hidden ${
                 isDark
-                    ? 'bg-[#0c162d]/90 border-slate-800/80 backdrop-blur-md text-white'
-                    : 'bg-white border-orange-200/80 shadow-orange-500/5 text-slate-900'
+                    ? 'bg-slate-900/90 border-slate-800 backdrop-blur-md text-white'
+                    : 'bg-white border-slate-200 text-slate-900'
             }`}>
                 <div className="space-y-1">
                     <div className="flex items-center gap-3">
@@ -435,12 +426,12 @@ export default function PromoterDashboardPage() {
                         <span className={`px-3 py-1 rounded-full text-xs font-black font-mono border ${
                             isDark
                                 ? 'bg-orange-500/10 text-orange-400 border-orange-500/30'
-                                : 'bg-orange-50 text-orange-700 border-orange-200'
+                                : 'bg-orange-50 text-orange-800 border-orange-200'
                         }`}>
                             {isAllUnitsSelected ? 'Consolidated Multi-Unit' : selectedUnitsLabel}
                         </span>
                     </div>
-                    <p className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                    <p className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                         Real-time executive operational & financial audit across hospital locations
                     </p>
                 </div>
@@ -452,35 +443,35 @@ export default function PromoterDashboardPage() {
                         <button
                             type="button"
                             onClick={() => setUnitMenuOpen((prev) => !prev)}
-                            className={`flex items-center gap-2.5 px-4 py-2 rounded-2xl text-xs font-bold transition-all cursor-pointer shadow-md border ${
+                            className={`flex items-center gap-2.5 px-4 py-2 rounded-2xl text-xs font-bold transition-all cursor-pointer shadow-sm border ${
                                 isDark
-                                    ? 'bg-slate-900/90 border-slate-700/80 text-slate-200 hover:border-orange-500/50 hover:text-white'
-                                    : 'bg-orange-50/60 border-orange-200 text-slate-900 hover:bg-orange-100/60 hover:border-orange-300'
+                                    ? 'bg-slate-800 border-slate-700 text-slate-200 hover:border-orange-500/50 hover:text-white'
+                                    : 'bg-slate-100 border-slate-200 text-slate-800 hover:bg-orange-50 hover:border-orange-200'
                             }`}
                         >
                             <Building2 className={`w-4 h-4 ${isDark ? 'text-orange-400' : 'text-orange-600'}`} />
-                            <span className={isDark ? 'text-slate-400' : 'text-slate-600'}>Units:</span>
+                            <span className={isDark ? 'text-slate-400' : 'text-slate-500'}>Units:</span>
                             <span className={`font-mono font-extrabold max-w-[220px] truncate ${isDark ? 'text-orange-300' : 'text-orange-700'}`}>{selectedUnitsLabel}</span>
-                            <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isDark ? 'text-slate-400' : 'text-slate-600'} ${unitMenuOpen ? 'rotate-180' : ''}`} />
+                            <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isDark ? 'text-slate-400' : 'text-slate-500'} ${unitMenuOpen ? 'rotate-180' : ''}`} />
                         </button>
 
                         {unitMenuOpen && (
                             <div className={`absolute z-30 top-full mt-2 left-0 w-72 rounded-2xl shadow-2xl overflow-hidden border backdrop-blur-xl ${
                                 isDark
-                                    ? 'bg-[#0a1226] border-slate-700/80 text-slate-200'
-                                    : 'bg-white border-orange-200 text-slate-900 shadow-orange-500/10'
+                                    ? 'bg-slate-900 border-slate-700 text-slate-200'
+                                    : 'bg-white border-slate-200 text-slate-900 shadow-xl'
                             }`}>
                                 <button
                                     type="button"
                                     onClick={() => setSelectedUnits(isAllUnitsSelected ? [] : UNIT_OPTIONS.map(u => u.code))}
                                     className={`w-full flex items-center justify-between px-4 py-3 text-xs font-black border-b cursor-pointer ${
                                         isDark
-                                            ? 'hover:bg-slate-800/60 border-slate-800 text-slate-200'
-                                            : 'hover:bg-orange-50 border-orange-100 text-orange-950'
+                                            ? 'hover:bg-slate-800 border-slate-800 text-slate-200'
+                                            : 'hover:bg-orange-50 border-slate-100 text-slate-900'
                                     }`}
                                 >
                                     <span>{isAllUnitsSelected ? 'Deselect All Units' : 'Select All Units'}</span>
-                                    {isAllUnitsSelected && <Check className={`w-4 h-4 ${isDark ? 'text-orange-400' : 'text-orange-600'}`} />}
+                                    {isAllUnitsSelected && <Check className="w-4 h-4 text-orange-500" />}
                                 </button>
                                 {UNIT_OPTIONS.map((unit) => {
                                     const checked = selectedUnits.includes(unit.code);
@@ -492,17 +483,17 @@ export default function PromoterDashboardPage() {
                                             onClick={() => toggleUnit(unit.code)}
                                             className={`w-full flex items-center justify-between px-4 py-2.5 text-xs font-semibold cursor-pointer transition-colors ${
                                                 isDark
-                                                    ? 'text-slate-300 hover:bg-slate-800/40'
-                                                    : 'text-slate-800 hover:bg-orange-50/60'
+                                                    ? 'text-slate-300 hover:bg-slate-800'
+                                                    : 'text-slate-800 hover:bg-orange-50'
                                             }`}
                                         >
                                             <div className="flex items-center gap-2.5">
                                                 <span className={`w-4 h-4 rounded-md border flex items-center justify-center shrink-0 transition-colors ${
                                                     checked
-                                                        ? (isDark ? 'bg-orange-500 border-orange-400' : 'bg-orange-500 border-orange-500 text-white')
+                                                        ? 'bg-orange-500 border-orange-500 text-white'
                                                         : (isDark ? 'border-slate-600' : 'border-slate-300')
                                                 }`}>
-                                                    {checked && <Check className={`w-3 h-3 font-black ${isDark ? 'text-slate-950' : 'text-white'}`} />}
+                                                    {checked && <Check className="w-3 h-3 font-black text-white" />}
                                                 </span>
                                                 <span>{unit.name}</span>
                                             </div>
@@ -515,10 +506,10 @@ export default function PromoterDashboardPage() {
                     </div>
 
                     {/* Period Selector */}
-                    <div className={`flex items-center p-1 rounded-2xl border text-xs font-bold shadow-inner ${
+                    <div className={`flex items-center p-1 rounded-2xl border text-xs font-bold ${
                         isDark
-                            ? 'bg-slate-950/80 border-slate-800'
-                            : 'bg-orange-50/80 border-orange-200'
+                            ? 'bg-slate-950 border-slate-800'
+                            : 'bg-slate-100 border-slate-200'
                     }`}>
                         {(['day', 'month', 'year', 'custom'] as const).map((type) => (
                             <button
@@ -526,8 +517,8 @@ export default function PromoterDashboardPage() {
                                 onClick={() => setFilterType(type)}
                                 className={`px-3.5 py-1.5 rounded-xl transition-all capitalize cursor-pointer font-mono ${
                                     filterType === type
-                                        ? (isDark ? 'bg-orange-500 text-slate-950 shadow-md font-black shadow-orange-500/20' : 'bg-orange-500 text-white shadow-md font-black shadow-orange-500/20')
-                                        : (isDark ? 'text-slate-400 hover:text-slate-200' : 'text-slate-600 hover:text-orange-950')
+                                        ? 'bg-orange-500 text-white shadow-md font-black'
+                                        : (isDark ? 'text-slate-400 hover:text-slate-200' : 'text-slate-600 hover:text-slate-900')
                                 }`}
                             >
                                 {type}
@@ -538,8 +529,8 @@ export default function PromoterDashboardPage() {
                     {filterType === 'custom' && (
                         <div className={`flex items-center gap-2 p-1.5 rounded-2xl text-xs font-mono border ${
                             isDark
-                                ? 'bg-slate-900/90 border-slate-700/80 text-slate-200'
-                                : 'bg-white border-orange-200 text-slate-800'
+                                ? 'bg-slate-900 border-slate-700 text-slate-200'
+                                : 'bg-white border-slate-200 text-slate-800'
                         }`}>
                             <input
                                 type="date"
@@ -556,7 +547,7 @@ export default function PromoterDashboardPage() {
                             />
                             <button
                                 onClick={loadData}
-                                className="px-3 py-1 rounded-xl bg-orange-500 hover:bg-orange-400 text-white font-black transition-colors"
+                                className="px-3 py-1 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-black transition-colors"
                             >
                                 Apply
                             </button>
@@ -568,8 +559,8 @@ export default function PromoterDashboardPage() {
                         title="Refresh Data"
                         className={`p-2.5 rounded-2xl border transition-colors cursor-pointer ${
                             isDark
-                                ? 'bg-slate-900/80 text-slate-400 border-slate-800 hover:text-white hover:border-slate-700'
-                                : 'bg-white text-slate-600 border-orange-200 hover:text-orange-600 hover:border-orange-300'
+                                ? 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
+                                : 'bg-slate-100 text-slate-600 border-slate-200 hover:text-orange-600 hover:bg-orange-50'
                         }`}
                     >
                         <RefreshCw className="w-4 h-4" />
@@ -577,10 +568,10 @@ export default function PromoterDashboardPage() {
 
                     <button
                         onClick={exportToCSV}
-                        className={`px-4 py-2.5 rounded-2xl text-xs font-extrabold border flex items-center gap-2 transition-all cursor-pointer shadow-md ${
+                        className={`px-4 py-2.5 rounded-2xl text-xs font-extrabold border flex items-center gap-2 transition-all cursor-pointer shadow-sm ${
                             isDark
-                                ? 'bg-slate-900/80 hover:bg-slate-800 text-slate-200 border-slate-800 hover:border-slate-700'
-                                : 'bg-white hover:bg-orange-50 text-slate-800 border-orange-200 hover:border-orange-300 shadow-orange-500/5'
+                                ? 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+                                : 'bg-slate-100 hover:bg-orange-50 text-slate-800 border-slate-200 hover:border-orange-200 hover:text-orange-700'
                         }`}
                     >
                         <Download className={`w-4 h-4 ${isDark ? 'text-orange-400' : 'text-orange-600'}`} />
@@ -589,7 +580,7 @@ export default function PromoterDashboardPage() {
 
                     <button
                         onClick={() => window.print()}
-                        className="px-4 py-2.5 rounded-2xl bg-gradient-to-r from-orange-500 via-orange-600 to-amber-600 hover:from-orange-400 hover:to-amber-500 text-white text-xs font-black flex items-center gap-2 shadow-lg shadow-orange-500/20 transition-all cursor-pointer"
+                        className="px-4 py-2.5 rounded-2xl bg-gradient-to-r from-orange-500 via-orange-600 to-amber-600 hover:from-orange-600 hover:to-amber-700 text-white text-xs font-black flex items-center gap-2 shadow-md shadow-orange-500/20 transition-all cursor-pointer"
                     >
                         <Printer className="w-4 h-4" />
                         <span>Print Audit</span>
@@ -597,12 +588,12 @@ export default function PromoterDashboardPage() {
                 </div>
             </div>
 
-            {/* Executive Financial Health Strip (Hospital Brand: Orange & White) */}
+            {/* Executive Financial Health Strip */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 print:grid-cols-4 print:gap-2">
-                <div className={`p-5 rounded-3xl shadow-xl relative overflow-hidden border print:bg-white print:p-3 print:border-slate-300 ${
+                <div className={`p-5 rounded-3xl shadow-sm relative overflow-hidden border print:bg-white print:p-3 print:border-slate-300 ${
                     isDark
-                        ? 'bg-gradient-to-br from-orange-950/40 via-slate-900/80 to-slate-950 border-orange-500/30 backdrop-blur-md'
-                        : 'bg-gradient-to-br from-orange-500 to-amber-600 text-white border-orange-400 shadow-orange-500/20'
+                        ? 'bg-slate-900 border-slate-800 backdrop-blur-md'
+                        : 'bg-gradient-to-br from-orange-500 to-amber-600 text-white border-orange-500 shadow-orange-500/10'
                 }`}>
                     <div className={`flex items-center justify-between text-xs font-black uppercase tracking-wider mb-2 ${
                         isDark ? 'text-orange-400 print:text-orange-800' : 'text-orange-100'
@@ -613,13 +604,13 @@ export default function PromoterDashboardPage() {
                     <div className={`text-3xl font-black font-mono print:text-xl print:text-slate-900 ${
                         isDark ? 'text-white' : 'text-white'
                     }`}>{executiveKPIs.ebitdaMarginPct}%</div>
-                    <div className={`text-xs font-medium mt-1 ${isDark ? 'text-orange-300/80' : 'text-orange-100'}`}>Operating Performance Yield</div>
+                    <div className={`text-xs font-medium mt-1 ${isDark ? 'text-slate-400' : 'text-orange-100'}`}>Operating Performance Yield</div>
                 </div>
 
-                <div className={`p-5 rounded-3xl shadow-xl relative overflow-hidden border print:bg-white print:p-3 print:border-slate-300 ${
+                <div className={`p-5 rounded-3xl shadow-sm relative overflow-hidden border print:bg-white print:p-3 print:border-slate-300 ${
                     isDark
-                        ? 'bg-gradient-to-br from-slate-900 via-slate-900/80 to-slate-950 border-slate-700/80 backdrop-blur-md'
-                        : 'bg-white border-orange-200 text-slate-900 shadow-orange-500/5'
+                        ? 'bg-slate-900 border-slate-800 backdrop-blur-md'
+                        : 'bg-white border-slate-200 text-slate-900 shadow-slate-200/50'
                 }`}>
                     <div className={`flex items-center justify-between text-xs font-black uppercase tracking-wider mb-2 ${
                         isDark ? 'text-amber-400 print:text-slate-800' : 'text-orange-600'
@@ -630,30 +621,28 @@ export default function PromoterDashboardPage() {
                     <div className={`text-3xl font-black font-mono print:text-xl print:text-slate-900 ${
                         isDark ? 'text-white' : 'text-slate-900'
                     }`}>{executiveKPIs.bedOccupancyRate}%</div>
-                    <div className={`text-xs font-medium mt-1 ${isDark ? 'text-amber-300/80' : 'text-slate-600'}`}>{currentAdmittedPatients.total.total} / {arpob.noOfBeds.total} Beds Occupied</div>
+                    <div className={`text-xs font-medium mt-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{currentAdmittedPatients.total.total} / {arpob.noOfBeds.total} Beds Occupied</div>
                 </div>
 
-                <div className={`p-5 rounded-3xl shadow-xl relative overflow-hidden border print:bg-white print:p-3 print:border-slate-300 ${
+                <div className={`p-5 rounded-3xl shadow-sm relative overflow-hidden border print:bg-white print:p-3 print:border-slate-300 ${
                     isDark
-                        ? 'bg-gradient-to-br from-orange-950/30 via-slate-900/80 to-slate-950 border-orange-500/30 backdrop-blur-md'
-                        : 'bg-gradient-to-br from-orange-600 to-amber-700 text-white border-orange-500 shadow-orange-500/20'
+                        ? 'bg-slate-900 border-slate-800 backdrop-blur-md'
+                        : 'bg-slate-900 text-white border-slate-800 shadow-slate-900/10'
                 }`}>
                     <div className={`flex items-center justify-between text-xs font-black uppercase tracking-wider mb-2 ${
-                        isDark ? 'text-orange-400 print:text-orange-800' : 'text-orange-100'
+                        isDark ? 'text-orange-400 print:text-orange-800' : 'text-orange-400'
                     }`}>
                         <span>Avg Length of Stay (ALOS)</span>
-                        <Clock className={`w-5 h-5 print:hidden ${isDark ? 'text-orange-400' : 'text-white'}`} />
+                        <Clock className="w-5 h-5 print:hidden text-orange-400" />
                     </div>
-                    <div className={`text-3xl font-black font-mono print:text-xl print:text-slate-900 ${
-                        isDark ? 'text-white' : 'text-white'
-                    }`}>{executiveKPIs.alosDays} Days</div>
-                    <div className={`text-xs font-medium mt-1 ${isDark ? 'text-orange-300/80' : 'text-orange-100'}`}>Optimal Inpatient Turnover</div>
+                    <div className="text-3xl font-black font-mono text-white print:text-xl print:text-slate-900">{executiveKPIs.alosDays} Days</div>
+                    <div className="text-xs font-medium mt-1 text-slate-400">Optimal Inpatient Turnover</div>
                 </div>
 
-                <div className={`p-5 rounded-3xl shadow-xl relative overflow-hidden border print:bg-white print:p-3 print:border-slate-300 ${
+                <div className={`p-5 rounded-3xl shadow-sm relative overflow-hidden border print:bg-white print:p-3 print:border-slate-300 ${
                     isDark
-                        ? 'bg-gradient-to-br from-amber-950/40 via-slate-900/80 to-slate-950 border-amber-500/30 backdrop-blur-md'
-                        : 'bg-white border-orange-200 text-slate-900 shadow-orange-500/5'
+                        ? 'bg-slate-900 border-slate-800 backdrop-blur-md'
+                        : 'bg-white border-slate-200 text-slate-900 shadow-slate-200/50'
                 }`}>
                     <div className={`flex items-center justify-between text-xs font-black uppercase tracking-wider mb-2 ${
                         isDark ? 'text-amber-400 print:text-amber-800' : 'text-amber-700'
@@ -664,16 +653,16 @@ export default function PromoterDashboardPage() {
                     <div className={`text-3xl font-black font-mono print:text-xl print:text-slate-900 ${
                         isDark ? 'text-white' : 'text-slate-900'
                     }`}>{executiveKPIs.collectionEfficiencyPct}%</div>
-                    <div className={`text-xs font-medium mt-1 ${isDark ? 'text-amber-300/80' : 'text-amber-700'}`}>Billed vs Cash Realized</div>
+                    <div className={`text-xs font-medium mt-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Billed vs Cash Realized</div>
                 </div>
             </div>
 
             {/* Top KPI Summary Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 print:grid-cols-5 print:gap-2">
-                <div className={`p-5 rounded-3xl shadow-xl border print:bg-white print:p-3 print:border-slate-300 ${
+                <div className={`p-5 rounded-3xl shadow-sm border print:bg-white print:p-3 print:border-slate-300 ${
                     isDark
-                        ? 'bg-slate-900/60 border-slate-800/80 backdrop-blur-md'
-                        : 'bg-white border-orange-200/80 shadow-orange-500/5'
+                        ? 'bg-slate-900 border-slate-800 backdrop-blur-md'
+                        : 'bg-white border-slate-200 shadow-slate-200/50'
                 }`}>
                     <div className={`flex items-center justify-between text-xs font-black uppercase tracking-wider mb-2 print:mb-1 ${
                         isDark ? 'text-slate-400 print:text-slate-600' : 'text-slate-500'
@@ -685,16 +674,16 @@ export default function PromoterDashboardPage() {
                         isDark ? 'text-white' : 'text-slate-900'
                     }`}>{arpob.noOfBeds.total} Beds</div>
                     <div className={`text-[11px] mt-2 font-mono font-semibold print:text-[9px] ${
-                        isDark ? 'text-slate-400 print:text-slate-600' : 'text-slate-600'
+                        isDark ? 'text-slate-400 print:text-slate-600' : 'text-slate-500'
                     }`}>
                         Axten: {arpob.noOfBeds.axten} • Avise: {arpob.noOfBeds.avise} • HQ: {arpob.noOfBeds.axtenHq}
                     </div>
                 </div>
 
-                <div className={`p-5 rounded-3xl shadow-xl border print:bg-white print:p-3 print:border-slate-300 ${
+                <div className={`p-5 rounded-3xl shadow-sm border print:bg-white print:p-3 print:border-slate-300 ${
                     isDark
-                        ? 'bg-slate-900/60 border-slate-800/80 backdrop-blur-md'
-                        : 'bg-white border-orange-200/80 shadow-orange-500/5'
+                        ? 'bg-slate-900 border-slate-800 backdrop-blur-md'
+                        : 'bg-white border-slate-200 shadow-slate-200/50'
                 }`}>
                     <div className={`flex items-center justify-between text-xs font-black uppercase tracking-wider mb-2 print:mb-1 ${
                         isDark ? 'text-slate-400 print:text-slate-600' : 'text-slate-500'
@@ -712,10 +701,10 @@ export default function PromoterDashboardPage() {
                     </div>
                 </div>
 
-                <div className={`p-5 rounded-3xl shadow-xl border print:bg-white print:p-3 print:border-slate-300 ${
+                <div className={`p-5 rounded-3xl shadow-sm border print:bg-white print:p-3 print:border-slate-300 ${
                     isDark
-                        ? 'bg-slate-900/60 border-slate-800/80 backdrop-blur-md'
-                        : 'bg-white border-orange-200/80 shadow-orange-500/5'
+                        ? 'bg-slate-900 border-slate-800 backdrop-blur-md'
+                        : 'bg-white border-slate-200 shadow-slate-200/50'
                 }`}>
                     <div className={`flex items-center justify-between text-xs font-black uppercase tracking-wider mb-2 print:mb-1 ${
                         isDark ? 'text-slate-400 print:text-slate-600' : 'text-slate-500'
@@ -727,16 +716,16 @@ export default function PromoterDashboardPage() {
                         isDark ? 'text-orange-400' : 'text-orange-600'
                     }`}>{fmtINR(revenue.total.total, true)}</div>
                     <div className={`text-[11px] mt-2 font-mono font-semibold print:text-[9px] ${
-                        isDark ? 'text-slate-400 print:text-slate-600' : 'text-slate-600'
+                        isDark ? 'text-slate-400 print:text-slate-600' : 'text-slate-500'
                     }`}>
                         Insurance: {fmtINR(revenue.insurance.total, true)}
                     </div>
                 </div>
 
-                <div className={`p-5 rounded-3xl shadow-xl border print:bg-white print:p-3 print:border-slate-300 ${
+                <div className={`p-5 rounded-3xl shadow-sm border print:bg-white print:p-3 print:border-slate-300 ${
                     isDark
-                        ? 'bg-slate-900/60 border-slate-800/80 backdrop-blur-md'
-                        : 'bg-white border-orange-200/80 shadow-orange-500/5'
+                        ? 'bg-slate-900 border-slate-800 backdrop-blur-md'
+                        : 'bg-white border-slate-200 shadow-slate-200/50'
                 }`}>
                     <div className={`flex items-center justify-between text-xs font-black uppercase tracking-wider mb-2 print:mb-1 ${
                         isDark ? 'text-slate-400 print:text-slate-600' : 'text-slate-500'
@@ -748,16 +737,16 @@ export default function PromoterDashboardPage() {
                         isDark ? 'text-amber-300' : 'text-amber-700'
                     }`}>{fmtINR(arpob.average.total, true)}</div>
                     <div className={`text-[11px] mt-2 font-semibold print:text-[9px] ${
-                        isDark ? 'text-amber-400' : 'text-amber-700'
+                        isDark ? 'text-slate-400' : 'text-slate-500'
                     }`}>
                         Avg Revenue / Bed / Day
                     </div>
                 </div>
 
-                <div className={`p-5 rounded-3xl shadow-xl border print:bg-white print:p-3 print:border-slate-300 ${
+                <div className={`p-5 rounded-3xl shadow-sm border print:bg-white print:p-3 print:border-slate-300 ${
                     isDark
-                        ? 'bg-slate-900/60 border-slate-800/80 backdrop-blur-md'
-                        : 'bg-white border-orange-200/80 shadow-orange-500/5'
+                        ? 'bg-slate-900 border-slate-800 backdrop-blur-md'
+                        : 'bg-white border-slate-200 shadow-slate-200/50'
                 }`}>
                     <div className={`flex items-center justify-between text-xs font-black uppercase tracking-wider mb-2 print:mb-1 ${
                         isDark ? 'text-slate-400 print:text-slate-600' : 'text-slate-500'
@@ -778,9 +767,7 @@ export default function PromoterDashboardPage() {
             </div>
 
             {/* Quick Navigation Anchor Bar (Hidden in Print) */}
-            <div className={`flex items-center gap-2 overflow-x-auto pb-2 text-xs font-bold no-scrollbar print:hidden ${
-                isDark ? 'text-slate-300' : 'text-slate-700'
-            }`}>
+            <div className="flex items-center gap-2 overflow-x-auto pb-2 text-xs font-bold no-scrollbar print:hidden">
                 <span className={`uppercase text-[10px] tracking-wider shrink-0 font-extrabold ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Jump To:</span>
                 {[
                     { href: '#admitted', label: '1. Admitted' },
@@ -801,8 +788,8 @@ export default function PromoterDashboardPage() {
                         href={item.href}
                         className={`px-3.5 py-1.5 rounded-xl border transition-all shrink-0 shadow-sm ${
                             isDark
-                                ? 'bg-slate-900/80 border-slate-800 hover:border-orange-500/50 hover:text-orange-300'
-                                : 'bg-white border-orange-200/80 text-slate-800 hover:border-orange-400 hover:text-orange-700 hover:bg-orange-50/60'
+                                ? 'bg-slate-900 border-slate-800 text-slate-300 hover:border-orange-500/50 hover:text-orange-300'
+                                : 'bg-slate-100 border-slate-200 text-slate-700 hover:border-orange-200 hover:text-orange-700 hover:bg-orange-50'
                         }`}
                     >
                         {item.label}

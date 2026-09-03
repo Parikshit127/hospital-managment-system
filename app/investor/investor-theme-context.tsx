@@ -21,7 +21,7 @@ export function InvestorThemeProvider({ children }: { children: React.ReactNode 
         if (saved === 'dark' || saved === 'light') {
             setThemeState(saved);
         } else {
-            setThemeState('light'); // Default to White & Orange Theme
+            setThemeState('light'); // Default to Executive White & Orange Theme
         }
         setMounted(true);
     }, []);
@@ -38,7 +38,7 @@ export function InvestorThemeProvider({ children }: { children: React.ReactNode 
 
     return (
         <InvestorThemeContext.Provider value={{ theme, setTheme, toggleTheme }}>
-            <div className={theme === 'dark' ? 'dark-investor-theme' : 'light-investor-theme'}>
+            <div className={theme === 'dark' ? 'dark bg-[#0b0f19] text-slate-100 min-h-screen' : 'bg-[#f8fafc] text-slate-900 min-h-screen'}>
                 {children}
             </div>
         </InvestorThemeContext.Provider>
