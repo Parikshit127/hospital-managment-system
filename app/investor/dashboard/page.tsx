@@ -24,6 +24,8 @@ import {
     ExternalLink
 } from 'lucide-react';
 
+import { useInvestorTheme } from '../investor-theme-context';
+
 const UNIT_OPTIONS = [
     { code: 'axten', name: 'Axten Hospital', shortName: 'Axten' },
     { code: 'avise', name: 'Avise Hospital', shortName: 'Avise' },
@@ -48,6 +50,9 @@ function defaultFYRange(): { from: string; to: string } {
 }
 
 export default function PromoterDashboardPage() {
+    const { theme } = useInvestorTheme();
+    const isDark = theme === 'dark';
+
     const [data, setData] = useState<InvestorDashboardData | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -142,14 +147,14 @@ export default function PromoterDashboardPage() {
 
     if (loading) {
         return (
-            <div className="min-h-[75vh] flex flex-col items-center justify-center gap-5 text-slate-400">
+            <div className="min-h-[75vh] flex flex-col items-center justify-center gap-5">
                 <div className="relative flex items-center justify-center">
-                    <div className="w-14 h-14 border-4 border-emerald-500/20 border-t-emerald-400 rounded-full animate-spin" />
-                    <Activity className="w-6 h-6 text-emerald-400 absolute animate-pulse" />
+                    <div className={`w-14 h-14 border-4 rounded-full animate-spin ${isDark ? 'border-orange-500/20 border-t-orange-400' : 'border-orange-200 border-t-orange-600'}`} />
+                    <Activity className={`w-6 h-6 absolute animate-pulse ${isDark ? 'text-orange-400' : 'text-orange-600'}`} />
                 </div>
                 <div className="text-center space-y-1">
-                    <p className="text-base font-black tracking-wide text-white">Aggregating Executive Intelligence...</p>
-                    <p className="text-xs text-slate-500 font-medium">Consolidating financial ledgers & bed statistics across hospital units</p>
+                    <p className={`text-base font-black tracking-wide ${isDark ? 'text-white' : 'text-slate-900'}`}>Aggregating Executive Intelligence...</p>
+                    <p className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>Consolidating financial ledgers & bed statistics across hospital units</p>
                 </div>
             </div>
         );
@@ -158,12 +163,14 @@ export default function PromoterDashboardPage() {
     if (error || !data) {
         return (
             <div className="min-h-[70vh] flex flex-col items-center justify-center gap-4">
-                <div className="bg-rose-950/40 border border-rose-900/60 rounded-3xl p-8 max-w-lg text-center backdrop-blur-md shadow-2xl space-y-4">
-                    <p className="text-xl font-black text-rose-200">Executive Audit Connection Warning</p>
-                    <p className="text-xs text-rose-300 font-medium">{error || 'No data returned from server'}</p>
+                <div className={`rounded-3xl p-8 max-w-lg text-center backdrop-blur-md shadow-2xl space-y-4 border ${
+                    isDark ? 'bg-rose-950/40 border-rose-900/60 text-rose-200' : 'bg-white border-rose-200 text-rose-900 shadow-rose-500/10'
+                }`}>
+                    <p className="text-xl font-black">Executive Audit Connection Warning</p>
+                    <p className="text-xs font-medium opacity-90">{error || 'No data returned from server'}</p>
                     <button
                         onClick={loadData}
-                        className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-black transition-all cursor-pointer shadow-lg shadow-emerald-500/20"
+                        className="px-5 py-2.5 rounded-2xl bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 text-white text-xs font-black transition-all cursor-pointer shadow-lg shadow-orange-500/20"
                     >
                         Retry Audit Sync
                     </button>
@@ -269,55 +276,77 @@ export default function PromoterDashboardPage() {
               );
 
         return (
-        <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl overflow-hidden shadow-xl mb-8 backdrop-blur-md transition-all duration-300 print:bg-white print:border-slate-300 print:shadow-none print:mb-6 print:break-inside-avoid">
+        <div className={`rounded-3xl overflow-hidden shadow-xl mb-8 border transition-all duration-300 print:bg-white print:border-slate-300 print:shadow-none print:mb-6 print:break-inside-avoid ${
+            isDark
+                ? 'bg-slate-900/60 border-slate-800/80 backdrop-blur-md'
+                : 'bg-white border-orange-200/80 shadow-orange-500/5'
+        }`}>
             <button
                 type="button"
                 onClick={() => toggleSection(key)}
-                className="w-full text-left bg-[#0c162d]/90 border-b border-slate-800/80 px-6 py-4 flex items-center justify-between print:bg-slate-100 print:py-2 print:px-4 cursor-pointer hover:bg-slate-800/60 transition-colors print:pointer-events-none group"
+                className={`w-full text-left px-6 py-4 flex items-center justify-between transition-colors print:bg-slate-100 print:py-2 print:px-4 cursor-pointer print:pointer-events-none group border-b ${
+                    isDark
+                        ? 'bg-[#0c162d]/90 border-slate-800/80 hover:bg-slate-800/60'
+                        : 'bg-gradient-to-r from-orange-500 via-orange-600 to-amber-600 text-white border-orange-600 hover:from-orange-600 hover:to-amber-700'
+                }`}
             >
                 <div>
-                    <h3 className="text-sm font-black text-white tracking-wide uppercase flex items-center gap-2.5 print:text-xs print:text-slate-900">
-                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400/50 print:hidden" />
+                    <h3 className={`text-sm font-black tracking-wide uppercase flex items-center gap-2.5 print:text-xs print:text-slate-900 ${
+                        isDark ? 'text-white' : 'text-white'
+                    }`}>
+                        <span className={`w-2.5 h-2.5 rounded-full shadow-sm print:hidden ${isDark ? 'bg-orange-400 shadow-orange-400/50' : 'bg-white shadow-white/50'}`} />
                         {title}
                     </h3>
-                    <p className="text-xs text-slate-400 font-medium mt-0.5 print:text-[10px] print:text-slate-600">{subtitle}</p>
+                    <p className={`text-xs font-medium mt-0.5 print:text-[10px] print:text-slate-600 ${
+                        isDark ? 'text-slate-400' : 'text-orange-100'
+                    }`}>{subtitle}</p>
                     {!isExpanded && (
-                        <p className="text-xs font-mono font-bold text-emerald-400 mt-2 print:hidden">
+                        <p className={`text-xs font-mono font-bold mt-2 print:hidden ${
+                            isDark ? 'text-orange-400' : 'text-white'
+                        }`}>
                             {isAllUnitsSelected ? 'Consolidated Total' : 'Selected Units Total'}: {totalDisplay}
                         </p>
                     )}
                 </div>
                 <div className="flex items-center gap-3">
-                    <span className="text-xs font-mono font-bold text-slate-400 hidden sm:inline-block print:hidden">
+                    <span className={`text-xs font-mono font-bold hidden sm:inline-block print:hidden ${
+                        isDark ? 'text-slate-400' : 'text-orange-100'
+                    }`}>
                         {rows.length} categories
                     </span>
                     {isExpanded ? (
-                        <ChevronDown className="w-4 h-4 text-slate-400 shrink-0 print:hidden group-hover:text-white transition-colors" />
+                        <ChevronDown className="w-4 h-4 text-white/80 shrink-0 print:hidden group-hover:text-white transition-colors" />
                     ) : (
-                        <ChevronRight className="w-4 h-4 text-slate-400 shrink-0 print:hidden group-hover:text-white transition-colors" />
+                        <ChevronRight className="w-4 h-4 text-white/80 shrink-0 print:hidden group-hover:text-white transition-colors" />
                     )}
                 </div>
             </button>
             <div className={`overflow-x-auto ${isExpanded ? '' : 'hidden print:block'}`}>
                 <table className="w-full text-left border-collapse">
                     <thead>
-                        <tr className="bg-slate-950/70 border-b border-slate-800 text-[11px] font-black text-slate-300 uppercase tracking-wider print:bg-slate-200 print:text-slate-900 print:text-[10px]">
+                        <tr className={`text-[11px] font-black uppercase tracking-wider border-b print:bg-slate-200 print:text-slate-900 print:text-[10px] ${
+                            isDark ? 'bg-slate-950/70 border-slate-800 text-slate-300' : 'bg-orange-50/80 border-orange-200 text-orange-950'
+                        }`}>
                             <th className="py-3.5 px-6 min-w-[220px] print:py-2 print:px-4">Category / Line Item</th>
-                            <th className={`py-3.5 px-4 text-right min-w-[130px] print:py-2 ${selectedUnits.includes('axten') ? 'bg-emerald-950/40 text-emerald-300 font-black' : 'text-slate-400'}`}>
+                            <th className={`py-3.5 px-4 text-right min-w-[130px] print:py-2 ${selectedUnits.includes('axten') ? (isDark ? 'bg-orange-950/40 text-orange-300 font-black' : 'bg-orange-100/60 text-orange-900 font-black') : (isDark ? 'text-slate-400' : 'text-slate-500')}`}>
                                 Axten Hospital
                             </th>
-                            <th className={`py-3.5 px-4 text-right min-w-[130px] print:py-2 ${selectedUnits.includes('avise') ? 'bg-indigo-950/40 text-indigo-300 font-black' : 'text-slate-400'}`}>
+                            <th className={`py-3.5 px-4 text-right min-w-[130px] print:py-2 ${selectedUnits.includes('avise') ? (isDark ? 'bg-amber-950/40 text-amber-300 font-black' : 'bg-amber-100/60 text-amber-900 font-black') : (isDark ? 'text-slate-400' : 'text-slate-500')}`}>
                                 Avise Hospital
                             </th>
-                            <th className={`py-3.5 px-4 text-right min-w-[130px] print:py-2 ${selectedUnits.includes('axtenHq') ? 'bg-amber-950/40 text-amber-300 font-black' : 'text-slate-400'}`}>
+                            <th className={`py-3.5 px-4 text-right min-w-[130px] print:py-2 ${selectedUnits.includes('axtenHq') ? (isDark ? 'bg-slate-900 text-slate-200 font-black' : 'bg-slate-100 text-slate-900 font-black') : (isDark ? 'text-slate-400' : 'text-slate-500')}`}>
                                 Axten HQ
                             </th>
-                            <th className="py-3.5 px-6 text-right min-w-[160px] font-black border-l border-slate-800 print:py-2 print:px-4 bg-emerald-950/60 text-emerald-300 print:bg-emerald-100 print:text-emerald-950">
+                            <th className={`py-3.5 px-6 text-right min-w-[160px] font-black border-l print:py-2 print:px-4 print:bg-orange-100 print:text-orange-950 ${
+                                isDark ? 'border-slate-800 bg-orange-950/60 text-orange-300' : 'border-orange-200 bg-orange-500 text-white'
+                            }`}>
                                 {isAllUnitsSelected ? 'Consolidated Total' : 'Selected Total'}
                             </th>
                         </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-800/60 text-xs print:text-[11px] print:divide-slate-200">
+                    <tbody className={`divide-y text-xs print:text-[11px] print:divide-slate-200 ${
+                        isDark ? 'divide-slate-800/60' : 'divide-orange-100/60'
+                    }`}>
                         {rows.map((row, idx) => {
                             const isTotal = row.isTotalRow || row.label.toLowerCase() === 'total';
                             return (
@@ -325,36 +354,38 @@ export default function PromoterDashboardPage() {
                                     key={idx}
                                     className={`transition-colors ${
                                         isTotal
-                                            ? 'bg-slate-950 text-white font-black print:bg-slate-900 print:text-white'
-                                            : 'hover:bg-slate-800/40 text-slate-200 font-semibold print:text-slate-800'
+                                            ? (isDark ? 'bg-slate-950 text-white font-black print:bg-slate-900 print:text-white' : 'bg-orange-500 text-white font-black print:bg-orange-600')
+                                            : (isDark ? 'hover:bg-slate-800/40 text-slate-200 font-semibold print:text-slate-800' : 'hover:bg-orange-50/70 text-slate-800 font-medium')
                                     }`}
                                 >
                                     <td className="py-3 px-6 font-bold flex items-center gap-2 print:py-1.5 print:px-4">
-                                        {isTotal && <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 print:hidden" />}
-                                        <span className={isTotal ? 'text-emerald-300 font-extrabold tracking-wide' : 'text-slate-200'}>{row.label}</span>
+                                        {isTotal && <CheckCircle2 className={`w-4 h-4 shrink-0 print:hidden ${isDark ? 'text-orange-400' : 'text-white'}`} />}
+                                        <span className={isTotal ? (isDark ? 'text-orange-300 font-extrabold tracking-wide' : 'text-white font-black tracking-wide') : (isDark ? 'text-slate-200' : 'text-slate-900')}>{row.label}</span>
                                     </td>
                                     {(['axten', 'avise', 'axtenHq'] as const).map((unit) => {
                                         const canDrill = !isTotal && !!row.drillSection && row.drillCategory !== 'panel';
-                                        const unitBg = unit === 'axten' ? 'bg-emerald-950/20 text-emerald-200 font-semibold' : unit === 'avise' ? 'bg-indigo-950/20 text-indigo-200 font-semibold' : 'bg-amber-950/20 text-amber-200 font-semibold';
+                                        const unitBg = isDark
+                                            ? (unit === 'axten' ? 'bg-orange-950/20 text-orange-200 font-semibold' : unit === 'avise' ? 'bg-amber-950/20 text-amber-200 font-semibold' : 'bg-slate-900 text-slate-200 font-semibold')
+                                            : (unit === 'axten' ? 'bg-orange-50/40 text-slate-900 font-semibold' : unit === 'avise' ? 'bg-amber-50/40 text-slate-900 font-semibold' : 'bg-slate-50 text-slate-900 font-semibold');
                                         const cellValue = row.isPercentage ? `${row.data[unit]}%` : fmtINR(row.data[unit], row.isCurrency);
                                         return (
                                             <td
                                                 key={unit}
                                                 onClick={canDrill ? () => openDrilldown(row.drillSection!, row.drillCategory!, row.label, unit, UNIT_OPTIONS.find(u => u.code === unit)!.shortName) : undefined}
                                                 title={canDrill ? `View ${row.label} records for ${UNIT_OPTIONS.find(u => u.code === unit)!.shortName}` : undefined}
-                                                className={`py-3 px-4 text-right font-mono text-xs print:py-1.5 group ${selectedUnits.includes(unit) ? (isTotal ? 'bg-slate-950 font-bold' : unitBg) : 'text-slate-500'} ${canDrill ? 'cursor-pointer hover:bg-emerald-500/10 hover:text-emerald-300 transition-colors' : ''}`}
+                                                className={`py-3 px-4 text-right font-mono text-xs print:py-1.5 group ${selectedUnits.includes(unit) ? (isTotal ? (isDark ? 'bg-slate-950 font-bold' : 'bg-orange-500 font-bold text-white') : unitBg) : (isDark ? 'text-slate-500' : 'text-slate-400')} ${canDrill ? (isDark ? 'cursor-pointer hover:bg-orange-500/10 hover:text-orange-300 transition-colors' : 'cursor-pointer hover:bg-orange-100 hover:text-orange-900 transition-colors') : ''}`}
                                             >
                                                 <span className="inline-flex items-center gap-1">
                                                     {cellValue}
-                                                    {canDrill && <ExternalLink className="w-3 h-3 text-emerald-400/60 opacity-0 group-hover:opacity-100 transition-opacity print:hidden" />}
+                                                    {canDrill && <ExternalLink className={`w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity print:hidden ${isDark ? 'text-orange-400/80' : 'text-orange-600'}`} />}
                                                 </span>
                                             </td>
                                         );
                                     })}
                                     <td className={`py-3 px-6 text-right font-mono font-bold border-l print:py-1.5 print:px-4 ${
                                         isTotal
-                                            ? 'border-slate-800 text-emerald-400 bg-slate-950 font-black text-sm'
-                                            : 'border-slate-800/80 text-emerald-300 bg-emerald-950/20 font-black'
+                                            ? (isDark ? 'border-slate-800 text-orange-400 bg-slate-950 font-black text-sm' : 'border-orange-600 text-white bg-orange-600 font-black text-sm')
+                                            : (isDark ? 'border-slate-800/80 text-orange-300 bg-orange-950/20 font-black' : 'border-orange-200 text-orange-950 bg-orange-500/10 font-black')
                                     }`}>
                                         {row.isPercentage
                                             ? `${row.data.total}%`
@@ -393,15 +424,23 @@ export default function PromoterDashboardPage() {
             </div>
 
             {/* Title Bar & Executive Filter Toolbar (Hidden in Print) */}
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-[#0c162d]/90 border border-slate-800/80 p-6 rounded-3xl shadow-2xl backdrop-blur-md print:hidden">
+            <div className={`flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-6 rounded-3xl shadow-2xl transition-all border print:hidden ${
+                isDark
+                    ? 'bg-[#0c162d]/90 border-slate-800/80 backdrop-blur-md text-white'
+                    : 'bg-white border-orange-200/80 shadow-orange-500/5 text-slate-900'
+            }`}>
                 <div className="space-y-1">
                     <div className="flex items-center gap-3">
-                        <h2 className="text-2xl font-black text-white tracking-tight">Promoter Intelligence</h2>
-                        <span className="px-3 py-1 rounded-full text-xs font-black bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-mono">
+                        <h2 className={`text-2xl font-black tracking-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>Promoter Intelligence</h2>
+                        <span className={`px-3 py-1 rounded-full text-xs font-black font-mono border ${
+                            isDark
+                                ? 'bg-orange-500/10 text-orange-400 border-orange-500/30'
+                                : 'bg-orange-50 text-orange-700 border-orange-200'
+                        }`}>
                             {isAllUnitsSelected ? 'Consolidated Multi-Unit' : selectedUnitsLabel}
                         </span>
                     </div>
-                    <p className="text-xs text-slate-400 font-medium">
+                    <p className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
                         Real-time executive operational & financial audit across hospital locations
                     </p>
                 </div>
@@ -413,23 +452,35 @@ export default function PromoterDashboardPage() {
                         <button
                             type="button"
                             onClick={() => setUnitMenuOpen((prev) => !prev)}
-                            className="flex items-center gap-2.5 bg-slate-900/90 border border-slate-700/80 px-4 py-2 rounded-2xl text-xs font-bold text-slate-200 hover:border-emerald-500/50 hover:text-white transition-all cursor-pointer shadow-md"
+                            className={`flex items-center gap-2.5 px-4 py-2 rounded-2xl text-xs font-bold transition-all cursor-pointer shadow-md border ${
+                                isDark
+                                    ? 'bg-slate-900/90 border-slate-700/80 text-slate-200 hover:border-orange-500/50 hover:text-white'
+                                    : 'bg-orange-50/60 border-orange-200 text-slate-900 hover:bg-orange-100/60 hover:border-orange-300'
+                            }`}
                         >
-                            <Building2 className="w-4 h-4 text-emerald-400" />
-                            <span className="text-slate-400 font-normal">Units:</span>
-                            <span className="font-mono font-extrabold text-emerald-300 max-w-[220px] truncate">{selectedUnitsLabel}</span>
-                            <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${unitMenuOpen ? 'rotate-180' : ''}`} />
+                            <Building2 className={`w-4 h-4 ${isDark ? 'text-orange-400' : 'text-orange-600'}`} />
+                            <span className={isDark ? 'text-slate-400' : 'text-slate-600'}>Units:</span>
+                            <span className={`font-mono font-extrabold max-w-[220px] truncate ${isDark ? 'text-orange-300' : 'text-orange-700'}`}>{selectedUnitsLabel}</span>
+                            <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isDark ? 'text-slate-400' : 'text-slate-600'} ${unitMenuOpen ? 'rotate-180' : ''}`} />
                         </button>
 
                         {unitMenuOpen && (
-                            <div className="absolute z-30 top-full mt-2 left-0 w-72 bg-[#0a1226] border border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden backdrop-blur-xl">
+                            <div className={`absolute z-30 top-full mt-2 left-0 w-72 rounded-2xl shadow-2xl overflow-hidden border backdrop-blur-xl ${
+                                isDark
+                                    ? 'bg-[#0a1226] border-slate-700/80 text-slate-200'
+                                    : 'bg-white border-orange-200 text-slate-900 shadow-orange-500/10'
+                            }`}>
                                 <button
                                     type="button"
                                     onClick={() => setSelectedUnits(isAllUnitsSelected ? [] : UNIT_OPTIONS.map(u => u.code))}
-                                    className="w-full flex items-center justify-between px-4 py-3 text-xs font-black text-slate-200 hover:bg-slate-800/60 border-b border-slate-800 cursor-pointer"
+                                    className={`w-full flex items-center justify-between px-4 py-3 text-xs font-black border-b cursor-pointer ${
+                                        isDark
+                                            ? 'hover:bg-slate-800/60 border-slate-800 text-slate-200'
+                                            : 'hover:bg-orange-50 border-orange-100 text-orange-950'
+                                    }`}
                                 >
                                     <span>{isAllUnitsSelected ? 'Deselect All Units' : 'Select All Units'}</span>
-                                    {isAllUnitsSelected && <Check className="w-4 h-4 text-emerald-400" />}
+                                    {isAllUnitsSelected && <Check className={`w-4 h-4 ${isDark ? 'text-orange-400' : 'text-orange-600'}`} />}
                                 </button>
                                 {UNIT_OPTIONS.map((unit) => {
                                     const checked = selectedUnits.includes(unit.code);
@@ -439,15 +490,23 @@ export default function PromoterDashboardPage() {
                                             type="button"
                                             key={unit.code}
                                             onClick={() => toggleUnit(unit.code)}
-                                            className="w-full flex items-center justify-between px-4 py-2.5 text-xs font-semibold text-slate-300 hover:bg-slate-800/40 cursor-pointer transition-colors"
+                                            className={`w-full flex items-center justify-between px-4 py-2.5 text-xs font-semibold cursor-pointer transition-colors ${
+                                                isDark
+                                                    ? 'text-slate-300 hover:bg-slate-800/40'
+                                                    : 'text-slate-800 hover:bg-orange-50/60'
+                                            }`}
                                         >
                                             <div className="flex items-center gap-2.5">
-                                                <span className={`w-4 h-4 rounded-md border flex items-center justify-center shrink-0 transition-colors ${checked ? 'bg-emerald-500 border-emerald-400' : 'border-slate-600'}`}>
-                                                    {checked && <Check className="w-3 h-3 text-slate-950 font-black" />}
+                                                <span className={`w-4 h-4 rounded-md border flex items-center justify-center shrink-0 transition-colors ${
+                                                    checked
+                                                        ? (isDark ? 'bg-orange-500 border-orange-400' : 'bg-orange-500 border-orange-500 text-white')
+                                                        : (isDark ? 'border-slate-600' : 'border-slate-300')
+                                                }`}>
+                                                    {checked && <Check className={`w-3 h-3 font-black ${isDark ? 'text-slate-950' : 'text-white'}`} />}
                                                 </span>
                                                 <span>{unit.name}</span>
                                             </div>
-                                            <span className="font-mono text-[11px] text-slate-400 font-bold">({bedCount} Beds)</span>
+                                            <span className={`font-mono text-[11px] font-bold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>({bedCount} Beds)</span>
                                         </button>
                                     );
                                 })}
@@ -456,15 +515,19 @@ export default function PromoterDashboardPage() {
                     </div>
 
                     {/* Period Selector */}
-                    <div className="flex items-center bg-slate-950/80 p-1 rounded-2xl border border-slate-800 text-xs font-bold shadow-inner">
+                    <div className={`flex items-center p-1 rounded-2xl border text-xs font-bold shadow-inner ${
+                        isDark
+                            ? 'bg-slate-950/80 border-slate-800'
+                            : 'bg-orange-50/80 border-orange-200'
+                    }`}>
                         {(['day', 'month', 'year', 'custom'] as const).map((type) => (
                             <button
                                 key={type}
                                 onClick={() => setFilterType(type)}
                                 className={`px-3.5 py-1.5 rounded-xl transition-all capitalize cursor-pointer font-mono ${
                                     filterType === type
-                                        ? 'bg-emerald-500 text-slate-950 shadow-md font-black shadow-emerald-500/20'
-                                        : 'text-slate-400 hover:text-slate-200'
+                                        ? (isDark ? 'bg-orange-500 text-slate-950 shadow-md font-black shadow-orange-500/20' : 'bg-orange-500 text-white shadow-md font-black shadow-orange-500/20')
+                                        : (isDark ? 'text-slate-400 hover:text-slate-200' : 'text-slate-600 hover:text-orange-950')
                                 }`}
                             >
                                 {type}
@@ -473,23 +536,27 @@ export default function PromoterDashboardPage() {
                     </div>
 
                     {filterType === 'custom' && (
-                        <div className="flex items-center gap-2 bg-slate-900/90 border border-slate-700/80 p-1.5 rounded-2xl text-xs font-mono">
+                        <div className={`flex items-center gap-2 p-1.5 rounded-2xl text-xs font-mono border ${
+                            isDark
+                                ? 'bg-slate-900/90 border-slate-700/80 text-slate-200'
+                                : 'bg-white border-orange-200 text-slate-800'
+                        }`}>
                             <input
                                 type="date"
                                 value={fromDate}
                                 onChange={(e) => setFromDate(e.target.value)}
-                                className="bg-transparent text-slate-200 focus:outline-none px-2 py-1 rounded"
+                                className="bg-transparent focus:outline-none px-2 py-1 rounded"
                             />
-                            <span className="text-slate-500">to</span>
+                            <span className="text-slate-400">to</span>
                             <input
                                 type="date"
                                 value={toDate}
                                 onChange={(e) => setToDate(e.target.value)}
-                                className="bg-transparent text-slate-200 focus:outline-none px-2 py-1 rounded"
+                                className="bg-transparent focus:outline-none px-2 py-1 rounded"
                             />
                             <button
                                 onClick={loadData}
-                                className="px-3 py-1 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black transition-colors"
+                                className="px-3 py-1 rounded-xl bg-orange-500 hover:bg-orange-400 text-white font-black transition-colors"
                             >
                                 Apply
                             </button>
@@ -499,22 +566,30 @@ export default function PromoterDashboardPage() {
                     <button
                         onClick={loadData}
                         title="Refresh Data"
-                        className="p-2.5 rounded-2xl bg-slate-900/80 text-slate-400 border border-slate-800 hover:text-white hover:border-slate-700 transition-colors cursor-pointer"
+                        className={`p-2.5 rounded-2xl border transition-colors cursor-pointer ${
+                            isDark
+                                ? 'bg-slate-900/80 text-slate-400 border-slate-800 hover:text-white hover:border-slate-700'
+                                : 'bg-white text-slate-600 border-orange-200 hover:text-orange-600 hover:border-orange-300'
+                        }`}
                     >
                         <RefreshCw className="w-4 h-4" />
                     </button>
 
                     <button
                         onClick={exportToCSV}
-                        className="px-4 py-2.5 rounded-2xl bg-slate-900/80 hover:bg-slate-800 text-slate-200 text-xs font-extrabold border border-slate-800 flex items-center gap-2 transition-all cursor-pointer shadow-md hover:border-slate-700"
+                        className={`px-4 py-2.5 rounded-2xl text-xs font-extrabold border flex items-center gap-2 transition-all cursor-pointer shadow-md ${
+                            isDark
+                                ? 'bg-slate-900/80 hover:bg-slate-800 text-slate-200 border-slate-800 hover:border-slate-700'
+                                : 'bg-white hover:bg-orange-50 text-slate-800 border-orange-200 hover:border-orange-300 shadow-orange-500/5'
+                        }`}
                     >
-                        <Download className="w-4 h-4 text-emerald-400" />
+                        <Download className={`w-4 h-4 ${isDark ? 'text-orange-400' : 'text-orange-600'}`} />
                         <span>Export CSV</span>
                     </button>
 
                     <button
                         onClick={() => window.print()}
-                        className="px-4 py-2.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 text-xs font-black flex items-center gap-2 shadow-lg shadow-emerald-500/20 transition-all cursor-pointer"
+                        className="px-4 py-2.5 rounded-2xl bg-gradient-to-r from-orange-500 via-orange-600 to-amber-600 hover:from-orange-400 hover:to-amber-500 text-white text-xs font-black flex items-center gap-2 shadow-lg shadow-orange-500/20 transition-all cursor-pointer"
                     >
                         <Printer className="w-4 h-4" />
                         <span>Print Audit</span>
@@ -522,98 +597,180 @@ export default function PromoterDashboardPage() {
                 </div>
             </div>
 
-            {/* Executive Financial Health Strip */}
+            {/* Executive Financial Health Strip (Hospital Brand: Orange & White) */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 print:grid-cols-4 print:gap-2">
-                <div className="bg-gradient-to-br from-emerald-950/40 via-slate-900/80 to-slate-950 border border-emerald-500/30 p-5 rounded-3xl shadow-xl backdrop-blur-md relative overflow-hidden print:bg-white print:p-3 print:border-slate-300">
-                    <div className="flex items-center justify-between text-emerald-400 text-xs font-black uppercase tracking-wider mb-2 print:text-emerald-800">
+                <div className={`p-5 rounded-3xl shadow-xl relative overflow-hidden border print:bg-white print:p-3 print:border-slate-300 ${
+                    isDark
+                        ? 'bg-gradient-to-br from-orange-950/40 via-slate-900/80 to-slate-950 border-orange-500/30 backdrop-blur-md'
+                        : 'bg-gradient-to-br from-orange-500 to-amber-600 text-white border-orange-400 shadow-orange-500/20'
+                }`}>
+                    <div className={`flex items-center justify-between text-xs font-black uppercase tracking-wider mb-2 ${
+                        isDark ? 'text-orange-400 print:text-orange-800' : 'text-orange-100'
+                    }`}>
                         <span>EBITDA Margin</span>
-                        <Award className="w-5 h-5 text-emerald-400 print:hidden" />
+                        <Award className={`w-5 h-5 print:hidden ${isDark ? 'text-orange-400' : 'text-white'}`} />
                     </div>
-                    <div className="text-3xl font-black text-white font-mono print:text-xl print:text-slate-900">{executiveKPIs.ebitdaMarginPct}%</div>
-                    <div className="text-xs text-emerald-300/80 font-medium mt-1 print:text-emerald-700">Operating Performance Yield</div>
+                    <div className={`text-3xl font-black font-mono print:text-xl print:text-slate-900 ${
+                        isDark ? 'text-white' : 'text-white'
+                    }`}>{executiveKPIs.ebitdaMarginPct}%</div>
+                    <div className={`text-xs font-medium mt-1 ${isDark ? 'text-orange-300/80' : 'text-orange-100'}`}>Operating Performance Yield</div>
                 </div>
 
-                <div className="bg-gradient-to-br from-indigo-950/40 via-slate-900/80 to-slate-950 border border-indigo-500/30 p-5 rounded-3xl shadow-xl backdrop-blur-md relative overflow-hidden print:bg-white print:p-3 print:border-slate-300">
-                    <div className="flex items-center justify-between text-indigo-400 text-xs font-black uppercase tracking-wider mb-2 print:text-indigo-800">
+                <div className={`p-5 rounded-3xl shadow-xl relative overflow-hidden border print:bg-white print:p-3 print:border-slate-300 ${
+                    isDark
+                        ? 'bg-gradient-to-br from-slate-900 via-slate-900/80 to-slate-950 border-slate-700/80 backdrop-blur-md'
+                        : 'bg-white border-orange-200 text-slate-900 shadow-orange-500/5'
+                }`}>
+                    <div className={`flex items-center justify-between text-xs font-black uppercase tracking-wider mb-2 ${
+                        isDark ? 'text-amber-400 print:text-slate-800' : 'text-orange-600'
+                    }`}>
                         <span>Bed Occupancy Rate</span>
-                        <Bed className="w-5 h-5 text-indigo-400 print:hidden" />
+                        <Bed className={`w-5 h-5 print:hidden ${isDark ? 'text-amber-400' : 'text-orange-500'}`} />
                     </div>
-                    <div className="text-3xl font-black text-white font-mono print:text-xl print:text-slate-900">{executiveKPIs.bedOccupancyRate}%</div>
-                    <div className="text-xs text-indigo-300/80 font-medium mt-1 print:text-indigo-700">{currentAdmittedPatients.total.total} / {arpob.noOfBeds.total} Beds Occupied</div>
+                    <div className={`text-3xl font-black font-mono print:text-xl print:text-slate-900 ${
+                        isDark ? 'text-white' : 'text-slate-900'
+                    }`}>{executiveKPIs.bedOccupancyRate}%</div>
+                    <div className={`text-xs font-medium mt-1 ${isDark ? 'text-amber-300/80' : 'text-slate-600'}`}>{currentAdmittedPatients.total.total} / {arpob.noOfBeds.total} Beds Occupied</div>
                 </div>
 
-                <div className="bg-gradient-to-br from-purple-950/40 via-slate-900/80 to-slate-950 border border-purple-500/30 p-5 rounded-3xl shadow-xl backdrop-blur-md relative overflow-hidden print:bg-white print:p-3 print:border-slate-300">
-                    <div className="flex items-center justify-between text-purple-400 text-xs font-black uppercase tracking-wider mb-2 print:text-purple-800">
+                <div className={`p-5 rounded-3xl shadow-xl relative overflow-hidden border print:bg-white print:p-3 print:border-slate-300 ${
+                    isDark
+                        ? 'bg-gradient-to-br from-orange-950/30 via-slate-900/80 to-slate-950 border-orange-500/30 backdrop-blur-md'
+                        : 'bg-gradient-to-br from-orange-600 to-amber-700 text-white border-orange-500 shadow-orange-500/20'
+                }`}>
+                    <div className={`flex items-center justify-between text-xs font-black uppercase tracking-wider mb-2 ${
+                        isDark ? 'text-orange-400 print:text-orange-800' : 'text-orange-100'
+                    }`}>
                         <span>Avg Length of Stay (ALOS)</span>
-                        <Clock className="w-5 h-5 text-purple-400 print:hidden" />
+                        <Clock className={`w-5 h-5 print:hidden ${isDark ? 'text-orange-400' : 'text-white'}`} />
                     </div>
-                    <div className="text-3xl font-black text-white font-mono print:text-xl print:text-slate-900">{executiveKPIs.alosDays} Days</div>
-                    <div className="text-xs text-purple-300/80 font-medium mt-1 print:text-purple-700">Optimal Inpatient Turnover</div>
+                    <div className={`text-3xl font-black font-mono print:text-xl print:text-slate-900 ${
+                        isDark ? 'text-white' : 'text-white'
+                    }`}>{executiveKPIs.alosDays} Days</div>
+                    <div className={`text-xs font-medium mt-1 ${isDark ? 'text-orange-300/80' : 'text-orange-100'}`}>Optimal Inpatient Turnover</div>
                 </div>
 
-                <div className="bg-gradient-to-br from-amber-950/40 via-slate-900/80 to-slate-950 border border-amber-500/30 p-5 rounded-3xl shadow-xl backdrop-blur-md relative overflow-hidden print:bg-white print:p-3 print:border-slate-300">
-                    <div className="flex items-center justify-between text-amber-400 text-xs font-black uppercase tracking-wider mb-2 print:text-amber-800">
+                <div className={`p-5 rounded-3xl shadow-xl relative overflow-hidden border print:bg-white print:p-3 print:border-slate-300 ${
+                    isDark
+                        ? 'bg-gradient-to-br from-amber-950/40 via-slate-900/80 to-slate-950 border-amber-500/30 backdrop-blur-md'
+                        : 'bg-white border-orange-200 text-slate-900 shadow-orange-500/5'
+                }`}>
+                    <div className={`flex items-center justify-between text-xs font-black uppercase tracking-wider mb-2 ${
+                        isDark ? 'text-amber-400 print:text-amber-800' : 'text-amber-700'
+                    }`}>
                         <span>Collection Efficiency</span>
-                        <TrendingUp className="w-5 h-5 text-amber-400 print:hidden" />
+                        <TrendingUp className={`w-5 h-5 print:hidden ${isDark ? 'text-amber-400' : 'text-amber-600'}`} />
                     </div>
-                    <div className="text-3xl font-black text-white font-mono print:text-xl print:text-slate-900">{executiveKPIs.collectionEfficiencyPct}%</div>
-                    <div className="text-xs text-amber-300/80 font-medium mt-1 print:text-amber-700">Billed vs Cash Realized</div>
+                    <div className={`text-3xl font-black font-mono print:text-xl print:text-slate-900 ${
+                        isDark ? 'text-white' : 'text-slate-900'
+                    }`}>{executiveKPIs.collectionEfficiencyPct}%</div>
+                    <div className={`text-xs font-medium mt-1 ${isDark ? 'text-amber-300/80' : 'text-amber-700'}`}>Billed vs Cash Realized</div>
                 </div>
             </div>
 
             {/* Top KPI Summary Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 print:grid-cols-5 print:gap-2">
-                <div className="bg-slate-900/60 border border-slate-800/80 p-5 rounded-2xl shadow-xl backdrop-blur-md print:bg-white print:p-3 print:border-slate-300">
-                    <div className="flex items-center justify-between text-slate-400 text-xs font-black uppercase tracking-wider mb-2 print:mb-1 print:text-slate-600">
+                <div className={`p-5 rounded-3xl shadow-xl border print:bg-white print:p-3 print:border-slate-300 ${
+                    isDark
+                        ? 'bg-slate-900/60 border-slate-800/80 backdrop-blur-md'
+                        : 'bg-white border-orange-200/80 shadow-orange-500/5'
+                }`}>
+                    <div className={`flex items-center justify-between text-xs font-black uppercase tracking-wider mb-2 print:mb-1 ${
+                        isDark ? 'text-slate-400 print:text-slate-600' : 'text-slate-500'
+                    }`}>
                         <span>Total Capacity</span>
-                        <Bed className="w-4 h-4 text-emerald-400 print:hidden" />
+                        <Bed className={`w-4 h-4 print:hidden ${isDark ? 'text-orange-400' : 'text-orange-600'}`} />
                     </div>
-                    <div className="text-2xl font-black text-white font-mono print:text-lg print:text-slate-900">{arpob.noOfBeds.total} Beds</div>
-                    <div className="text-[11px] text-slate-400 mt-2 font-mono font-semibold print:text-[9px] print:text-slate-600">
+                    <div className={`text-2xl font-black font-mono print:text-lg print:text-slate-900 ${
+                        isDark ? 'text-white' : 'text-slate-900'
+                    }`}>{arpob.noOfBeds.total} Beds</div>
+                    <div className={`text-[11px] mt-2 font-mono font-semibold print:text-[9px] ${
+                        isDark ? 'text-slate-400 print:text-slate-600' : 'text-slate-600'
+                    }`}>
                         Axten: {arpob.noOfBeds.axten} • Avise: {arpob.noOfBeds.avise} • HQ: {arpob.noOfBeds.axtenHq}
                     </div>
                 </div>
 
-                <div className="bg-slate-900/60 border border-slate-800/80 p-5 rounded-2xl shadow-xl backdrop-blur-md print:bg-white print:p-3 print:border-slate-300">
-                    <div className="flex items-center justify-between text-slate-400 text-xs font-black uppercase tracking-wider mb-2 print:mb-1 print:text-slate-600">
+                <div className={`p-5 rounded-3xl shadow-xl border print:bg-white print:p-3 print:border-slate-300 ${
+                    isDark
+                        ? 'bg-slate-900/60 border-slate-800/80 backdrop-blur-md'
+                        : 'bg-white border-orange-200/80 shadow-orange-500/5'
+                }`}>
+                    <div className={`flex items-center justify-between text-xs font-black uppercase tracking-wider mb-2 print:mb-1 ${
+                        isDark ? 'text-slate-400 print:text-slate-600' : 'text-slate-500'
+                    }`}>
                         <span>Currently Admitted</span>
-                        <Users className="w-4 h-4 text-indigo-400 print:hidden" />
+                        <Users className={`w-4 h-4 print:hidden ${isDark ? 'text-amber-400' : 'text-orange-600'}`} />
                     </div>
-                    <div className="text-2xl font-black text-white font-mono print:text-lg print:text-slate-900">{currentAdmittedPatients.total.total} Patients</div>
-                    <div className="text-[11px] text-indigo-400 mt-2 font-mono font-semibold print:text-[9px]">
+                    <div className={`text-2xl font-black font-mono print:text-lg print:text-slate-900 ${
+                        isDark ? 'text-white' : 'text-slate-900'
+                    }`}>{currentAdmittedPatients.total.total} Patients</div>
+                    <div className={`text-[11px] mt-2 font-mono font-semibold print:text-[9px] ${
+                        isDark ? 'text-amber-400' : 'text-orange-700'
+                    }`}>
                         {currentAdmittedPatients.insurance.total} Ins • {currentAdmittedPatients.cash.total} Cash
                     </div>
                 </div>
 
-                <div className="bg-slate-900/60 border border-slate-800/80 p-5 rounded-2xl shadow-xl backdrop-blur-md print:bg-white print:p-3 print:border-slate-300">
-                    <div className="flex items-center justify-between text-slate-400 text-xs font-black uppercase tracking-wider mb-2 print:mb-1 print:text-slate-600">
+                <div className={`p-5 rounded-3xl shadow-xl border print:bg-white print:p-3 print:border-slate-300 ${
+                    isDark
+                        ? 'bg-slate-900/60 border-slate-800/80 backdrop-blur-md'
+                        : 'bg-white border-orange-200/80 shadow-orange-500/5'
+                }`}>
+                    <div className={`flex items-center justify-between text-xs font-black uppercase tracking-wider mb-2 print:mb-1 ${
+                        isDark ? 'text-slate-400 print:text-slate-600' : 'text-slate-500'
+                    }`}>
                         <span>Period Revenue</span>
-                        <TrendingUp className="w-4 h-4 text-emerald-400 print:hidden" />
+                        <TrendingUp className={`w-4 h-4 print:hidden ${isDark ? 'text-orange-400' : 'text-orange-600'}`} />
                     </div>
-                    <div className="text-2xl font-black text-emerald-400 font-mono print:text-lg print:text-emerald-800">{fmtINR(revenue.total.total, true)}</div>
-                    <div className="text-[11px] text-slate-400 mt-2 font-mono font-semibold print:text-[9px] print:text-slate-600">
+                    <div className={`text-2xl font-black font-mono print:text-lg ${
+                        isDark ? 'text-orange-400' : 'text-orange-600'
+                    }`}>{fmtINR(revenue.total.total, true)}</div>
+                    <div className={`text-[11px] mt-2 font-mono font-semibold print:text-[9px] ${
+                        isDark ? 'text-slate-400 print:text-slate-600' : 'text-slate-600'
+                    }`}>
                         Insurance: {fmtINR(revenue.insurance.total, true)}
                     </div>
                 </div>
 
-                <div className="bg-slate-900/60 border border-slate-800/80 p-5 rounded-2xl shadow-xl backdrop-blur-md print:bg-white print:p-3 print:border-slate-300">
-                    <div className="flex items-center justify-between text-slate-400 text-xs font-black uppercase tracking-wider mb-2 print:mb-1 print:text-slate-600">
+                <div className={`p-5 rounded-3xl shadow-xl border print:bg-white print:p-3 print:border-slate-300 ${
+                    isDark
+                        ? 'bg-slate-900/60 border-slate-800/80 backdrop-blur-md'
+                        : 'bg-white border-orange-200/80 shadow-orange-500/5'
+                }`}>
+                    <div className={`flex items-center justify-between text-xs font-black uppercase tracking-wider mb-2 print:mb-1 ${
+                        isDark ? 'text-slate-400 print:text-slate-600' : 'text-slate-500'
+                    }`}>
                         <span>Consolidated ARPOB</span>
-                        <Activity className="w-4 h-4 text-cyan-400 print:hidden" />
+                        <Activity className={`w-4 h-4 print:hidden ${isDark ? 'text-amber-400' : 'text-amber-600'}`} />
                     </div>
-                    <div className="text-2xl font-black text-cyan-300 font-mono print:text-lg print:text-cyan-900">{fmtINR(arpob.average.total, true)}</div>
-                    <div className="text-[11px] text-cyan-400 mt-2 font-semibold print:text-[9px]">
+                    <div className={`text-2xl font-black font-mono print:text-lg ${
+                        isDark ? 'text-amber-300' : 'text-amber-700'
+                    }`}>{fmtINR(arpob.average.total, true)}</div>
+                    <div className={`text-[11px] mt-2 font-semibold print:text-[9px] ${
+                        isDark ? 'text-amber-400' : 'text-amber-700'
+                    }`}>
                         Avg Revenue / Bed / Day
                     </div>
                 </div>
 
-                <div className="bg-slate-900/60 border border-slate-800/80 p-5 rounded-2xl shadow-xl backdrop-blur-md print:bg-white print:p-3 print:border-slate-300">
-                    <div className="flex items-center justify-between text-slate-400 text-xs font-black uppercase tracking-wider mb-2 print:mb-1 print:text-slate-600">
+                <div className={`p-5 rounded-3xl shadow-xl border print:bg-white print:p-3 print:border-slate-300 ${
+                    isDark
+                        ? 'bg-slate-900/60 border-slate-800/80 backdrop-blur-md'
+                        : 'bg-white border-orange-200/80 shadow-orange-500/5'
+                }`}>
+                    <div className={`flex items-center justify-between text-xs font-black uppercase tracking-wider mb-2 print:mb-1 ${
+                        isDark ? 'text-slate-400 print:text-slate-600' : 'text-slate-500'
+                    }`}>
                         <span>Net Profit / Loss</span>
-                        <PieChart className="w-4 h-4 text-emerald-400 print:hidden" />
+                        <PieChart className={`w-4 h-4 print:hidden ${isDark ? 'text-orange-400' : 'text-orange-600'}`} />
                     </div>
-                    <div className="text-2xl font-black text-emerald-400 font-mono print:text-lg print:text-emerald-800">{fmtINR(profitLoss.amount.total, true)}</div>
-                    <div className="text-[11px] text-emerald-300 mt-2 font-bold flex items-center gap-1 print:text-[9px] print:text-emerald-700">
+                    <div className={`text-2xl font-black font-mono print:text-lg ${
+                        isDark ? 'text-orange-400' : 'text-orange-600'
+                    }`}>{fmtINR(profitLoss.amount.total, true)}</div>
+                    <div className={`text-[11px] mt-2 font-bold flex items-center gap-1 print:text-[9px] ${
+                        isDark ? 'text-orange-300' : 'text-orange-700'
+                    }`}>
                         <ArrowUpRight className="w-3.5 h-3.5 print:hidden" />
                         <span>Margin: {profitLoss.percentage.total}%</span>
                     </div>
@@ -621,20 +778,36 @@ export default function PromoterDashboardPage() {
             </div>
 
             {/* Quick Navigation Anchor Bar (Hidden in Print) */}
-            <div className="flex items-center gap-2 overflow-x-auto pb-2 text-xs text-slate-300 font-bold no-scrollbar print:hidden">
-                <span className="text-slate-500 uppercase text-[10px] tracking-wider shrink-0 font-extrabold">Jump To:</span>
-                <a href="#admitted" className="px-3.5 py-1.5 rounded-xl bg-slate-900/80 border border-slate-800 hover:border-emerald-500/50 hover:text-emerald-300 transition-all shrink-0 shadow-sm">1. Admitted</a>
-                <a href="#admissions" className="px-3.5 py-1.5 rounded-xl bg-slate-900/80 border border-slate-800 hover:border-emerald-500/50 hover:text-emerald-300 transition-all shrink-0 shadow-sm">2. Admissions</a>
-                <a href="#discharges" className="px-3.5 py-1.5 rounded-xl bg-slate-900/80 border border-slate-800 hover:border-emerald-500/50 hover:text-emerald-300 transition-all shrink-0 shadow-sm">3. Discharges</a>
-                <a href="#revenue" className="px-3.5 py-1.5 rounded-xl bg-slate-900/80 border border-slate-800 hover:border-emerald-500/50 hover:text-emerald-300 transition-all shrink-0 shadow-sm">4. Revenue</a>
-                <a href="#opd-ipd" className="px-3.5 py-1.5 rounded-xl bg-slate-900/80 border border-slate-800 hover:border-emerald-500/50 hover:text-emerald-300 transition-all shrink-0 shadow-sm">5. OPD vs IPD Split</a>
-                <a href="#department" className="px-3.5 py-1.5 rounded-xl bg-slate-900/80 border border-slate-800 hover:border-emerald-500/50 hover:text-emerald-300 transition-all shrink-0 shadow-sm">6. Department Revenue</a>
-                <a href="#expenses" className="px-3.5 py-1.5 rounded-xl bg-slate-900/80 border border-slate-800 hover:border-emerald-500/50 hover:text-emerald-300 transition-all shrink-0 shadow-sm">7. Expenses</a>
-                <a href="#receivables" className="px-3.5 py-1.5 rounded-xl bg-slate-900/80 border border-slate-800 hover:border-emerald-500/50 hover:text-emerald-300 transition-all shrink-0 shadow-sm">8. Receivables & Aging</a>
-                <a href="#payables" className="px-3.5 py-1.5 rounded-xl bg-slate-900/80 border border-slate-800 hover:border-emerald-500/50 hover:text-emerald-300 transition-all shrink-0 shadow-sm">9. Payables</a>
-                <a href="#salaries" className="px-3.5 py-1.5 rounded-xl bg-slate-900/80 border border-slate-800 hover:border-emerald-500/50 hover:text-emerald-300 transition-all shrink-0 shadow-sm">10. Salaries</a>
-                <a href="#arpob" className="px-3.5 py-1.5 rounded-xl bg-slate-900/80 border border-slate-800 hover:border-emerald-500/50 hover:text-emerald-300 transition-all shrink-0 shadow-sm">11. ARPOB</a>
-                <a href="#profit-loss" className="px-3.5 py-1.5 rounded-xl bg-slate-900/80 border border-slate-800 hover:border-emerald-500/50 hover:text-emerald-300 transition-all shrink-0 shadow-sm">12. Profit/Loss</a>
+            <div className={`flex items-center gap-2 overflow-x-auto pb-2 text-xs font-bold no-scrollbar print:hidden ${
+                isDark ? 'text-slate-300' : 'text-slate-700'
+            }`}>
+                <span className={`uppercase text-[10px] tracking-wider shrink-0 font-extrabold ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Jump To:</span>
+                {[
+                    { href: '#admitted', label: '1. Admitted' },
+                    { href: '#admissions', label: '2. Admissions' },
+                    { href: '#discharges', label: '3. Discharges' },
+                    { href: '#revenue', label: '4. Revenue' },
+                    { href: '#opd-ipd', label: '5. OPD vs IPD Split' },
+                    { href: '#department', label: '6. Department Revenue' },
+                    { href: '#expenses', label: '7. Expenses' },
+                    { href: '#receivables', label: '8. Receivables & Aging' },
+                    { href: '#payables', label: '9. Payables' },
+                    { href: '#salaries', label: '10. Salaries' },
+                    { href: '#arpob', label: '11. ARPOB' },
+                    { href: '#profit-loss', label: '12. Profit/Loss' },
+                ].map((item) => (
+                    <a
+                        key={item.href}
+                        href={item.href}
+                        className={`px-3.5 py-1.5 rounded-xl border transition-all shrink-0 shadow-sm ${
+                            isDark
+                                ? 'bg-slate-900/80 border-slate-800 hover:border-orange-500/50 hover:text-orange-300'
+                                : 'bg-white border-orange-200/80 text-slate-800 hover:border-orange-400 hover:text-orange-700 hover:bg-orange-50/60'
+                        }`}
+                    >
+                        {item.label}
+                    </a>
+                ))}
             </div>
 
 
@@ -839,44 +1012,62 @@ export default function PromoterDashboardPage() {
 
             {/* Drill-down modal — the actual records behind a clicked cell */}
             {drillTarget && (
-                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md print:hidden" onClick={closeDrilldown}>
-                    <div className="bg-[#0b1329] border border-slate-700/80 rounded-3xl shadow-2xl w-full max-w-4xl max-h-[85vh] flex flex-col overflow-hidden ring-1 ring-white/10" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-900/60 shrink-0">
+                <div className={`fixed inset-0 z-[200] flex items-center justify-center p-4 backdrop-blur-md print:hidden ${
+                    isDark ? 'bg-slate-950/80' : 'bg-slate-900/50'
+                }`} onClick={closeDrilldown}>
+                    <div className={`rounded-3xl shadow-2xl w-full max-w-4xl max-h-[85vh] flex flex-col overflow-hidden ring-1 border ${
+                        isDark
+                            ? 'bg-[#0b1329] border-slate-700/80 ring-white/10 text-white'
+                            : 'bg-white border-orange-200 ring-orange-500/10 text-slate-900 shadow-orange-500/10'
+                    }`} onClick={(e) => e.stopPropagation()}>
+                        <div className={`flex items-center justify-between px-6 py-4 border-b shrink-0 ${
+                            isDark ? 'border-slate-800 bg-slate-900/60' : 'border-orange-100 bg-orange-50/80'
+                        }`}>
                             <div>
-                                <h3 className="text-base font-black text-white flex items-center gap-2">
-                                    <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                                    {drillTarget.label} — <span className="text-emerald-400 font-mono">{drillTarget.unitLabel}</span>
+                                <h3 className={`text-base font-black flex items-center gap-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                                    <span className="w-2.5 h-2.5 rounded-full bg-orange-500" />
+                                    {drillTarget.label} — <span className="text-orange-600 dark:text-orange-400 font-mono">{drillTarget.unitLabel}</span>
                                 </h3>
-                                <p className="text-xs text-slate-400 font-medium mt-0.5">
+                                <p className={`text-xs font-medium mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
                                     {drillLoading ? 'Aggregating drilldown ledger records…' : drillResult ? `${drillResult.totalCount} record${drillResult.totalCount !== 1 ? 's' : ''}${drillResult.truncated ? ` (showing first ${drillResult.rows.length})` : ''}` : ' '}
                                 </p>
                             </div>
-                            <button onClick={closeDrilldown} className="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-white transition-all cursor-pointer">
+                            <button onClick={closeDrilldown} className={`p-2 rounded-xl transition-all cursor-pointer ${
+                                isDark ? 'bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-white' : 'bg-white hover:bg-orange-100 text-slate-600 hover:text-orange-950 border border-orange-200'
+                            }`}>
                                 <X className="w-4 h-4" />
                             </button>
                         </div>
                         <div className="overflow-auto flex-1 p-0">
                             {drillLoading ? (
-                                <div className="flex flex-col items-center justify-center py-20 gap-3 text-slate-400">
-                                    <Loader2 className="w-8 h-8 animate-spin text-emerald-400" />
+                                <div className={`flex flex-col items-center justify-center py-20 gap-3 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                                    <Loader2 className="w-8 h-8 animate-spin text-orange-500" />
                                     <span className="text-xs font-semibold">Loading ledger details...</span>
                                 </div>
                             ) : drillError ? (
-                                <div className="p-10 text-center text-sm text-rose-400 font-medium bg-rose-950/20">{drillError}</div>
+                                <div className={`p-10 text-center text-sm font-medium ${isDark ? 'text-rose-400 bg-rose-950/20' : 'text-rose-700 bg-rose-50'}`}>{drillError}</div>
                             ) : !drillResult || drillResult.rows.length === 0 ? (
-                                <div className="p-10 text-center text-sm text-slate-500 font-medium">No audit records found for this category selection.</div>
+                                <div className={`p-10 text-center text-sm font-medium ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>No audit records found for this category selection.</div>
                             ) : (
                                 <table className="w-full text-left border-collapse text-xs">
-                                    <thead className="sticky top-0 bg-slate-950 border-b border-slate-800">
-                                        <tr className="text-[10px] font-black text-emerald-400 uppercase tracking-wider">
+                                    <thead className={`sticky top-0 border-b ${
+                                        isDark ? 'bg-slate-950 border-slate-800' : 'bg-orange-50 border-orange-200'
+                                    }`}>
+                                        <tr className={`text-[10px] font-black uppercase tracking-wider ${
+                                            isDark ? 'text-orange-400' : 'text-orange-950'
+                                        }`}>
                                             {drillResult.columns.map((col) => (
                                                 <th key={col} className="py-3 px-5">{col}</th>
                                             ))}
                                         </tr>
                                     </thead>
-                                    <tbody className="divide-y divide-slate-800/60 font-medium">
+                                    <tbody className={`divide-y font-medium ${
+                                        isDark ? 'divide-slate-800/60' : 'divide-orange-100'
+                                    }`}>
                                         {drillResult.rows.map((row, idx) => (
-                                            <tr key={idx} className="hover:bg-slate-800/40 text-slate-300 transition-colors">
+                                            <tr key={idx} className={`transition-colors ${
+                                                isDark ? 'hover:bg-slate-800/40 text-slate-300' : 'hover:bg-orange-50/70 text-slate-800'
+                                            }`}>
                                                 {row.map((cell, cellIdx) => (
                                                     <td key={cellIdx} className="py-2.5 px-5 whitespace-nowrap font-mono text-xs">{cell}</td>
                                                 ))}
