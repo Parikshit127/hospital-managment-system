@@ -260,15 +260,22 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
     const displayItems = [...consolidatedItems, ...otherRows];
 
     // Group display items by category
-    const categoryMap: Record<string, { items: any[]; total: number }> = {};
+    const categoryMap: Record<string, { items: any[]; total: number; gross: number; discount: number }> = {};
     for (const item of displayItems) {
         const cat = item.service_category || item.department || 'Other';
-        if (!categoryMap[cat]) categoryMap[cat] = { items: [], total: 0 };
+        if (!categoryMap[cat]) categoryMap[cat] = { items: [], total: 0, gross: 0, discount: 0 };
         categoryMap[cat].items.push(item);
         // Line/category amounts are the pre-tax taxable value (net_price), matching
         // the regular print bill. Tax is shown in its own GST column and summarised
         // in the footer — it must NOT be added into the line total as well.
         categoryMap[cat].total += Number(item.net_price);
+        // Gross (pre-discount) and discount, so a category with its own per-item
+        // discount (e.g. pharmacy's bill-level discount allocated across items —
+        // see app/actions/pharmacy-actions.ts) can show its own Subtotal/Discount/
+        // Net breakdown instead of only surfacing net in the section header, with
+        // the discount only visible lumped into the whole-bill total at the bottom.
+        categoryMap[cat].gross += Number(item.total_price ?? item.net_price);
+        categoryMap[cat].discount += Number(item.discount || 0);
     }
 
     // The pharmacy block on an IPD bill is the hospital dispensing to its own
@@ -286,6 +293,14 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
     for (const [cat, data] of Object.entries(categoryMap)) {
         const catLabel = cat.toLowerCase() === 'pharmacy' ? pharmacyLabel : cat;
         itemRows += `<tr style="background:#f0fdf4;"><td colspan="8" style="padding:5px 12px;font-size:11px;font-weight:700;color:#059669;">${catLabel} — ${data.total.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>`;
+        // Categories with their own discount (e.g. pharmacy's bill-level discount
+        // allocated across items in postSaleToIpd) get a Subtotal/Discount/Net
+        // breakdown here, mirroring the source pharmacy invoice, instead of only
+        // showing the already-discounted net in the header and burying the
+        // discount in the whole-bill total at the bottom.
+        if (data.discount > 0.01) {
+            itemRows += `<tr style="background:#f0fdf4;"><td colspan="8" style="padding:0 12px 5px;font-size:9px;color:#6b7280;text-align:right;">Subtotal: ${data.gross.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })} &nbsp;&nbsp; Discount: -${data.discount.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })} &nbsp;&nbsp; Net: ${data.total.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>`;
+        }
         // Medicine-name toggle: when off, keep the Pharmacy total line but hide the
         // individual medicine rows. The amount stays in the totals (items not removed).
         const isBulkPharmacy = cat.toLowerCase() === 'pharmacy';

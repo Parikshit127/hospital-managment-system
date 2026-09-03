@@ -3,10 +3,12 @@
 import { prisma } from '@/backend/db';
 import { getInvestorSession } from './investor-auth-actions';
 
+// Per-organization values keyed by organization id, plus the sum across every
+// active organization. Dynamic (not a fixed set of hospitals) — the investor
+// portal shows every active organization on this server, so a newly added
+// hospital appears automatically without a code change.
 export interface UnitMetrics {
-    axten: number;
-    avise: number;
-    axtenHq: number;
+    byOrg: Record<string, number>;
     total: number;
 }
 
@@ -101,18 +103,6 @@ export interface InvestorDashboardData {
     };
 }
 
-// Real organization IDs behind the 3 investor-facing hospital units.
-const INVESTOR_UNIT_ORG_IDS: Record<'axten' | 'avise' | 'axtenHq', string> = {
-    axten: 'org-axten-production',
-    avise: '0425857b-6293-4d91-86b2-bd049de66252',
-    axtenHq: '9bd49bae-cecc-49f8-b18d-88f146124a98',
-};
-const UNIT_ORG_ENTRIES = Object.entries(INVESTOR_UNIT_ORG_IDS) as Array<['axten' | 'avise' | 'axtenHq', string]>;
-const ALL_ORG_IDS = UNIT_ORG_ENTRIES.map(([, id]) => id);
-const orgToUnitKey: Record<string, 'axten' | 'avise' | 'axtenHq'> = Object.fromEntries(
-    UNIT_ORG_ENTRIES.map(([unitKey, orgId]) => [orgId, unitKey])
-);
-
 // Real patient_type / billing_patient_type values behind each investor-facing
 // payer category. Live data is inconsistent in casing ("Insurance" vs
 // "tpa_insurance"), so this normalizes rather than doing an exact match.
@@ -125,34 +115,66 @@ function categoryOf(rawType: string | null | undefined): 'cash' | 'insurance' | 
     return 'cash';
 }
 
-const zeroUnit = (): UnitMetrics => ({ axten: 0, avise: 0, axtenHq: 0, total: 0 });
+function zeroUnit(orgIds: string[]): UnitMetrics {
+    const byOrg: Record<string, number> = {};
+    for (const id of orgIds) byOrg[id] = 0;
+    return { byOrg, total: 0 };
+}
 
 // Sum unit metrics across columns reliably
-function sumUnits(...unitsArr: UnitMetrics[]): UnitMetrics {
-    const res = zeroUnit();
+function sumUnits(orgIds: string[], ...unitsArr: UnitMetrics[]): UnitMetrics {
+    const res = zeroUnit(orgIds);
     for (const u of unitsArr) {
-        res.axten += u.axten;
-        res.avise += u.avise;
-        res.axtenHq += u.axtenHq;
+        for (const id of orgIds) res.byOrg[id] += (u.byOrg[id] || 0);
+        res.total += u.total;
     }
-    res.total = res.axten + res.avise + res.axtenHq;
     return res;
 }
 
-function addTo(bucket: UnitMetrics, unitKey: 'axten' | 'avise' | 'axtenHq', amount: number) {
-    bucket[unitKey] += amount;
+function addTo(bucket: UnitMetrics, orgId: string, amount: number) {
+    bucket.byOrg[orgId] = (bucket.byOrg[orgId] ?? 0) + amount;
     bucket.total += amount;
 }
 
-// Single consolidated reporting window for every real query below: April 1 -
-// July 31 of the current Indian fiscal year (Apr 1 start) by default — the
-// most recently completed months — or the investor's own from/to filter when
-// they've picked one. Point-in-time sections (receivables, payables, aging,
-// current admitted) intentionally ignore this and use "as of now" instead,
-// same as any real balance sheet.
-function resolvePeriod(params?: { fromDate?: string; toDate?: string }) {
+// The set of hospitals the investor portal reports on: every currently active
+// organization. Deactivating an organization in admin settings removes it from
+// the portal; there is no separate investor-visibility flag.
+async function getActiveOrgs(): Promise<Array<{ id: string; name: string }>> {
+    return prisma.organization.findMany({
+        where: { is_active: true },
+        select: { id: true, name: true },
+        orderBy: { created_at: 'asc' },
+    }).catch((err) => { console.error('investor: active orgs', err); return [] as Array<{ id: string; name: string }>; });
+}
+
+// Single consolidated reporting window for every real query below. 'day' /
+// 'month' / 'year' are computed here directly (today; current calendar month;
+// current fiscal year to date) so the filter buttons actually narrow the data.
+// 'custom' (or no filterType) uses the investor's own from/to picker, falling
+// back to the FY Apr 1 - Jul 31 window when neither is set. Point-in-time
+// sections (receivables, payables, aging, current admitted) intentionally
+// ignore this and use "as of now" instead, same as any real balance sheet.
+function resolvePeriod(params?: { filterType?: 'day' | 'month' | 'year' | 'custom'; fromDate?: string; toDate?: string }) {
     const now = new Date();
     const fyStartYear = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1; // month index 3 = April
+
+    if (params?.filterType === 'day') {
+        const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const end = new Date(start);
+        end.setDate(end.getDate() + 1);
+        return { start, end, fyStartYear };
+    }
+    if (params?.filterType === 'month') {
+        const start = new Date(now.getFullYear(), now.getMonth(), 1);
+        const end = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+        return { start, end, fyStartYear };
+    }
+    if (params?.filterType === 'year') {
+        const start = new Date(fyStartYear, 3, 1);
+        const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+        return { start, end, fyStartYear };
+    }
+
     const defaultStart = new Date(fyStartYear, 3, 1);
     const defaultEnd = new Date(fyStartYear, 7, 1); // Aug 1, exclusive — covers Apr-Jul
     let start = defaultStart;
@@ -192,7 +214,7 @@ function fyMonthsToDate(fyStartYear: number): Array<{ year: number; monthIndex: 
 
 export async function getInvestorDashboardData(params?: {
     filterType?: 'day' | 'month' | 'year' | 'custom';
-    selectedUnit?: string; // 'all' | 'axten' | 'avise' | 'axtenHq'
+    selectedUnit?: string; // 'all' or a comma-separated list of organization ids
     fromDate?: string;
     toDate?: string;
 }): Promise<{ success: boolean; data?: InvestorDashboardData; error?: string }> {
@@ -214,92 +236,78 @@ export async function getInvestorDashboardData(params?: {
         const fyRangeStart = new Date(fyMonths[0].year, fyMonths[0].monthIndex, 1);
         const fyRangeEnd = new Date(fyMonths[fyMonths.length - 1].year, fyMonths[fyMonths.length - 1].monthIndex + 1, 1);
 
+        // ---- Every active hospital on this server ----
+        const activeOrgs = await getActiveOrgs();
+        const orgIds = activeOrgs.map((o) => o.id);
+
         // ---- Real operational bed counts per hospital (drives bed occupancy + ARPOB) ----
-        const [orgRows, bedRows] = await Promise.all([
-            prisma.organization.findMany({
-                where: { id: { in: ALL_ORG_IDS } },
-                select: { id: true, bed_capacity: true },
-            }).catch(() => [] as Array<{ id: string; bed_capacity: number | null }>),
-            prisma.beds.groupBy({
-                by: ['organizationId'],
-                where: { organizationId: { in: ALL_ORG_IDS } },
-                _count: true,
-            }).catch(() => [] as Array<{ organizationId: string; _count: number }>),
-        ]);
+        // Sourced from actual `beds` rows only — the same count the Hospital Wards
+        // screen shows as Occupied+Available. organization.bed_capacity is a free-typed
+        // admin field from onboarding (often a placeholder guess) and is deliberately
+        // NOT used here, since it can be stale or larger than the real ward setup.
+        const bedRows = await prisma.beds.groupBy({
+            by: ['organizationId'],
+            where: { organizationId: { in: orgIds } },
+            _count: true,
+        }).catch(() => [] as Array<{ organizationId: string; _count: number }>);
 
-        const orgCapacities: Record<string, number> = {};
-        for (const org of orgRows) {
-            orgCapacities[org.id] = org.bed_capacity || 0;
+        const bedCounts = zeroUnit(orgIds);
+        for (const id of orgIds) {
+            const tableRow = bedRows.find((r) => r.organizationId === id);
+            bedCounts.byOrg[id] = tableRow ? tableRow._count : 0;
         }
+        bedCounts.total = orgIds.reduce((s, id) => s + bedCounts.byOrg[id], 0);
 
-        const bedCounts = zeroUnit();
-        for (const [unitKey, orgId] of UNIT_ORG_ENTRIES) {
-            const tableRow = bedRows.find((r) => r.organizationId === orgId);
-            const bedsFromTable = tableRow ? tableRow._count : 0;
-            const orgCap = orgCapacities[orgId] || 0;
-            bedCounts[unitKey] = Math.max(bedsFromTable, orgCap);
-        }
-        bedCounts.total = bedCounts.axten + bedCounts.avise + bedCounts.axtenHq;
-
-        const units = [
-            { code: 'axten', name: 'Axten Hospital', beds: bedCounts.axten },
-            { code: 'avise', name: 'Avise Hospital', beds: bedCounts.avise },
-            { code: 'axtenHq', name: 'Axten HQ', beds: bedCounts.axtenHq },
-        ];
+        const units = activeOrgs.map((o) => ({ code: o.id, name: o.name, beds: bedCounts.byOrg[o.id] }));
 
         // ---- 1. Current Admitted Patients (real, point-in-time) ----
         const admittedRows = await prisma.admissions.findMany({
-            where: { status: { not: 'Discharged' }, is_archived: false, organizationId: { in: ALL_ORG_IDS } },
+            where: { status: { notIn: ['Discharged', 'Cancelled'] }, is_archived: false, organizationId: { in: orgIds } },
             select: { organizationId: true, patient: { select: { patient_type: true } } },
         }).catch((err) => { console.error('investor: admitted rows', err); return [] as Array<{ organizationId: string; patient: { patient_type: string } | null }>; });
 
-        const admittedCash = zeroUnit();
-        const admittedInsurance = zeroUnit();
-        const admittedPanel = zeroUnit(); // no real backing field — always 0
-        const admittedCorporate = zeroUnit();
+        const admittedCash = zeroUnit(orgIds);
+        const admittedInsurance = zeroUnit(orgIds);
+        const admittedPanel = zeroUnit(orgIds); // no real backing field — always 0
+        const admittedCorporate = zeroUnit(orgIds);
         for (const row of admittedRows) {
-            const unitKey = orgToUnitKey[row.organizationId];
-            if (!unitKey) continue;
             const bucket = categoryOf(row.patient?.patient_type) === 'corporate' ? admittedCorporate
                 : categoryOf(row.patient?.patient_type) === 'insurance' ? admittedInsurance
                 : admittedCash;
-            addTo(bucket, unitKey, 1);
+            addTo(bucket, row.organizationId, 1);
         }
-        const admittedTotal = sumUnits(admittedCash, admittedInsurance, admittedPanel, admittedCorporate);
+        const admittedTotal = sumUnits(orgIds, admittedCash, admittedInsurance, admittedPanel, admittedCorporate);
 
         // ---- 2. Admissions (real, within period) ----
+        // Excludes Cancelled — a cancelled admission was never actually admitted.
         const admissionRows = await prisma.admissions.findMany({
-            where: { organizationId: { in: ALL_ORG_IDS }, is_archived: false, admission_date: { gte: start, lt: end } },
+            where: { organizationId: { in: orgIds }, is_archived: false, status: { not: 'Cancelled' }, admission_date: { gte: start, lt: end } },
             select: { organizationId: true, patient: { select: { patient_type: true } } },
         }).catch((err) => { console.error('investor: admission rows', err); return [] as Array<{ organizationId: string; patient: { patient_type: string } | null }>; });
 
-        const admCash = zeroUnit(), admInsurance = zeroUnit(), admPanel = zeroUnit(), admCorporate = zeroUnit();
+        const admCash = zeroUnit(orgIds), admInsurance = zeroUnit(orgIds), admPanel = zeroUnit(orgIds), admCorporate = zeroUnit(orgIds);
         for (const row of admissionRows) {
-            const unitKey = orgToUnitKey[row.organizationId];
-            if (!unitKey) continue;
             const bucket = categoryOf(row.patient?.patient_type) === 'corporate' ? admCorporate
                 : categoryOf(row.patient?.patient_type) === 'insurance' ? admInsurance
                 : admCash;
-            addTo(bucket, unitKey, 1);
+            addTo(bucket, row.organizationId, 1);
         }
-        const admTotal = sumUnits(admCash, admInsurance, admPanel, admCorporate);
+        const admTotal = sumUnits(orgIds, admCash, admInsurance, admPanel, admCorporate);
 
         // ---- 3. Discharges (real, within period) ----
         const dischargeRows = await prisma.admissions.findMany({
-            where: { organizationId: { in: ALL_ORG_IDS }, is_archived: false, status: 'Discharged', discharge_date: { gte: start, lt: end } },
+            where: { organizationId: { in: orgIds }, is_archived: false, status: 'Discharged', discharge_date: { gte: start, lt: end } },
             select: { organizationId: true, patient: { select: { patient_type: true } } },
         }).catch((err) => { console.error('investor: discharge rows', err); return [] as Array<{ organizationId: string; patient: { patient_type: string } | null }>; });
 
-        const disCash = zeroUnit(), disInsurance = zeroUnit(), disPanel = zeroUnit(), disCorporate = zeroUnit();
+        const disCash = zeroUnit(orgIds), disInsurance = zeroUnit(orgIds), disPanel = zeroUnit(orgIds), disCorporate = zeroUnit(orgIds);
         for (const row of dischargeRows) {
-            const unitKey = orgToUnitKey[row.organizationId];
-            if (!unitKey) continue;
             const bucket = categoryOf(row.patient?.patient_type) === 'corporate' ? disCorporate
                 : categoryOf(row.patient?.patient_type) === 'insurance' ? disInsurance
                 : disCash;
-            addTo(bucket, unitKey, 1);
+            addTo(bucket, row.organizationId, 1);
         }
-        const disTotal = sumUnits(disCash, disInsurance, disPanel, disCorporate);
+        const disTotal = sumUnits(orgIds, disCash, disInsurance, disPanel, disCorporate);
 
         // ---- 4. Revenue by payer category (real, within period) ----
         // Revenue = Final (finalized/billed) invoices only, dated by created_at —
@@ -312,21 +320,19 @@ export async function getInvestorDashboardData(params?: {
         // Revenue for the same hospital. Consistency across the app's own
         // screens matters more here than which convention is theoretically purer.
         const revenueInvoices = await prisma.invoices.findMany({
-            where: { organizationId: { in: ALL_ORG_IDS }, status: 'Final', created_at: { gte: start, lt: end } },
+            where: { organizationId: { in: orgIds }, status: 'Final', created_at: { gte: start, lt: end } },
             select: { organizationId: true, net_amount: true, paid_amount: true, billing_patient_type: true, invoice_type: true, doctor_id: true, id: true },
         }).catch((err) => { console.error('investor: revenue invoices', err); return [] as Array<{ organizationId: string; net_amount: unknown; paid_amount: unknown; billing_patient_type: string | null; invoice_type: string; doctor_id: string | null; id: number }>; });
 
-        const revCash = zeroUnit(), revInsurance = zeroUnit(), revPanel = zeroUnit(), revCorporate = zeroUnit();
+        const revCash = zeroUnit(orgIds), revInsurance = zeroUnit(orgIds), revPanel = zeroUnit(orgIds), revCorporate = zeroUnit(orgIds);
         for (const inv of revenueInvoices) {
-            const unitKey = orgToUnitKey[inv.organizationId];
-            if (!unitKey) continue;
             const amt = Number(inv.net_amount);
             const bucket = categoryOf(inv.billing_patient_type) === 'corporate' ? revCorporate
                 : categoryOf(inv.billing_patient_type) === 'insurance' ? revInsurance
                 : revCash;
-            addTo(bucket, unitKey, amt);
+            addTo(bucket, inv.organizationId, amt);
         }
-        const revTotal = sumUnits(revCash, revInsurance, revPanel, revCorporate);
+        const revTotal = sumUnits(orgIds, revCash, revInsurance, revPanel, revCorporate);
 
         // ---- 4B. OPD vs IPD vs Pharmacy vs Diagnostics (real, line-item level) ----
         // Bucketed by item so a pharmacy/lab line inside an IPD bill still lands in
@@ -341,27 +347,25 @@ export async function getInvestorDashboardData(params?: {
             }).catch((err) => { console.error('investor: opd/ipd items', err); return [] as Array<{ invoice_id: number; net_price: unknown; service_category: string | null; department: string | null }>; })
             : [];
 
-        const opdRev = zeroUnit(), ipdRev = zeroUnit(), pharmRev = zeroUnit(), diagRev = zeroUnit();
+        const opdRev = zeroUnit(orgIds), ipdRev = zeroUnit(orgIds), pharmRev = zeroUnit(orgIds), diagRev = zeroUnit(orgIds);
         const PHARMACY_RE = /pharma/i;
         const DIAGNOSTIC_RE = /lab|diagnos|radiol|biochem|microbiol|serolog|haematol|hematol|patholog/i;
         for (const item of periodItems) {
             const inv = invoiceMetaById.get(item.invoice_id);
             if (!inv) continue;
-            const unitKey = orgToUnitKey[inv.organizationId];
-            if (!unitKey) continue;
             const label = `${item.service_category || ''} ${item.department || ''}`;
             const amt = Number(item.net_price);
             if (PHARMACY_RE.test(label) || /^(pharmacy|phm)$/i.test(inv.invoice_type)) {
-                addTo(pharmRev, unitKey, amt);
+                addTo(pharmRev, inv.organizationId, amt);
             } else if (DIAGNOSTIC_RE.test(label)) {
-                addTo(diagRev, unitKey, amt);
+                addTo(diagRev, inv.organizationId, amt);
             } else if (inv.invoice_type === 'IPD') {
-                addTo(ipdRev, unitKey, amt);
+                addTo(ipdRev, inv.organizationId, amt);
             } else {
-                addTo(opdRev, unitKey, amt);
+                addTo(opdRev, inv.organizationId, amt);
             }
         }
-        const opdVsIpdTotal = sumUnits(opdRev, ipdRev, pharmRev, diagRev);
+        const opdVsIpdTotal = sumUnits(orgIds, opdRev, ipdRev, pharmRev, diagRev);
 
         // ---- 4C. Top clinical department revenue (real, by treating doctor's specialty) ----
         // invoice_items.rendered_by_doctor_id is essentially unpopulated in live data
@@ -375,11 +379,9 @@ export async function getInvestorDashboardData(params?: {
         const specialtyByDoctorId = new Map(doctors.map((d) => [d.id, (d.specialty || '').trim() || 'General / Unassigned']));
         const deptRevenueMap = new Map<string, UnitMetrics>();
         for (const inv of revenueInvoices) {
-            const unitKey = orgToUnitKey[inv.organizationId];
-            if (!unitKey) continue;
             const dept = inv.doctor_id ? (specialtyByDoctorId.get(inv.doctor_id) || 'General / Unassigned') : 'General / Unassigned';
-            if (!deptRevenueMap.has(dept)) deptRevenueMap.set(dept, zeroUnit());
-            addTo(deptRevenueMap.get(dept)!, unitKey, Number(inv.net_amount));
+            if (!deptRevenueMap.has(dept)) deptRevenueMap.set(dept, zeroUnit(orgIds));
+            addTo(deptRevenueMap.get(dept)!, inv.organizationId, Number(inv.net_amount));
         }
         const departmentRevenue = Array.from(deptRevenueMap.entries())
             .map(([name, metrics]) => ({ name, metrics }))
@@ -388,36 +390,32 @@ export async function getInvestorDashboardData(params?: {
 
         // ---- 5. Expenses (real, monthly, Approved/Paid only) ----
         const expenseRows = await prisma.expense.findMany({
-            where: { organizationId: { in: ALL_ORG_IDS }, status: { in: ['Approved', 'Paid'] }, created_at: { gte: fyRangeStart, lt: fyRangeEnd } },
+            where: { organizationId: { in: orgIds }, status: { in: ['Approved', 'Paid'] }, created_at: { gte: fyRangeStart, lt: fyRangeEnd } },
             select: { organizationId: true, total_amount: true, created_at: true },
         }).catch((err) => { console.error('investor: expenses', err); return [] as Array<{ organizationId: string; total_amount: unknown; created_at: Date }>; });
 
-        const expByMonth: UnitMetrics[] = fyMonths.map(() => zeroUnit());
+        const expByMonth: UnitMetrics[] = fyMonths.map(() => zeroUnit(orgIds));
         for (const row of expenseRows) {
-            const unitKey = orgToUnitKey[row.organizationId];
-            if (!unitKey) continue;
             const idx = fyMonthIndexByKey.get(fyMonthKey(row.created_at.getFullYear(), row.created_at.getMonth()));
             if (idx === undefined) continue;
-            addTo(expByMonth[idx], unitKey, Number(row.total_amount));
+            addTo(expByMonth[idx], row.organizationId, Number(row.total_amount));
         }
-        const expTotal = sumUnits(...expByMonth);
+        const expTotal = sumUnits(orgIds, ...expByMonth);
 
         // ---- 6. Receivables — yet to receive (real, point-in-time balance) ----
         // Final bills only — a Draft is still being edited, not a committed
         // receivable yet.
         const openInvoices = await prisma.invoices.findMany({
-            where: { organizationId: { in: ALL_ORG_IDS }, status: 'Final', balance_due: { gt: 0 } },
+            where: { organizationId: { in: orgIds }, status: 'Final', balance_due: { gt: 0 } },
             select: { organizationId: true, balance_due: true, billing_patient_type: true, tpa_tds_amount: true },
         }).catch((err) => { console.error('investor: receivables', err); return [] as Array<{ organizationId: string; balance_due: unknown; billing_patient_type: string | null; tpa_tds_amount: unknown }>; });
 
-        const recCash = zeroUnit(), recInsurance = zeroUnit(), recPanel = zeroUnit(), recCorporate = zeroUnit();
+        const recCash = zeroUnit(orgIds), recInsurance = zeroUnit(orgIds), recPanel = zeroUnit(orgIds), recCorporate = zeroUnit(orgIds);
         for (const inv of openInvoices) {
-            const unitKey = orgToUnitKey[inv.organizationId];
-            if (!unitKey) continue;
             const bucket = categoryOf(inv.billing_patient_type) === 'corporate' ? recCorporate
                 : categoryOf(inv.billing_patient_type) === 'insurance' ? recInsurance
                 : recCash;
-            addTo(bucket, unitKey, Number(inv.balance_due));
+            addTo(bucket, inv.organizationId, Number(inv.balance_due));
         }
 
         // TDS receivables: invoices.tpa_tds_amount — TDS the insurer deducted on
@@ -425,15 +423,14 @@ export async function getInvestorDashboardData(params?: {
         // is the authoritative per-invoice field (identity: settled + disallowed +
         // tds = approved, per the field's own schema comment).
         const tdsInvoices = await prisma.invoices.findMany({
-            where: { organizationId: { in: ALL_ORG_IDS }, tpa_tds_amount: { gt: 0 } },
+            where: { organizationId: { in: orgIds }, tpa_tds_amount: { gt: 0 } },
             select: { organizationId: true, tpa_tds_amount: true },
         }).catch((err) => { console.error('investor: tds receivables', err); return [] as Array<{ organizationId: string; tpa_tds_amount: unknown }>; });
-        const recTds = zeroUnit();
+        const recTds = zeroUnit(orgIds);
         for (const inv of tdsInvoices) {
-            const unitKey = orgToUnitKey[inv.organizationId];
-            if (unitKey) addTo(recTds, unitKey, Number(inv.tpa_tds_amount));
+            addTo(recTds, inv.organizationId, Number(inv.tpa_tds_amount));
         }
-        const recTotal = sumUnits(recCash, recInsurance, recPanel, recCorporate, recTds);
+        const recTotal = sumUnits(orgIds, recCash, recInsurance, recPanel, recCorporate, recTds);
 
         // ---- 6B. Insurance receivables aging (real, point-in-time) ----
         // invoices.tpa_payable — money still owed by the payer, net of receipts/
@@ -442,45 +439,40 @@ export async function getInvestorDashboardData(params?: {
         // / created_at is available, same fallback order the existing TPA
         // outstanding report (getInsuranceOutstanding) uses.
         const tpaOutstandingInvoices = await prisma.invoices.findMany({
-            where: { organizationId: { in: ALL_ORG_IDS }, tpa_payable: { gt: 0 } },
+            where: { organizationId: { in: orgIds }, tpa_payable: { gt: 0 } },
             select: { organizationId: true, tpa_payable: true, tpa_approved_at: true, finalized_at: true, created_at: true },
         }).catch((err) => { console.error('investor: insurance aging', err); return [] as Array<{ organizationId: string; tpa_payable: unknown; tpa_approved_at: Date | null; finalized_at: Date | null; created_at: Date }>; });
 
-        const age0to30 = zeroUnit(), age31to60 = zeroUnit(), age60Plus = zeroUnit();
+        const age0to30 = zeroUnit(orgIds), age31to60 = zeroUnit(orgIds), age60Plus = zeroUnit(orgIds);
         const nowTs = Date.now();
         for (const inv of tpaOutstandingInvoices) {
-            const unitKey = orgToUnitKey[inv.organizationId];
-            if (!unitKey) continue;
             const agedFrom = inv.tpa_approved_at || inv.finalized_at || inv.created_at;
             const days = Math.floor((nowTs - new Date(agedFrom).getTime()) / (1000 * 60 * 60 * 24));
             const bucket = days <= 30 ? age0to30 : days <= 60 ? age31to60 : age60Plus;
-            addTo(bucket, unitKey, Number(inv.tpa_payable));
+            addTo(bucket, inv.organizationId, Number(inv.tpa_payable));
         }
-        const ageTotal = sumUnits(age0to30, age31to60, age60Plus);
+        const ageTotal = sumUnits(orgIds, age0to30, age31to60, age60Plus);
 
         // ---- 7. Payables — due for payment (real, point-in-time) ----
         // Vendors: general (non-pharmacy) vendor bills approved but not yet paid,
         // plus pharmacy purchase invoices with an unpaid balance (drug procurement
         // is tracked on its own model, PharmacyPurchaseInvoice, not Expense).
         const payableExpenses = await prisma.expense.findMany({
-            where: { organizationId: { in: ALL_ORG_IDS }, status: 'Approved' }, // approved but not yet Paid = owed
+            where: { organizationId: { in: orgIds }, status: 'Approved' }, // approved but not yet Paid = owed
             select: { organizationId: true, total_amount: true, vendor_id: true },
         }).catch((err) => { console.error('investor: payables (expenses)', err); return [] as Array<{ organizationId: string; total_amount: unknown; vendor_id: number | null }>; });
-        const payVendors = zeroUnit(), payOthers = zeroUnit();
+        const payVendors = zeroUnit(orgIds), payOthers = zeroUnit(orgIds);
         for (const e of payableExpenses) {
-            const unitKey = orgToUnitKey[e.organizationId];
-            if (!unitKey) continue;
-            addTo(e.vendor_id ? payVendors : payOthers, unitKey, Number(e.total_amount));
+            addTo(e.vendor_id ? payVendors : payOthers, e.organizationId, Number(e.total_amount));
         }
 
         const pharmacyPayables = await prisma.pharmacyPurchaseInvoice.findMany({
-            where: { organizationId: { in: ALL_ORG_IDS }, status: { not: 'Draft' } },
+            where: { organizationId: { in: orgIds }, status: { not: 'Draft' } },
             select: { organizationId: true, total_amount: true, amount_paid: true },
         }).catch((err) => { console.error('investor: payables (pharmacy purchases)', err); return [] as Array<{ organizationId: string; total_amount: number; amount_paid: number }>; });
         for (const p of pharmacyPayables) {
-            const unitKey = orgToUnitKey[p.organizationId];
             const due = Number(p.total_amount) - Number(p.amount_paid);
-            if (unitKey && due > 0) addTo(payVendors, unitKey, due);
+            if (due > 0) addTo(payVendors, p.organizationId, due);
         }
 
         // Doctor/professional payables + the TDS withheld on them: DoctorCommission
@@ -490,17 +482,15 @@ export async function getInvestorDashboardData(params?: {
         // just the DoctorPayoutStatement header (which would miss commission never
         // yet bundled into any statement).
         const unpaidCommissions = await prisma.doctorCommission.findMany({
-            where: { organizationId: { in: ALL_ORG_IDS }, status: { in: ['accrued', 'included_in_statement'] } },
+            where: { organizationId: { in: orgIds }, status: { in: ['accrued', 'included_in_statement'] } },
             select: { organizationId: true, commission_amount: true, tds_amount: true },
         }).catch((err) => { console.error('investor: payables (doctor commission)', err); return [] as Array<{ organizationId: string; commission_amount: unknown; tds_amount: unknown }>; });
-        const payDoctors = zeroUnit(), payTds = zeroUnit();
+        const payDoctors = zeroUnit(orgIds), payTds = zeroUnit(orgIds);
         for (const c of unpaidCommissions) {
-            const unitKey = orgToUnitKey[c.organizationId];
-            if (!unitKey) continue;
-            addTo(payDoctors, unitKey, Number(c.commission_amount));
-            addTo(payTds, unitKey, Number(c.tds_amount));
+            addTo(payDoctors, c.organizationId, Number(c.commission_amount));
+            addTo(payTds, c.organizationId, Number(c.tds_amount));
         }
-        const payTotal = sumUnits(payVendors, payDoctors, payTds, payOthers);
+        const payTotal = sumUnits(orgIds, payVendors, payDoctors, payTds, payOthers);
 
         // ---- 8. Salaries (real, monthly, from active-employee roster) ----
         // No payroll-run model exists (no per-month "paid" record) — this uses each
@@ -508,44 +498,42 @@ export async function getInvestorDashboardData(params?: {
         // from the month after they joined onward. It won't reflect mid-month
         // exits (no termination-date field exists to detect those).
         const employees = await prisma.employee.findMany({
-            where: { organizationId: { in: ALL_ORG_IDS }, is_active: true },
+            where: { organizationId: { in: orgIds }, is_active: true },
             select: { organizationId: true, salary_basic: true, date_of_joining: true },
         }).catch((err) => { console.error('investor: salaries', err); return [] as Array<{ organizationId: string; salary_basic: number; date_of_joining: Date }>; });
 
-        const salByMonth: UnitMetrics[] = fyMonths.map(() => zeroUnit());
+        const salByMonth: UnitMetrics[] = fyMonths.map(() => zeroUnit(orgIds));
         fyMonths.forEach((mo, m) => {
             const monthEnd = new Date(mo.year, mo.monthIndex + 1, 1); // exclusive end of this month
             for (const e of employees) {
-                const unitKey = orgToUnitKey[e.organizationId];
-                if (!unitKey) continue;
                 if (new Date(e.date_of_joining) < monthEnd) {
-                    addTo(salByMonth[m], unitKey, Number(e.salary_basic || 0));
+                    addTo(salByMonth[m], e.organizationId, Number(e.salary_basic || 0));
                 }
             }
         });
-        const salTotal = sumUnits(...salByMonth);
+        const salTotal = sumUnits(orgIds, ...salByMonth);
 
         // ---- 9. ARPOB — Average Revenue Per Operational Bed (real, monthly, IPD revenue only) ----
         // Same Final-status + created_at dating as the main Revenue section (see
         // that section's comment for why created_at, not discharge_date).
         const ipdMonthlyRevenue = await prisma.invoices.findMany({
-            where: { organizationId: { in: ALL_ORG_IDS }, invoice_type: 'IPD', status: 'Final', created_at: { gte: fyRangeStart, lt: fyRangeEnd } },
+            where: { organizationId: { in: orgIds }, invoice_type: 'IPD', status: 'Final', created_at: { gte: fyRangeStart, lt: fyRangeEnd } },
             select: { organizationId: true, net_amount: true, created_at: true },
         }).catch((err) => { console.error('investor: arpob', err); return [] as Array<{ organizationId: string; net_amount: unknown; created_at: Date }>; });
-        const ipdRevByMonth: UnitMetrics[] = fyMonths.map(() => zeroUnit());
+        const ipdRevByMonth: UnitMetrics[] = fyMonths.map(() => zeroUnit(orgIds));
         for (const inv of ipdMonthlyRevenue) {
-            const unitKey = orgToUnitKey[inv.organizationId];
-            if (!unitKey) continue;
             const idx = fyMonthIndexByKey.get(fyMonthKey(inv.created_at.getFullYear(), inv.created_at.getMonth()));
             if (idx === undefined) continue;
-            addTo(ipdRevByMonth[idx], unitKey, Number(inv.net_amount));
+            addTo(ipdRevByMonth[idx], inv.organizationId, Number(inv.net_amount));
         }
-        const arpobFor = (revBucket: UnitMetrics, days: number): UnitMetrics => ({
-            axten: bedCounts.axten > 0 ? Math.round(revBucket.axten / (bedCounts.axten * days)) : 0,
-            avise: bedCounts.avise > 0 ? Math.round(revBucket.avise / (bedCounts.avise * days)) : 0,
-            axtenHq: bedCounts.axtenHq > 0 ? Math.round(revBucket.axtenHq / (bedCounts.axtenHq * days)) : 0,
-            total: bedCounts.total > 0 ? Math.round(revBucket.total / (bedCounts.total * days)) : 0,
-        });
+        const arpobFor = (revBucket: UnitMetrics, days: number): UnitMetrics => {
+            const res = zeroUnit(orgIds);
+            for (const id of orgIds) {
+                res.byOrg[id] = bedCounts.byOrg[id] > 0 ? Math.round(revBucket.byOrg[id] / (bedCounts.byOrg[id] * days)) : 0;
+            }
+            res.total = bedCounts.total > 0 ? Math.round(revBucket.total / (bedCounts.total * days)) : 0;
+            return res;
+        };
         // The current (still in-progress) month divides by days elapsed so far,
         // not the full month length — otherwise a partial month's revenue would
         // look artificially diluted against days that haven't happened yet.
@@ -555,32 +543,28 @@ export async function getInvestorDashboardData(params?: {
             const days = isCurrentMonth ? todayForArpob.getDate() : daysInMonth(mo.year, mo.monthIndex);
             return arpobFor(ipdRevByMonth[i], days);
         });
-        const arpobAvg = {
-            axten: Math.round(arpobByMonth.reduce((s, m) => s + m.axten, 0) / arpobByMonth.length),
-            avise: Math.round(arpobByMonth.reduce((s, m) => s + m.avise, 0) / arpobByMonth.length),
-            axtenHq: Math.round(arpobByMonth.reduce((s, m) => s + m.axtenHq, 0) / arpobByMonth.length),
-            total: Math.round(arpobByMonth.reduce((s, m) => s + m.total, 0) / arpobByMonth.length),
-        };
+        const arpobAvg = zeroUnit(orgIds);
+        for (const id of orgIds) {
+            arpobAvg.byOrg[id] = Math.round(arpobByMonth.reduce((s, m) => s + m.byOrg[id], 0) / arpobByMonth.length);
+        }
+        arpobAvg.total = Math.round(arpobByMonth.reduce((s, m) => s + m.total, 0) / arpobByMonth.length);
 
         // ---- 10. Status of Profit/Loss (derived — real now that every input is real) ----
-        const profitAmount: UnitMetrics = {
-            axten: revTotal.axten - expTotal.axten - salTotal.axten,
-            avise: revTotal.avise - expTotal.avise - salTotal.avise,
-            axtenHq: revTotal.axtenHq - expTotal.axtenHq - salTotal.axtenHq,
-            total: 0,
-        };
-        profitAmount.total = profitAmount.axten + profitAmount.avise + profitAmount.axtenHq;
+        const profitAmount = zeroUnit(orgIds);
+        for (const id of orgIds) {
+            profitAmount.byOrg[id] = revTotal.byOrg[id] - expTotal.byOrg[id] - salTotal.byOrg[id];
+        }
+        profitAmount.total = orgIds.reduce((s, id) => s + profitAmount.byOrg[id], 0);
 
-        const profitPercentage: UnitMetrics = {
-            axten: Number(((profitAmount.axten / (revTotal.axten || 1)) * 100).toFixed(1)),
-            avise: Number(((profitAmount.avise / (revTotal.avise || 1)) * 100).toFixed(1)),
-            axtenHq: Number(((profitAmount.axtenHq / (revTotal.axtenHq || 1)) * 100).toFixed(1)),
-            total: Number(((profitAmount.total / (revTotal.total || 1)) * 100).toFixed(1)),
-        };
+        const profitPercentage = zeroUnit(orgIds);
+        for (const id of orgIds) {
+            profitPercentage.byOrg[id] = Number(((profitAmount.byOrg[id] / (revTotal.byOrg[id] || 1)) * 100).toFixed(1));
+        }
+        profitPercentage.total = Number(((profitAmount.total / (revTotal.total || 1)) * 100).toFixed(1));
 
         // ---- Executive KPIs (real) ----
         const alosRows = await prisma.admissions.findMany({
-            where: { organizationId: { in: ALL_ORG_IDS }, status: 'Discharged', discharge_date: { gte: start, lt: end, not: null } },
+            where: { organizationId: { in: orgIds }, status: 'Discharged', discharge_date: { gte: start, lt: end, not: null } },
             select: { admission_date: true, discharge_date: true },
         }).catch(() => [] as Array<{ admission_date: Date; discharge_date: Date | null }>);
         const alosDays = alosRows.length
@@ -602,13 +586,18 @@ export async function getInvestorDashboardData(params?: {
             collectionEfficiencyPct,
         };
 
+        const inclusiveEnd = new Date(end);
+        inclusiveEnd.setDate(inclusiveEnd.getDate() - 1); // end is exclusive
         return {
             success: true,
             data: {
                 period: params?.filterType || 'month',
                 selectedUnit,
-                fromDate: params?.fromDate,
-                toDate: params?.toDate,
+                // The actual applied window (matches "day"/"month"/"year" as well as
+                // "custom"), not just an echo of whatever fromDate/toDate the caller
+                // passed — those are ignored for anything but "custom".
+                fromDate: start.toISOString().slice(0, 10),
+                toDate: inclusiveEnd.toISOString().slice(0, 10),
                 units,
                 executiveKPIs,
                 currentAdmittedPatients: {
@@ -716,7 +705,7 @@ const fmtDate = (d: Date | string | null | undefined) => d ? new Date(d).toLocal
 export async function getInvestorDrilldown(params: {
     section: DrilldownSection;
     category: string;
-    unit: 'axten' | 'avise' | 'axtenHq';
+    unit: string; // organization id
     fromDate?: string;
     toDate?: string;
 }): Promise<{ success: boolean; data?: DrilldownResult; error?: string }> {
@@ -724,7 +713,11 @@ export async function getInvestorDrilldown(params: {
         const session = await getInvestorSession();
         if (!session) return { success: false, error: 'Unauthorized investor session' };
 
-        const orgId = INVESTOR_UNIT_ORG_IDS[params.unit];
+        // Only allow drilling into an organization that's actually part of the
+        // active investor-visible set — the org id comes from the client, so this
+        // is the tenant-isolation boundary, not just data lookup.
+        const activeOrgs = await getActiveOrgs();
+        const orgId = activeOrgs.find((o) => o.id === params.unit)?.id;
         if (!orgId) return { success: false, error: 'Unknown unit' };
         if (params.category === 'panel') {
             return { success: true, data: { columns: [], rows: [], totalCount: 0, truncated: false } };
@@ -738,9 +731,9 @@ export async function getInvestorDrilldown(params: {
             case 'admissions':
             case 'discharges': {
                 const dateFilter = params.section === 'admitted'
-                    ? { status: { not: 'Discharged' } }
+                    ? { status: { notIn: ['Discharged', 'Cancelled'] } }
                     : params.section === 'admissions'
-                        ? { admission_date: { gte: start, lt: end } }
+                        ? { status: { not: 'Cancelled' }, admission_date: { gte: start, lt: end } }
                         : { status: 'Discharged', discharge_date: { gte: start, lt: end } };
                 const rows = await prisma.admissions.findMany({
                     where: { organizationId: orgId, is_archived: false, ...dateFilter },
@@ -996,47 +989,28 @@ export async function getInvestorDrilldown(params: {
 
 export async function getInvestorUnitSummaries(): Promise<Array<{ code: string; name: string; shortName: string; beds: number }>> {
     try {
-        const [orgRows, bedRows] = await Promise.all([
-            prisma.organization.findMany({
-                where: { id: { in: ALL_ORG_IDS } },
-                select: { id: true, bed_capacity: true },
-            }).catch(() => [] as Array<{ id: string; bed_capacity: number | null }>),
-            prisma.beds.groupBy({
-                by: ['organizationId'],
-                where: { organizationId: { in: ALL_ORG_IDS } },
-                _count: true,
-            }).catch(() => [] as Array<{ organizationId: string; _count: number }>),
-        ]);
+        const activeOrgs = await getActiveOrgs();
+        const orgIds = activeOrgs.map((o) => o.id);
 
-        const orgCapacities: Record<string, number> = {};
-        for (const org of orgRows) {
-            orgCapacities[org.id] = org.bed_capacity || 0;
-        }
+        // Real `beds` rows only — see getInvestorDashboardData for why
+        // organization.bed_capacity is deliberately not used as a fallback.
+        const bedRows = await prisma.beds.groupBy({
+            by: ['organizationId'],
+            where: { organizationId: { in: orgIds } },
+            _count: true,
+        }).catch(() => [] as Array<{ organizationId: string; _count: number }>);
 
-        const unitMap: Record<'axten' | 'avise' | 'axtenHq', { name: string; shortName: string }> = {
-            axten: { name: 'Axten Hospital', shortName: 'Axten' },
-            avise: { name: 'Avise Hospital', shortName: 'Avise' },
-            axtenHq: { name: 'Axten HQ', shortName: 'Axten HQ' },
-        };
-
-        return UNIT_ORG_ENTRIES.map(([unitKey, orgId]) => {
-            const tableRow = bedRows.find((r) => r.organizationId === orgId);
-            const bedsFromTable = tableRow ? tableRow._count : 0;
-            const orgCap = orgCapacities[orgId] || 0;
-            const effectiveBeds = Math.max(bedsFromTable, orgCap);
+        return activeOrgs.map((o) => {
+            const tableRow = bedRows.find((r) => r.organizationId === o.id);
             return {
-                code: unitKey,
-                name: unitMap[unitKey].name,
-                shortName: unitMap[unitKey].shortName,
-                beds: effectiveBeds,
+                code: o.id,
+                name: o.name,
+                shortName: o.name,
+                beds: tableRow ? tableRow._count : 0,
             };
         });
     } catch (err) {
         console.error('getInvestorUnitSummaries error:', err);
-        return [
-            { code: 'axten', name: 'Axten Hospital', shortName: 'Axten', beds: 62 },
-            { code: 'avise', name: 'Avise Hospital', shortName: 'Avise', beds: 100 },
-            { code: 'axtenHq', name: 'Axten HQ', shortName: 'Axten HQ', beds: 100 },
-        ];
+        return [];
     }
 }

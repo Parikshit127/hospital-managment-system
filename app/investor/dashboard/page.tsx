@@ -26,12 +26,6 @@ import {
 
 import { useInvestorTheme } from '../investor-theme-context';
 
-const UNIT_OPTIONS = [
-    { code: 'axten', name: 'Axten Hospital', shortName: 'Axten' },
-    { code: 'avise', name: 'Avise Hospital', shortName: 'Avise' },
-    { code: 'axtenHq', name: 'Axten HQ', shortName: 'Axten HQ' },
-] as const;
-
 // Format numbers: default is currency=false (no ₹ symbol) so counts render as pure numbers!
 function fmtINR(n: number, isCurrency = false): string {
     if (n === undefined || n === null) return '-';
@@ -57,7 +51,11 @@ export default function PromoterDashboardPage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [filterType, setFilterType] = useState<'day' | 'month' | 'year' | 'custom'>('month');
-    const [selectedUnits, setSelectedUnits] = useState<string[]>(UNIT_OPTIONS.map(u => u.code));
+    // Hospital units are dynamic (every active organization on this server), so
+    // the selection starts empty and is populated from the first successful
+    // load's `data.units` list — see the loadData success handler below.
+    const [selectedUnits, setSelectedUnits] = useState<string[]>([]);
+    const unitsInitialized = useRef(false);
     const [unitMenuOpen, setUnitMenuOpen] = useState(false);
     const unitMenuRef = useRef<HTMLDivElement>(null);
     const [fromDate, setFromDate] = useState(() => defaultFYRange().from);
@@ -66,12 +64,12 @@ export default function PromoterDashboardPage() {
 
     // Drill-down: click any hospital's cell in a real (non-derived) row to see
     // the actual records behind that number.
-    const [drillTarget, setDrillTarget] = useState<{ section: DrilldownSection; category: string; label: string; unit: 'axten' | 'avise' | 'axtenHq'; unitLabel: string } | null>(null);
+    const [drillTarget, setDrillTarget] = useState<{ section: DrilldownSection; category: string; label: string; unit: string; unitLabel: string } | null>(null);
     const [drillLoading, setDrillLoading] = useState(false);
     const [drillError, setDrillError] = useState<string | null>(null);
     const [drillResult, setDrillResult] = useState<DrilldownResult | null>(null);
 
-    const openDrilldown = async (section: DrilldownSection, category: string, label: string, unit: 'axten' | 'avise' | 'axtenHq', unitLabel: string) => {
+    const openDrilldown = async (section: DrilldownSection, category: string, label: string, unit: string, unitLabel: string) => {
         setDrillTarget({ section, category, label, unit, unitLabel });
         setDrillResult(null);
         setDrillError(null);
@@ -90,13 +88,6 @@ export default function PromoterDashboardPage() {
         }
     };
     const closeDrilldown = () => { setDrillTarget(null); setDrillResult(null); setDrillError(null); };
-
-    const isAllUnitsSelected = selectedUnits.length === UNIT_OPTIONS.length;
-    const selectedUnitsLabel = isAllUnitsSelected
-        ? 'All Units (Consolidated)'
-        : selectedUnits.length === 0
-            ? 'No Units Selected'
-            : UNIT_OPTIONS.filter(u => selectedUnits.includes(u.code)).map(u => u.shortName).join(' + ');
 
     const toggleUnit = (code: string) => {
         setSelectedUnits((prev) =>
@@ -123,13 +114,24 @@ export default function PromoterDashboardPage() {
         });
     };
 
-    const loadData = async () => {
+    const loadData = async (overrideFrom?: string, overrideTo?: string) => {
         setLoading(true);
         setError(null);
         try {
-            const res = await getInvestorDashboardData({ filterType, selectedUnit: isAllUnitsSelected ? 'all' : selectedUnits.join(','), fromDate, toDate });
+            const res = await getInvestorDashboardData({
+                filterType,
+                selectedUnit: selectedUnits.length ? selectedUnits.join(',') : 'all',
+                fromDate: overrideFrom ?? fromDate,
+                toDate: overrideTo ?? toDate,
+            });
             if (res.success && res.data) {
                 setData(res.data);
+                // First successful load: default the unit selection to every
+                // hospital the server returned, now that we know what they are.
+                if (!unitsInitialized.current) {
+                    setSelectedUnits(res.data.units.map((u) => u.code));
+                    unitsInitialized.current = true;
+                }
             } else {
                 setError(res.error || 'Failed to load dashboard data');
             }
@@ -140,8 +142,31 @@ export default function PromoterDashboardPage() {
         }
     };
 
+    // The Day / Month / Year buttons must actually narrow the query window —
+    // previously they only changed a cosmetic `filterType` label while the
+    // backend kept using whatever fromDate/toDate was already in state
+    // (defaulting to the whole fiscal-year-to-date range), so switching to
+    // "day" never changed the numbers. Custom keeps whatever the user picked.
     useEffect(() => {
-        loadData();
+        if (filterType === 'custom') {
+            loadData();
+            return;
+        }
+        const now = new Date();
+        let from: Date;
+        if (filterType === 'day') {
+            from = now;
+        } else if (filterType === 'month') {
+            from = new Date(now.getFullYear(), now.getMonth(), 1);
+        } else {
+            const fyStartYear = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
+            from = new Date(fyStartYear, 3, 1);
+        }
+        const newFrom = toISODate(from);
+        const newTo = toISODate(now);
+        setFromDate(newFrom);
+        setToDate(newTo);
+        loadData(newFrom, newTo);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [filterType]);
 
@@ -169,7 +194,7 @@ export default function PromoterDashboardPage() {
                     <p className="text-xl font-black">Executive Audit Connection Warning</p>
                     <p className="text-xs font-medium opacity-90">{error || 'No data returned from server'}</p>
                     <button
-                        onClick={loadData}
+                        onClick={() => loadData()}
                         className="px-5 py-2.5 rounded-2xl bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 text-white text-xs font-black transition-all cursor-pointer shadow-lg shadow-orange-500/20"
                     >
                         Retry Audit Sync
@@ -194,63 +219,77 @@ export default function PromoterDashboardPage() {
         salaries,
         arpob,
         profitLoss,
+        units,
     } = data;
+
+    const isAllUnitsSelected = selectedUnits.length === units.length;
+    const selectedUnitsLabel = isAllUnitsSelected
+        ? 'All Units (Consolidated)'
+        : selectedUnits.length === 0
+            ? 'No Units Selected'
+            : units.filter(u => selectedUnits.includes(u.code)).map(u => u.name).join(' + ');
 
     const exportToCSV = () => {
         if (!data) return;
-        const csvRows = [
+        const unitCodes = units.map((u) => u.code);
+        const row = (label: string, m: UnitMetrics, isPct = false): Array<string | number> => [
+            label,
+            ...unitCodes.map((c) => (isPct ? `${m.byOrg[c] || 0}%` : (m.byOrg[c] || 0))),
+            isPct ? `${m.total}%` : m.total,
+        ];
+        const csvRows: Array<Array<string | number>> = [
             ['AxtenOS Promoter Dashboard — Consolidated Executive Financial Report'],
             ['Filter', filterType.toUpperCase()],
             ['Selected Units', selectedUnitsLabel],
-            ['Date Range', `${fromDate} to ${toDate}`],
+            ['Date Range', `${data.fromDate} to ${data.toDate}`],
             [],
-            ['Unit / Category', 'Axten Hospital', 'Avise Hospital', 'Axten HQ', 'Consolidated Total'],
+            ['Unit / Category', ...units.map((u) => u.name), 'Consolidated Total'],
             [],
             ['1. CURRENT ADMITTED PATIENTS'],
-            ['Cash Patients', currentAdmittedPatients.cash.axten, currentAdmittedPatients.cash.avise, currentAdmittedPatients.cash.axtenHq, currentAdmittedPatients.cash.total],
-            ['Insurance Patients', currentAdmittedPatients.insurance.axten, currentAdmittedPatients.insurance.avise, currentAdmittedPatients.insurance.axtenHq, currentAdmittedPatients.insurance.total],
-            ['Panel Patients', currentAdmittedPatients.panel.axten, currentAdmittedPatients.panel.avise, currentAdmittedPatients.panel.axtenHq, currentAdmittedPatients.panel.total],
-            ['Corporate Patients', currentAdmittedPatients.corporate.axten, currentAdmittedPatients.corporate.avise, currentAdmittedPatients.corporate.axtenHq, currentAdmittedPatients.corporate.total],
-            ['Total Admitted Patients', currentAdmittedPatients.total.axten, currentAdmittedPatients.total.avise, currentAdmittedPatients.total.axtenHq, currentAdmittedPatients.total.total],
+            row('Cash Patients', currentAdmittedPatients.cash),
+            row('Insurance Patients', currentAdmittedPatients.insurance),
+            row('Panel Patients', currentAdmittedPatients.panel),
+            row('Corporate Patients', currentAdmittedPatients.corporate),
+            row('Total Admitted Patients', currentAdmittedPatients.total),
             [],
             ['2. ADMISSIONS'],
-            ['Cash', admissions.cash.axten, admissions.cash.avise, admissions.cash.axtenHq, admissions.cash.total],
-            ['Insurance', admissions.insurance.axten, admissions.insurance.avise, admissions.insurance.axtenHq, admissions.insurance.total],
-            ['Panel', admissions.panel.axten, admissions.panel.avise, admissions.panel.axtenHq, admissions.panel.total],
-            ['Corporate', admissions.corporate.axten, admissions.corporate.avise, admissions.corporate.axtenHq, admissions.corporate.total],
-            ['Total Admissions', admissions.total.axten, admissions.total.avise, admissions.total.axtenHq, admissions.total.total],
+            row('Cash', admissions.cash),
+            row('Insurance', admissions.insurance),
+            row('Panel', admissions.panel),
+            row('Corporate', admissions.corporate),
+            row('Total Admissions', admissions.total),
             [],
             ['3. DISCHARGES'],
-            ['Cash', discharges.cash.axten, discharges.cash.avise, discharges.cash.axtenHq, discharges.cash.total],
-            ['Insurance', discharges.insurance.axten, discharges.insurance.avise, discharges.insurance.axtenHq, discharges.insurance.total],
-            ['Panel', discharges.panel.axten, discharges.panel.avise, discharges.panel.axtenHq, discharges.panel.total],
-            ['Corporate', discharges.corporate.axten, discharges.corporate.avise, discharges.corporate.axtenHq, discharges.corporate.total],
-            ['Total Discharges', discharges.total.axten, discharges.total.avise, discharges.total.axtenHq, discharges.total.total],
+            row('Cash', discharges.cash),
+            row('Insurance', discharges.insurance),
+            row('Panel', discharges.panel),
+            row('Corporate', discharges.corporate),
+            row('Total Discharges', discharges.total),
             [],
             ['4. REVENUE REALIZATION (₹)'],
-            ['Cash', revenue.cash.axten, revenue.cash.avise, revenue.cash.axtenHq, revenue.cash.total],
-            ['Insurance', revenue.insurance.axten, revenue.insurance.avise, revenue.insurance.axtenHq, revenue.insurance.total],
-            ['Panel', revenue.panel.axten, revenue.panel.avise, revenue.panel.axtenHq, revenue.panel.total],
-            ['Corporate', revenue.corporate.axten, revenue.corporate.avise, revenue.corporate.axtenHq, revenue.corporate.total],
-            ['Total Revenue', revenue.total.axten, revenue.total.avise, revenue.total.axtenHq, revenue.total.total],
+            row('Cash', revenue.cash),
+            row('Insurance', revenue.insurance),
+            row('Panel', revenue.panel),
+            row('Corporate', revenue.corporate),
+            row('Total Revenue', revenue.total),
             [],
             ['5. OPD vs IPD REVENUE SPLIT (₹)'],
-            ['OPD Consultations & Procedures', opdVsIpdRevenue.opd.axten, opdVsIpdRevenue.opd.avise, opdVsIpdRevenue.opd.axtenHq, opdVsIpdRevenue.opd.total],
-            ['IPD Admissions & Surgeries', opdVsIpdRevenue.ipd.axten, opdVsIpdRevenue.ipd.avise, opdVsIpdRevenue.ipd.axtenHq, opdVsIpdRevenue.ipd.total],
-            ['Pharmacy Sales', opdVsIpdRevenue.pharmacy.axten, opdVsIpdRevenue.pharmacy.avise, opdVsIpdRevenue.pharmacy.axtenHq, opdVsIpdRevenue.pharmacy.total],
-            ['Diagnostics & Pathology', opdVsIpdRevenue.diagnostics.axten, opdVsIpdRevenue.diagnostics.avise, opdVsIpdRevenue.diagnostics.axtenHq, opdVsIpdRevenue.diagnostics.total],
-            ['Total Service Revenue', opdVsIpdRevenue.total.axten, opdVsIpdRevenue.total.avise, opdVsIpdRevenue.total.axtenHq, opdVsIpdRevenue.total.total],
+            row('OPD Consultations & Procedures', opdVsIpdRevenue.opd),
+            row('IPD Admissions & Surgeries', opdVsIpdRevenue.ipd),
+            row('Pharmacy Sales', opdVsIpdRevenue.pharmacy),
+            row('Diagnostics & Pathology', opdVsIpdRevenue.diagnostics),
+            row('Total Service Revenue', opdVsIpdRevenue.total),
             [],
             ['6. STATUS OF PROFIT / LOSS'],
-            ['Net Amount (₹)', profitLoss.amount.axten, profitLoss.amount.avise, profitLoss.amount.axtenHq, profitLoss.amount.total],
-            ['Profit Percentage (%)', `${profitLoss.percentage.axten}%`, `${profitLoss.percentage.avise}%`, `${profitLoss.percentage.axtenHq}%`, `${profitLoss.percentage.total}%`],
+            row('Net Amount (₹)', profitLoss.amount),
+            row('Profit Percentage (%)', profitLoss.percentage, true),
         ];
 
         const csvContent = 'data:text/csv;charset=utf-8,' + csvRows.map((e) => e.join(',')).join('\n');
         const encodedUri = encodeURI(csvContent);
         const link = document.createElement('a');
         link.setAttribute('href', encodedUri);
-        link.setAttribute('download', `AxtenOS_Promoter_Report_${isAllUnitsSelected ? 'all' : selectedUnits.join('-')}_${filterType}_${new Date().toISOString().slice(0, 10)}.csv`);
+        link.setAttribute('download', `AxtenOS_Promoter_Report_${isAllUnitsSelected ? 'all' : `${selectedUnits.length}-units`}_${filterType}_${new Date().toISOString().slice(0, 10)}.csv`);
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -271,7 +310,7 @@ export default function PromoterDashboardPage() {
             : fmtINR(
                   isAllUnitsSelected
                       ? totalRow.data.total
-                      : selectedUnits.reduce((sum, u) => sum + (totalRow.data[u as 'axten' | 'avise' | 'axtenHq'] || 0), 0),
+                      : selectedUnits.reduce((sum, u) => sum + (totalRow.data.byOrg[u] || 0), 0),
                   totalRow.isCurrency
               );
 
@@ -316,15 +355,11 @@ export default function PromoterDashboardPage() {
                             isDark ? 'bg-slate-950/90 border-slate-800 text-slate-300' : 'bg-slate-100/90 border-slate-200 text-slate-700'
                         }`}>
                             <th className="py-3.5 px-6 min-w-[220px] print:py-2 print:px-4">Category / Line Item</th>
-                            <th className={`py-3.5 px-4 text-right min-w-[130px] print:py-2 ${selectedUnits.includes('axten') ? 'font-black text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400'}`}>
-                                Axten Hospital
-                            </th>
-                            <th className={`py-3.5 px-4 text-right min-w-[130px] print:py-2 ${selectedUnits.includes('avise') ? 'font-black text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400'}`}>
-                                Avise Hospital
-                            </th>
-                            <th className={`py-3.5 px-4 text-right min-w-[130px] print:py-2 ${selectedUnits.includes('axtenHq') ? 'font-black text-slate-900 dark:text-white' : 'text-slate-500 dark:text-slate-400'}`}>
-                                Axten HQ
-                            </th>
+                            {units.map((unit) => (
+                                <th key={unit.code} className={`py-3.5 px-4 text-right min-w-[130px] print:py-2 ${selectedUnits.includes(unit.code) ? (isDark ? 'font-black text-white' : 'font-black text-slate-900') : (isDark ? 'text-slate-400' : 'text-slate-500')}`}>
+                                    {unit.name}
+                                </th>
+                            ))}
                             <th className={`py-3.5 px-6 text-right min-w-[160px] font-black border-l print:py-2 print:px-4 print:bg-orange-100 print:text-orange-950 ${
                                 isDark ? 'border-slate-800 bg-orange-950/40 text-orange-300' : 'border-slate-200 bg-orange-50/80 text-orange-950'
                             }`}>
@@ -350,18 +385,18 @@ export default function PromoterDashboardPage() {
                                         {isTotal && <CheckCircle2 className="w-4 h-4 shrink-0 text-orange-400 print:hidden" />}
                                         <span className={isTotal ? 'text-white font-black tracking-wide' : (isDark ? 'text-slate-200' : 'text-slate-900')}>{row.label}</span>
                                     </td>
-                                    {(['axten', 'avise', 'axtenHq'] as const).map((unit) => {
+                                    {units.map((unit) => {
                                         const canDrill = !isTotal && !!row.drillSection && row.drillCategory !== 'panel';
-                                        const cellValue = row.isPercentage ? `${row.data[unit]}%` : fmtINR(row.data[unit], row.isCurrency);
+                                        const cellValue = row.isPercentage ? `${row.data.byOrg[unit.code] || 0}%` : fmtINR(row.data.byOrg[unit.code] || 0, row.isCurrency);
                                         return (
                                             <td
-                                                key={unit}
-                                                onClick={canDrill ? () => openDrilldown(row.drillSection!, row.drillCategory!, row.label, unit, UNIT_OPTIONS.find(u => u.code === unit)!.shortName) : undefined}
-                                                title={canDrill ? `View ${row.label} records for ${UNIT_OPTIONS.find(u => u.code === unit)!.shortName}` : undefined}
+                                                key={unit.code}
+                                                onClick={canDrill ? () => openDrilldown(row.drillSection!, row.drillCategory!, row.label, unit.code, unit.name) : undefined}
+                                                title={canDrill ? `View ${row.label} records for ${unit.name}` : undefined}
                                                 className={`py-3.5 px-4 text-right font-mono text-xs print:py-1.5 group ${
                                                     isTotal
                                                         ? 'text-white font-black font-mono'
-                                                        : (selectedUnits.includes(unit)
+                                                        : (selectedUnits.includes(unit.code)
                                                             ? (isDark ? 'text-slate-100 font-semibold' : 'text-slate-900 font-semibold')
                                                             : (isDark ? 'text-slate-500' : 'text-slate-400'))
                                                 } ${canDrill ? (isDark ? 'cursor-pointer hover:bg-orange-500/10 hover:text-orange-300 transition-colors' : 'cursor-pointer hover:bg-orange-50 hover:text-orange-700 transition-colors') : ''}`}
@@ -383,7 +418,7 @@ export default function PromoterDashboardPage() {
                                             : fmtINR(
                                                   isAllUnitsSelected
                                                       ? row.data.total
-                                                      : selectedUnits.reduce((sum, u) => sum + (row.data[u as 'axten' | 'avise' | 'axtenHq'] || 0), 0),
+                                                      : selectedUnits.reduce((sum, u) => sum + (row.data.byOrg[u] || 0), 0),
                                                   row.isCurrency
                                               )}
                                     </td>
@@ -463,7 +498,7 @@ export default function PromoterDashboardPage() {
                             }`}>
                                 <button
                                     type="button"
-                                    onClick={() => setSelectedUnits(isAllUnitsSelected ? [] : UNIT_OPTIONS.map(u => u.code))}
+                                    onClick={() => setSelectedUnits(isAllUnitsSelected ? [] : units.map(u => u.code))}
                                     className={`w-full flex items-center justify-between px-4 py-3 text-xs font-black border-b cursor-pointer ${
                                         isDark
                                             ? 'hover:bg-slate-800 border-slate-800 text-slate-200'
@@ -473,9 +508,8 @@ export default function PromoterDashboardPage() {
                                     <span>{isAllUnitsSelected ? 'Deselect All Units' : 'Select All Units'}</span>
                                     {isAllUnitsSelected && <Check className="w-4 h-4 text-orange-500" />}
                                 </button>
-                                {UNIT_OPTIONS.map((unit) => {
+                                {units.map((unit) => {
                                     const checked = selectedUnits.includes(unit.code);
-                                    const bedCount = data.units.find(u => u.code === unit.code)?.beds ?? 0;
                                     return (
                                         <button
                                             type="button"
@@ -497,7 +531,7 @@ export default function PromoterDashboardPage() {
                                                 </span>
                                                 <span>{unit.name}</span>
                                             </div>
-                                            <span className={`font-mono text-[11px] font-bold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>({bedCount} Beds)</span>
+                                            <span className={`font-mono text-[11px] font-bold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>({unit.beds} Beds)</span>
                                         </button>
                                     );
                                 })}
@@ -546,7 +580,7 @@ export default function PromoterDashboardPage() {
                                 className="bg-transparent focus:outline-none px-2 py-1 rounded"
                             />
                             <button
-                                onClick={loadData}
+                                onClick={() => loadData()}
                                 className="px-3 py-1 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-black transition-colors"
                             >
                                 Apply
@@ -555,7 +589,7 @@ export default function PromoterDashboardPage() {
                     )}
 
                     <button
-                        onClick={loadData}
+                        onClick={() => loadData()}
                         title="Refresh Data"
                         className={`p-2.5 rounded-2xl border transition-colors cursor-pointer ${
                             isDark
@@ -676,7 +710,7 @@ export default function PromoterDashboardPage() {
                     <div className={`text-[11px] mt-2 font-mono font-semibold print:text-[9px] ${
                         isDark ? 'text-slate-400 print:text-slate-600' : 'text-slate-500'
                     }`}>
-                        Axten: {arpob.noOfBeds.axten} • Avise: {arpob.noOfBeds.avise} • HQ: {arpob.noOfBeds.axtenHq}
+                        {units.map((u) => `${u.name}: ${arpob.noOfBeds.byOrg[u.code] || 0}`).join(' • ')}
                     </div>
                 </div>
 
