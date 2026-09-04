@@ -152,6 +152,18 @@ export async function getIPDServiceCatalog(
             where: ipdWhere, orderBy: { service_name: 'asc' }, take: limit,
         });
 
+        // Search radiology_imaging
+        const radWhere: any = { is_available: true };
+        if (q) {
+            radWhere.OR = [
+                { procedure_name: { contains: q, mode: 'insensitive' } },
+                { procedure_code: { contains: q, mode: 'insensitive' } },
+            ];
+        }
+        const radItems = await db.radiology_imaging.findMany({
+            where: radWhere, orderBy: { procedure_name: 'asc' }, take: limit,
+        });
+
         // Merge into unified format
         const all = [
             ...catalogItems.map((s: any) => ({
@@ -176,6 +188,13 @@ export async function getIPDServiceCatalog(
                 requires_rendered_by: !!s.requires_rendered_by,
                 service_master_id: s.id,
                 is_price_editable: !!s.is_price_editable,
+            })),
+            ...radItems.map((s: any) => ({
+                id: `rad-${s.id}`, item_name: s.procedure_name, item_code: s.procedure_code || '',
+                default_price: Number(s.price),
+                service_category: s.category || s.modality || 'Radiology',
+                category: s.category || 'Radiology', source: 'radiology', requires_rendered_by: false,
+                is_price_editable: true,
             })),
         ].slice(0, limit);
 

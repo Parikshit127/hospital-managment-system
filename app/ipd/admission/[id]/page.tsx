@@ -815,7 +815,7 @@ export default function AdmissionDetailPage() {
         if (chargeMode === 'package') {
             if (!selectedPkgId) { toast.error('Select a package from the list'); return; }
             setPostingCharge(true);
-            const res = await applyPackageToAdmission(data.admission_id, selectedPkgId);
+            const res = await applyPackageToAdmission(data.admission_id, selectedPkgId, Number(chargeQty) || 1);
             setPostingCharge(false);
             if (res.success) {
                 const mig: any = (res.data as any)?.migration;

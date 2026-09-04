@@ -885,8 +885,9 @@ async function resolvePackagePrice(
         : { amount: fallbackAmount, name: fallbackName, providerId: policy.provider_id, isTpaRate: false };
 }
 
-export async function applyPackageToAdmission(admissionId: string, packageId: number) {
+export async function applyPackageToAdmission(admissionId: string, packageId: number, quantity: number = 1) {
     try {
+        const qty = Number(quantity) > 0 ? Number(quantity) : 1;
         const { db, session, organizationId } = await requireTenantContext();
 
         const pkg = await db.ipdPackage.findUnique({ where: { id: packageId } });
@@ -953,7 +954,7 @@ export async function applyPackageToAdmission(admissionId: string, packageId: nu
             source_module: 'package',
             source_ref_id: String(admPkg.id),
             description: `Package: ${resolvedName}`,
-            quantity: 1,
+            quantity: qty,
             unit_price: resolvedAmount,
             tax_rate: packageTaxRate,
             service_category: PACKAGE_SERVICE_CATEGORY,
