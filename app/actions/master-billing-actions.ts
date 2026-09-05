@@ -27,6 +27,7 @@
 
 import { requireTenantContext } from "@/backend/tenant";
 import { getTodayRange } from "@/app/lib/timezone";
+import { buildTrail } from "@/app/lib/patient-trail";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -1143,109 +1144,87 @@ export async function getPatientLedger(patientId: string) {
 // Patient Timeline (Section L — clinical-financial event timeline)
 // ──────────────────────────────────────────────────────────────────────────
 
+/**
+ * Financial timeline for one patient. Row -> event mapping lives in
+ * app/lib/patient-trail.ts so this and the IPD admission trail cannot drift apart.
+ *
+ * Two bugs died in that move: refunds were filtered on `invoice_id: { in: [] }`
+ * (a placeholder that always matched nothing), and pre-auths were read via a
+ * `requested_at` column that does not exist on InsurancePreAuth — the resulting
+ * `new Date(undefined).toISOString()` threw, and the catch below turned it into a
+ * silently empty timeline for every patient holding a pre-auth.
+ */
 export async function getPatientTimeline(patientId: string) {
   try {
-    const { db, organizationId } = await requireTenantContext();
+    const { db } = await requireTenantContext();
 
-    const [invoices, payments, admissions, refunds, preauths] = await Promise.all([
+    const [invoices, admissions, deposits, preauths] = await Promise.all([
       db.invoices.findMany({
-        where: { patient_id: patientId, organizationId },
+        where: { patient_id: patientId },
         select: {
+          id: true,
           invoice_number: true,
+          final_bill_number: true,
+          invoice_type: true,
           status: true,
+          notes: true,
           created_at: true,
+          updated_at: true,
           finalized_at: true,
           net_amount: true,
-        },
-      }),
-      db.payments.findMany({
-        where: { invoice: { patient_id: patientId, organizationId } },
-        select: {
-          receipt_number: true,
-          amount: true,
-          payment_method: true,
-          created_at: true,
+          payments: {
+            select: {
+              receipt_number: true, amount: true, payment_method: true,
+              status: true, received_by: true, created_at: true,
+            },
+          },
         },
       }),
       db.admissions.findMany({
-        where: { patient_id: patientId, organizationId },
+        where: { patient_id: patientId },
         select: {
-          admission_id: true,
-          admission_date: true,
-          discharge_date: true,
-          status: true,
-          discharge_type: true,
+          admission_id: true, admission_date: true, discharge_date: true,
+          status: true, discharge_type: true, discharge_disposition: true,
+          diagnosis: true, admission_type: true, doctor_name: true,
+          fit_for_discharge_at: true, fit_for_discharge_by: true,
+          cancellation_date: true, cancellation_reason: true, cancelled_by: true,
         },
       }),
-      db.refund.findMany({
-        where: { organizationId, invoice_id: { in: [] } }, // placeholder; filtered below
-        select: { id: true, amount: true, status: true, created_at: true },
+      db.patientDeposit.findMany({
+        where: { patient_id: patientId },
+        select: {
+          deposit_number: true, amount: true, payment_method: true, status: true,
+          collected_by: true, created_at: true,
+          cancelled_at: true, cancelled_reason: true, cancelled_by: true,
+        },
       }),
-      (db.insurancePreAuth as any).findMany({
-        where: { patient_id: patientId, organizationId },
-        select: { pre_auth_number: true, status: true, submitted_at: true, responded_at: true },
+      db.insurancePreAuth.findMany({
+        where: { patient_id: patientId },
+        select: {
+          pre_auth_number: true, tpa_name: true, status: true,
+          requested_amount: true, approved_amount: true, tpa_remarks: true,
+          submitted_at: true, responded_at: true,
+        },
       }),
     ]);
 
-    type TimelineItem = { ts: string; kind: string; label: string; meta?: string };
-    const items: TimelineItem[] = [];
+    // Refund has no patient relation and stores invoice_id as a String while
+    // invoices.id is an Int — hence the cast. The original code left `in: []` here.
+    const invoiceIds = invoices.map((i: any) => String(i.id));
+    const refunds = invoiceIds.length
+      ? await db.refund.findMany({
+          where: { invoice_id: { in: invoiceIds } },
+          select: {
+            id: true, amount: true, status: true, reason: true,
+            payment_method: true, processed_by: true, created_at: true,
+          },
+        })
+      : [];
 
-    invoices.forEach((i: any) => {
-      items.push({
-        ts: new Date(i.created_at).toISOString(),
-        kind: "invoice_created",
-        label: `Invoice ${i.invoice_number} created`,
-        meta: `${decToNum(i.net_amount)}`,
-      });
-      if (i.finalized_at) {
-        items.push({
-          ts: new Date(i.finalized_at).toISOString(),
-          kind: "invoice_finalized",
-          label: `Invoice ${i.invoice_number} finalized`,
-        });
-      }
-    });
-    payments.forEach((p: any) => {
-      items.push({
-        ts: new Date(p.created_at).toISOString(),
-        kind: "payment",
-        label: `Payment collected · ${p.receipt_number}`,
-        meta: `${decToNum(p.amount)} via ${p.payment_method}`,
-      });
-    });
-    admissions.forEach((a: any) => {
-      items.push({
-        ts: new Date(a.admission_date).toISOString(),
-        kind: "admission",
-        label: `Admitted (${a.admission_id})`,
-      });
-      if (a.discharge_date) {
-        items.push({
-          ts: new Date(a.discharge_date).toISOString(),
-          kind: "discharge",
-          label: `Discharged (${a.discharge_type ?? a.status})`,
-        });
-      }
-    });
-    refunds.forEach((r: any) => {
-      items.push({
-        ts: new Date(r.created_at).toISOString(),
-        kind: "refund",
-        label: `Refund ${r.status} (R-${r.id})`,
-        meta: `${r.amount}`,
-      });
-    });
-    preauths.forEach((p: any) => {
-      items.push({
-        ts: new Date(p.requested_at).toISOString(),
-        kind: "preauth",
-        label: `Pre-auth ${p.pre_auth_number ?? "draft"} · ${p.status}`,
-      });
-    });
-
-    items.sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime());
-
-    return { success: true, data: serialize(items) };
+    return {
+      success: true,
+      data: serialize(buildTrail({ invoices, admissions, deposits, refunds, preauths })),
+    };
   } catch (error: any) {
     console.error("getPatientTimeline error:", error);
     return { success: false, data: [] };

@@ -1650,6 +1650,9 @@ model system_audit_logs {
   @@index([action])
   @@index([module])
   @@index([created_at])
+  // Per-entity lookup for the IPD admission trail's "who changed what" view.
+  // Without this, filtering audit rows for one admission/patient/invoice is a scan.
+  @@index([entity_type, entity_id])
 }
 
 model triage_results {

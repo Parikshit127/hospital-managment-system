@@ -1,6 +1,7 @@
 "use server";
 
-import { requireTenantContext } from "@/backend/tenant";
+import { requireTenantContext, requireRoleAndTenant } from "@/backend/tenant";
+import { buildTrail } from "@/app/lib/patient-trail";
 import { logAudit } from "@/app/lib/audit";
 import { revalidatePath } from "next/cache";
 import { getPatientBalances } from '@/app/actions/balance-actions';
@@ -2400,6 +2401,215 @@ export async function cancelAdmission(admissionId: string, reason: string, cance
     return { success: true };
   } catch (error: any) {
     console.error('cancelAdmission error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Complete trail for one admission — admission, clinical events, billing,
+ * discharge — merged into a single chronological stream.
+ *
+ * `fullHistory` widens the same query set from this admission to the patient's
+ * whole record (every visit and admission). The row -> event mapping lives in
+ * app/lib/patient-trail.ts, shared with the Master Billing timeline.
+ *
+ * One action, not N: Server Actions are serialised per client, so a page firing
+ * several of these pays the round trip each time (LLM_INDEX §4.3). Everything the
+ * Trail tab needs comes back in one bundle.
+ */
+export async function getAdmissionTrail(
+  admissionId: string,
+  options?: { fullHistory?: boolean },
+) {
+  try {
+    // requireTenantContext alone would accept a patient session (LLM_INDEX §4.2).
+    const { db, organizationId } = await requireRoleAndTenant([
+      "admin", "ipd_manager", "receptionist", "doctor", "nurse", "finance", "opd_manager",
+    ]);
+
+    const admission = await db.admissions.findUnique({
+      where: { admission_id: admissionId },
+      include: { bed: { include: { wards: true } }, ward: true },
+    });
+    if (!admission) return { success: false, error: "Admission not found" };
+
+    const fullHistory = options?.fullHistory === true;
+    const patientId = admission.patient_id;
+
+    // Clinical tables are admission-keyed. For the patient-wide view that means
+    // resolving every admission first, then keying off all of them.
+    const scopeAdmissions = fullHistory
+      ? await db.admissions.findMany({
+          where: { patient_id: patientId },
+          select: {
+            admission_id: true, admission_date: true, discharge_date: true, status: true,
+            discharge_type: true, discharge_disposition: true, diagnosis: true,
+            admission_type: true, doctor_name: true,
+            fit_for_discharge_at: true, fit_for_discharge_by: true,
+            cancellation_date: true, cancellation_reason: true, cancelled_by: true,
+          },
+          orderBy: { admission_date: "desc" },
+        })
+      : [admission];
+    const admissionIds = scopeAdmissions.map((a: any) => a.admission_id);
+    const byAdmission = { admission_id: { in: admissionIds } };
+
+    const [
+      medicalNotes, nursingNotes, wardRounds, vitals, transfers, dietPlans,
+      nursingTasks, medications, summaries, invoices, deposits, preauths,
+      pharmacyOrders, labOrders, appointments,
+    ] = await Promise.all([
+      db.medical_notes.findMany({ where: byAdmission, orderBy: { created_at: "desc" } }),
+      db.nursingNote.findMany({ where: byAdmission, orderBy: { created_at: "desc" } }),
+      db.wardRound.findMany({ where: byAdmission, orderBy: { created_at: "desc" } }),
+      db.iPDVitals.findMany({ where: byAdmission, orderBy: { created_at: "desc" }, take: 200 }),
+      db.bedTransfer.findMany({ where: byAdmission, orderBy: { created_at: "desc" } }),
+      db.dietPlan.findMany({ where: byAdmission, orderBy: { created_at: "desc" } }),
+      db.nursingTask.findMany({ where: byAdmission, orderBy: { scheduled_at: "desc" }, take: 200 }),
+      db.medicationAdministration.findMany({
+        where: { ...byAdmission, administered_at: { not: null } },
+        orderBy: { administered_at: "desc" },
+        take: 300,
+      }),
+      db.discharge_summaries.findMany({ where: byAdmission, orderBy: { created_at: "desc" } }),
+      db.invoices.findMany({
+        where: fullHistory ? { patient_id: patientId } : byAdmission,
+        include: {
+          payments: {
+            select: {
+              receipt_number: true, amount: true, payment_method: true,
+              status: true, received_by: true, created_at: true,
+            },
+          },
+        },
+        orderBy: { created_at: "desc" },
+      }),
+      db.patientDeposit.findMany({
+        where: fullHistory ? { patient_id: patientId } : byAdmission,
+        orderBy: { created_at: "desc" },
+      }),
+      db.insurancePreAuth.findMany({
+        where: fullHistory ? { patient_id: patientId } : byAdmission,
+        orderBy: { submitted_at: "desc" },
+      }),
+      db.pharmacy_orders.findMany({
+        where: fullHistory ? { patient_id: patientId } : byAdmission,
+        include: { items: { select: { medicine_name: true } } },
+        orderBy: { created_at: "desc" },
+        take: 200,
+      }),
+      // lab_orders carries no admission_id — patient-keyed, then trimmed to the
+      // admission's date window below so the single-admission view stays honest.
+      db.lab_orders.findMany({
+        where: { patient_id: patientId },
+        orderBy: { created_at: "desc" },
+        take: 200,
+      }),
+      fullHistory
+        ? db.appointments.findMany({
+            where: { patient_id: patientId },
+            orderBy: { appointment_date: "desc" },
+            take: 200,
+          })
+        : Promise.resolve([]),
+    ]);
+
+    const windowStart = new Date(admission.admission_date).getTime();
+    const windowEnd = admission.discharge_date
+      ? new Date(admission.discharge_date).getTime()
+      : Date.now();
+    const scopedLabOrders = fullHistory
+      ? labOrders
+      : labOrders.filter((l: any) => {
+          const t = new Date(l.created_at).getTime();
+          return Number.isFinite(t) && t >= windowStart && t <= windowEnd;
+        });
+
+    // Refund has no patient relation and stores invoice_id as String vs invoices.id Int.
+    const invoiceIds = invoices.map((i: any) => String(i.id));
+    const refunds = invoiceIds.length
+      ? await db.refund.findMany({
+          where: { invoice_id: { in: invoiceIds } },
+          orderBy: { created_at: "desc" },
+        })
+      : [];
+
+    // Several clinical tables store a user UUID where a name is wanted
+    // (IPDVitals.recorded_by, NursingNote.nurse_id, WardRound.doctor_id, ...).
+    // Resolve them in one query rather than rendering raw ids.
+    const actorIds = Array.from(
+      new Set(
+        [
+          ...vitals.map((v: any) => v.recorded_by),
+          ...nursingNotes.map((n: any) => n.nurse_id),
+          ...wardRounds.map((r: any) => r.doctor_id),
+          ...medications.map((m: any) => m.administered_by),
+          ...dietPlans.map((d: any) => d.created_by),
+          ...transfers.map((t: any) => t.transferred_by),
+          ...nursingTasks.map((t: any) => t.assigned_to),
+          ...summaries.map((x: any) => x.prepared_by),
+        ].filter((v): v is string => typeof v === "string" && v.length > 0),
+      ),
+    );
+    const actorRows = actorIds.length
+      ? await db.user.findMany({
+          where: { id: { in: actorIds } },
+          select: { id: true, name: true, username: true },
+        })
+      : [];
+    const actors: Record<string, string> = {};
+    for (const u of actorRows) actors[u.id] = u.name || u.username;
+
+    const events = buildTrail({
+      actors,
+      admissions: scopeAdmissions,
+      appointments,
+      medicalNotes,
+      nursingNotes,
+      wardRounds,
+      vitals,
+      transfers,
+      dietPlans,
+      nursingTasks,
+      medications,
+      labOrders: scopedLabOrders,
+      pharmacyOrders,
+      summaries,
+      invoices,
+      deposits,
+      refunds,
+      preauths,
+    });
+
+    // "Who changed what" sub-tab. Audit rows are keyed by entity_id, which holds
+    // whichever id the writing action passed — admission, patient or invoice.
+    const auditKeys = [
+      ...admissionIds,
+      patientId,
+      ...invoiceIds,
+      ...invoices.map((i: any) => i.invoice_number).filter(Boolean),
+    ];
+    const audit = await db.system_audit_logs.findMany({
+      where: { entity_id: { in: auditKeys } },
+      orderBy: { created_at: "desc" },
+      take: 300,
+    });
+
+    return {
+      success: true,
+      data: serialize({
+        admission,
+        events,
+        audit,
+        fullHistory,
+        counts: { events: events.length, audit: audit.length },
+      }),
+    };
+  } catch (error: any) {
+    if (error?.name === "ForbiddenError" || String(error?.message).includes("FORBIDDEN_ERROR")) {
+      return { success: false, error: "Not permitted to view this trail" };
+    }
+    console.error("getAdmissionTrail error:", error);
     return { success: false, error: error.message };
   }
 }

@@ -12,13 +12,13 @@ import {
     FileText, CheckCircle2, Pencil, Receipt, AlertTriangle,
     Loader2, Plus, X, DollarSign, Activity, LogOut, HeartPulse,
     ArrowLeftRight, CreditCard, TrendingUp, CalendarDays,
-    ShieldAlert, ShieldCheck, Info, ChevronRight, RotateCcw, Printer
+    ShieldAlert, ShieldCheck, Info, ChevronRight, RotateCcw, Printer, History
 } from 'lucide-react';
 import {
     getAdmissionFullDetails, createNursingTask, changeAdmissionDoctor,
     recordWardRound, assignDietPlan, addMedicalNote, getWardsWithBeds, transferPatient,
     updateAdmissionDiagnosis, updateAdmissionBasicDetails, undischargeAdmission,
-    updateAdmissionPatientCategory,
+    updateAdmissionPatientCategory, getAdmissionTrail,
 } from '@/app/actions/ipd-actions';
 import { getInsuranceProviders } from '@/app/actions/insurance-actions';
 import {
@@ -52,11 +52,13 @@ import { NEWSScoreBadge } from '@/app/components/ipd/NEWSScoreBadge';
 import { PreDischargeChecklist } from '@/app/components/ipd/PreDischargeChecklist';
 import { DischargeSummaryEditor } from '@/app/components/ipd/DischargeSummaryEditor';
 import { TpaProfilePanel } from '@/app/components/ipd/TpaProfileModal';
+import { AdmissionTrail } from '@/app/components/ipd/AdmissionTrail';
 import { formatDoctorName } from '@/app/lib/format-name';
 import { admissionStatusLabel, isSemiDischarged } from '@/app/lib/admission-status';
 
 const TABS = [
     { id: 'overview', label: 'Overview', icon: Activity },
+    { id: 'trail', label: 'Trail', icon: History },
     { id: 'clinical', label: 'Clinical', icon: Stethoscope },
     { id: 'nursing', label: 'Nursing', icon: HeartPulse },
     { id: 'vitals', label: 'Vitals', icon: Activity },
@@ -257,6 +259,24 @@ export default function AdmissionDetailPage() {
         setLoading(false);
     }, [params.id]);
 
+    const [trail, setTrail] = useState<{ events: any[]; audit: any[] } | null>(null);
+    const [trailLoading, setTrailLoading] = useState(false);
+    const [trailFullHistory, setTrailFullHistory] = useState(false);
+
+    // One action, one round trip — Server Actions are serialised per client, so
+    // fetching the trail's pieces separately would pay the latency N times over.
+    const loadTrail = useCallback(async (fullHistory: boolean) => {
+        setTrailLoading(true);
+        const res = await getAdmissionTrail(params.id as string, { fullHistory });
+        if (res.success && res.data) {
+            setTrail({ events: res.data.events || [], audit: res.data.audit || [] });
+        } else {
+            setTrail({ events: [], audit: [] });
+            toast.error(res.error || 'Failed to load trail');
+        }
+        setTrailLoading(false);
+    }, [params.id, toast]);
+
     const loadChecklist = useCallback(async () => {
         const res = await getPreDischargeChecklist(params.id as string);
         if (res.success && res.data) setDischargeChecklist(res.data.checklist);
@@ -266,6 +286,9 @@ export default function AdmissionDetailPage() {
     useEffect(() => {
         if (activeTab === 'discharge') loadChecklist();
     }, [activeTab, loadChecklist]);
+    useEffect(() => {
+        if (activeTab === 'trail' && !trail && !trailLoading) loadTrail(trailFullHistory);
+    }, [activeTab, trail, trailLoading, trailFullHistory, loadTrail]);
     useEffect(() => {
         if (!data?.admission_id) return;
         getPackagesForAdmission(data.admission_id).then(res => { if (res.success) setPackages((res.data as any[]) || []); });
@@ -1670,6 +1693,23 @@ export default function AdmissionDetailPage() {
                         )}
 
                         {/* ════════════════════════════ CLINICAL ════════════════════════════ */}
+                        {activeTab === 'trail' && (
+                            <div id="admission-trail-print">
+                                <AdmissionTrail
+                                    events={trail?.events ?? []}
+                                    audit={trail?.audit ?? []}
+                                    fullHistory={trailFullHistory}
+                                    loading={trailLoading}
+                                    admissionRef={data.admission_id}
+                                    onScopeChange={(full) => {
+                                        setTrailFullHistory(full);
+                                        setTrail(null);
+                                        loadTrail(full);
+                                    }}
+                                />
+                            </div>
+                        )}
+
                         {activeTab === 'clinical' && (
                             <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
                                 {/* Left: Timeline */}
