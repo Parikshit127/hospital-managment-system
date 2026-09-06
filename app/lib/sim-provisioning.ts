@@ -9,7 +9,7 @@
  */
 import { prisma } from '@/backend/db';
 import * as bcrypt from 'bcryptjs';
-import { syncMasterData, assignWorkstationIps } from '@/app/lib/sim-master-data';
+import { syncMasterData, syncDepartmentsOnly, assignWorkstationIps } from '@/app/lib/sim-master-data';
 import { assertSimulationOrg } from '@/scripts/sim/guard';
 
 /**
@@ -252,6 +252,10 @@ export async function provisionSimulation(params: ProvisionParams): Promise<Prov
         }
         if (sourceOrgId && useMasterData) {
             masterData = await syncMasterData(created.org.id, sourceOrgId, { departmentMode });
+        } else if (sourceOrgId && departmentMode === 'clone') {
+            // Departments were asked for explicitly, so honour that even though the rest of
+            // the master data is not being copied.
+            await syncDepartmentsOnly(created.org.id, sourceOrgId);
         }
     } catch (err) {
         await deleteSimulationEnvironment(created.org.id).catch(() => { /* best effort */ });

@@ -1092,26 +1092,35 @@ export async function runActivityTick(now: Date = new Date(), targetOrgId?: stri
         select: { test_name: true },
     });
     // Read once, used twice: `medicines` is what a doctor may prescribe, `medicineById`
-    // prices and taxes it at the counter later. Splitting these into two queries meant a
-    // second full-table read on every tick.
-    const allMedicines: (SimMedicine & { batches: { id: number }[] })[] =
-        await db.pharmacy_medicine_master.findMany({
-            where: { is_active: true },
-            select: {
-                id: true, brand_name: true, selling_price: true,
-                gst_percent: true, hsn_sac_code: true,
-                batches: {
-                    where: { current_stock: { gt: 0 }, is_quarantined: false, expiry_date: { gt: now } },
-                    select: { id: true },
-                    take: 1,
-                },
-            },
-        });
+    // prices and taxes it at the counter later.
+    //
+    // Two flat queries rather than one with a nested `batches` relation. Prisma issues a
+    // relation query PER PARENT ROW, so nesting it turned a single read of a cloned
+    // hospital's 6,600-line formulary into thousands of round trips and took a tick from
+    // seconds to minutes.
+    const allMedicines: SimMedicine[] = await db.pharmacy_medicine_master.findMany({
+        where: { is_active: true },
+        select: {
+            id: true, brand_name: true, selling_price: true,
+            gst_percent: true, hsn_sac_code: true,
+        },
+    });
     const medicineById = new Map(allMedicines.map(m => [m.id, m]));
+
+    const stockedIds = new Set<number>(
+        (await db.pharmacy_batch_inventory.findMany({
+            where: {
+                current_stock: { gt: 0 }, is_quarantined: false, expiry_date: { gt: now },
+                medicine: { organizationId: orgId },
+            },
+            select: { medicine_id: true },
+            distinct: ['medicine_id'],
+        })).map((b: { medicine_id: number }) => b.medicine_id),
+    );
 
     // A doctor cannot prescribe what the pharmacy cannot hand over. Prescribing from the
     // whole formulary put a red "Out of Stock" against rows the engine had just created.
-    let medicines: SimMedicine[] = allMedicines.filter(m => m.batches.length > 0);
+    let medicines: SimMedicine[] = allMedicines.filter(m => stockedIds.has(m.id));
     if (!medicines.length && allMedicines.length) {
         // Everything has run dry: a fresh batch arrives rather than the pharmacy going
         // dark. ponytail: only fires when the shelf is COMPLETELY empty, so a single
