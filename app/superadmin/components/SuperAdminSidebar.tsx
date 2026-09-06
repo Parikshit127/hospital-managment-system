@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { superAdminLogout } from '@/app/actions/superadmin-actions';
 import {
     LayoutDashboard, Building2, Plus, LineChart, Users, Clock, CreditCard,
-    ShieldCheck, LogOut, ChevronLeft, ChevronRight,
+    ShieldCheck, LogOut, ChevronLeft, ChevronRight, Activity,
 } from 'lucide-react';
 
 const NAV_SECTIONS = [
@@ -21,6 +21,7 @@ const NAV_SECTIONS = [
         items: [
             { label: 'Organizations', href: '/superadmin/organizations', icon: Building2 },
             { label: 'New Hospital', href: '/superadmin/organizations/new', icon: Plus },
+            { label: 'Simulations', href: '/superadmin/simulations', icon: Activity },
         ],
     },
     {

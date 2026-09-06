@@ -18,6 +18,7 @@
  * Plain library. NEVER add 'use server' — it exports constants and sync helpers.
  */
 import { prisma } from '@/backend/db';
+import { buildWorkstationIps } from '@/app/lib/sim-master-data';
 
 export interface StaffMember {
     id: string;
@@ -61,14 +62,20 @@ function hash32(s: string): number {
 /**
  * The workstation a person logs in from — stable for the life of the account.
  *
- * Real staff sit at the same desk. An audit trail where the same user appears from a
- * different address every session is the kind of detail that reads as generated, so the
- * address is derived purely from the username: same person, same machine, forever, and
- * identical whichever code path writes the row.
+ * Real staff connect from the same place each day. An audit trail where the same user
+ * appears from a different address every session reads as generated, so the address is
+ * derived purely from the username: same person, same address, forever, and identical
+ * whichever code path writes the row.
  *
- * Third octet 1–4 stands in for a floor/VLAN, fourth for the desk.
+ * `overrides` carries the per-simulation map built at clone time, which matches the
+ * source hospital's own network pattern. Without it we fall back to a private office
+ * range — correct for a hospital whose staff work on a LAN, and the only sensible guess
+ * for a simulation with no source to learn from.
  */
-export function workstationIp(username: string): string {
+export function workstationIp(username: string, overrides?: Record<string, string> | null): string {
+    const inherited = overrides?.[username];
+    if (inherited) return inherited;
+
     const h = hash32(username);
     const vlan = 1 + (h % 4);
     const host = 11 + ((h >>> 8) % 230);
@@ -200,6 +207,7 @@ export async function syncStaffSessions(
     staff: StaffMember[],
     at: Date,
     timezone: string,
+    workstations?: Record<string, string> | null,
 ): Promise<{ loggedIn: number; loggedOut: number }> {
     let loggedIn = 0;
     let loggedOut = 0;
@@ -224,7 +232,7 @@ export async function syncStaffSessions(
                 module: 'Auth',
                 entity_type: 'session',
                 details: shouldBeIn ? 'Login successful' : 'User logged out',
-                ip_address: workstationIp(member.username),
+                ip_address: workstationIp(member.username, workstations),
                 organizationId,
                 // Spread across the tick so a shift change is not one identical timestamp.
                 created_at: new Date(at.getTime() - Math.floor(Math.random() * 8 * 60_000)),
@@ -293,6 +301,8 @@ export async function logSimAudit(params: {
     entityId?: string;
     details?: string;
     at?: Date;
+    /** Per-simulation workstation map, so audit rows match the login rows. */
+    workstations?: Record<string, string> | null;
 }): Promise<void> {
     const { organizationId, actor, action, module, entityType, entityId, details, at } = params;
     await prisma.system_audit_logs.create({
@@ -305,7 +315,7 @@ export async function logSimAudit(params: {
             entity_type: entityType ?? null,
             entity_id: entityId ?? null,
             details: details ?? null,
-            ip_address: actor ? workstationIp(actor.username) : null,
+            ip_address: actor ? workstationIp(actor.username, params.workstations) : null,
             organizationId,
             ...(at ? { created_at: at } : {}),
         },
@@ -328,8 +338,27 @@ function selfCheck(): void {
         assert(workstationIp(u) === workstationIp(u), `workstation not stable for ${u}`);
         assert(/^10\.20\.[1-4]\.(1[1-9]|[2-9]\d|1\d\d|2[0-3]\d|240)$/.test(workstationIp(u)), `bad ip shape for ${u}: ${workstationIp(u)}`);
     }
-    const ips = new Set(users.map(workstationIp));
+    const ips = new Set(users.map(u => workstationIp(u)));
     assert(ips.size === users.length, `workstation collision among bootstrap staff: ${[...ips].join(', ')}`);
+
+    // An inherited map wins over the generated fallback.
+    assert(workstationIp('mgh.lab', { 'mgh.lab': '49.200.60.31' }) === '49.200.60.31', 'override must win');
+    assert(workstationIp('mgh.lab', { 'other.user': '1.2.3.4' }) === workstationIp('mgh.lab'), 'unmapped user must fall back');
+
+    // Pattern is inherited, addresses are not: no generated address may equal one the
+    // source hospital actually used.
+    const real = ['223.190.82.125', '49.200.60.26', '49.156.87.173', '122.162.144.155', '::1', '10.0.0.5'];
+    const built = buildWorkstationIps(users, real);
+    assert(Object.keys(built).length === users.length, 'every user should get an address from a usable pool');
+    assert(Object.values(built).every(ip => !real.includes(ip)), `a real source address was reproduced: ${JSON.stringify(built)}`);
+    assert(
+        Object.values(built).every(ip => ['223.190.82', '49.200.60', '49.156.87', '122.162.144'].includes(ip.split('.').slice(0, 3).join('.'))),
+        'generated addresses must sit inside the source hospital\'s own blocks',
+    );
+    assert(new Set(Object.values(built)).size === users.length, 'two people must not share one address');
+    // Private and loopback source rows contribute nothing.
+    assert(Object.keys(buildWorkstationIps(users, ['::1', '10.0.0.5', '192.168.1.9'])).length === 0,
+        'a source with no public addresses must yield no map, so the default applies');
 
     const member = (username: string, role: string, hours?: string, days?: string): StaffMember =>
         ({ id: `id-${username}`, username, name: username, role, specialty: null, working_hours: hours, working_days: days });

@@ -132,6 +132,37 @@ export async function assertActivityTarget(orgId: string): Promise<void> {
 }
 
 /**
+ * Throw unless `orgId` is a simulation environment safe to administer.
+ *
+ * Used by the Superadmin management actions — reset, delete, start, stop — which must be
+ * usable on a machine where the engine itself is switched off. It therefore does NOT
+ * require SIM_ENABLED: you should be able to tear down an environment without first
+ * enabling generation. What it does enforce is the part that actually matters — the
+ * target is flagged as a simulation, and is not one of the organizations holding real
+ * clinical data.
+ */
+export async function assertSimulationOrg(orgId: string): Promise<void> {
+    if (!orgId?.trim()) {
+        throw new ActivityGeneratorDisabledError('No organization id supplied.');
+    }
+    if (PROTECTED_ORG_IDS.has(orgId)) {
+        throw new ActivityGeneratorDisabledError(
+            `Refusing: "${orgId}" holds real clinical data.`,
+        );
+    }
+    const config = await prisma.organizationConfig.findUnique({
+        where: { organizationId: orgId },
+        select: { simulation_enabled: true },
+    });
+    if (!config?.simulation_enabled) {
+        throw new ActivityGeneratorDisabledError(
+            `Refusing: "${orgId}" is not a simulation environment. This action only ever ` +
+            'operates on organizations created as simulations.',
+        );
+    }
+}
+
+/**
  * Resolve and validate a target organization in one step.
  *
  * Uses SIM_ORG_ID when pinned; otherwise the single eligible organization. Throws when

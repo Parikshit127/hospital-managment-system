@@ -355,6 +355,37 @@ model OrganizationConfig {
   // controls WHETHER the engine is currently running against it.
   simulation_enabled           Boolean @default(false)
 
+  // The hospital this simulation was cloned from. Recorded at clone time because the
+  // daily master-data sync needs to know where to re-read from; without it a cloned
+  // environment has no way back to its source.
+  simulation_source_org_id     String?
+
+  // true  — use the cloned hospital's own master data (doctors, services, lab tests,
+  //         radiology, packages, medicines) exactly as it stands, ₹0 prices included.
+  // false — use the generator's built-in defaults instead.
+  simulation_use_master_data   Boolean @default(true)
+
+  // Last successful master-data sync. The tick re-syncs once a day so changes made in
+  // the real hospital show up in the simulation without anyone re-cloning.
+  simulation_master_synced_at  DateTime?
+
+  // Which presenting-complaint set the generator draws from: "general" (allopathic
+  // OPD) or "ayurvedic" (Panchakarma / Ayurvedic practice).
+  simulation_complaint_style   String  @default("general")
+
+  // Map of simulated username -> workstation address, built at clone time.
+  //
+  // Addresses are GENERATED to match the shape of the source hospital's real traffic,
+  // never copied from it. Real audit rows hold public ISP addresses belonging to named
+  // individuals; reproducing those would put real people's location data into a prop
+  // environment. What is inherited is the network pattern, so the log looks native.
+  simulation_workstation_ips   Json?
+
+  // How departments are handled when provisioning: "clone" copies the source
+  // hospital's, "default" uses the generator's built-in list, "none" runs without
+  // departments at all (the visit then follows the doctor's specialty and fee).
+  simulation_department_mode   String  @default("clone")
+
   // Operator controls for the synthetic background activity generator (staging only).
   // These are one of TWO required keys — the engine also requires SIM_ENABLED=1 in the
   // environment (scripts/sim/guard.ts). Enabling these on a deploy without that variable

@@ -34,10 +34,64 @@ import {
 import {
     loadStaff, syncStaffSessions, actorFor, logSimAudit, dailyVolumeMultiplier,
 } from '@/app/lib/sim-staff';
+import { syncMasterDataIfDue } from '@/app/lib/sim-master-data';
 import { runWardCare } from '@/app/lib/sim-ward';
 import { runBackOffice } from '@/app/lib/sim-back-office';
 import { assertActivityTarget, resolveActivityTarget } from '@/scripts/sim/guard';
 import { castPerson } from '@/scripts/sim/cast';
+
+// ---------------------------------------------------------------------------
+// Which streams the engine generates
+// ---------------------------------------------------------------------------
+
+/**
+ * Currently narrowed to the OPD patient journey only:
+ *
+ *   register → queue → check in (+ fee receipt) → consultation
+ *              → lab test ordered, resulted
+ *              → prescription raised, verified, dispensed
+ *
+ * Everything else is switched off, NOT deleted. sim-ward.ts and sim-back-office.ts are
+ * untouched and still typecheck; flipping a flag back to true restores that stream in
+ * full. Consequences of the current setting, so they are not a surprise on camera:
+ *
+ *   ipd: false        — nobody is ever admitted. Beds stay Available, the ward board,
+ *                       eMAR, vitals, nursing notes and discharge summaries stay empty.
+ *   backOffice: false — no deposits, no TPA claims, no ledger entries, no ER triage.
+ *                       OPD invoices and payments still happen (that is opdBilling),
+ *                       but nothing posts to the general ledger.
+ *
+ * Staff still clock in and out on their real shifts and every action is still audited.
+ *
+ * Turning a stream off stops NEW work being created; anything already in flight still
+ * progresses to completion. Freezing half-finished orders in "Pending" would look far
+ * more broken on screen than letting the queue drain. Bed cleaning is released for the
+ * same reason even with ipd off — a bed stranded mid-clean never becomes available again.
+ */
+const GENERATE = {
+    /** Consultation fee invoice + payment, collected at check-in. */
+    opdBilling: true,
+    /** Lab orders raised from a completed consultation, through to a result. */
+    lab: true,
+    /** Pharmacy indents raised from a completed consultation, through to dispensing. */
+    pharmacy: true,
+    /** Admissions, bed occupancy, ward care, discharge, final bill, bed turnaround. */
+    ipd: false,
+    /** Deposits, TPA claims, GL journal entries, ER triage. */
+    backOffice: false,
+};
+
+/**
+ * Roles the current settings give no work to.
+ *
+ * They are left off the duty roster entirely — no login, no logout, no audit rows. A
+ * nurse who clocks in at seven every morning and then does nothing all day is more
+ * conspicuous on an audit screen than one who simply is not on the system.
+ *
+ * The accounts still exist and are still cloned; they are only absent from the roster.
+ * Turning `ipd` back on restores them automatically.
+ */
+const IDLE_ROLES: ReadonlySet<string> = new Set(GENERATE.ipd ? [] : ['nurse']);
 
 // ---------------------------------------------------------------------------
 // Volume model
@@ -117,31 +171,510 @@ const DISCHARGE_CONDITIONS = [
     'Blood counts improving. Advised outpatient review.',
 ];
 
-const REASONS_FOR_VISIT = [
-    'Fever with body ache', 'Persistent cough', 'Abdominal pain', 'Follow-up review',
-    'Headache and giddiness', 'Breathlessness on exertion', 'Joint pain', 'Loose motions',
-    'Chest discomfort', 'Routine health check', 'Skin rash', 'Back pain',
+/**
+ * Presenting complaints, weighted and split by department.
+ *
+ * Two problems this fixes. A flat twelve-item list repeats visibly once a queue holds
+ * more than a few patients; and picking from one shared list produced a cardiology
+ * patient complaining of loose motions — internally consistent data, obviously wrong to
+ * anyone who reads the screen.
+ *
+ * Frequencies follow Indian OPD morbidity data: fever is the single largest complaint
+ * (~35% of primary-care presentations), respiratory symptoms appear in over half of all
+ * encounters, then digestive, musculoskeletal, circulatory and skin. Gynaecology is led
+ * by lower abdominal pain (~50%) then menstrual irregularity. Weights are relative, not
+ * percentages.
+ */
+type Weighted = readonly (readonly [number, string])[];
+
+const REASONS_BY_DEPARTMENT: Record<string, Weighted> = {
+    'General Medicine': [
+        [10, 'Fever with chills for 3 days'], [9, 'Fever with body ache'],
+        [8, 'Cough with expectoration'], [7, 'Dry cough and sore throat'],
+        [6, 'Cold, running nose and sneezing'], [6, 'Acidity and burning in chest'],
+        [5, 'Abdominal pain and bloating'], [5, 'Loose motions since morning'],
+        [5, 'Generalised weakness and fatigue'], [4, 'Headache and giddiness'],
+        [4, 'Blood pressure review'], [4, 'Diabetes follow-up, sugar review'],
+        [3, 'Breathlessness on exertion'], [3, 'Vomiting and nausea'],
+        [3, 'Body ache and joint pains'], [2, 'Chest discomfort'],
+        [2, 'Routine health check'], [2, 'Itching and skin rash'],
+        [2, 'Swelling of both feet'], [2, 'Burning micturition'],
+        [1, 'Disturbed sleep and anxiety'], [1, 'Weight loss under evaluation'],
+        [1, 'Follow-up with reports'],
+    ],
+    'Paediatrics': [
+        [10, 'Fever for 2 days, child not feeding well'], [8, 'Cough and cold'],
+        [7, 'Loose motions and vomiting'], [6, 'Fever with rash'],
+        [5, 'Ear pain and irritability'], [5, 'Cold with blocked nose'],
+        [4, 'Vomiting after feeds'], [4, 'Immunisation due'],
+        [3, 'Abdominal pain, child pointing to navel'], [3, 'Poor weight gain'],
+        [3, 'Wheezing episode'], [2, 'Routine growth check'],
+        [2, 'Constipation for 4 days'], [2, 'Skin rash over trunk'],
+        [1, 'Fall at home, minor injury'], [1, 'Follow-up after fever'],
+    ],
+    'Orthopaedics': [
+        [10, 'Low back pain radiating to leg'], [8, 'Knee pain on climbing stairs'],
+        [6, 'Neck pain and stiffness'], [6, 'Shoulder pain, difficulty lifting arm'],
+        [5, 'Joint pains in both hands'], [5, 'Ankle sprain after a fall'],
+        [4, 'Heel pain in the morning'], [4, 'Wrist pain after injury'],
+        [3, 'Follow-up, plaster review'], [3, 'Swelling over knee joint'],
+        [2, 'Numbness and tingling in fingers'], [2, 'Post-operative review'],
+        [2, 'Difficulty walking, hip pain'], [1, 'Sports injury, thigh muscle'],
+    ],
+    'Obstetrics & Gynaecology': [
+        [10, 'Lower abdominal pain'], [8, 'Irregular menstrual cycles'],
+        [7, 'Antenatal check-up'], [6, 'White discharge per vaginum'],
+        [5, 'Heavy menstrual bleeding'], [4, 'Painful periods'],
+        [4, 'Missed period, pregnancy confirmation'], [3, 'Post-natal follow-up'],
+        [3, 'Difficulty conceiving'], [2, 'Backache in pregnancy'],
+        [2, 'Burning micturition'], [2, 'Routine gynaecological check'],
+        [1, 'Contraception advice'],
+    ],
+    'Emergency': [
+        [8, 'Chest pain radiating to left arm'], [7, 'Breathlessness since morning'],
+        [6, 'Road traffic accident, abrasions'], [5, 'High-grade fever with rigors'],
+        [5, 'Severe abdominal pain'], [4, 'Fall at home, suspected fracture'],
+        [3, 'Vomiting with dehydration'], [3, 'Giddiness and palpitations'],
+        [2, 'Seizure episode at home'], [2, 'Severe headache'],
+    ],
+};
+
+/**
+ * Ayurvedic / Panchakarma practice sees a different mix entirely: chronic joint and
+ * spine disorders, neurological rehabilitation, skin conditions, digestive weakness,
+ * obesity and stress — people who have usually tried allopathic care first. "Acidity"
+ * and "blood pressure review" would read as wrong on a Panchakarma clinic's queue.
+ *
+ * Department names differ too (Kayachikitsa, Panchakarma, Prasuti Tantra), so most
+ * hospitals will land on the fallback list rather than a department-specific one.
+ */
+const AYURVEDIC_GENERAL: Weighted = [
+    [10, 'Joint pain and stiffness, both knees'], [9, 'Low back pain, chronic'],
+    [8, 'Cervical spondylosis, neck stiffness'], [7, 'Indigestion and loss of appetite'],
+    [6, 'Generalised weakness and fatigue'], [6, 'Sleeplessness and stress'],
+    [6, 'Skin rash and itching, chronic'], [5, 'Weight gain, seeking Panchakarma'],
+    [5, 'Constipation, long-standing'], [5, 'Migraine, recurrent episodes'],
+    [4, 'Hair fall and dandruff'], [4, 'Acidity and bloating after meals'],
+    [4, 'Sciatica, pain radiating down the leg'], [4, 'Frozen shoulder'],
+    [3, 'Post-stroke weakness, seeking rehabilitation'], [3, 'Bronchial asthma, seasonal'],
+    [3, 'Piles, discomfort and bleeding'], [3, 'Psoriasis, patches over elbows'],
+    [3, 'Diabetes, seeking Ayurvedic management'], [2, 'Rheumatoid arthritis follow-up'],
+    [2, 'Wellness consultation and diet advice'], [2, 'Facial palsy, seeking Nasya'],
+    [2, 'Varicose veins, leg heaviness'], [2, 'Anxiety and palpitations'],
+    [1, 'Panchakarma follow-up review'], [1, 'Seasonal detox consultation'],
 ];
 
-/** Plausible result strings per test, so a lab report reads correctly in close-up. */
-const RESULT_TEMPLATES: Record<string, () => string> = {
-    'Complete Blood Count': () => `Hb ${(11 + Math.random() * 5).toFixed(1)} g/dL, WBC ${(4 + Math.random() * 7).toFixed(1)} x10³/µL, Platelets ${Math.round(150 + Math.random() * 250)} x10³/µL`,
-    'Random Blood Sugar': () => `${Math.round(78 + Math.random() * 110)} mg/dL`,
-    'Liver Function Test': () => `Bilirubin ${(0.3 + Math.random() * 1.2).toFixed(1)} mg/dL, SGOT ${Math.round(15 + Math.random() * 45)} U/L, SGPT ${Math.round(12 + Math.random() * 50)} U/L`,
-    'Kidney Function Test': () => `Urea ${Math.round(15 + Math.random() * 30)} mg/dL, Creatinine ${(0.6 + Math.random() * 0.8).toFixed(2)} mg/dL`,
-    'Thyroid Profile (T3 T4 TSH)': () => `T3 ${(0.8 + Math.random() * 1.2).toFixed(2)} ng/mL, T4 ${(5 + Math.random() * 6).toFixed(1)} µg/dL, TSH ${(0.4 + Math.random() * 4).toFixed(2)} µIU/mL`,
-    'Urine Routine & Microscopy': () => `Pale yellow, clear. Albumin ${Math.random() < 0.75 ? 'Nil' : 'Trace'}, Sugar Nil, Pus cells ${Math.round(Math.random() * 6)}/hpf`,
-    'C-Reactive Protein': () => `${(0.4 + Math.random() * 18).toFixed(1)} mg/L`,
-    'Chest X-Ray PA View': () => `${Math.random() < 0.7 ? 'No focal consolidation. Cardiac silhouette within normal limits.' : 'Mild bronchovascular prominence in bilateral lower zones.'}`,
-    'Serum Electrolytes': () => `Na ${Math.round(134 + Math.random() * 10)} mEq/L, K ${(3.4 + Math.random() * 1.4).toFixed(1)} mEq/L, Cl ${Math.round(98 + Math.random() * 9)} mEq/L`,
-    'Dengue NS1 Antigen': () => (Math.random() < 0.82 ? 'Non-reactive' : 'Reactive'),
+const AYURVEDIC_BY_DEPARTMENT: Record<string, Weighted> = {
+    'Panchakarma': [
+        [10, 'Joint pain, advised Abhyanga and Swedana'], [8, 'Chronic back pain for Kati Basti'],
+        [7, 'Sleeplessness, advised Shirodhara'], [6, 'Obesity, advised Udvartana'],
+        [5, 'Skin disorder, advised Vamana'], [5, 'Sinusitis, advised Nasya'],
+        [4, 'Constipation, advised Basti'], [3, 'Panchakarma follow-up review'],
+        [3, 'Seasonal detox, Ritu Shodhana'], [2, 'Post-treatment diet counselling'],
+    ],
+    'Kayachikitsa': [
+        [10, 'Indigestion and loss of appetite'], [8, 'Joint pain, chronic'],
+        [7, 'Generalised weakness'], [6, 'Acidity and bloating'],
+        [5, 'Diabetes, Ayurvedic management'], [5, 'Skin rash, chronic'],
+        [4, 'Constipation'], [4, 'Migraine'], [3, 'Anaemia under evaluation'],
+        [3, 'Fever with body ache'], [2, 'Hypertension, seeking Ayurvedic care'],
+    ],
+    'Prasuti Tantra': [
+        [9, 'Irregular menstrual cycles'], [7, 'White discharge per vaginum'],
+        [6, 'Painful periods'], [6, 'PCOD, seeking Ayurvedic management'],
+        [5, 'Antenatal care and diet advice'], [4, 'Difficulty conceiving'],
+        [3, 'Post-natal care, Sutika Paricharya'], [2, 'Menopausal symptoms'],
+    ],
+    'Kaumarbhritya': [
+        [9, 'Poor appetite in child'], [7, 'Recurrent cold and cough'],
+        [6, 'Poor weight gain'], [5, 'Skin rash over body'],
+        [4, 'Constipation in child'], [3, 'Suvarnaprashan due'],
+        [3, 'Recurrent tonsillitis'], [2, 'Delayed milestones'],
+    ],
+    'Shalya Tantra': [
+        [9, 'Piles, bleeding and discomfort'], [7, 'Fistula in ano'],
+        [6, 'Fissure, painful defecation'], [5, 'Varicose veins'],
+        [4, 'Non-healing ulcer over leg'], [3, 'Post Ksharasutra follow-up'],
+    ],
+    'Shalakya Tantra': [
+        [8, 'Sinusitis and nasal blockage'], [7, 'Dry eyes and strain'],
+        [6, 'Recurrent tonsillitis'], [5, 'Hearing difficulty'],
+        [4, 'Headache with heaviness of head'], [3, 'Netra Tarpana advised'],
+    ],
 };
+
+/**
+ * The two complaint vocabularies, selected per simulation by
+ * `organization_configs.simulation_complaint_style`.
+ */
+const REASON_SETS: Record<string, { byDepartment: Record<string, Weighted>; fallback: Weighted }> = {
+    general: {
+        byDepartment: REASONS_BY_DEPARTMENT,
+        fallback: REASONS_BY_DEPARTMENT['General Medicine'],
+    },
+    ayurvedic: {
+        byDepartment: AYURVEDIC_BY_DEPARTMENT,
+        fallback: AYURVEDIC_GENERAL,
+    },
+};
+
+function weightedPick(items: Weighted): string {
+    const total = items.reduce((s, [w]) => s + w, 0);
+    let r = Math.random() * total;
+    for (const [w, text] of items) {
+        r -= w;
+        if (r <= 0) return text;
+    }
+    return items[items.length - 1][1];
+}
+
+/**
+ * Pick a complaint for this visit. `style` comes from the simulation's own config, so a
+ * Panchakarma clinic and a multi-specialty hospital running side by side each get their
+ * own vocabulary.
+ */
+export function reasonFor(department: string | null, style: string = 'general'): string {
+    const set = REASON_SETS[style] ?? REASON_SETS.general;
+    return weightedPick(set.byDepartment[department ?? ''] ?? set.fallback);
+}
+
+// ---------------------------------------------------------------------------
+// Prescribing
+// ---------------------------------------------------------------------------
+
+export interface SimMedicine {
+    id: number;
+    brand_name: string;
+    selling_price: number | null;
+    category?: string | null;
+}
+
+/**
+ * How often each drug class appears on an Indian OPD prescription.
+ *
+ * Picking uniformly from the formulary meant a rare injectable turned up as often as
+ * paracetamol, and the same three or four brands recurred across every indent on screen.
+ * Prescription-audit studies of Indian outpatient departments consistently show acid
+ * suppressants and analgesics dominating, vitamins close behind, and antibiotics on
+ * roughly one encounter in five or six.
+ */
+const CLASS_WEIGHTS: Weighted = [
+    [34, 'acid'],
+    [26, 'analgesic'],
+    [20, 'vitamin'],
+    [17, 'antibiotic'],
+    [14, 'antiallergic'],
+    [9, 'antiemetic'],
+    [7, 'respiratory'],
+    [6, 'chronic'],
+    [4, 'other'],
+];
+
+/**
+ * Brand-name fragments that identify a class, so this works off whatever formulary the
+ * hospital actually has.
+ *
+ * Every alternative is anchored with \b. Without it `pan` (Pantoprazole) matched
+ * "**Pan**chakarma" and filed an Ayurvedic therapy as a stomach tablet — a real
+ * false positive found while looking at an Ayurvedic hospital's master data. Anchoring
+ * only the START is deliberate: several entries are prefixes (`amox`, `cefix`) meant to
+ * catch a family of brand names.
+ */
+const CLASS_MATCHERS: Record<string, RegExp> = {
+    acid: /\b(pan|omez|rantac|ulcer|razo|aciloc|gelusil|sucral|pantop|esomep|nexpro)/i,
+    analgesic: /\b(crocin|dolo|combiflam|brufen|voveran|zerodol|paracet|ibupro|diclo|nise|aceclo|etoshine)/i,
+    vitamin: /\b(becosule|shelcal|neurobion|zincovit|calcium|vitamin|limcee|folvite|orofer|supradyn|a to z)/i,
+    antibiotic: /\b(augment|azithral|zifi|monocef|taxim|cifran|metrogyl|amox|cefix|doxy|levoflox|ofloxa)/i,
+    antiallergic: /\b(allegra|cetriz|cetzine|montek|avil|levocet|okacet|teczine)/i,
+    antiemetic: /\b(emeset|domstal|perinorm|ondans|vomikind|rebalanz)/i,
+    respiratory: /\b(asthalin|deriphyllin|ascoril|montair|budecort|foracort|seroflo)/i,
+    chronic: /\b(metformin|glycomet|amlo|telma|atorva|thyronorm|losar|januvia|rosuva|olmesar)/i,
+};
+
+const classOf = (m: SimMedicine): string => {
+    for (const [name, re] of Object.entries(CLASS_MATCHERS)) {
+        if (re.test(m.brand_name)) return name;
+    }
+    return 'other';
+};
+
+/**
+ * Build one prescription: 1–4 lines, each from a different drug class, weighted by how
+ * often that class is actually prescribed. Distinct classes matter — two acid
+ * suppressants on the same slip is the kind of thing a pharmacist would query.
+ */
+export function composePrescription(medicines: SimMedicine[]): SimMedicine[] {
+    if (!medicines.length) return [];
+    const byClass = new Map<string, SimMedicine[]>();
+    for (const m of medicines) {
+        const c = classOf(m);
+        if (!byClass.has(c)) byClass.set(c, []);
+        byClass.get(c)!.push(m);
+    }
+
+    const lines = weightedPick([[30, '1'], [38, '2'], [22, '3'], [10, '4']]);
+    const wanted = Number(lines);
+
+    // An Ayurvedic or otherwise non-allopathic formulary matches none of the classes
+    // above, leaving everything under "other". Weighting would then almost never select
+    // anything and prescriptions would come out empty, so fall back to a plain pick.
+    if (byClass.size === 1 && byClass.has('other')) {
+        const pool = [...medicines];
+        const out: SimMedicine[] = [];
+        while (out.length < Math.min(wanted, pool.length)) {
+            const m = pick(pool);
+            if (!out.includes(m)) out.push(m);
+        }
+        return out;
+    }
+    const chosen: SimMedicine[] = [];
+    const usedClasses = new Set<string>();
+
+    for (let attempt = 0; chosen.length < wanted && attempt < 24; attempt++) {
+        const cls = weightedPick(CLASS_WEIGHTS);
+        if (usedClasses.has(cls)) continue;
+        const pool = byClass.get(cls);
+        if (!pool?.length) continue;
+        usedClasses.add(cls);
+        chosen.push(pick(pool));
+    }
+
+    // Formulary too narrow to fill the slip by class — top up rather than return short.
+    while (chosen.length < wanted && chosen.length < medicines.length) {
+        const m = pick(medicines);
+        if (!chosen.includes(m)) chosen.push(m);
+    }
+    return chosen;
+}
+
+// ---------------------------------------------------------------------------
+// Lab results
+// ---------------------------------------------------------------------------
+
+/**
+ * Reference ranges as used by Indian laboratories, so a printed report reads correctly
+ * against its own stated normals.
+ *
+ * The previous version drew every analyte from one uniform band, which made every CBC
+ * on screen look like every other CBC — the same three values, the same spread, nothing
+ * ever flagged. Real reports are mostly normal with the occasional value outside range,
+ * and that outlier is what makes the page look like a real result rather than filler.
+ */
+interface Analyte {
+    label: string;
+    unit: string;
+    /** Reference interval printed alongside the value. */
+    low: number;
+    high: number;
+    /** Decimal places. 0 = integer. */
+    dp: number;
+    /** How far outside the range an abnormal value may stray, as a fraction of the range. */
+    spread?: number;
+    /**
+     * Only ever drift upward. For some analytes a low result is not a clinical finding at
+     * all — nobody is investigated for a low HbA1c — so generating one produces a number
+     * a real lab would never report.
+     */
+    highOnly?: boolean;
+}
+
+/** Probability any single analyte on a panel comes back outside its reference range. */
+const P_ANALYTE_ABNORMAL = 0.16;
+
+function measure(a: Analyte): string {
+    const range = a.high - a.low;
+    let value: number;
+
+    if (Math.random() < P_ANALYTE_ABNORMAL) {
+        // Outside the range, and usually only just outside — grossly deranged values on
+        // every other report would read as a hospital full of dying people.
+        const drift = range * (a.spread ?? 0.45) * (0.15 + Math.random() * 0.85);
+        // Low-side drift is additionally capped against the lower bound itself, not just
+        // the width of the range. Blood urea has a narrow reference band (15–40) sitting
+        // well above zero, so a range-proportional drop produced values like 4 mg/dL —
+        // arithmetically fine, clinically impossible, and obvious to anyone who reads it.
+        // An analyte whose normal floor is zero (ESR) can only ever drift upward.
+        const canGoLow = a.low > 0 && !a.highOnly;
+        value = canGoLow && Math.random() < 0.5
+            ? a.low - Math.min(drift, a.low * 0.35)
+            : a.high + drift;
+    } else {
+        // Bunched toward the middle of the range rather than flat across it, so repeated
+        // reports vary the way real ones do instead of looking uniformly scattered.
+        const t = (Math.random() + Math.random()) / 2;
+        value = a.low + range * t;
+    }
+
+    const shown = value.toFixed(a.dp);
+    const flag = value < a.low ? ' (L)' : value > a.high ? ' (H)' : '';
+    const refLow = a.low.toFixed(a.dp);
+    const refHigh = a.high.toFixed(a.dp);
+    return `${a.label} ${shown} ${a.unit}${flag} [${refLow}–${refHigh}]`;
+}
+
+const panel = (...analytes: Analyte[]) => () => analytes.map(measure).join(', ');
+
+/** Result text per test. Keys must match `lab_test_inventory.test_name`. */
+export const RESULT_TEMPLATES: Record<string, () => string> = {
+    'Complete Blood Count': panel(
+        { label: 'Hb', unit: 'g/dL', low: 12.0, high: 16.5, dp: 1 },
+        { label: 'TLC', unit: '/µL', low: 4000, high: 11000, dp: 0 },
+        { label: 'Platelets', unit: '/µL', low: 150000, high: 410000, dp: 0 },
+        { label: 'PCV', unit: '%', low: 36, high: 48, dp: 1 },
+    ),
+    'Random Blood Sugar': panel(
+        { label: 'Glucose (R)', unit: 'mg/dL', low: 80, high: 140, dp: 0, spread: 0.9 },
+    ),
+    'Fasting Blood Sugar': panel(
+        { label: 'Glucose (F)', unit: 'mg/dL', low: 70, high: 100, dp: 0, spread: 1.1 },
+    ),
+    'HbA1c': panel(
+        { label: 'HbA1c', unit: '%', low: 4.0, high: 5.7, dp: 1, spread: 0.9, highOnly: true },
+    ),
+    'Lipid Profile': panel(
+        { label: 'Total Cholesterol', unit: 'mg/dL', low: 125, high: 200, dp: 0 },
+        { label: 'LDL', unit: 'mg/dL', low: 50, high: 100, dp: 0 },
+        { label: 'HDL', unit: 'mg/dL', low: 40, high: 60, dp: 0 },
+        { label: 'Triglycerides', unit: 'mg/dL', low: 50, high: 150, dp: 0, spread: 0.8 },
+    ),
+    'Liver Function Test': panel(
+        { label: 'Total Bilirubin', unit: 'mg/dL', low: 0.1, high: 1.2, dp: 2 },
+        { label: 'SGOT', unit: 'U/L', low: 10, high: 40, dp: 0 },
+        { label: 'SGPT', unit: 'U/L', low: 7, high: 56, dp: 0 },
+        { label: 'Alk. Phosphatase', unit: 'U/L', low: 44, high: 147, dp: 0 },
+    ),
+    'Kidney Function Test': panel(
+        { label: 'Blood Urea', unit: 'mg/dL', low: 15, high: 40, dp: 0 },
+        { label: 'Creatinine', unit: 'mg/dL', low: 0.6, high: 1.3, dp: 2 },
+        { label: 'Uric Acid', unit: 'mg/dL', low: 3.5, high: 7.2, dp: 1 },
+    ),
+    'Thyroid Profile (T3 T4 TSH)': panel(
+        { label: 'T3', unit: 'pg/mL', low: 2.3, high: 4.2, dp: 2 },
+        { label: 'T4', unit: 'ng/dL', low: 0.8, high: 1.8, dp: 2 },
+        { label: 'TSH', unit: 'µIU/mL', low: 0.4, high: 4.0, dp: 2, spread: 1.4 },
+    ),
+    'Serum Electrolytes': panel(
+        { label: 'Sodium', unit: 'mEq/L', low: 136, high: 145, dp: 0 },
+        { label: 'Potassium', unit: 'mEq/L', low: 3.5, high: 5.0, dp: 1 },
+        { label: 'Chloride', unit: 'mEq/L', low: 98, high: 106, dp: 0 },
+    ),
+    'C-Reactive Protein': panel(
+        { label: 'CRP', unit: 'mg/L', low: 0.3, high: 6.0, dp: 1, spread: 2.5, highOnly: true },
+    ),
+    // Descriptive reports — no numeric panel, so these vary by wording instead.
+    'Urine Routine & Microscopy': () => {
+        const albumin = weightedPick([[8, 'Nil'], [2, 'Trace'], [1, '1+']]);
+        const pus = Math.random() < 0.75 ? `${rint(0, 4)}` : `${rint(6, 18)}`;
+        return `Colour pale yellow, clear. Albumin ${albumin}, Sugar Nil, `
+            + `Pus cells ${pus}/hpf [0–5], Epithelial cells ${rint(1, 6)}/hpf, RBC ${Math.random() < 0.88 ? 'Nil' : `${rint(2, 8)}/hpf`}`;
+    },
+    'Chest X-Ray PA View': () => weightedPick([
+        [70, 'Both lung fields clear. No focal consolidation. Cardiac silhouette within normal limits. CP angles clear.'],
+        [10, 'Mild bronchovascular prominence in bilateral lower zones. No consolidation.'],
+        [7, 'Ill-defined opacity in right lower zone — suggest clinical correlation.'],
+        [7, 'Hyperinflated lung fields with flattened diaphragm.'],
+        [6, 'Cardiomegaly noted, CT ratio increased. Suggest echocardiography.'],
+    ]),
+    'Dengue NS1 Antigen': () => weightedPick([[82, 'Non-reactive'], [18, 'Reactive']]),
+    'Widal Test': () => weightedPick([
+        [78, 'S. typhi O <1:40, H <1:40 — Non-significant'],
+        [12, 'S. typhi O 1:80, H 1:160 — Significant titre'],
+        [10, 'S. typhi O 1:160, H 1:320 — Significant titre'],
+    ]),
+    'Malaria Rapid Test': () => weightedPick([[90, 'Negative for P. vivax and P. falciparum'], [10, 'Positive for P. vivax']]),
+    'ESR': panel({ label: 'ESR', unit: 'mm/hr', low: 0, high: 20, dp: 0, spread: 2.0, highOnly: true }),
+
+    // Single-analyte tests that hospitals often list separately rather than as a panel.
+    'Blood Urea': panel({ label: 'Blood Urea', unit: 'mg/dL', low: 15, high: 40, dp: 0 }),
+    'Serum Creatinine': panel({ label: 'Creatinine', unit: 'mg/dL', low: 0.6, high: 1.3, dp: 2 }),
+    'Serum Uric Acid': panel({ label: 'Uric Acid', unit: 'mg/dL', low: 3.5, high: 7.2, dp: 1 }),
+    'Haemoglobin': panel({ label: 'Hb', unit: 'g/dL', low: 12.0, high: 16.5, dp: 1 }),
+    'Serum Bilirubin': panel({ label: 'Total Bilirubin', unit: 'mg/dL', low: 0.1, high: 1.2, dp: 2 }),
+    'ABO & Rh Typing': () => weightedPick([
+        [32, 'Blood Group O Positive'], [25, 'Blood Group B Positive'],
+        [21, 'Blood Group A Positive'], [8, 'Blood Group AB Positive'],
+        [5, 'Blood Group O Negative'], [4, 'Blood Group B Negative'],
+        [3, 'Blood Group A Negative'], [2, 'Blood Group AB Negative'],
+    ]),
+    'ASO Titre': () => weightedPick([[80, 'ASO Titre <200 IU/mL — Non-significant'], [20, 'ASO Titre 400 IU/mL — Significant']]),
+    'Absolute Eosinophil Count': panel({ label: 'AEC', unit: '/µL', low: 40, high: 440, dp: 0, spread: 1.6 }),
+    'Bleeding Time / Clotting Time': () => `BT ${rint(1, 4)} min ${rint(0, 59)} sec [1–6 min], CT ${rint(4, 9)} min ${rint(0, 59)} sec [4–10 min]`,
+};
+
+// ---------------------------------------------------------------------------
+// Matching a hospital's own test names to a result template
+// ---------------------------------------------------------------------------
+
+/**
+ * Hospitals name the same test differently — "CBC (Complete Blood Count)",
+ * "Complete Blood Count", "C.B.C.", "Blood Sugar (Random)". Keying templates on an exact
+ * name meant a cloned hospital's tests all fell through to a blank result, which is
+ * exactly what a real lab report never looks like.
+ *
+ * Fragments are checked longest-first so "fasting blood sugar" is not swallowed by
+ * "blood sugar".
+ */
+const TEST_ALIASES: readonly (readonly [string, string])[] = [
+    ['fasting blood sugar', 'Fasting Blood Sugar'], ['blood sugar fasting', 'Fasting Blood Sugar'],
+    ['fbs', 'Fasting Blood Sugar'], ['random blood sugar', 'Random Blood Sugar'],
+    ['blood sugar random', 'Random Blood Sugar'], ['rbs', 'Random Blood Sugar'],
+    ['blood sugar', 'Random Blood Sugar'], ['glucose', 'Random Blood Sugar'],
+    ['complete blood count', 'Complete Blood Count'], ['cbc', 'Complete Blood Count'],
+    ['haemogram', 'Complete Blood Count'], ['hemogram', 'Complete Blood Count'],
+    ['liver function', 'Liver Function Test'], ['lft', 'Liver Function Test'],
+    ['kidney function', 'Kidney Function Test'], ['renal function', 'Kidney Function Test'],
+    ['kft', 'Kidney Function Test'], ['rft', 'Kidney Function Test'],
+    ['thyroid', 'Thyroid Profile (T3 T4 TSH)'], ['tsh', 'Thyroid Profile (T3 T4 TSH)'],
+    ['lipid', 'Lipid Profile'], ['cholesterol', 'Lipid Profile'],
+    ['hba1c', 'HbA1c'], ['glycosylated', 'HbA1c'],
+    ['electrolyte', 'Serum Electrolytes'], ['sodium', 'Serum Electrolytes'],
+    ['c-reactive', 'C-Reactive Protein'], ['crp', 'C-Reactive Protein'],
+    ['urine routine', 'Urine Routine & Microscopy'], ['urine', 'Urine Routine & Microscopy'],
+    ['chest x-ray', 'Chest X-Ray PA View'], ['x-ray chest', 'Chest X-Ray PA View'],
+    ['dengue', 'Dengue NS1 Antigen'], ['widal', 'Widal Test'], ['typhoid', 'Widal Test'],
+    ['malaria', 'Malaria Rapid Test'], ['esr', 'ESR'], ['sedimentation', 'ESR'],
+    ['blood urea', 'Blood Urea'], ['urea', 'Blood Urea'],
+    ['creatinine', 'Serum Creatinine'], ['uric acid', 'Serum Uric Acid'],
+    ['haemoglobin', 'Haemoglobin'], ['hemoglobin', 'Haemoglobin'], ['bilirubin', 'Serum Bilirubin'],
+    ['blood group', 'ABO & Rh Typing'], ['abo', 'ABO & Rh Typing'], ['rh typing', 'ABO & Rh Typing'],
+    ['aso', 'ASO Titre'], ['eosinophil', 'Absolute Eosinophil Count'], ['aec', 'Absolute Eosinophil Count'],
+    ['bleeding time', 'Bleeding Time / Clotting Time'], ['bt/ct', 'Bleeding Time / Clotting Time'],
+];
+
+const ALIASES_BY_LENGTH = [...TEST_ALIASES].sort((a, b) => b[0].length - a[0].length);
+
+const normaliseTestName = (name: string) =>
+    name.toLowerCase().replace(/[().,_-]/g, ' ').replace(/\s+/g, ' ').trim();
+
+/**
+ * Result text for a test, whatever the hospital happens to call it.
+ *
+ * Unrecognised tests get a plausible descriptive line rather than nothing — a cloned
+ * hospital may have hundreds of tests we have no template for, and a blank result column
+ * looks broken in a way "Within normal limits" does not.
+ */
+export function resultForTest(testName: string): string {
+    const direct = RESULT_TEMPLATES[testName];
+    if (direct) return direct();
+
+    const norm = normaliseTestName(testName);
+    for (const [fragment, key] of ALIASES_BY_LENGTH) {
+        if (norm.includes(fragment)) return RESULT_TEMPLATES[key]();
+    }
+    return weightedPick([
+        [70, 'Within normal limits.'],
+        [12, 'No significant abnormality detected.'],
+        [10, 'Mild abnormality noted — suggest clinical correlation.'],
+        [8, 'Sample adequate. Results within expected reference range.'],
+    ]);
+}
 
 // ---------------------------------------------------------------------------
 // Small helpers
 // ---------------------------------------------------------------------------
 
 const rand = (min: number, max: number) => min + Math.random() * (max - min);
+const rint = (min: number, max: number) => Math.floor(rand(min, max + 1));
 const pick = <T>(xs: readonly T[]): T => xs[Math.floor(Math.random() * xs.length)];
 
 /** Jitter a dwell time so rows never transition in lockstep. */
@@ -240,6 +773,10 @@ export async function runActivityTick(now: Date = new Date(), targetOrgId?: stri
             uhid_prefix: true,
             activity_generator_enabled: true,
             activity_generator_intensity: true,
+            simulation_use_master_data: true,
+            simulation_complaint_style: true,
+            simulation_department_mode: true,
+            simulation_workstation_ips: true,
         },
     });
 
@@ -250,6 +787,20 @@ export async function runActivityTick(now: Date = new Date(), targetOrgId?: stri
     const org = await prisma.organization.findUnique({ where: { id: orgId }, select: { code: true } });
     const orgCode = org?.code || 'HOS';
     const tz = config.timezone || 'Asia/Kolkata';
+    const complaintStyle = config.simulation_complaint_style || 'general';
+    // Per-simulation workstation addresses, matching the source hospital's own network
+    // pattern. Null for a blank simulation, where the generated default applies.
+    const workstations = (config.simulation_workstation_ips as Record<string, string> | null) ?? null;
+
+    // Pull any master-data changes made in the real hospital. Costs one timestamp
+    // comparison on the ticks where nothing is due, which is all but one a day.
+    const synced = await syncMasterDataIfDue(orgId, now);
+    if (synced) {
+        const changed = Object.entries(synced)
+            .filter(([, v]) => v.created || v.updated || v.retired)
+            .map(([table, v]) => `${table} +${v.created} ~${v.updated} -${v.retired}`);
+        console.log(`[sim-tick] master data synced for ${orgId}: ${changed.join(', ') || 'no changes'}`);
+    }
     const intensity = INTENSITY_MULTIPLIER[config.activity_generator_intensity] ?? 1.0;
     const db = getTenantPrisma(orgId);
 
@@ -257,13 +808,15 @@ export async function runActivityTick(now: Date = new Date(), targetOrgId?: stri
 
     // Doctors on staff — every visit, lab order and indent is attributed to one, so a
     // record never shows a dangling reference under a close-up.
-    const staff = await loadStaff(orgId);
+    // Idle roles are dropped before anything else sees the roster, so they cannot clock
+    // in, cannot be picked as a stand-in, and never appear in the audit trail.
+    const staff = (await loadStaff(orgId)).filter(s => !IDLE_ROLES.has(s.role));
     const doctors = staff.filter(s => s.role === 'doctor');
     if (!doctors.length) return { ...EMPTY, reason: 'no active doctors in this organization' };
 
     // Reconcile the roster against the audit log first, so anyone attributed to an
     // action below is already recorded as logged in at this moment.
-    const sessions = await syncStaffSessions(orgId, staff, now, tz);
+    const sessions = await syncStaffSessions(orgId, staff, now, tz, workstations);
     result.staffLoggedIn = sessions.loggedIn;
     result.staffLoggedOut = sessions.loggedOut;
 
@@ -280,9 +833,6 @@ export async function runActivityTick(now: Date = new Date(), targetOrgId?: stri
         ? Math.min(60, Math.max(0.5, (now.getTime() - new Date(newest.created_at).getTime()) / 60_000))
         : 5;
     result.elapsedMinutes = Number(elapsedMinutes.toFixed(1));
-
-    const tpaProviders: { id: number; provider_code: string }[] =
-        await db.insurance_providers.findMany({ where: { is_active: true }, select: { id: true, provider_code: true } });
 
     const { start: dayStart, end: dayEnd } = getTodayRange(tz);
     const registeredToday = await db.oPD_REG.count({
@@ -307,27 +857,29 @@ export async function runActivityTick(now: Date = new Date(), targetOrgId?: stri
         const totalSoFar = await db.oPD_REG.count();
         const person = castPerson(totalSoFar + i + 1);
 
-        const patientType = Math.random() < 0.14 ? 'tpa_insurance' : 'cash';
         const patientId = await createWithUniqueRetry(async () => {
             const patientId = await generateUHID(db, config.uhid_prefix || 'AVN');
+            // Deliberately narrow: identity, age and the department only.
+            //
+            // castPerson() still generates a phone, address, blood group, Aadhaar, ABHA
+            // and next-of-kin — those are simply not written. Keeping the generator whole
+            // means re-adding a field here is one line, and cast.ts's checksum guarantees
+            // stay covered by its own self-check.
+            //
+            // Consequences, so they are not a surprise on screen: phone, address, blood
+            // group and emergency contact render blank, and patient_type falls back to
+            // the column default 'cash'.
             await db.oPD_REG.create({
                 data: {
                     patient_id: patientId,
                     full_name: person.full_name,
-                    age: person.age,
                     gender: person.gender,
-                    phone: person.phone,
-                    address: person.address,
-                    blood_group: person.blood_group,
+                    age: person.age,
                     date_of_birth: person.date_of_birth,
-                    aadhar_card: person.aadhar_card,
-                    abha_number: person.abha_number,
-                    emergency_contact_name: person.emergency_contact_name,
-                    emergency_contact_phone: person.emergency_contact_phone,
-                    emergency_contact_relation: person.emergency_contact_relation,
                     department,
+                    // Set explicitly: the column defaults to false, which would show every
+                    // patient as not having consented to registration.
                     registration_consent: true,
-                    patient_type: patientType,
                     // Back-date slightly so arrivals within one tick are not all identical.
                     created_at: new Date(now.getTime() - Math.floor(rand(0, elapsedMinutes * 60_000))),
                 } as any,
@@ -341,8 +893,11 @@ export async function runActivityTick(now: Date = new Date(), targetOrgId?: stri
                     doctor_name: doctor.name,
                     department,
                     status: 'Scheduled',
-                    reason_for_visit: pick(REASONS_FOR_VISIT),
-                    booking_channel: Math.random() < 0.75 ? 'walk_in' : 'phone',
+                    reason_for_visit: reasonFor(department, complaintStyle),
+                    // Every visit is a walk-in. The app also recognises phone, online,
+                    // whatsapp, referral and call_center, so any report broken down by
+                    // channel will show a single bar.
+                    booking_channel: 'walk_in',
                     queue_token: registeredToday + i + 1,
                     appointment_date: new Date(now.getTime() - Math.floor(rand(0, elapsedMinutes * 60_000))),
                 } as any,
@@ -350,31 +905,9 @@ export async function runActivityTick(now: Date = new Date(), targetOrgId?: stri
             return patientId;
         });
 
-        // An insured patient needs a policy on file, or the TPA claim raised against
-        // their bill later would have nothing to attach to and the claim never appears.
-        if (patientType === 'tpa_insurance' && tpaProviders.length) {
-            const provider = pick(tpaProviders);
-            const limit = pick([100000, 200000, 300000, 500000]);
-            await db.insurance_policies.create({
-                data: {
-                    patient_id: patientId,
-                    provider_id: provider.id,
-                    policy_number: `${provider.provider_code}/${new Date().getFullYear()}/${String(Math.floor(rand(10000, 99999)))}`,
-                    policy_holder: person.full_name,
-                    plan_name: 'Family Floater',
-                    policy_type: 'Individual',
-                    coverage_limit: limit,
-                    remaining_limit: limit,
-                    valid_from: new Date(now.getFullYear(), 0, 1),
-                    valid_until: new Date(now.getFullYear(), 11, 31),
-                    status: 'Active',
-                    organizationId: orgId,
-                } as any,
-            });
-        }
-
         await logSimAudit({
             organizationId: orgId,
+            workstations,
             actor: actor('receptionist'),
             action: 'REGISTER_PATIENT',
             module: 'opd',
@@ -390,11 +923,44 @@ export async function runActivityTick(now: Date = new Date(), targetOrgId?: stri
     // Each step uses the timestamp the real workflow writes, so a record's history is
     // internally consistent if anyone opens it.
 
-    // Consultation fees by department, fetched once rather than per appointment.
+    // Consultation fees by department, fetched once rather than per appointment. A
+    // simulation set to "no departments" simply returns none and falls back to the
+    // doctor's own rate.
     const departments: { name: string; base_consultation_fee: number }[] =
         await db.department.findMany({ where: { is_active: true }, select: { name: true, base_consultation_fee: true } });
-    const feeFor = (dept: string | null) =>
-        departments.find(d => d.name === dept)?.base_consultation_fee ?? 700;
+
+    // Per-doctor rates from Doctor Master, keyed by id for the fee lookup below.
+    const doctorFees = new Map(
+        (await prisma.user.findMany({
+            where: { organizationId: orgId, role: 'doctor', is_active: true },
+            select: { id: true, consultation_fee: true, follow_up_fee: true },
+        })).map(d => [d.id, d]),
+    );
+    /**
+     * Consultation fee for one visit.
+     *
+     * The department's base fee is the list price, but a counter does not charge every
+     * patient the same amount: roughly a quarter of OPD footfall is a follow-up within
+     * the free/reduced window, which Indian private hospitals typically bill at 40–50%
+     * of a new consultation. Charging one flat figure to every patient made the whole
+     * day's collection a single number repeated down the page.
+     */
+    const feeFor = (dept: string | null, doctorId: string | null): { fee: number; isFollowUp: boolean } => {
+        // The doctor's own fee wins. A cloned hospital sets consultation_fee per doctor in
+        // Doctor Master, and reading only the department rate threw that away — every
+        // consultant billed the same amount regardless of what their record said. Falls
+        // back to the department rate, then to a flat default, so a simulation running
+        // with no departments at all still bills something sensible.
+        const doctor = doctorId ? doctorFees.get(doctorId) : undefined;
+        const departmentRate = departments.find(d => d.name === dept)?.base_consultation_fee;
+        const base = doctor?.consultation_fee || departmentRate || 600;
+        const isFollowUp = Math.random() < 0.26;
+        if (!isFollowUp) return { fee: base, isFollowUp };
+        // The doctor's own follow-up rate when set, otherwise 40–50% of the new-visit fee
+        // rounded to the nearest ₹50, the way a real tariff card is written.
+        const followUp = doctor?.follow_up_fee || Math.round((base * rand(0.4, 0.5)) / 50) * 50;
+        return { fee: followUp, isFollowUp };
+    };
 
     const scheduled = await db.appointments.findMany({
         where: { status: 'Scheduled' },
@@ -410,10 +976,12 @@ export async function runActivityTick(now: Date = new Date(), targetOrgId?: stri
         });
         result.checkedIn++;
 
+        if (!GENERATE.opdBilling) continue;
+
         // The OPD consultation fee is collected at the counter on check-in, so the
         // receipt and the check-in timestamp agree.
         const cashier = actor('receptionist');
-        const fee = feeFor(appt.department);
+        const { fee, isFollowUp } = feeFor(appt.department, appt.doctor_id);
         await createWithUniqueRetry(async () => {
             const invoiceNumber = await generateInvoiceNumber(orgId, 'OPD', false, db);
             const invoice = await db.invoices.create({
@@ -433,7 +1001,7 @@ export async function runActivityTick(now: Date = new Date(), targetOrgId?: stri
                 data: {
                     invoice_id: invoice.id,
                     department: appt.department || 'General Medicine',
-                    description: `Consultation — ${appt.department || 'General Medicine'}`,
+                    description: `${isFollowUp ? 'Follow-up consultation' : 'Consultation'} — ${appt.department || 'General Medicine'}`,
                     quantity: 1, unit_price: fee, total_price: fee, net_price: fee,
                     rendered_by_doctor_id: appt.doctor_id,
                     created_at: new Date(due),
@@ -455,7 +1023,7 @@ export async function runActivityTick(now: Date = new Date(), targetOrgId?: stri
         result.opdBilled++;
 
         await logSimAudit({
-            organizationId: orgId, actor: cashier,
+            organizationId: orgId, workstations, actor: cashier,
             action: 'RECORD_PAYMENT', module: 'billing',
             entityType: 'invoice', entityId: appt.patient_id,
             details: `OPD consultation fee collected — Rs ${fee}`,
@@ -511,7 +1079,7 @@ export async function runActivityTick(now: Date = new Date(), targetOrgId?: stri
         const consultingDoctor = doctors.find(d => d.id === doctorId) ?? doctors[0];
 
         await logSimAudit({
-            organizationId: orgId, actor: consultingDoctor,
+            organizationId: orgId, workstations, actor: consultingDoctor,
             action: 'COMPLETE_CONSULTATION', module: 'doctor',
             entityType: 'appointment', entityId: appt.patient_id,
             details: 'Consultation completed', at: new Date(due),
@@ -525,13 +1093,15 @@ export async function runActivityTick(now: Date = new Date(), targetOrgId?: stri
         // skew heavily towards people with cover. That is realistic on its own, and it
         // also keeps the TPA pipeline fed: at a flat rate, insured-AND-admitted is ~1% of
         // arrivals, so whether the claims screens had any data at all came down to luck.
-        const insured = await db.oPD_REG.findFirst({
-            where: { patient_id: appt.patient_id }, select: { patient_type: true },
-        });
+        const insured = GENERATE.ipd
+            ? await db.oPD_REG.findFirst({
+                where: { patient_id: appt.patient_id }, select: { patient_type: true },
+            })
+            : null;
         const admitChance = insured?.patient_type === 'tpa_insurance'
             ? P_ADMIT_AFTER_CONSULT * 2.6
             : P_ADMIT_AFTER_CONSULT;
-        if (Math.random() < admitChance) {
+        if (GENERATE.ipd && Math.random() < admitChance) {
             const freeBed = await db.beds.findFirst({
                 where: { status: 'Available' },
                 select: { bed_id: true, ward_id: true, bed_name: true },
@@ -577,7 +1147,7 @@ export async function runActivityTick(now: Date = new Date(), targetOrgId?: stri
                     });
 
                     await logSimAudit({
-                        organizationId: orgId, actor: admittedBy,
+                        organizationId: orgId, workstations, actor: admittedBy,
                         action: 'ADMIT_PATIENT', module: 'ipd',
                         entityType: 'admission', entityId: admissionId,
                         details: `Admitted to ${freeBed.bed_name || freeBed.bed_id}`,
@@ -588,7 +1158,7 @@ export async function runActivityTick(now: Date = new Date(), targetOrgId?: stri
             }
         }
 
-        if (labMenu.length && Math.random() < P_LAB_AFTER_CONSULT) {
+        if (GENERATE.lab && labMenu.length && Math.random() < P_LAB_AFTER_CONSULT) {
             const tests = Math.random() < 0.3 ? 2 : 1;
             for (let t = 0; t < tests; t++) {
                 await createWithUniqueRetry(async () => {
@@ -613,16 +1183,14 @@ export async function runActivityTick(now: Date = new Date(), targetOrgId?: stri
             }
         }
 
-        if (medicines.length && Math.random() < P_PHARMACY_AFTER_CONSULT) {
+        if (GENERATE.pharmacy && medicines.length && Math.random() < P_PHARMACY_AFTER_CONSULT) {
             await createWithUniqueRetry(async () => {
                 const indentNumber = await generateIndentNumber(orgId, db);
-                const lines = Math.floor(rand(1, 4));
                 // Quantities are decided before the total so the header amount is the sum
                 // of the line items. A header that disagrees with its own lines is the
                 // first thing that looks wrong when a bill is held up to camera.
-                const chosen = Array.from({ length: lines }, () => {
-                    const medicine = pick(medicines);
-                    const quantity = Math.floor(rand(1, 4));
+                const chosen = composePrescription(medicines).map(medicine => {
+                    const quantity = rint(1, 3);
                     return { medicine, quantity, lineTotal: (medicine.selling_price || 0) * quantity };
                 });
                 const total = chosen.reduce((s, line) => s + line.lineTotal, 0);
@@ -682,14 +1250,16 @@ export async function runActivityTick(now: Date = new Date(), targetOrgId?: stri
         const due = new Date(order.created_at).getTime()
             + jitteredDwellMs(DWELL_MINUTES.labOrderedToProcessing + DWELL_MINUTES.labProcessingToCompleted);
         if (now.getTime() < due) continue;
-        const template = RESULT_TEMPLATES[order.test_type];
         const isCritical = Math.random() < P_CRITICAL_RESULT;
         const technician = actor('lab_technician');
         await db.lab_orders.update({
             where: { id: order.id },
             data: {
                 status: 'Completed',
-                result_value: template ? template() : 'Within normal limits',
+                // Alias-aware: a cloned hospital names its tests however it likes
+                // ("CBC (Complete Blood Count)"), and an exact-key lookup left every one
+                // of them blank.
+                result_value: resultForTest(order.test_type),
                 is_critical: isCritical,
                 assigned_technician_id: technician?.username ?? null,
                 ...(isCritical ? { critical_notified_at: new Date(due) } : {}),
@@ -698,7 +1268,7 @@ export async function runActivityTick(now: Date = new Date(), targetOrgId?: stri
         result.labCompleted++;
 
         await logSimAudit({
-            organizationId: orgId, actor: technician,
+            organizationId: orgId, workstations, actor: technician,
             action: isCritical ? 'CRITICAL_RESULT_NOTIFIED' : 'UPLOAD_RESULT',
             module: 'lab',
             entityType: 'lab_order', entityId: String(order.id),
@@ -740,7 +1310,7 @@ export async function runActivityTick(now: Date = new Date(), targetOrgId?: stri
         result.indentsDispensed++;
 
         await logSimAudit({
-            organizationId: orgId, actor: actor('pharmacist'),
+            organizationId: orgId, workstations, actor: actor('pharmacist'),
             action: 'DISPENSE_MEDICATION', module: 'Pharmacy',
             entityType: 'pharmacy_order', entityId: String(order.id),
             details: `Dispensed ${order.total_items_requested ?? 0} item(s)`, at: new Date(due),
@@ -752,8 +1322,10 @@ export async function runActivityTick(now: Date = new Date(), targetOrgId?: stri
     // 'Admitted', so discharging first would mean a patient who arrived and left within
     // one tick was never observed, never medicated and never charted — leaving a
     // discharge summary attached to an empty record.
-    const ward = await runWardCare(db, orgId, staff, doctors, now, tz);
-    Object.assign(result, ward);
+    if (GENERATE.ipd) {
+        const ward = await runWardCare(db, orgId, staff, doctors, now, tz);
+        Object.assign(result, ward);
+    }
 
     // ── Discharge ────────────────────────────────────────────────────────────
     // Summary, final bill, payment and bed release happen as one sequence, the way a
@@ -761,9 +1333,11 @@ export async function runActivityTick(now: Date = new Date(), targetOrgId?: stri
     // discharge summary, is the kind of gap that shows up immediately on a ward board.
 
     const wards: { ward_id: number; ward_name: string; cost_per_day: number | null; nursing_charge: number | null }[] =
-        await db.wards.findMany({ select: { ward_id: true, ward_name: true, cost_per_day: true, nursing_charge: true } });
+        GENERATE.ipd
+            ? await db.wards.findMany({ select: { ward_id: true, ward_name: true, cost_per_day: true, nursing_charge: true } })
+            : [];
 
-    const admitted = await db.admissions.findMany({
+    const admitted = !GENERATE.ipd ? [] : await db.admissions.findMany({
         where: { status: 'Admitted' },
         take: MAX_TRANSITIONS_PER_STATUS,
         select: {
@@ -882,7 +1456,7 @@ export async function runActivityTick(now: Date = new Date(), targetOrgId?: stri
         }
 
         await logSimAudit({
-            organizationId: orgId, actor: attending,
+            organizationId: orgId, workstations, actor: attending,
             action: 'DISCHARGE_PATIENT', module: 'discharge',
             entityType: 'admission', entityId: adm.admission_id,
             details: `Discharged after ${days} day(s). Final bill Rs ${netAmount}`,
@@ -892,6 +1466,8 @@ export async function runActivityTick(now: Date = new Date(), targetOrgId?: stri
     }
 
     // ── Bed turnaround ───────────────────────────────────────────────────────
+    // Still runs when IPD is off, so any bed left mid-clean by an earlier run is
+    // released rather than stranded in Cleaning forever.
     const cleaning = await db.beds.findMany({
         where: { status: 'Cleaning' },
         take: MAX_TRANSITIONS_PER_STATUS,
@@ -908,7 +1484,7 @@ export async function runActivityTick(now: Date = new Date(), targetOrgId?: stri
         result.bedsReleased++;
 
         await logSimAudit({
-            organizationId: orgId, actor: actor('nurse'),
+            organizationId: orgId, workstations, actor: actor('nurse'),
             action: 'BED_MARKED_AVAILABLE', module: 'ipd',
             entityType: 'bed', entityId: bed.bed_id,
             details: 'Terminal cleaning completed', at: new Date(due),
@@ -918,8 +1494,10 @@ export async function runActivityTick(now: Date = new Date(), targetOrgId?: stri
     // ── Back office ──────────────────────────────────────────────────────────
     // Runs last: deposits, claims and ledger postings all reference admissions and
     // invoices created earlier in this same tick.
-    const backOffice = await runBackOffice(db, orgId, staff, now, tz);
-    Object.assign(result, backOffice);
+    if (GENERATE.backOffice) {
+        const backOffice = await runBackOffice(db, orgId, staff, now, tz);
+        Object.assign(result, backOffice);
+    }
 
     return result;
 }
