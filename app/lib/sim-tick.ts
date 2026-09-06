@@ -1192,6 +1192,9 @@ export async function runActivityTick(now: Date = new Date(), targetOrgId?: stri
         if (GENERATE.lab && labMenu.length && Math.random() < P_LAB_AFTER_CONSULT) {
             const tests = Math.random() < 0.3 ? 2 : 1;
             for (let t = 0; t < tests; t++) {
+                // Chosen outside the retry so the audit line names the same test that was
+                // written, and so a P2002 retry cannot silently order a different one.
+                const testName = pick(labMenu).test_name;
                 await createWithUniqueRetry(async () => {
                     // Barcode format matches orderLabTest() in doctor-actions.ts exactly —
                     // a lab slip printed from generated data must be indistinguishable
@@ -1204,17 +1207,30 @@ export async function runActivityTick(now: Date = new Date(), targetOrgId?: stri
                             barcode,
                             patient_id: appt.patient_id,
                             doctor_id: doctorId,
-                            test_type: pick(labMenu).test_name,
+                            test_type: testName,
                             status: 'Pending',
                             created_at: new Date(due),
                         } as any,
                     });
                 });
                 result.labOrdered++;
+
+                // The ordering itself is now logged. Previously only the result upload
+                // appeared, so the audit trail showed a technician releasing a test
+                // nobody was recorded as having asked for.
+                await logSimAudit({
+                    organizationId: orgId, workstations, actor: consultingDoctor,
+                    action: 'ORDER_LAB_TEST', module: 'lab',
+                    entityType: 'patient', entityId: appt.patient_id,
+                    details: `Ordered ${testName}`, at: now,
+                });
             }
         }
 
         if (GENERATE.pharmacy && medicines.length && Math.random() < P_PHARMACY_AFTER_CONSULT) {
+            // Captured from inside the retry so the audit line lists exactly what was
+            // written, not a second roll of the dice.
+            let prescribed: string[] = [];
             await createWithUniqueRetry(async () => {
                 const indentNumber = await generateIndentNumber(orgId, db);
                 // Quantities are decided before the total so the header amount is the sum
@@ -1231,6 +1247,10 @@ export async function runActivityTick(now: Date = new Date(), targetOrgId?: stri
                         indent_number: indentNumber,
                         patient_id: appt.patient_id,
                         doctor_id: doctorId,
+                        // The pharmacy queue prints `requested_by_name || doctor_id`, and
+                        // doctor_id is a UUID in real hospital data too — leaving this null
+                        // put a raw UUID in the Doctor column of every row on screen.
+                        requested_by_name: consultingDoctor.name,
                         status: 'Pending',
                         total_amount: Number(total.toFixed(2)),
                         total_items_requested: chosen.length,
@@ -1251,8 +1271,17 @@ export async function runActivityTick(now: Date = new Date(), targetOrgId?: stri
                         } as any,
                     });
                 }
+                prescribed = chosen.map(line => line.medicine.brand_name);
             });
             result.indentsRaised++;
+
+            await logSimAudit({
+                organizationId: orgId, workstations, actor: consultingDoctor,
+                action: 'PRESCRIBE_MEDICATION', module: 'Pharmacy',
+                entityType: 'patient', entityId: appt.patient_id,
+                details: `Prescribed ${prescribed.length} item(s): ${prescribed.join(', ')}`,
+                at: now,
+            });
         }
     }
 
@@ -1275,7 +1304,7 @@ export async function runActivityTick(now: Date = new Date(), targetOrgId?: stri
     const labProcessing = await db.lab_orders.findMany({
         where: { status: 'Processing' },
         take: MAX_TRANSITIONS_PER_STATUS,
-        select: { id: true, created_at: true, test_type: true },
+        select: { id: true, created_at: true, test_type: true, barcode: true },
     });
     for (const order of labProcessing) {
         const due = new Date(order.created_at).getTime()
@@ -1301,6 +1330,21 @@ export async function runActivityTick(now: Date = new Date(), targetOrgId?: stri
             },
         });
         result.labCompleted++;
+
+        // Mirrors the stamp uploadResult() writes. The lab dashboard's average
+        // turnaround time is measured off this row, so without it every generated
+        // result left "Average TAT (Today): 0 minutes" on screen.
+        const tracked = await db.labSampleTracking.findUnique({ where: { barcode: order.barcode } });
+        if (tracked) {
+            await db.labSampleTracking.update({
+                where: { barcode: order.barcode },
+                data: { status: 'Completed', completed_at: now },
+            });
+        } else {
+            await db.labSampleTracking.create({
+                data: { barcode: order.barcode, status: 'Completed', collected_at: order.created_at, completed_at: now },
+            });
+        }
 
         await logSimAudit({
             organizationId: orgId, workstations, actor: technician,

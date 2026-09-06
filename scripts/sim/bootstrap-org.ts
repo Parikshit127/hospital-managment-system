@@ -18,6 +18,7 @@
  */
 import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
+import { stockSimMedicines } from '../../app/lib/sim-master-data';
 
 const prisma = new PrismaClient();
 
@@ -338,7 +339,8 @@ async function main() {
         });
         medCreated++;
     }
-    console.log(`✓ Medicines: ${medCreated} created`);
+    const batched = await stockSimMedicines(ORG_ID);
+    console.log(`✓ Medicines: ${medCreated} created, ${batched} stocked`);
 
     // ── Chart of accounts ────────────────────────────────────────────────────
     // Minimal double-entry chart. The engine posts against these codes; if they are

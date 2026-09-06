@@ -214,7 +214,16 @@ export async function syncStaffSessions(
 
     for (const member of staff) {
         const last = await prisma.system_audit_logs.findFirst({
-            where: { organizationId, module: 'Auth', user_id: member.id, action: { in: ['LOGIN', 'LOGOUT'] } },
+            // Both casings: the real login path writes 'auth', logAuthEvent() writes
+            // 'Auth', and rows written before this was noticed carry the capitalised
+            // form. Reading only one would make every user look permanently logged out
+            // and clock in again on every tick.
+            where: {
+                organizationId,
+                module: { in: ['auth', 'Auth'] },
+                user_id: member.id,
+                action: { in: ['LOGIN', 'LOGOUT'] },
+            },
             orderBy: { created_at: 'desc' },
             select: { action: true },
         });
@@ -229,7 +238,12 @@ export async function syncStaffSessions(
                 username: member.username,
                 role: member.role,
                 action: shouldBeIn ? 'LOGIN' : 'LOGOUT',
-                module: 'Auth',
+                // Lowercase, matching what an actual staff login writes in
+                // app/login/actions.ts. logAuthEvent() in app/lib/audit.ts uses 'Auth',
+                // but that is not the path a person signing in goes through — and a
+                // simulated login that groups separately from the real ones on a filtered
+                // audit view is exactly the kind of tell this engine exists to avoid.
+                module: 'auth',
                 entity_type: 'session',
                 details: shouldBeIn ? 'Login successful' : 'User logged out',
                 ip_address: workstationIp(member.username, workstations),
