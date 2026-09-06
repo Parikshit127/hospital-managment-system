@@ -13,7 +13,8 @@ import { prisma } from '@/backend/db';
 import { requireSuperAdmin } from '@/app/actions/superadmin-actions';
 import { revalidatePath } from 'next/cache';
 import { assertSimulationOrg, isActivityGeneratorPermitted, pinnedOrganizationId } from '@/scripts/sim/guard';
-import { describeMasterData, masterDataCounts, syncMasterData } from '@/app/lib/sim-master-data';
+import { describeMasterData, masterDataCounts, syncMasterData, stockSimMedicines } from '@/app/lib/sim-master-data';
+import { seedDefaultMasterData } from '@/app/lib/sim-defaults';
 import {
     provisionSimulation,
     resetSimulationData,
@@ -46,6 +47,7 @@ export async function listSimulations() {
                 simulation_department_mode: true,
                 simulation_source_org_id: true,
                 simulation_master_synced_at: true,
+                simulation_procurement_enabled: true,
             },
         });
 
@@ -99,6 +101,7 @@ export async function listSimulations() {
                 useMasterData: c.simulation_use_master_data,
                 complaintStyle: c.simulation_complaint_style,
                 departmentMode: c.simulation_department_mode,
+                procurementEnabled: c.simulation_procurement_enabled,
                 sourceName: report.sourceName,
                 lastSyncedAt: c.simulation_master_synced_at?.toISOString() ?? null,
                 counts: { patients, visits, invoices, ...report.counts },
@@ -211,6 +214,7 @@ export async function updateSimulationSettings(orgId: string, settings: {
     useMasterData?: boolean;
     complaintStyle?: string;
     departmentMode?: DepartmentMode;
+    procurementEnabled?: boolean;
 }) {
     await requireSuperAdmin();
     try {
@@ -229,8 +233,19 @@ export async function updateSimulationSettings(orgId: string, settings: {
                 ...(settings.useMasterData !== undefined ? { simulation_use_master_data: settings.useMasterData } : {}),
                 ...(style ? { simulation_complaint_style: style } : {}),
                 ...(mode ? { simulation_department_mode: mode } : {}),
+                ...(settings.procurementEnabled !== undefined
+                    ? { simulation_procurement_enabled: settings.procurementEnabled }
+                    : {}),
             },
         });
+
+        // Switching TO built-in defaults has to actually supply them, or the operator gets
+        // an empty formulary and lab menu and no downstream orders at all.
+        if (settings.useMasterData === false) {
+            await seedDefaultMasterData(orgId);
+            await stockSimMedicines(orgId);
+        }
+
         revalidatePath('/superadmin/simulations');
         return { success: true };
     } catch (err: any) {

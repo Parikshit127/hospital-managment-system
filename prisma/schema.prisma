@@ -394,6 +394,12 @@ model OrganizationConfig {
   activity_generator_enabled   Boolean @default(false)
   activity_generator_intensity String  @default("moderate") // low | moderate | high
 
+  // Whether the simulation raises purchase orders for the stock it consumes, against the
+  // suppliers cloned from the source hospital. The pharmacy dashboard derives gross
+  // margin from 30-day purchases, so with this off — or with no suppliers to buy from —
+  // cost of goods reads as zero and the margin shows 100%.
+  simulation_procurement_enabled Boolean @default(true)
+
   organization                  Organization @relation(fields: [organizationId], references: [id])
 
   @@map("organization_configs")

@@ -9,7 +9,8 @@
  */
 import { prisma } from '@/backend/db';
 import * as bcrypt from 'bcryptjs';
-import { syncMasterData, syncDepartmentsOnly, assignWorkstationIps } from '@/app/lib/sim-master-data';
+import { syncMasterData, syncDepartmentsOnly, assignWorkstationIps, stockSimMedicines } from '@/app/lib/sim-master-data';
+import { seedDefaultMasterData } from '@/app/lib/sim-defaults';
 import { assertSimulationOrg } from '@/scripts/sim/guard';
 
 /**
@@ -257,6 +258,14 @@ export async function provisionSimulation(params: ProvisionParams): Promise<Prov
             // the master data is not being copied.
             await syncDepartmentsOnly(created.org.id, sourceOrgId);
         }
+
+        if (!useMasterData) {
+            // "Built-in defaults" now actually supplies a formulary and a lab menu. Without
+            // this the option only switched cloning off, leaving both tables empty so no
+            // prescription or lab order could ever be generated.
+            await seedDefaultMasterData(created.org.id);
+            await stockSimMedicines(created.org.id);
+        }
     } catch (err) {
         await deleteSimulationEnvironment(created.org.id).catch(() => { /* best effort */ });
         throw err;
@@ -301,6 +310,9 @@ export async function resetSimulationData(orgId: string): Promise<void> {
     // The dispense ledger is generated activity and points at both the batch it came
     // from and the medicine — leaving it behind blocked the medicine delete on teardown.
     await prisma.pharmacyInventoryMovement.deleteMany({ where: o });
+    // Purchase paperwork is generated too, and its items hold an FK to the medicine master.
+    await prisma.purchaseOrderItem.deleteMany({ where: { purchase_order: { organizationId: orgId } } });
+    await prisma.purchaseOrder.deleteMany({ where: o });
     await prisma.pharmacy_order_items.deleteMany({ where: { order: { organizationId: orgId } } });
     await prisma.pharmacy_orders.deleteMany({ where: o });
     await prisma.lab_orders.deleteMany({ where: o });
@@ -337,6 +349,8 @@ export async function deleteSimulationEnvironment(orgId: string): Promise<void> 
     await prisma.lab_test_inventory.deleteMany({ where: o });
     // Batches are scoped through their medicine, not by organizationId, and hold the FK
     // that makes the delete below fail if they are still standing.
+    await prisma.pharmacySupplier.deleteMany({ where: o });
+    await prisma.vendor.deleteMany({ where: o });
     await prisma.pharmacy_batch_inventory.deleteMany({ where: { medicine: { organizationId: orgId } } });
     await prisma.pharmacy_medicine_master.deleteMany({ where: o });
     await prisma.beds.deleteMany({ where: o });

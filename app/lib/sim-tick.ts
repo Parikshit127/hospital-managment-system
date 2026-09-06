@@ -38,6 +38,7 @@ import {
 import { syncMasterDataIfDue, stockSimMedicines } from '@/app/lib/sim-master-data';
 import { runWardCare } from '@/app/lib/sim-ward';
 import { runBackOffice } from '@/app/lib/sim-back-office';
+import { runProcurement } from '@/app/lib/sim-procurement';
 import { assertActivityTarget, resolveActivityTarget } from '@/scripts/sim/guard';
 import { castPerson } from '@/scripts/sim/cast';
 
@@ -805,6 +806,14 @@ export async function runActivityTick(now: Date = new Date(), targetOrgId?: stri
             .map(([table, v]) => `${table} +${v.created} ~${v.updated} -${v.retired}`);
         console.log(`[sim-tick] master data synced for ${orgId}: ${changed.join(', ') || 'no changes'}`);
     }
+    // Buy back yesterday's dispensing, so the pharmacy's cost of goods is on the books.
+    // Costs one indexed lookup on the ticks where nothing is due, which is all but one
+    // a day.
+    const purchase = await runProcurement(orgId, now, tz);
+    if (purchase.ordered) {
+        console.log(`[sim-tick] ${orgId}: raised ${purchase.poNumber} — ${purchase.lines} line(s), Rs ${purchase.amount}`);
+    }
+
     const intensity = INTENSITY_MULTIPLIER[config.activity_generator_intensity] ?? 1.0;
     const db = getTenantPrisma(orgId);
 
@@ -1098,13 +1107,23 @@ export async function runActivityTick(now: Date = new Date(), targetOrgId?: stri
     // relation query PER PARENT ROW, so nesting it turned a single read of a cloned
     // hospital's 6,600-line formulary into thousands of round trips and took a tick from
     // seconds to minutes.
-    const allMedicines: SimMedicine[] = await db.pharmacy_medicine_master.findMany({
-        where: { is_active: true },
-        select: {
-            id: true, brand_name: true, selling_price: true,
-            gst_percent: true, hsn_sac_code: true,
-        },
+    // Only what the hospital has actually priced. A counter cannot bill a line it has no
+    // rate for, and imported formularies are mostly unpriced — Avise carries 6,631 lines
+    // with a rate on 52 — so this is both the correct set to prescribe from and a hundred
+    // times less to read on a tick that runs every five minutes. No price is invented: a
+    // hospital that has priced nothing falls through to its whole list and the money is
+    // genuinely zero, which is its own data speaking.
+    const select = {
+        id: true, brand_name: true, selling_price: true,
+        gst_percent: true, hsn_sac_code: true,
+    };
+    let allMedicines: SimMedicine[] = await db.pharmacy_medicine_master.findMany({
+        where: { is_active: true, selling_price: { gt: 0 } },
+        select,
     });
+    if (!allMedicines.length) {
+        allMedicines = await db.pharmacy_medicine_master.findMany({ where: { is_active: true }, select });
+    }
     const medicineById = new Map(allMedicines.map(m => [m.id, m]));
 
     const stockedIds = new Set<number>(
@@ -1121,14 +1140,16 @@ export async function runActivityTick(now: Date = new Date(), targetOrgId?: stri
     // A doctor cannot prescribe what the pharmacy cannot hand over. Prescribing from the
     // whole formulary put a red "Out of Stock" against rows the engine had just created.
     let medicines: SimMedicine[] = allMedicines.filter(m => stockedIds.has(m.id));
-    if (!medicines.length && allMedicines.length) {
-        // Everything has run dry: a fresh batch arrives rather than the pharmacy going
-        // dark. ponytail: only fires when the shelf is COMPLETELY empty, so a single
-        // exhausted drug waits for the daily master sync to restock it. Seeded batches
-        // last months at simulated volume, so that is a slow enough leak to ignore.
+
+    // Reorder once a quarter of the formulary has run down, rather than waiting for the
+    // shelf to go completely bare. A pharmacy reorders continuously; waiting for zero
+    // meant drugs dropped off what doctors could prescribe one at a time and never came
+    // back, so the prescribable range quietly narrowed over a long run.
+    if (allMedicines.length && medicines.length < allMedicines.length * 0.75) {
         await stockSimMedicines(orgId);
         medicines = allMedicines;
     }
+
 
     for (const appt of inProgress) {
         const from = new Date(appt.called_at ?? appt.appointment_date).getTime();

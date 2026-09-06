@@ -21,6 +21,7 @@ export interface SimulationRow {
     useMasterData: boolean;
     complaintStyle: string;
     departmentMode: string;
+    procurementEnabled: boolean;
     sourceName: string | null;
     lastSyncedAt: string | null;
     counts: Record<string, number>;
@@ -225,6 +226,18 @@ export default function SimulationsPanel({
                                             <option value="default">Use defaults</option>
                                             <option value="none">No departments</option>
                                         </select>
+                                    </div>
+                                    <div>
+                                        <label className={label}>Purchasing</label>
+                                        <select value={sim.procurementEnabled ? 'on' : 'off'} disabled={!!busy} className={field}
+                                            onChange={e => run(sim.orgId, () => updateSimulationSettings(sim.orgId, { procurementEnabled: e.target.value === 'on' }), 'Purchasing updated')}>
+                                            <option value="on">Buy stock from the hospital&rsquo;s suppliers</option>
+                                            <option value="off">No purchasing</option>
+                                        </select>
+                                        <p className="text-[11px] text-gray-600 mt-1">
+                                            Gross margin is worked out from purchases. With this off, or with no
+                                            suppliers on file, cost of goods is zero and the margin reads 100%.
+                                        </p>
                                     </div>
                                 </div>
                             </div>
