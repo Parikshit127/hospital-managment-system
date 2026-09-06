@@ -13,7 +13,7 @@ import { prisma } from '@/backend/db';
 import { requireSuperAdmin } from '@/app/actions/superadmin-actions';
 import { revalidatePath } from 'next/cache';
 import { assertSimulationOrg, isActivityGeneratorPermitted, pinnedOrganizationId } from '@/scripts/sim/guard';
-import { describeMasterData, syncMasterData } from '@/app/lib/sim-master-data';
+import { describeMasterData, masterDataCounts, syncMasterData } from '@/app/lib/sim-master-data';
 import {
     provisionSimulation,
     resetSimulationData,
@@ -52,17 +52,34 @@ export async function listSimulations() {
         const envPermits = isActivityGeneratorPermitted();
         const pin = pinnedOrganizationId();
 
+        // Every count is read across ALL simulations at once. Counting per organization
+        // meant roughly eleven queries each, and DATABASE_URL pins connection_limit=1
+        // (pgBouncer) — so they queued on one connection and the page died with a P2024
+        // pool timeout before it rendered.
+        const orgIds = configs.map(c => c.organizationId);
+        const [orgs, patientRows, visitRows, invoiceRows, counts] = await Promise.all([
+            prisma.organization.findMany({
+                where: { id: { in: orgIds } },
+                select: { id: true, name: true, code: true, is_active: true },
+            }),
+            prisma.oPD_REG.groupBy({ by: ['organizationId'], _count: true, where: { organizationId: { in: orgIds } } }),
+            prisma.appointments.groupBy({ by: ['organizationId'], _count: true, where: { organizationId: { in: orgIds } } }),
+            prisma.invoices.groupBy({ by: ['organizationId'], _count: true, where: { organizationId: { in: orgIds } } }),
+            masterDataCounts(orgIds),
+        ]);
+        const orgById = new Map(orgs.map(o => [o.id, o]));
+        const tally = (rows: { organizationId: string; _count: number }[]) =>
+            new Map(rows.map(r => [r.organizationId, r._count]));
+        const patientsBy = tally(patientRows as any);
+        const visitsBy = tally(visitRows as any);
+        const invoicesBy = tally(invoiceRows as any);
+
         const rows = await Promise.all(configs.map(async (c) => {
-            const [org, patients, visits, invoices, report] = await Promise.all([
-                prisma.organization.findUnique({
-                    where: { id: c.organizationId },
-                    select: { name: true, code: true, is_active: true },
-                }),
-                prisma.oPD_REG.count({ where: { organizationId: c.organizationId } }),
-                prisma.appointments.count({ where: { organizationId: c.organizationId } }),
-                prisma.invoices.count({ where: { organizationId: c.organizationId } }),
-                describeMasterData(c.organizationId),
-            ]);
+            const org = orgById.get(c.organizationId);
+            const patients = patientsBy.get(c.organizationId) ?? 0;
+            const visits = visitsBy.get(c.organizationId) ?? 0;
+            const invoices = invoicesBy.get(c.organizationId) ?? 0;
+            const report = await describeMasterData(c.organizationId, counts[c.organizationId]);
 
             // Three things must agree before a tick does anything. Surface which one is
             // missing rather than leaving an operator staring at a switched-on toggle
@@ -108,18 +125,29 @@ export async function listHospitalsForCloning() {
             select: { id: true, name: true, code: true, config: { select: { simulation_enabled: true } } },
         });
 
-        const rows = await Promise.all(orgs
-            .filter(o => !o.config?.simulation_enabled)
-            .map(async (o) => {
-                const [staff, doctors, labTests, medicines, services] = await Promise.all([
-                    prisma.user.count({ where: { organizationId: o.id, is_active: true } }),
-                    prisma.user.count({ where: { organizationId: o.id, role: 'doctor', is_active: true } }),
-                    prisma.lab_test_inventory.count({ where: { organizationId: o.id } }),
-                    prisma.pharmacy_medicine_master.count({ where: { organizationId: o.id } }),
-                    prisma.ipdServiceMaster.count({ where: { organizationId: o.id } }),
-                ]);
-                return { id: o.id, name: o.name, code: o.code, staff, doctors, labTests, medicines, services };
-            }));
+        // Same reasoning as listSimulations: one grouped query per table, not five per
+        // hospital. With connection_limit=1 the per-hospital fan-out timed out.
+        const candidates = orgs.filter(o => !o.config?.simulation_enabled);
+        const ids = { in: candidates.map(o => o.id) };
+        const [staffRows, doctorRows, labRows, medRows, svcRows] = await Promise.all([
+            prisma.user.groupBy({ by: ['organizationId'], _count: true, where: { organizationId: ids, is_active: true } }),
+            prisma.user.groupBy({ by: ['organizationId'], _count: true, where: { organizationId: ids, role: 'doctor', is_active: true } }),
+            prisma.lab_test_inventory.groupBy({ by: ['organizationId'], _count: true, where: { organizationId: ids } }),
+            prisma.pharmacy_medicine_master.groupBy({ by: ['organizationId'], _count: true, where: { organizationId: ids } }),
+            prisma.ipdServiceMaster.groupBy({ by: ['organizationId'], _count: true, where: { organizationId: ids } }),
+        ]);
+        const tally = (rows: any[]) => new Map(rows.map(r => [r.organizationId, r._count as number]));
+        const staffBy = tally(staffRows), doctorsBy = tally(doctorRows);
+        const labBy = tally(labRows), medBy = tally(medRows), svcBy = tally(svcRows);
+
+        const rows = candidates.map(o => ({
+            id: o.id, name: o.name, code: o.code,
+            staff: staffBy.get(o.id) ?? 0,
+            doctors: doctorsBy.get(o.id) ?? 0,
+            labTests: labBy.get(o.id) ?? 0,
+            medicines: medBy.get(o.id) ?? 0,
+            services: svcBy.get(o.id) ?? 0,
+        }));
 
         return { success: true, data: rows };
     } catch (err: any) {

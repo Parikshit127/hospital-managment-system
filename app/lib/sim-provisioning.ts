@@ -20,7 +20,19 @@ import { assertSimulationOrg } from '@/scripts/sim/guard';
  * them would hand working credentials for real employees to whoever uses the environment.
  */
 export const SIMULATION_STAFF_PASSWORD = 'user@123';
-export const SIMULATION_USERNAME_PREFIX = 'sim.';
+/**
+ * Login prefix for a simulation's cloned staff.
+ *
+ * Per environment, not global. User.username is unique across the WHOLE database, so a
+ * single 'sim.' prefix meant the SECOND simulation cloned from a hospital found every
+ * name taken, cloned zero staff and generated nothing at all — silently, because
+ * cloneStaffInto skips collisions rather than failing. Keying on the environment's own
+ * code lets one hospital back several simulations at once, and matches the mgh.* naming
+ * the bootstrap script already uses.
+ */
+export function simulationUsernamePrefix(code: string): string {
+    return `${code.toLowerCase().replace(/[^a-z0-9]/g, '')}.`;
+}
 
 export type DepartmentMode = 'clone' | 'default' | 'none';
 
@@ -45,6 +57,7 @@ export async function cloneStaffInto(
     client: any,
     sourceOrgId: string,
     targetOrgId: string,
+    prefix: string,
 ): Promise<number> {
     const sourceStaff = await client.user.findMany({
         where: { organizationId: sourceOrgId, is_active: true },
@@ -52,7 +65,7 @@ export async function cloneStaffInto(
     if (!sourceStaff.length) return 0;
 
     const simPassword = await bcrypt.hash(SIMULATION_STAFF_PASSWORD, 10);
-    const wanted = sourceStaff.map((u: any) => `${SIMULATION_USERNAME_PREFIX}${u.username}`);
+    const wanted = sourceStaff.map((u: any) => `${prefix}${u.username}`);
 
     // Usernames are globally unique. Skip the ones already taken rather than aborting, so
     // re-cloning from a source already used does not lose the whole batch.
@@ -64,8 +77,8 @@ export async function cloneStaffInto(
     );
 
     const rows = sourceStaff
-        .filter((u: any) => !taken.has(`${SIMULATION_USERNAME_PREFIX}${u.username}`))
-        .map((u: any) => buildClone(u, simPassword, targetOrgId));
+        .filter((u: any) => !taken.has(`${prefix}${u.username}`))
+        .map((u: any) => buildClone(u, simPassword, targetOrgId, prefix));
 
     const CHUNK = 200;
     for (let i = 0; i < rows.length; i += CHUNK) {
@@ -74,9 +87,9 @@ export async function cloneStaffInto(
     return rows.length;
 }
 
-function buildClone(u: any, password: string, targetOrgId: string) {
+function buildClone(u: any, password: string, targetOrgId: string, prefix: string) {
     return {
-                username: `${SIMULATION_USERNAME_PREFIX}${u.username}`,
+                username: `${prefix}${u.username}`,
                 password,
                 role: u.role,
                 name: u.name,
@@ -144,6 +157,7 @@ export interface ProvisionResult {
  */
 export async function provisionSimulation(params: ProvisionParams): Promise<ProvisionResult> {
     const { name, slug, code, sourceOrgId, useMasterData, complaintStyle, departmentMode, actor } = params;
+    const usernamePrefix = simulationUsernamePrefix(code);
 
     const created = await prisma.$transaction(async (tx) => {
         if (await tx.organization.findUnique({ where: { slug } })) {
@@ -229,11 +243,12 @@ export async function provisionSimulation(params: ProvisionParams): Promise<Prov
     let masterData: ProvisionResult['masterData'] = null;
     try {
         if (sourceOrgId) {
-            clonedStaff = await cloneStaffInto(prisma, sourceOrgId, created.org.id);
-            // Learn the network pattern the source hospital's staff actually connect from
-            // and generate an address per simulated user inside it. Never copies a real
-            // address — see buildWorkstationIps().
-            await assignWorkstationIps(created.org.id, sourceOrgId);
+            clonedStaff = await cloneStaffInto(prisma, sourceOrgId, created.org.id, usernamePrefix);
+            // Each simulated user inherits the EXACT address its real counterpart last
+            // connected from, so the audit trail reads like the hospital's own network.
+            // Only staff with no history fall back to a generated address in the same
+            // ranges — see assignWorkstationIps().
+            await assignWorkstationIps(created.org.id, sourceOrgId, usernamePrefix);
         }
         if (sourceOrgId && useMasterData) {
             masterData = await syncMasterData(created.org.id, sourceOrgId, { departmentMode });
@@ -249,7 +264,7 @@ export async function provisionSimulation(params: ProvisionParams): Promise<Prov
         sourceName: created.sourceName,
         masterData,
         password: SIMULATION_STAFF_PASSWORD,
-        usernamePrefix: SIMULATION_USERNAME_PREFIX,
+        usernamePrefix,
     };
 }
 
@@ -279,6 +294,9 @@ export async function resetSimulationData(orgId: string): Promise<void> {
     await prisma.invoice_items.deleteMany({ where: o });
     await prisma.invoices.deleteMany({ where: o });
     await prisma.discharge_summaries.deleteMany({ where: o });
+    // The dispense ledger is generated activity and points at both the batch it came
+    // from and the medicine — leaving it behind blocked the medicine delete on teardown.
+    await prisma.pharmacyInventoryMovement.deleteMany({ where: o });
     await prisma.pharmacy_order_items.deleteMany({ where: { order: { organizationId: orgId } } });
     await prisma.pharmacy_orders.deleteMany({ where: o });
     await prisma.lab_orders.deleteMany({ where: o });
@@ -313,6 +331,9 @@ export async function deleteSimulationEnvironment(orgId: string): Promise<void> 
     await prisma.ipdServiceMaster.deleteMany({ where: o });
     await prisma.radiology_imaging.deleteMany({ where: o });
     await prisma.lab_test_inventory.deleteMany({ where: o });
+    // Batches are scoped through their medicine, not by organizationId, and hold the FK
+    // that makes the delete below fail if they are still standing.
+    await prisma.pharmacy_batch_inventory.deleteMany({ where: { medicine: { organizationId: orgId } } });
     await prisma.pharmacy_medicine_master.deleteMany({ where: o });
     await prisma.beds.deleteMany({ where: o });
     await prisma.wards.deleteMany({ where: o });

@@ -1228,8 +1228,21 @@ export async function runActivityTick(now: Date = new Date(), targetOrgId?: stri
                     // a lab slip printed from generated data must be indistinguishable
                     // from one a doctor raised through the UI.
                     const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-                    const count = await db.lab_orders.count();
-                    const barcode = `LAB-${dateStr}-${String(count + 1).padStart(4, '0')}`;
+                    const prefix = `LAB-${dateStr}-`;
+                    // lab_orders.barcode is unique across the WHOLE database, but
+                    // orderLabTest() numbers it from a tenant-scoped count. Two
+                    // organizations ordering on the same day therefore mint the same
+                    // barcode and the second insert dies — and because the retry
+                    // recomputes the same count, retrying cannot clear it. Reading the
+                    // highest barcode already issued for the day, unscoped, keeps the
+                    // printed format identical and is what makes the retry converge.
+                    const last = await prisma.lab_orders.findFirst({
+                        where: { barcode: { startsWith: prefix } },
+                        orderBy: { barcode: 'desc' },
+                        select: { barcode: true },
+                    });
+                    const seq = last ? Number(last.barcode.slice(prefix.length)) + 1 : 1;
+                    const barcode = `${prefix}${String(seq).padStart(4, '0')}`;
                     await db.lab_orders.create({
                         data: {
                             barcode,

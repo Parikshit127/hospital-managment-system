@@ -39,6 +39,19 @@ export interface HospitalRow {
     services: number;
 }
 
+/**
+ * Pinned to one locale and zone on purpose. A bare toLocaleString() formats with the
+ * SERVER's locale during SSR and the browser's on hydration, and React threw a hydration
+ * mismatch on this line whenever the two differed.
+ */
+function formatSynced(iso: string): string {
+    return new Date(iso).toLocaleString('en-GB', {
+        timeZone: 'Asia/Kolkata',
+        day: '2-digit', month: 'short', year: 'numeric',
+        hour: '2-digit', minute: '2-digit', hour12: false,
+    });
+}
+
 const card = 'bg-white/5 border border-white/5 rounded-xl p-5';
 const label = 'block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5';
 const field = 'w-full px-3 py-2 bg-[#161b22] border border-white/10 rounded-lg text-sm text-white placeholder-gray-500 focus:ring-2 focus:ring-violet-500 focus:border-violet-500 outline-none';
@@ -115,7 +128,7 @@ export default function SimulationsPanel({
                                         </div>
                                         <p className="text-xs text-gray-500 mt-1">
                                             {sim.sourceName ? `Cloned from ${sim.sourceName}` : 'Not cloned from a hospital'}
-                                            {sim.lastSyncedAt && ` · synced ${new Date(sim.lastSyncedAt).toLocaleString()}`}
+                                            {sim.lastSyncedAt && ` · synced ${formatSynced(sim.lastSyncedAt)}`}
                                         </p>
                                     </div>
 
