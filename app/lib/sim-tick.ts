@@ -32,7 +32,7 @@ import {
     createWithUniqueRetry,
 } from '@/app/lib/sequence-generator';
 import {
-    loadStaff, syncStaffSessions, actorFor, logSimAudit, dailyVolumeMultiplier,
+    loadStaff, syncStaffSessions, actorFor, actorOnDuty, logSimAudit, dailyVolumeMultiplier, isOnDuty,
 } from '@/app/lib/sim-staff';
 import { syncMasterDataIfDue } from '@/app/lib/sim-master-data';
 import { runWardCare } from '@/app/lib/sim-ward';
@@ -850,9 +850,29 @@ export async function runActivityTick(now: Date = new Date(), targetOrgId?: stri
     let arrivals = Math.floor(expected) + (Math.random() < expected % 1 ? 1 : 0);
     arrivals = Math.min(arrivals, MAX_ARRIVALS_PER_TICK, Math.max(0, DAILY_ARRIVAL_CAP - registeredToday));
 
+    // Only doctors actually on shift can be given patients.
+    //
+    // Previously any active doctor could be assigned, which meant a consultation could be
+    // recorded against someone who had gone home — the completion audit row uses the
+    // assigned doctor directly rather than the on-duty picker every other role goes
+    // through, so it was the one place the "never attributed to somebody off shift" rule
+    // did not hold.
+    const onDutyDoctors = doctors.filter(d => isOnDuty(d, now, tz));
+
+    // Registration needs BOTH a doctor to see the patient and someone at the counter to
+    // register them. No doctor means the clinic is not running; no receptionist means
+    // there is nobody to do the registering. The hourly curve already makes overnight
+    // arrivals rare — this stops the last few appearing with the front desk unstaffed.
+    const registrar = actorOnDuty(staff, 'receptionist', now, tz);
+    if (!onDutyDoctors.length || !registrar) arrivals = 0;
+
     for (let i = 0; i < arrivals; i++) {
-        const doctor = pick(doctors);
-        const department = doctor.specialty || 'General Medicine';
+        const doctor = pick(onDutyDoctors);
+        // A hospital may run without departments at all — Axten Nulife has twelve doctors
+        // and zero department records. The doctor's own specialty stands in, and where
+        // even that is blank the field is left EMPTY rather than filled with an invented
+        // "General Medicine" the hospital does not have.
+        const department = doctor.specialty?.trim() || null;
         // Seed from the running total so a person is reproducible from DB state.
         const totalSoFar = await db.oPD_REG.count();
         const person = castPerson(totalSoFar + i + 1);
@@ -908,7 +928,7 @@ export async function runActivityTick(now: Date = new Date(), targetOrgId?: stri
         await logSimAudit({
             organizationId: orgId,
             workstations,
-            actor: actor('receptionist'),
+            actor: registrar,
             action: 'REGISTER_PATIENT',
             module: 'opd',
             entityType: 'patient',
@@ -979,8 +999,10 @@ export async function runActivityTick(now: Date = new Date(), targetOrgId?: stri
         if (!GENERATE.opdBilling) continue;
 
         // The OPD consultation fee is collected at the counter on check-in, so the
-        // receipt and the check-in timestamp agree.
-        const cashier = actor('receptionist');
+        // receipt and the check-in timestamp agree. The cashier must be on duty at the
+        // moment the audit row claims, not merely at the moment the tick runs.
+        const cashier = actorOnDuty(staff, 'receptionist', now, tz);
+        if (!cashier) continue;
         const { fee, isFollowUp } = feeFor(appt.department, appt.doctor_id);
         await createWithUniqueRetry(async () => {
             const invoiceNumber = await generateInvoiceNumber(orgId, 'OPD', false, db);
@@ -1000,8 +1022,12 @@ export async function runActivityTick(now: Date = new Date(), targetOrgId?: stri
             await db.invoice_items.create({
                 data: {
                     invoice_id: invoice.id,
-                    department: appt.department || 'General Medicine',
-                    description: `${isFollowUp ? 'Follow-up consultation' : 'Consultation'} — ${appt.department || 'General Medicine'}`,
+                    // invoice_items.department is NOT NULL, so a hospital without
+                    // departments gets the neutral "OPD" rather than a specialty invented
+                    // for it. The line description simply drops the suffix.
+                    department: appt.department || 'OPD',
+                    description: `${isFollowUp ? 'Follow-up consultation' : 'Consultation'}`
+                        + (appt.department ? ` — ${appt.department}` : ''),
                     quantity: 1, unit_price: fee, total_price: fee, net_price: fee,
                     rendered_by_doctor_id: appt.doctor_id,
                     created_at: new Date(due),
@@ -1027,7 +1053,7 @@ export async function runActivityTick(now: Date = new Date(), targetOrgId?: stri
             action: 'RECORD_PAYMENT', module: 'billing',
             entityType: 'invoice', entityId: appt.patient_id,
             details: `OPD consultation fee collected — Rs ${fee}`,
-            at: new Date(due),
+            at: now,
         });
     }
 
@@ -1072,17 +1098,22 @@ export async function runActivityTick(now: Date = new Date(), targetOrgId?: stri
         const due = from + jitteredDwellMs(DWELL_MINUTES.inProgressToCompleted);
         if (now.getTime() < due) continue;
 
-        await db.appointments.update({ where: { id: appt.id }, data: { status: 'Completed' } });
-        result.consultCompleted++;
-
         const doctorId = appt.doctor_id || doctors[0].id;
         const consultingDoctor = doctors.find(d => d.id === doctorId) ?? doctors[0];
+
+        // The consultation is completed by the assigned doctor, so it can only complete
+        // while that doctor is actually in clinic. If they have gone home the patient is
+        // still waiting, and the visit finishes when the doctor is next on shift.
+        if (!isOnDuty(consultingDoctor, now, tz)) continue;
+
+        await db.appointments.update({ where: { id: appt.id }, data: { status: 'Completed' } });
+        result.consultCompleted++;
 
         await logSimAudit({
             organizationId: orgId, workstations, actor: consultingDoctor,
             action: 'COMPLETE_CONSULTATION', module: 'doctor',
             entityType: 'appointment', entityId: appt.patient_id,
-            details: 'Consultation completed', at: new Date(due),
+            details: 'Consultation completed', at: now,
         });
 
         // ── Admission ────────────────────────────────────────────────────────
@@ -1250,8 +1281,12 @@ export async function runActivityTick(now: Date = new Date(), targetOrgId?: stri
         const due = new Date(order.created_at).getTime()
             + jitteredDwellMs(DWELL_MINUTES.labOrderedToProcessing + DWELL_MINUTES.labProcessingToCompleted);
         if (now.getTime() < due) continue;
+        // The result is released by whoever is in the lab NOW, and stamped now. Choosing
+        // the technician for the tick time but stamping the row at the due time put
+        // results in the log at 19:15 signed by someone whose shift ended at 17:00.
+        const technician = actorOnDuty(staff, 'lab_technician', now, tz);
+        if (!technician) continue; // lab closed — the sample waits until it reopens
         const isCritical = Math.random() < P_CRITICAL_RESULT;
-        const technician = actor('lab_technician');
         await db.lab_orders.update({
             where: { id: order.id },
             data: {
@@ -1261,8 +1296,8 @@ export async function runActivityTick(now: Date = new Date(), targetOrgId?: stri
                 // of them blank.
                 result_value: resultForTest(order.test_type),
                 is_critical: isCritical,
-                assigned_technician_id: technician?.username ?? null,
-                ...(isCritical ? { critical_notified_at: new Date(due) } : {}),
+                assigned_technician_id: technician.username,
+                ...(isCritical ? { critical_notified_at: now } : {}),
             },
         });
         result.labCompleted++;
@@ -1273,7 +1308,7 @@ export async function runActivityTick(now: Date = new Date(), targetOrgId?: stri
             module: 'lab',
             entityType: 'lab_order', entityId: String(order.id),
             details: `${order.test_type} resulted${isCritical ? ' — critical value flagged' : ''}`,
-            at: new Date(due),
+            at: now,
         });
     }
 
@@ -1303,6 +1338,10 @@ export async function runActivityTick(now: Date = new Date(), targetOrgId?: stri
         const from = new Date(order.verified_at ?? order.created_at).getTime();
         const due = from + jitteredDwellMs(DWELL_MINUTES.verifiedToDispensed);
         if (now.getTime() < due) continue;
+        // Nobody dispenses from a closed counter — the prescription waits.
+        const dispenser = actorOnDuty(staff, 'pharmacist', now, tz);
+        if (!dispenser) continue;
+
         await db.pharmacy_orders.update({
             where: { id: order.id },
             data: { status: 'Completed', items_dispensed: order.total_items_requested ?? 0, items_missing: 0 },
@@ -1310,10 +1349,10 @@ export async function runActivityTick(now: Date = new Date(), targetOrgId?: stri
         result.indentsDispensed++;
 
         await logSimAudit({
-            organizationId: orgId, workstations, actor: actor('pharmacist'),
+            organizationId: orgId, workstations, actor: dispenser,
             action: 'DISPENSE_MEDICATION', module: 'Pharmacy',
             entityType: 'pharmacy_order', entityId: String(order.id),
-            details: `Dispensed ${order.total_items_requested ?? 0} item(s)`, at: new Date(due),
+            details: `Dispensed ${order.total_items_requested ?? 0} item(s)`, at: now,
         });
     }
 

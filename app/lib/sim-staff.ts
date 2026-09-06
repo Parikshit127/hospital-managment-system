@@ -287,6 +287,28 @@ export function actorFor(staff: StaffMember[], role: string, at: Date, timezone:
 }
 
 /**
+ * Someone in `role` who is genuinely on duty at `at`, or null if nobody is.
+ *
+ * The strict counterpart to actorFor(), which always returns somebody. Use this when the
+ * work itself should not happen unless a person is there to do it: a lab result is not
+ * released at 19:15 by a technician whose shift ended at 17:00, it waits until the lab
+ * reopens. Returning null lets the caller hold the step rather than fabricate the worker.
+ */
+export function actorOnDuty(
+    staff: StaffMember[],
+    role: string,
+    at: Date,
+    timezone: string,
+): StaffMember | null {
+    const onDuty = staff.filter(s => isOnDuty(s, at, timezone));
+    for (const candidateRole of ROLE_FALLBACKS[role] ?? [role]) {
+        const pool = onDuty.filter(s => s.role === candidateRole);
+        if (pool.length) return pool[Math.floor(Math.random() * pool.length)];
+    }
+    return null;
+}
+
+/**
  * Write one audit row attributed to a staff member.
  *
  * `module` is REQUIRED by the schema — omitting it makes the insert throw, and callers
