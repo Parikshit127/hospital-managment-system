@@ -29,12 +29,13 @@ import {
     generateIndentNumber,
     generateInvoiceNumber,
     generateReceiptNumber,
+    generateSequentialNumber,
     createWithUniqueRetry,
 } from '@/app/lib/sequence-generator';
 import {
     loadStaff, syncStaffSessions, actorFor, actorOnDuty, logSimAudit, dailyVolumeMultiplier, isOnDuty,
 } from '@/app/lib/sim-staff';
-import { syncMasterDataIfDue } from '@/app/lib/sim-master-data';
+import { syncMasterDataIfDue, stockSimMedicines } from '@/app/lib/sim-master-data';
 import { runWardCare } from '@/app/lib/sim-ward';
 import { runBackOffice } from '@/app/lib/sim-back-office';
 import { assertActivityTarget, resolveActivityTarget } from '@/scripts/sim/guard';
@@ -347,6 +348,8 @@ export interface SimMedicine {
     brand_name: string;
     selling_price: number | null;
     category?: string | null;
+    gst_percent?: number | null;
+    hsn_sac_code?: string | null;
 }
 
 /**
@@ -717,6 +720,7 @@ export interface TickResult {
     indentsRaised: number;
     indentsVerified: number;
     indentsDispensed: number;
+    pharmacyBilled: number;
     staffLoggedIn: number;
     staffLoggedOut: number;
     opdBilled: number;
@@ -738,7 +742,7 @@ export interface TickResult {
 const EMPTY: TickResult = {
     ran: false, registered: 0, checkedIn: 0, consultStarted: 0, consultCompleted: 0,
     labOrdered: 0, labProcessing: 0, labCompleted: 0,
-    indentsRaised: 0, indentsVerified: 0, indentsDispensed: 0,
+    indentsRaised: 0, indentsVerified: 0, indentsDispensed: 0, pharmacyBilled: 0,
     staffLoggedIn: 0, staffLoggedOut: 0, opdBilled: 0,
     admitted: 0, discharged: 0, ipdBilled: 0, bedsReleased: 0,
     vitalsRecorded: 0, nursingNotes: 0, medsPrescribed: 0, medsAdministered: 0,
@@ -1087,11 +1091,35 @@ export async function runActivityTick(now: Date = new Date(), targetOrgId?: stri
         where: { is_available: true },
         select: { test_name: true },
     });
-    const medicines: { id: number; brand_name: string; selling_price: number | null }[] =
+    // Read once, used twice: `medicines` is what a doctor may prescribe, `medicineById`
+    // prices and taxes it at the counter later. Splitting these into two queries meant a
+    // second full-table read on every tick.
+    const allMedicines: (SimMedicine & { batches: { id: number }[] })[] =
         await db.pharmacy_medicine_master.findMany({
             where: { is_active: true },
-            select: { id: true, brand_name: true, selling_price: true },
+            select: {
+                id: true, brand_name: true, selling_price: true,
+                gst_percent: true, hsn_sac_code: true,
+                batches: {
+                    where: { current_stock: { gt: 0 }, is_quarantined: false, expiry_date: { gt: now } },
+                    select: { id: true },
+                    take: 1,
+                },
+            },
         });
+    const medicineById = new Map(allMedicines.map(m => [m.id, m]));
+
+    // A doctor cannot prescribe what the pharmacy cannot hand over. Prescribing from the
+    // whole formulary put a red "Out of Stock" against rows the engine had just created.
+    let medicines: SimMedicine[] = allMedicines.filter(m => m.batches.length > 0);
+    if (!medicines.length && allMedicines.length) {
+        // Everything has run dry: a fresh batch arrives rather than the pharmacy going
+        // dark. ponytail: only fires when the shelf is COMPLETELY empty, so a single
+        // exhausted drug waits for the daily master sync to restock it. Seeded batches
+        // last months at simulated volume, so that is a slow enough leak to ignore.
+        await stockSimMedicines(orgId);
+        medicines = allMedicines;
+    }
 
     for (const appt of inProgress) {
         const from = new Date(appt.called_at ?? appt.appointment_date).getTime();
@@ -1376,7 +1404,10 @@ export async function runActivityTick(now: Date = new Date(), targetOrgId?: stri
     const indentsVerified = await db.pharmacy_orders.findMany({
         where: { status: 'Verified' },
         take: MAX_TRANSITIONS_PER_STATUS,
-        select: { id: true, verified_at: true, created_at: true, total_items_requested: true },
+        select: {
+            id: true, verified_at: true, created_at: true, total_items_requested: true,
+            patient_id: true, doctor_id: true, requested_by_name: true,
+        },
     });
     for (const order of indentsVerified) {
         const from = new Date(order.verified_at ?? order.created_at).getTime();
@@ -1391,6 +1422,148 @@ export async function runActivityTick(now: Date = new Date(), targetOrgId?: stri
             data: { status: 'Completed', items_dispensed: order.total_items_requested ?? 0, items_missing: 0 },
         });
         result.indentsDispensed++;
+
+        // The counter collects for what it just handed over, and the stock it came from
+        // goes down. Without this the pharmacy dashboard read "Today Revenue Rs 0" beside
+        // a full day of dispensing and Pharmacy Sales listed nothing at all, while the
+        // shelf count never moved.
+        const items = await db.pharmacy_order_items.findMany({
+            where: { order_id: order.id },
+            select: { medicine_id: true, medicine_name: true, quantity_requested: true, unit_price: true },
+        });
+
+        if (items.length) {
+            const lines: {
+                description: string; qty: number; rate: number; net: number;
+                tax: number; taxRate: number; hsn: string | null; batchNo: string | null; mrp: number;
+            }[] = [];
+
+            for (const it of items) {
+                const qty = it.quantity_requested ?? 1;
+                const med = it.medicine_id ? medicineById.get(it.medicine_id) : undefined;
+                const rate = Number(it.unit_price) || Number(med?.selling_price) || 0;
+                const gross = rate * qty;
+                const taxRate = Number(med?.gst_percent) || 0;
+                // Indian retail pharmacy prices are MRP-inclusive of GST, so the tax is
+                // backed OUT of the price. Adding it on top would overcharge the patient
+                // against a printed MRP the same bill shows.
+                const tax = taxRate > 0 ? gross - gross / (1 + taxRate / 100) : 0;
+
+                // FEFO — the same order the real allocator hands stock out in.
+                let batchNo: string | null = null;
+                if (it.medicine_id) {
+                    const batch = await db.pharmacy_batch_inventory.findFirst({
+                        where: {
+                            medicine_id: it.medicine_id, current_stock: { gt: 0 },
+                            is_quarantined: false, expiry_date: { gt: now },
+                        },
+                        orderBy: { expiry_date: 'asc' },
+                        select: { id: true, batch_no: true, current_stock: true, cost_price: true },
+                    });
+                    if (batch) {
+                        batchNo = batch.batch_no;
+                        const remaining = Math.max(0, batch.current_stock - qty);
+                        await db.pharmacy_batch_inventory.update({
+                            where: { id: batch.id },
+                            data: { current_stock: remaining },
+                        });
+                        // Cost of goods is read off this ledger, not off the invoice. With
+                        // the stock moving but no movement row, the dashboard divided by a
+                        // COGS of zero and reported a 100% gross margin.
+                        await db.pharmacyInventoryMovement.create({
+                            data: {
+                                medicine_id: it.medicine_id,
+                                batch_id: batch.id,
+                                movement_type: 'DISPENSE',
+                                quantity_out: qty,
+                                unit_cost: Number(batch.cost_price) || 0,
+                                balance_after: remaining,
+                                source_type: 'INVOICE',
+                                source_id: `COUNTER-${order.patient_id}`,
+                                created_at: now,
+                            } as any,
+                        });
+                    }
+                }
+
+                lines.push({
+                    description: `${it.medicine_name}${batchNo ? ` (Batch: ${batchNo})` : ''}`,
+                    qty, rate, net: gross - tax, tax, taxRate,
+                    hsn: med?.hsn_sac_code ?? null, batchNo, mrp: rate,
+                });
+            }
+
+            const subtotal = Number(lines.reduce((sum, l) => sum + l.net, 0).toFixed(2));
+            const taxTotal = Number(lines.reduce((sum, l) => sum + l.tax, 0).toFixed(2));
+            const netAmount = Number((subtotal + taxTotal).toFixed(2));
+
+            await createWithUniqueRetry(async () => {
+                const invoice = await db.invoices.create({
+                    data: {
+                        invoice_number: await generateSequentialNumber(orgId, 'PHM', db),
+                        patient_id: order.patient_id,
+                        invoice_type: 'Pharmacy',
+                        status: 'Final',
+                        total_amount: subtotal,
+                        net_amount: netAmount,
+                        paid_amount: netAmount,
+                        balance_due: 0,
+                        total_tax: taxTotal,
+                        cgst_amount: Number((taxTotal / 2).toFixed(2)),
+                        sgst_amount: Number((taxTotal / 2).toFixed(2)),
+                        igst_amount: 0,
+                        is_inter_state: false,
+                        finalized_at: now,
+                        // Pharmacy Sales lists `doctor_name || '—'`; the prescriber's name
+                        // is already on the order, so the bill carries it too.
+                        doctor_id: order.doctor_id,
+                        doctor_name: order.requested_by_name,
+                        created_at: now,
+                    } as any,
+                });
+
+                for (const l of lines) {
+                    await db.invoice_items.create({
+                        data: {
+                            invoice_id: invoice.id,
+                            department: 'Pharmacy',
+                            service_category: 'Pharmacy',
+                            description: l.description,
+                            quantity: l.qty,
+                            unit_price: l.rate,
+                            total_price: Number((l.rate * l.qty).toFixed(2)),
+                            net_price: Number(l.net.toFixed(2)),
+                            tax_rate: l.taxRate,
+                            tax_amount: Number(l.tax.toFixed(2)),
+                            hsn_sac_code: l.hsn,
+                            batch_no: l.batchNo,
+                            mrp: l.mrp,
+                            created_at: now,
+                        } as any,
+                    });
+                }
+
+                await db.payments.create({
+                    data: {
+                        receipt_number: await generateReceiptNumber(orgId, db),
+                        invoice_id: invoice.id,
+                        amount: netAmount,
+                        payment_method: Math.random() < 0.5 ? 'Cash' : 'UPI',
+                        payment_type: 'Full',
+                        status: 'Completed',
+                        received_by: dispenser.username,
+                        created_at: now,
+                    } as any,
+                });
+
+                await db.pharmacy_orders.update({
+                    where: { id: order.id },
+                    data: { invoice_id: invoice.id } as any,
+                });
+            });
+
+            result.pharmacyBilled++;
+        }
 
         await logSimAudit({
             organizationId: orgId, workstations, actor: dispenser,

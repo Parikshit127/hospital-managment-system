@@ -9,7 +9,6 @@ import {
     getSuperAdminSession,
 } from '@/app/lib/session';
 import { superAdminLoginSchema, createOrganizationSchema, organizationProfileSchema, branchSchema } from '@/app/lib/validations';
-import { isActivityGeneratorPermitted, pinnedOrganizationId } from '@/scripts/sim/guard';
 
 // ========================================
 // AUTH
@@ -860,30 +859,9 @@ export async function getOrganizationConfig(orgId: string) {
             prisma.organizationConfig.findUnique({ where: { organizationId: orgId } }),
             prisma.organizationBranding.findUnique({ where: { organizationId: orgId } }),
         ]);
-        // The activity generator needs BOTH the stored toggle and the environment lock.
-        // Report the environment side back so an operator can tell the difference between
-        // "switched off" and "switched on but the environment forbids it" — otherwise the
-        // toggle reads as active while doing nothing.
-        // The engine needs SIM_ENABLED=1, the org's own simulation_enabled flag, and any
-        // SIM_ORG_ID pin to agree. Report all three so an operator can tell "switched
-        // off" apart from "switched on but this deploy will not run it".
-        const envOptedIn = isActivityGeneratorPermitted();
-        const pin = pinnedOrganizationId();
-        const flagged = !!config?.simulation_enabled;
-
-        return {
-            success: true,
-            data: {
-                config,
-                branding,
-                activityGenerator: {
-                    environmentPermitsThisOrg: envOptedIn && flagged && (!pin || pin === orgId),
-                    environmentConfigured: envOptedIn,
-                    isSimulationEnvironment: flagged,
-                    pinnedElsewhere: envOptedIn && !!pin && pin !== orgId,
-                },
-            },
-        };
+        // The activity generator's own state is reported by listSimulations() on the
+        // Simulations page, which owns it end to end. Nothing here reads it.
+        return { success: true, data: { config, branding } };
     } catch (err: any) {
         console.error('getOrganizationConfig error:', err);
         return { success: false, error: 'Failed to fetch config' };
