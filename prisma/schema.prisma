@@ -1111,6 +1111,10 @@ model admissions {
   cancellation_reason       String?
   cancellation_date         DateTime?
   cancelled_by              String?
+  created_by                String?
+  created_by_name           String?
+  discharged_by             String?
+  discharged_by_name        String?
   admission_consultants     AdmissionConsultant[]
   bed                       beds?                  @relation(fields: [bed_id], references: [bed_id])
   organization              Organization           @relation(fields: [organizationId], references: [id])

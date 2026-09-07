@@ -5,6 +5,7 @@ import { getPharmacyBranding } from '@/app/lib/pharmacy-branding';
 import { parseWalkinNote } from '@/app/lib/walkin-note';
 import { dispensingKey } from '@/app/lib/pharmacy-bill-group';
 import { formatDoctorName } from '@/app/lib/format-name';
+import { formatDateTime } from '@/app/lib/timezone';
 
 function splitLineDoctor(desc: any): { text: string; doctor: string } {
     const parts = String(desc || '').split(' — ');
@@ -538,6 +539,7 @@ export default async function PharmacyInvoiceViewPage({ params, searchParams }: 
                 </div>
 
                 <div className="gen-note">Computer generated invoice — {pharmacy.name}</div>
+                <div className="gen-note">Printed by: {session.name}{session.role ? ` (${session.role})` : ''} &middot; {formatDateTime(new Date())}</div>
             </div>
         </>
     );

@@ -10,6 +10,7 @@ export async function GET(req: NextRequest) {
     const search = searchParams.get('search') ?? '';
     const action = searchParams.get('action') ?? '';
     const module = searchParams.get('module') ?? '';
+    const user = searchParams.get('user') ?? '';
     const from = searchParams.get('from') ?? '';
     const to = searchParams.get('to') ?? '';
     // ?scope=edits restricts to the edit/cancel action set above.
@@ -22,6 +23,9 @@ export async function GET(req: NextRequest) {
     const where: any = { organizationId };
     if (action) where.action = resolveAuditActionFilter(action);
     if (module) where.module = module;
+    // Exact match on the stamped username — the user picker's options come from
+    // the org's user list, so its values are real usernames, not free text.
+    if (user) where.username = { equals: user, mode: 'insensitive' };
     if (scope === 'edits' && !action) where.action = { in: [...EDIT_CANCEL_ACTIONS] };
     if (from || to) {
       // Both inputs are date-only. Resolve them against the ORG's timezone, not

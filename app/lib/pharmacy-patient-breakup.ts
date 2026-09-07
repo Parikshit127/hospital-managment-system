@@ -3,6 +3,7 @@
 // plus patient returns and a summary block. Printable by reception.
 // Pure renderer: takes already-fetched data so it has no DB / server imports.
 import type { PharmacyBranding } from '@/app/lib/pharmacy-branding';
+import { formatDateTime } from '@/app/lib/timezone';
 
 export interface BreakupLine {
     name: string;
@@ -57,6 +58,7 @@ export interface PharmacyBreakupData {
     patient: BreakupPatient;
     sales: BreakupSale[];
     summary: BreakupSummary;
+    printedBy?: { name: string; role?: string };
 }
 
 const money = (n: number) => Number(n || 0).toFixed(2);
@@ -110,7 +112,7 @@ function saleTableHtml(s: BreakupSale): string {
 }
 
 export function buildPharmacyBreakupHtml(data: PharmacyBreakupData): string {
-    const { hospital, pharmacy, patient, sales, summary } = data;
+    const { hospital, pharmacy, patient, sales, summary, printedBy } = data;
 
     const salesHtml = sales.length
         ? sales.map(saleTableHtml).join('')
@@ -199,5 +201,6 @@ export function buildPharmacyBreakupHtml(data: PharmacyBreakupData): string {
     <span>[Signing Authority]</span>
     <span>**All figures are in Rupees (INR) only</span>
   </div>
+  ${printedBy ? `<div style="font-size:9px;color:#9ca3af;text-align:center;margin-top:10px;">Printed by: ${esc(printedBy.name)}${printedBy.role ? ` (${esc(printedBy.role)})` : ''} &middot; ${formatDateTime(new Date())}</div>` : ''}
 </body></html>`;
 }

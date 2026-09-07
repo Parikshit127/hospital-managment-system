@@ -3,6 +3,7 @@
 import { requireTenantContext, requireRoleAndTenant } from '@/backend/tenant';
 import { prisma } from '@/backend/db';
 import { logAudit } from '@/app/lib/audit';
+import { diffObjects } from '@/app/lib/audit-diff';
 import { sendWhatsAppMessage, formatPhoneNumber } from '@/app/lib/whatsapp';
 import { billingInvoiceMsg, paymentReceiptMsg } from '@/app/lib/whatsapp-templates';
 import { postInvoiceToGL, postPaymentToGL, postRefundToGL, reverseJournalEntry } from './gl-actions';
@@ -814,7 +815,7 @@ export async function getInvoiceDetail(invoiceId: number) {
 // Finalize invoice (Draft -> Final)
 export async function finalizeInvoice(invoiceId: number) {
     try {
-        const { db, organizationId } = await requireTenantContext();
+        const { db, organizationId, session } = await requireTenantContext();
 
         // Rule 3: an IPD bill can only be finalized after the patient is discharged.
         const existing = await db.invoices.findUnique({
@@ -860,6 +861,8 @@ export async function finalizeInvoice(invoiceId: number) {
                 entity_type: 'invoice',
                 entity_id: invoice.invoice_number || `draft#${invoice.id}`,
                 details: JSON.stringify({ net_amount: Number(invoice.net_amount) }),
+                user_id: session?.id,
+                username: session?.username,
                 organizationId,
             },
         });
@@ -975,7 +978,8 @@ export async function unlockInvoice(invoiceId: number) {
         await db.system_audit_logs.create({
             data: {
                 action: 'UNLOCK_INVOICE', module: 'finance', entity_type: 'invoice',
-                entity_id: String(invoiceId), details: JSON.stringify({ by: session.username }), organizationId,
+                entity_id: String(invoiceId), details: JSON.stringify({ by: session.username }),
+                user_id: session?.id, username: session?.username, organizationId,
             },
         });
         return { success: true };
@@ -1077,7 +1081,7 @@ export async function cancelInvoice(invoiceId: number, reason: string) {
         // Don't allow double-cancellation
         const existing = await db.invoices.findUnique({
             where: { id: invoiceId },
-            select: { status: true, invoice_number: true, paid_amount: true },
+            select: { status: true, invoice_number: true, paid_amount: true, balance_due: true, notes: true },
         });
         if (!existing) return { success: false, error: 'Invoice not found.' };
         if (existing.status === 'Cancelled') {
@@ -1125,6 +1129,10 @@ export async function cancelInvoice(invoiceId: number, reason: string) {
             console.error('referral commission recompute failed:', e);
         }
 
+        const cancelChanges = diffObjects(
+            { status: existing.status, balance_due: existing.balance_due, notes: existing.notes },
+            { status: invoice.status, balance_due: invoice.balance_due, notes: invoice.notes }
+        );
         await db.system_audit_logs.create({
             data: {
                 action: 'CANCEL_INVOICE',
@@ -1132,10 +1140,12 @@ export async function cancelInvoice(invoiceId: number, reason: string) {
                 entity_type: 'invoice',
                 entity_id: invoice.invoice_number || `draft#${invoice.id}`,
                 details: JSON.stringify({
+                    summary: `Invoice cancelled: ${trimmed}`,
                     reason: trimmed,
                     cancelled_by: actor,
                     cancelled_at: now.toISOString(),
                     previous_status: existing.status,
+                    ...(cancelChanges.length ? { changes: cancelChanges } : {}),
                 }),
                 user_id: session?.id,
                 username: session?.username,
@@ -1153,7 +1163,7 @@ export async function cancelInvoice(invoiceId: number, reason: string) {
 // Revert a cancelled invoice back to Final
 export async function revertInvoice(invoiceId: number, reason?: string) {
     try {
-        const { db, organizationId } = await requireTenantContext();
+        const { db, organizationId, session } = await requireTenantContext();
 
         const existing = await db.invoices.findUnique({ where: { id: invoiceId } });
         if (!existing) return { success: false, error: 'Invoice not found' };
@@ -1183,13 +1193,24 @@ export async function revertInvoice(invoiceId: number, reason?: string) {
             console.error('referral commission recompute failed:', e);
         }
 
+        const revertChanges = diffObjects(
+            { status: existing.status, balance_due: existing.balance_due, cancellation_reason: existing.cancellation_reason },
+            { status: invoice.status, balance_due: invoice.balance_due, cancellation_reason: invoice.cancellation_reason }
+        );
         await db.system_audit_logs.create({
             data: {
                 action: 'REVERT_INVOICE',
                 module: 'finance',
                 entity_type: 'invoice',
                 entity_id: invoice.invoice_number || `draft#${invoice.id}`,
-                details: JSON.stringify({ reason, newStatus: 'Final' }),
+                details: JSON.stringify({
+                    summary: reason ? `Cancelled invoice reverted to Final: ${reason}` : 'Cancelled invoice reverted to Final',
+                    reason,
+                    newStatus: 'Final',
+                    ...(revertChanges.length ? { changes: revertChanges } : {}),
+                }),
+                user_id: session?.id,
+                username: session?.username,
                 organizationId,
             },
         });
@@ -1222,7 +1243,7 @@ export async function revertInvoiceToDraft(invoiceId: number, reason?: string) {
 
         const existing = await db.invoices.findUnique({
             where: { id: invoiceId },
-            select: { status: true, invoice_number: true, paid_amount: true },
+            select: { status: true, invoice_number: true, paid_amount: true, is_locked: true },
         });
         if (!existing) return { success: false, error: 'Invoice not found.' };
         if (existing.status !== 'Final') {
@@ -1248,13 +1269,25 @@ export async function revertInvoiceToDraft(invoiceId: number, reason?: string) {
             },
         });
 
+        const unlockChanges = diffObjects(
+            { status: existing.status, is_locked: existing.is_locked },
+            { status: invoice.status, is_locked: invoice.is_locked }
+        );
         await db.system_audit_logs.create({
             data: {
                 action: 'UNLOCK_INVOICE_TO_DRAFT',
                 module: 'finance',
                 entity_type: 'invoice',
                 entity_id: invoice.invoice_number || `draft#${invoice.id}`,
-                details: JSON.stringify({ reason: (reason || '').trim() || null, by: session.username, previous_status: 'Final' }),
+                details: JSON.stringify({
+                    summary: `Finalised bill unlocked to Draft${reason ? `: ${reason.trim()}` : ''}`,
+                    reason: (reason || '').trim() || null,
+                    by: session.username,
+                    previous_status: 'Final',
+                    ...(unlockChanges.length ? { changes: unlockChanges } : {}),
+                }),
+                user_id: session?.id,
+                username: session?.username,
                 organizationId,
             },
         });
@@ -1692,6 +1725,11 @@ export async function reversePayment(paymentId: number, reason: string) {
     try {
         const { db, session, organizationId } = await requireRoleAndTenant(['admin', 'finance', 'superadmin']);
 
+        const paymentBefore = await db.payments.findUnique({
+            where: { id: paymentId },
+            select: { status: true, notes: true },
+        });
+
         const payment = await db.payments.update({
             where: { id: paymentId },
             data: { status: 'Reversed', notes: reason },
@@ -1788,6 +1826,10 @@ export async function reversePayment(paymentId: number, reason: string) {
             console.error('referral commission recompute failed:', e);
         }
 
+        const reverseChanges = diffObjects(
+            { status: paymentBefore?.status, notes: paymentBefore?.notes },
+            { status: payment.status, notes: payment.notes }
+        );
         await db.system_audit_logs.create({
             data: {
                 user_id: session?.id,
@@ -1797,7 +1839,12 @@ export async function reversePayment(paymentId: number, reason: string) {
                 module: 'finance',
                 entity_type: 'payment',
                 entity_id: payment.receipt_number,
-                details: JSON.stringify({ reason, amount: Number(payment.amount) }),
+                details: JSON.stringify({
+                    summary: `Payment reversed: ${reason}`,
+                    reason,
+                    amount: Number(payment.amount),
+                    ...(reverseChanges.length ? { changes: reverseChanges } : {}),
+                }),
                 organizationId,
             },
         });
@@ -2342,6 +2389,8 @@ export async function performCashClosure(data: { notes?: string }) {
                 action: 'CASH_CLOSURE',
                 module: 'finance',
                 details: `Drawer closed by ${session.username}. Cash: ${cash_total}`,
+                user_id: session?.id,
+                username: session?.username,
                 organizationId
             }
         });
@@ -2448,6 +2497,10 @@ export async function updatePayment(paymentId: number, updates: { amount?: numbe
                 });
             }
 
+            const paymentEditChanges = diffObjects(
+                { amount: payment.amount, created_at: payment.created_at, payment_method: payment.payment_method, reference: payment.reference, notes: payment.notes },
+                { amount: updated.amount, created_at: updated.created_at, payment_method: updated.payment_method, reference: updated.reference, notes: updated.notes }
+            );
             await tx.system_audit_logs.create({
                 data: {
                     user_id: session?.id,
@@ -2457,9 +2510,9 @@ export async function updatePayment(paymentId: number, updates: { amount?: numbe
                     module: 'finance',
                     entity_type: 'payment',
                     entity_id: updated.receipt_number,
-                    details: JSON.stringify({ 
-                        before: { amount: payment.amount, created_at: payment.created_at, payment_method: payment.payment_method, reference: payment.reference, notes: payment.notes }, 
-                        after: { amount: updated.amount, created_at: updated.created_at, payment_method: updated.payment_method, reference: updated.reference, notes: updated.notes } 
+                    details: JSON.stringify({
+                        summary: `Payment ${updated.receipt_number} edited`,
+                        ...(paymentEditChanges.length ? { changes: paymentEditChanges } : {}),
                     }),
                     organizationId,
                 },
@@ -2656,6 +2709,18 @@ export async function processRefund(input: {
                 },
             });
 
+            const refundChanges = diffObjects(
+                {
+                    payment_status: payment.status,
+                    invoice_paid_amount: Number(payment.invoice.paid_amount),
+                    invoice_balance_due: Number(payment.invoice.balance_due),
+                },
+                {
+                    payment_status: isFullPaymentRefund ? 'Refunded' : payment.status,
+                    invoice_paid_amount: netPaid,
+                    invoice_balance_due: balance,
+                }
+            );
             await tx.system_audit_logs.create({
                 data: {
                     action: 'PROCESS_REFUND',
@@ -2663,6 +2728,7 @@ export async function processRefund(input: {
                     entity_type: 'payment',
                     entity_id: payment.receipt_number,
                     details: JSON.stringify({
+                        summary: `Refund of ₹${amount} processed against receipt ${payment.receipt_number}: ${input.reason.trim()}`,
                         refund_id: refund.id,
                         amount,
                         reason: input.reason.trim(),
@@ -2670,6 +2736,7 @@ export async function processRefund(input: {
                         original_receipt: payment.receipt_number,
                         collected_via: payment.payment_method,
                         refunded_via: refund.payment_method ?? payment.payment_method,
+                        ...(refundChanges.length ? { changes: refundChanges } : {}),
                     }),
                     username: session?.username,
                     user_id: session?.id,
@@ -2756,7 +2823,7 @@ export async function updateRefundStatus(id: number, status: string) {
 }
 export async function approveInvoice(id: string | number, source: string) {
     try {
-        const { db, organizationId } = await requireTenantContext();
+        const { db, organizationId, session } = await requireTenantContext();
 
         if (source === 'OPD' || source === 'IPD') {
             // Only finalize the invoice — do NOT mark as Paid or zero balance_due
@@ -2795,6 +2862,8 @@ export async function approveInvoice(id: string | number, source: string) {
                 entity_type: source.toLowerCase(),
                 entity_id: String(id),
                 details: `Approved ${source} payment via registry`,
+                user_id: session?.id,
+                username: session?.username,
                 organizationId,
             },
         });
@@ -3253,13 +3322,33 @@ export async function updateInvoiceItem(itemId: number, patch: {
         await recalculateInvoice(item.invoice_id);
         await handleGLRepost(item.invoice_id, item.invoice.status);
 
+        const itemChanges = diffObjects(
+            {
+                department: item.department, description: item.description, quantity: item.quantity, unit_price: item.unit_price,
+                discount: item.discount, tax_rate: item.tax_rate, hsn_sac_code: item.hsn_sac_code, service_category: item.service_category,
+                total_price: item.total_price, net_price: item.net_price, tax_amount: item.tax_amount,
+            },
+            {
+                department: patch.department ?? item.department,
+                description: patch.description ?? item.description,
+                quantity, unit_price, discount, tax_rate,
+                hsn_sac_code: patch.hsn_sac_code !== undefined ? patch.hsn_sac_code : item.hsn_sac_code,
+                service_category: patch.service_category !== undefined ? patch.service_category : item.service_category,
+                total_price, net_price, tax_amount,
+            }
+        );
         await db.system_audit_logs.create({
             data: {
                 action: 'UPDATE_INVOICE_ITEM',
                 module: 'finance',
                 entity_type: 'invoice',
                 entity_id: item.invoice.invoice_number || `draft#${item.invoice.id}`,
-                details: JSON.stringify({ item_id: itemId, patch }),
+                details: JSON.stringify({
+                    summary: `Invoice line item edited (${item.description || itemId})`,
+                    item_id: itemId,
+                    patch,
+                    ...(itemChanges.length ? { changes: itemChanges } : {}),
+                }),
                 user_id: session?.id,
                 username: session?.username,
                 organizationId,
@@ -3331,13 +3420,25 @@ export async function updateInvoiceHeader(invoiceId: number, patch: {
             await handleGLRepost(invoiceId, invoice.status);
         }
 
+        const headerKeys = Object.keys(data).filter((k) => k !== 'version');
+        const headerBefore: Record<string, any> = {};
+        const headerAfter: Record<string, any> = {};
+        for (const k of headerKeys) {
+            headerBefore[k] = (invoice as any)[k];
+            headerAfter[k] = (data as any)[k];
+        }
+        const headerChanges = diffObjects(headerBefore, headerAfter);
         await db.system_audit_logs.create({
             data: {
                 action: 'UPDATE_INVOICE_HEADER',
                 module: 'finance',
                 entity_type: 'invoice',
                 entity_id: invoice.invoice_number || `draft#${invoice.id}`,
-                details: JSON.stringify({ patch }),
+                details: JSON.stringify({
+                    summary: `Invoice header edited (${invoice.invoice_number || invoice.id})`,
+                    patch,
+                    ...(headerChanges.length ? { changes: headerChanges } : {}),
+                }),
                 user_id: session?.id,
                 username: session?.username,
                 organizationId,
@@ -3718,6 +3819,26 @@ export async function saveInvoiceEdits(invoiceId: number, payload: {
 
         const updated = await db.invoices.findUnique({ where: { id: invoiceId } });
 
+        const invoiceEditChanges = diffObjects(
+            {
+                total_amount: _snapshotData.total_amount,
+                total_discount: _snapshotData.total_discount,
+                net_amount: _snapshotData.net_amount,
+                balance_due: _snapshotData.balance_due,
+                bill_discount: _snapshotData.bill_discount,
+                concession_amount: _snapshotData.concession_amount,
+                notes: _snapshotData.notes,
+            },
+            {
+                total_amount: Number(updated?.total_amount ?? 0),
+                total_discount: Number(updated?.total_discount ?? 0),
+                net_amount: Number(updated?.net_amount ?? 0),
+                balance_due: Number(updated?.balance_due ?? 0),
+                bill_discount: Number((updated as any)?.bill_discount ?? 0),
+                concession_amount: Number((updated as any)?.concession_amount ?? 0),
+                notes: updated?.notes,
+            }
+        );
         await db.system_audit_logs.create({
             data: {
                 action: 'UPDATE_INVOICE',
@@ -3725,6 +3846,7 @@ export async function saveInvoiceEdits(invoiceId: number, payload: {
                 entity_type: 'invoice',
                 entity_id: invoice.invoice_number || `draft#${invoice.id}`,
                 details: JSON.stringify({
+                    summary: _changeSummary,
                     expected_version: payload.expected_version,
                     new_version: updated?.version,
                     status: originalStatus,
@@ -3739,6 +3861,7 @@ export async function saveInvoiceEdits(invoiceId: number, payload: {
                         net_amount: Number(updated?.net_amount ?? 0),
                         balance_due: Number(updated?.balance_due ?? 0),
                     },
+                    ...(invoiceEditChanges.length ? { changes: invoiceEditChanges } : {}),
                 }),
                 user_id: session?.id,
                 username: session?.username,

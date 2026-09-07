@@ -2,6 +2,7 @@
 
 import { requireTenantContext, ForbiddenError, AuthError } from '@/backend/tenant';
 import { requireDevAdmin } from '@/backend/dev-portal';
+import { getDayRange, getOrgTimezone } from '@/app/lib/timezone';
 
 // Log an audit event
 export async function logAuditEvent(params: {
@@ -59,15 +60,12 @@ export async function getAuditLogs(page: number = 1, limit: number = 50, filters
         if (filters?.entity_type) where.entity_type = filters.entity_type;
         
         if (filters?.from || filters?.to) {
+            // Date-only inputs resolved against the ORG's timezone, not the
+            // server's — see the same fix in app/api/ipd/audit-logs/route.ts.
+            const tz = await getOrgTimezone();
             where.created_at = {};
-            if (filters?.from) {
-                where.created_at.gte = new Date(filters.from);
-            }
-            if (filters?.to) {
-                const toDate = new Date(filters.to);
-                toDate.setHours(23, 59, 59, 999);
-                where.created_at.lte = toDate;
-            }
+            if (filters?.from) where.created_at.gte = getDayRange(filters.from, tz).start;
+            if (filters?.to) where.created_at.lte = getDayRange(filters.to, tz).end;
         }
 
         const [logs, total] = await Promise.all([

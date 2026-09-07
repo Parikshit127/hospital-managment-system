@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/backend/db';
 import { resolveRouteAuth } from '@/app/lib/route-auth';
 import { getSignedDownloadUrl } from '@/app/lib/s3';
+import { formatDateTime } from '@/app/lib/timezone';
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     try {
@@ -43,7 +44,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
             }
         }
 
-        const html = generateDepositReceiptHTML(deposit, patient, org, logoSignedUrl);
+        const printedBy = auth.context.kind === 'staff'
+            ? { name: auth.context.session.name, role: auth.context.session.role }
+            : undefined;
+        const html = generateDepositReceiptHTML(deposit, patient, org, logoSignedUrl, printedBy);
         return new NextResponse(html, {
             headers: { 'Content-Type': 'text/html; charset=utf-8' },
         });
@@ -75,7 +79,7 @@ function numberToWords(n: number): string {
     return result + ' Only';
 }
 
-function generateDepositReceiptHTML(deposit: any, patient: any, org: any, logoSignedUrl = '') {
+function generateDepositReceiptHTML(deposit: any, patient: any, org: any, logoSignedUrl = '', printedBy?: { name: string; role?: string }) {
     const amount = Number(deposit.amount || 0);
     const depositDate = deposit.created_at
         ? new Date(deposit.created_at).toLocaleDateString('en-GB', {
@@ -219,6 +223,7 @@ function generateDepositReceiptHTML(deposit: any, patient: any, org: any, logoSi
         <div style="border-top:1px solid #e5e7eb;padding-top:16px;text-align:center;">
             <p style="font-size:11px;color:#9ca3af;">This is a computer-generated deposit receipt and does not require a signature.</p>
             <p style="font-size:11px;color:#9ca3af;margin-top:4px;">${hospitalName}${hospitalPhone ? ` | ${hospitalPhone}` : ''}${hospitalEmail ? ` | ${hospitalEmail}` : ''}</p>
+            ${printedBy ? `<p style="font-size:10px;color:#9ca3af;margin-top:6px;">Printed by: ${printedBy.name}${printedBy.role ? ` (${printedBy.role})` : ''} &middot; ${formatDateTime(new Date())}</p>` : ''}
         </div>
     </div>
 </body>

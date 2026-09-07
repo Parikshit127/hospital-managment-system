@@ -12,6 +12,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ admi
         const apiKeyHeader = req.headers.get('X-Api-Key');
         let organizationId: string | null = null;
         let isApiKeyAuth = false;
+        let printedBy: { name: string; role?: string } | undefined;
 
         if (apiKeyHeader) {
             // Zealthix API authentication
@@ -32,6 +33,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ admi
             });
             if (!auth.ok) return auth.response;
             organizationId = auth.context.organizationId;
+            if (auth.context.kind === 'staff') {
+                printedBy = { name: auth.context.session.name, role: auth.context.session.role };
+            }
         }
 
         const { admissionId } = await params;
@@ -248,7 +252,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ admi
         </div>
 
         <!-- Footer -->
-        ${billFooterHtml(branding)}
+        ${billFooterHtml(branding, printedBy)}
     </div>
 </body>
 </html>`

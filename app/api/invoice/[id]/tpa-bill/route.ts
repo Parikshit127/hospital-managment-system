@@ -98,8 +98,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         }
 
         const branding = await getBillBranding(auth.context.organizationId);
+        const printedBy = auth.context.kind === 'staff'
+            ? { name: auth.context.session.name, role: auth.context.session.role }
+            : undefined;
 
-        const html = generateTpaBillHTML(invoice, admission, branding, tpaProviderName, policyNumber, preAuthNumber);
+        const html = generateTpaBillHTML(invoice, admission, branding, tpaProviderName, policyNumber, preAuthNumber, printedBy);
 
         return new NextResponse(html, {
             headers: { 'Content-Type': 'text/html; charset=utf-8' },
@@ -134,6 +137,7 @@ function generateTpaBillHTML(
     tpaProviderName: string,
     policyNumber: string,
     preAuthNumber: string,
+    printedBy?: { name: string; role?: string },
 ) {
     const patient = invoice.patient || {};
     const items = invoice.items || [];
@@ -384,7 +388,7 @@ function generateTpaBillHTML(
                 <p style="font-size:10px;text-align:right;color:#666;margin-bottom:10px;">(All figures are in Rupees (INR) only)</p>
                 <p style="font-size:9px;color:#9ca3af;margin-bottom:10px;">This is the hospital's claim bill addressed to the insurer/TPA, reflecting the actual treatment charges. The patient's own bill is issued separately.</p>
                 ${bankDetailsHtml(brandingToBankDetails(branding))}
-                ${billFooterHtml(branding)}
+                ${billFooterHtml(branding, printedBy)}
             </div>
         </td></tr></tbody>
         <tfoot><tr><td class="print-layout-footer-spacer"></td></tr></tfoot>

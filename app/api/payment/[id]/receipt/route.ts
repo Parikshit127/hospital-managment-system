@@ -3,6 +3,7 @@ import { prisma } from '@/backend/db';
 import { resolveRouteAuth } from '@/app/lib/route-auth';
 import { getSignedDownloadUrl } from '@/app/lib/s3';
 import { fmtBillDateTime, deriveInvoiceStatus, deriveTpaStatusPill, deriveInvoiceTotals } from '@/app/lib/bill-branding';
+import { formatDateTime } from '@/app/lib/timezone';
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     try {
@@ -80,7 +81,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
             }
         }
 
-        const html = generateReceiptHTML(payment, org, logoSignedUrl);
+        const printedBy = auth.context.kind === 'staff'
+            ? { name: auth.context.session.name, role: auth.context.session.role }
+            : undefined;
+        const html = generateReceiptHTML(payment, org, logoSignedUrl, printedBy);
         return new NextResponse(html, {
             headers: { 'Content-Type': 'text/html; charset=utf-8' },
         });
@@ -112,7 +116,7 @@ function numberToWords(n: number): string {
     return result + ' Only';
 }
 
-function generateReceiptHTML(payment: any, org: any, logoSignedUrl = '') {
+function generateReceiptHTML(payment: any, org: any, logoSignedUrl = '', printedBy?: { name: string; role?: string }) {
     const invoice = payment.invoice || {};
     const patient = invoice.patient || {};
     const amount = Number(payment.amount || 0);
@@ -363,6 +367,7 @@ function generateReceiptHTML(payment: any, org: any, logoSignedUrl = '') {
         <div style="border-top:1px solid #e5e7eb;padding-top:16px;text-align:center;position:relative;z-index:2;">
             <p style="font-size:11px;color:#9ca3af;">This is a computer-generated receipt and does not require a signature.</p>
             <p style="font-size:11px;color:#9ca3af;margin-top:4px;">${hospitalName}${hospitalPhone ? ` | ${hospitalPhone}` : ''}${hospitalEmail ? ` | ${hospitalEmail}` : ''}</p>
+            ${printedBy ? `<p style="font-size:10px;color:#9ca3af;margin-top:6px;">Printed by: ${printedBy.name}${printedBy.role ? ` (${printedBy.role})` : ''} &middot; ${formatDateTime(new Date())}</p>` : ''}
         </div>
     </div>
 </body>

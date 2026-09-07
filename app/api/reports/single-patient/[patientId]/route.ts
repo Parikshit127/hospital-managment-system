@@ -45,7 +45,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ pat
         }
 
         const branding = await getBillBranding(auth.context.organizationId);
-        const html = render(res.data, branding);
+        const printedBy = auth.context.kind === 'staff'
+            ? { name: auth.context.session.name, role: auth.context.session.role }
+            : undefined;
+        const html = render(res.data, branding, printedBy);
         return new NextResponse(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
     } catch (error: any) {
         console.error('single-patient report route error:', error);
@@ -69,7 +72,7 @@ function section(title: string, count: number, head: string[], bodyRows: string[
     </div>`;
 }
 
-function render(d: any, b: any): string {
+function render(d: any, b: any, printedBy?: { name: string; role?: string }): string {
     const p = d.patient;
     const s = d.summary;
 
@@ -227,7 +230,7 @@ ${printButtonHtml(b, 'Single Patient Report')}
   ${section('Pharmacy Indents', (d.indents ?? []).length,
         ['Indent', 'Date', 'Items', 'Status'], indentRows)}
 
-  ${billFooterHtml(b)}
+  ${billFooterHtml(b, printedBy)}
 </div>
 </body>
 </html>`;

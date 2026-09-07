@@ -156,7 +156,7 @@ export async function admitPatient(
   diagnosis: string,
 ) {
   try {
-    const { db, organizationId } = await requireTenantContext();
+    const { db, session, organizationId } = await requireTenantContext();
 
     // 1. Generate sequential admission ID
     const org = await db.organization.findUnique({ where: { id: organizationId }, select: { code: true } });
@@ -186,6 +186,8 @@ export async function admitPatient(
         diagnosis: diagnosis,
         status: "Admitted",
         admission_date: now,
+        created_by: session?.username || null,
+        created_by_name: session?.name || session?.username || null,
         organizationId,
       },
     });

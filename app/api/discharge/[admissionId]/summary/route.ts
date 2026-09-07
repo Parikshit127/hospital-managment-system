@@ -49,7 +49,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ adm
         const branding = await getBillBranding(organizationId);
         const header = buildDischargeHeader(admission, data);
 
-        const html = renderDischargeSummaryHtml(branding, header, data, { withPrintButton: true });
+        const printedBy = auth.context.kind === 'staff'
+            ? { name: auth.context.session.name, role: auth.context.session.role }
+            : undefined;
+        const html = renderDischargeSummaryHtml(branding, header, data, { withPrintButton: true, printedBy });
         return new NextResponse(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
     } catch (error: any) {
         console.error('discharge summary print route error:', error);

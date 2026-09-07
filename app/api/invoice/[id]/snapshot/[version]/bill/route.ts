@@ -81,6 +81,12 @@ export async function GET(
         const branding = await getBillBranding(auth.context.organizationId);
         const sections = await getBillSections(auth.context.organizationId, 'invoice');
 
+        // The snapshot shows a HISTORICAL bill version, but "Printed by" reflects who is
+        // viewing/printing it right NOW, not who authored the snapshot.
+        const printedBy = auth.context.kind === 'staff'
+            ? { name: auth.context.session.name, role: auth.context.session.role }
+            : undefined;
+
         const html = renderSnapshotBillHTML({
             snapshot: inv,
             patient: patient || { full_name: '—', patient_id: '—', phone: null, age: null, gender: null },
@@ -91,6 +97,7 @@ export async function GET(
             versionNumber,
             detailed,
             opdDoctor: liveInvoice?.doctor_name || '',
+            printedBy,
         });
 
         return new NextResponse(html, {
@@ -129,6 +136,7 @@ function renderSnapshotBillHTML({
     versionNumber,
     detailed,
     opdDoctor,
+    printedBy,
 }: {
     snapshot: any;
     patient: any;
@@ -139,6 +147,7 @@ function renderSnapshotBillHTML({
     versionNumber: number;
     detailed: boolean;
     opdDoctor: string;
+    printedBy?: { name: string; role?: string };
 }) {
     const items: any[] = snapshot.items || [];
     const isIPD = !!admission;
@@ -295,7 +304,7 @@ function renderSnapshotBillHTML({
                     <tr><td style="padding:3px 8px;font-size:11px;font-weight:bold;">Balance:</td><td style="font-size:11px;">${balance.toFixed(2)} - ${numberToWords(balance)}</td></tr>
                 </table>
                 <p style="font-size:10px;text-align:right;color:#666;margin-bottom:10px;">(All figures are in Rupees (INR) only)</p>
-                ${sections.showFooter ? billFooterHtml(branding) : ''}
+                ${sections.showFooter ? billFooterHtml(branding, printedBy) : ''}
             </div>
         </td></tr></tbody>
         <tfoot><tr><td class="print-layout-footer-spacer"></td></tr></tfoot>

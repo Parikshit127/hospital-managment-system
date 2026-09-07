@@ -101,7 +101,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         // The medicine-name toggle only matters in detailed mode (summary mode already
         // collapses pharmacy to a single total).
         const medsToggle = medsToggleHtml(req.url, medsAvailable && detailed, includeMeds);
-        const html = generateSummaryBillHTML(invoice, admission, org, deposits, branding, sections, opdDoctor, tpaProviderName, detailed, medsToggle, includeMeds);
+        const printedBy = auth.context.kind === 'staff'
+            ? { name: auth.context.session.name, role: auth.context.session.role }
+            : undefined;
+        const html = generateSummaryBillHTML(invoice, admission, org, deposits, branding, sections, opdDoctor, tpaProviderName, detailed, medsToggle, includeMeds, printedBy);
 
         return new NextResponse(html, {
             headers: { 'Content-Type': 'text/html; charset=utf-8' },
@@ -129,7 +132,7 @@ function numberToWords(n: number): string {
     return (n < 0 ? 'Minus ' : '') + 'Rupees ' + convert(rupees) + ' Only';
 }
 
-function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposits: any[], branding: BillBranding, sections: any, opdDoctor: string = '', tpaProviderName: string = '', detailed: boolean = false, medsToggle: string = '', includeMeds: boolean = true) {
+function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposits: any[], branding: BillBranding, sections: any, opdDoctor: string = '', tpaProviderName: string = '', detailed: boolean = false, medsToggle: string = '', includeMeds: boolean = true, printedBy?: { name: string; role?: string }) {
     const patient = invoice.patient || {};
     const items = invoice.items || [];
 
@@ -410,7 +413,7 @@ function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposit
                             : `<tr><td style="padding:3px 8px;font-size:11px;font-weight:bold;">Balance :</td><td style="font-size:11px;">${balance.toFixed(2)} - ${numberToWords(balance)}</td></tr>`)}
                 </table>
                 <p style="font-size:10px;text-align:right;color:#666;margin-bottom:10px;">(All figures are in Rupees (INR) only)</p>
-                ${sections.showFooter ? billFooterHtml(branding) : ''}
+                ${sections.showFooter ? billFooterHtml(branding, printedBy) : ''}
             </div>
         </td></tr></tbody>
         <tfoot><tr><td class="print-layout-footer-spacer"></td></tr></tfoot>

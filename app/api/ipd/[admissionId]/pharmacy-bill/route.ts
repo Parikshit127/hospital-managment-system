@@ -4,6 +4,7 @@ import { resolveRouteAuth } from '@/app/lib/route-auth';
 import { getPharmacyBranding } from '@/app/lib/pharmacy-branding';
 import { dispensingKey } from '@/app/lib/pharmacy-bill-group';
 import { formatDoctorName } from '@/app/lib/format-name';
+import { formatDateTime } from '@/app/lib/timezone';
 
 const ALLOWED_STAFF_ROLES = ['admin', 'finance', 'receptionist', 'ipd_manager', 'doctor', 'pharmacist', 'nurse', 'store_manager'];
 
@@ -211,6 +212,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ admi
   </table>`}
 
   <p style="font-size:9px;color:#9ca3af;margin-top:18px;text-align:center;">Computer-generated pharmacy bill — no signature required.</p>
+  <p style="font-size:9px;color:#9ca3af;text-align:center;margin-top:4px;">Printed by: ${esc(auth.context.session.name)}${auth.context.session.role ? ` (${esc(auth.context.session.role)})` : ''} &middot; ${formatDateTime(new Date())}</p>
 </div>
 </body></html>`;
 

@@ -100,7 +100,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ admi
         });
 
         const isFinal = admission.status === 'Discharged';
-        const html = generateSummaryBillHTML(admission, invoice, org, deposits, isFinal, branding, sections);
+        const printedBy = auth.context.kind === 'staff'
+            ? { name: auth.context.session.name, role: auth.context.session.role }
+            : undefined;
+        const html = generateSummaryBillHTML(admission, invoice, org, deposits, isFinal, branding, sections, printedBy);
 
         return new NextResponse(html, {
             headers: { 'Content-Type': 'text/html; charset=utf-8' },
@@ -128,7 +131,7 @@ function numberToWords(n: number): string {
     return (n < 0 ? 'Minus ' : '') + 'Rupees ' + convert(rupees) + ' Only';
 }
 
-function generateSummaryBillHTML(admission: any, invoice: any, org: any, deposits: any[], isFinal: boolean, branding: BillBranding, sections: any) {
+function generateSummaryBillHTML(admission: any, invoice: any, org: any, deposits: any[], isFinal: boolean, branding: BillBranding, sections: any, printedBy?: { name: string; role?: string }) {
     const patient = admission.patient || {};
     const items = invoice.items || [];
 
@@ -233,6 +236,8 @@ function generateSummaryBillHTML(admission: any, invoice: any, org: any, deposit
                                 <p style="font-size:11px;"><strong>Discharged:</strong> ${dischargeDate || '—'}</p>
                                 <p style="font-size:11px;"><strong>LOS:</strong> ${los} day(s)</p>
                                 <p style="font-size:11px;"><strong>Diagnosis:</strong> ${admission.diagnosis || '-'}</p>
+                                <p style="font-size:11px;"><strong>Admission created by:</strong> ${admission.created_by_name || admission.created_by || '-'}${admission.created_by ? ` (ID: ${admission.created_by})` : ''}</p>
+                                <p style="font-size:11px;"><strong>Discharge billed by:</strong> ${admission.discharged_by_name || admission.discharged_by || '-'}${admission.discharged_by ? ` (ID: ${admission.discharged_by})` : ''}</p>
                             </div>
                         </div>` : ''}
 
@@ -277,7 +282,7 @@ function generateSummaryBillHTML(admission: any, invoice: any, org: any, deposit
                             <p style="font-size:10px;color:#059669;"><strong>Amount in Words:</strong> ${numberToWords(net)}</p>
                         </div>` : ''}
 
-                        ${sections.showFooter ? billFooterHtml(branding) : ''}
+                        ${sections.showFooter ? billFooterHtml(branding, printedBy) : ''}
                     </div>
                 </td>
             </tr>

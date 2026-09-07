@@ -44,6 +44,17 @@ export default function PlatformAuditLogPage() {
 
     const totalPages = Math.ceil(total / 50);
 
+    // "This Month" quick-filter — a superadmin auditing platform activity usually
+    // wants a calendar month at a glance rather than hand-picking two dates.
+    function setThisMonth() {
+        const now = new Date();
+        const y = now.getFullYear(), m = String(now.getMonth() + 1).padStart(2, '0');
+        const pad = (n: number) => String(n).padStart(2, '0');
+        setFrom(`${y}-${m}-01`);
+        setTo(`${y}-${m}-${pad(now.getDate())}`);
+        setPage(1);
+    }
+
     const actionColor = (action: string) => {
         if (action.includes('CREATE')) return 'text-emerald-400 bg-emerald-500/10';
         if (action.includes('DELETE') || action.includes('SUSPEND')) return 'text-red-400 bg-red-500/10';
@@ -76,6 +87,10 @@ export default function PlatformAuditLogPage() {
                     className="px-3 py-2 bg-[#161b22] border border-white/10 rounded-lg text-sm text-white outline-none focus:ring-2 focus:ring-violet-500" />
                 <DateField value={to} onChange={e => { setTo(e.target.value); setPage(1); }}
                     className="px-3 py-2 bg-[#161b22] border border-white/10 rounded-lg text-sm text-white outline-none focus:ring-2 focus:ring-violet-500" />
+                <button type="button" onClick={setThisMonth}
+                    className="px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-xs font-bold text-gray-300 hover:bg-white/10 transition">
+                    This Month
+                </button>
                 <span className="text-xs text-gray-500">{total} entries</span>
             </div>
 

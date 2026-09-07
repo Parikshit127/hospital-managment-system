@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/backend/db';
 import { resolveRouteAuth } from '@/app/lib/route-auth';
 import { getBillBranding, fmtBillDate, bankDetailsHtml } from '@/app/lib/bill-branding';
+import { formatDateTime } from '@/app/lib/timezone';
 
 // Printable acknowledgement for a TPA / insurance receipt: the payer settlement
 // on hospital letterhead, with the bill-wise split of what was applied.
@@ -56,7 +57,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
         }
 
         const branding = await getBillBranding(organizationId);
-        return new NextResponse(receiptHTML(receipt, branding, reversal), {
+        const printedBy = auth.context.kind === 'staff'
+            ? { name: auth.context.session.name, role: auth.context.session.role }
+            : undefined;
+        return new NextResponse(receiptHTML(receipt, branding, reversal, printedBy), {
             headers: { 'Content-Type': 'text/html; charset=utf-8' },
         });
     } catch (error: any) {
@@ -90,7 +94,7 @@ function numberToWords(amount: number): string {
     return `Rupees ${parts.join(' ')}${paise ? ` and ${two(paise)} Paise` : ''} Only`;
 }
 
-function receiptHTML(r: any, b: any, reversal?: { reason: string; at: Date | null } | null): string {
+function receiptHTML(r: any, b: any, reversal?: { reason: string; at: Date | null } | null, printedBy?: { name: string; role?: string }): string {
     const accent = b.accentColor || '#1e3a6e';
     const payer = r.provider?.provider_name || r.corporate?.company_name || '—';
     const isReversed = r.status === 'Reversed';
@@ -269,6 +273,7 @@ ${isReversed ? `
     </div>
 
     ${b.footerText ? `<div style="border-top:1px solid #e5e7eb;margin-top:22px;padding-top:10px;text-align:center;"><p style="font-size:10px;color:#9ca3af;">${esc(b.footerText)}</p></div>` : ''}
+    ${printedBy ? `<p style="font-size:9px;color:#9ca3af;text-align:center;margin-top:10px;">Printed by: ${esc(printedBy.name)}${printedBy.role ? ` (${esc(printedBy.role)})` : ''} &middot; ${formatDateTime(new Date())}</p>` : ''}
 </div>
 </body></html>`;
 }

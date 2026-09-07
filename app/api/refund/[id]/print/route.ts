@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/backend/db';
 import { resolveRouteAuth } from '@/app/lib/route-auth';
 import { getBillBranding, fmtBillDateTime } from '@/app/lib/bill-branding';
+import { formatDateTime } from '@/app/lib/timezone';
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     try {
@@ -40,7 +41,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
             : null;
 
         const branding = await getBillBranding(organizationId);
-        return new NextResponse(refundReceiptHTML(refund, invoice, payment, branding), {
+        const printedBy = auth.context.kind === 'staff'
+            ? { name: auth.context.session.name, role: auth.context.session.role }
+            : undefined;
+        return new NextResponse(refundReceiptHTML(refund, invoice, payment, branding, printedBy), {
             headers: { 'Content-Type': 'text/html; charset=utf-8' },
         });
     } catch (error: any) {
@@ -73,7 +77,7 @@ function numberToWords(amount: number): string {
     return `Rupees ${parts.join(' ')}${paise ? ` and ${two(paise)} Paise` : ''} Only`;
 }
 
-function refundReceiptHTML(refund: any, invoice: any, payment: any, branding: any): string {
+function refundReceiptHTML(refund: any, invoice: any, payment: any, branding: any, printedBy?: { name: string; role?: string }): string {
     const accent = branding.accentColor || '#1e3a6e';
     const refundNo = 'REF-' + String(refund.id).padStart(5, '0');
     const patientName = invoice?.patient?.full_name || 'Patient';
@@ -182,7 +186,7 @@ function refundReceiptHTML(refund: any, invoice: any, payment: any, branding: an
   <strong>Reason for Refund:</strong> ${esc(refund.reason || 'Patient overcharge / adjustment')}
 </div>
 <div class="footer">
-<div><br><p>Computer-generated receipt. Retain this copy for your financial records.</p></div>
+<div><br><p>Computer-generated receipt. Retain this copy for your financial records.</p>${printedBy ? `<p style="margin-top:4px;">Printed by: ${esc(printedBy.name)}${printedBy.role ? ` (${esc(printedBy.role)})` : ''} &middot; ${formatDateTime(new Date())}</p>` : ''}</div>
 <div class="sig-block">
   <div style="height: 35px;"></div>
   <p class="sig-line">Authorised Signatory</p>

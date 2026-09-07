@@ -3,6 +3,7 @@
 // Sr | Qty | Pack | Particulars | HSN | Batch | Exp | MRP | Rate | Dis% | GST% |
 // Taxable | CGST | SGST | IGST | Amount, with a totals footer + amount in words).
 import type { PharmacyBranding } from '@/app/lib/pharmacy-branding';
+import { formatDateTime } from '@/app/lib/timezone';
 
 export interface PurchasePrintLine {
     name: string;
@@ -32,6 +33,7 @@ export interface PurchasePrintOpts {
     buyer: PharmacyBranding;
     supplier: { name: string; gstin?: string | null; address?: string | null; phone?: string | null };
     lines: PurchasePrintLine[];
+    printedBy?: { name: string; role?: string };
 }
 
 const r2 = (n: number) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
@@ -212,6 +214,7 @@ export function buildPurchasePrintHtml(opts: PurchasePrintOpts): string {
         </div>
     </div>
     <div class="gen">${esc(buyer.name)} ${buyer.division ? esc(buyer.division) : ''}</div>
+    ${opts.printedBy ? `<div class="gen">Printed by: ${esc(opts.printedBy.name)}${opts.printedBy.role ? ` (${esc(opts.printedBy.role)})` : ''} &middot; ${formatDateTime(new Date())}</div>` : ''}
 </div>
 </body></html>`;
 }

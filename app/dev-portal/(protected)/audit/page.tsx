@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type ReactNode } from 'react';
 import {
     Shield, Search, Loader2, ChevronLeft, ChevronRight,
     Download, Filter, AlertTriangle, Clock
@@ -10,6 +10,81 @@ import { getAuditLogs, getAuditStats } from '@/app/actions/audit-actions';
 
 const CRITICAL_ACTIONS = ['PAYMENT_REVERSED', 'DISCOUNT_APPLIED', 'DELETE', 'CANCEL_INVOICE', 'DRUG_INTERACTION_WARNING'];
 
+// Some rows now store `details` as { summary?, changes?: [{field, from, to}] } instead of
+// free text. Render that shape as a compact "field: from → to" line; anything else (plain
+// string, or a JSON object without a `changes` array) falls back to the raw text exactly
+// as before, so legacy rows are unaffected.
+function formatChangeValue(v: any): string {
+    if (v === null || v === undefined || v === '') return '—';
+    if (typeof v === 'object') return JSON.stringify(v);
+    return String(v);
+}
+
+function renderDetails(details: any): ReactNode {
+    if (!details) return '-';
+    let parsed: any = null;
+    if (typeof details === 'string') {
+        try { parsed = JSON.parse(details); } catch { parsed = null; }
+    } else if (details && typeof details === 'object') {
+        parsed = details;
+    }
+
+    const changes = parsed && typeof parsed === 'object' && Array.isArray(parsed.changes) ? parsed.changes : null;
+    const summary = parsed && typeof parsed === 'object' && typeof parsed.summary === 'string' && parsed.summary.trim()
+        ? parsed.summary.trim()
+        : null;
+
+    if ((changes && changes.length > 0) || summary) {
+        return (
+            <div className="space-y-0.5">
+                {summary && <div className="text-gray-500 font-semibold">{summary}</div>}
+                {changes && changes.slice(0, 4).map((c: any, idx: number) => (
+                    <div key={idx} className="text-gray-400">
+                        <span className="font-semibold text-gray-500 capitalize">{String(c?.field ?? '').replace(/_/g, ' ')}</span>
+                        {': '}
+                        <span className="font-mono">{formatChangeValue(c?.from)}</span>
+                        <span className="mx-1">→</span>
+                        <span className="font-mono">{formatChangeValue(c?.to)}</span>
+                    </div>
+                ))}
+                {changes && changes.length > 4 && (
+                    <div className="text-gray-300">+{changes.length - 4} more</div>
+                )}
+            </div>
+        );
+    }
+
+    // Legacy plain-string / generic-JSON details — unchanged, still truncated with
+    // the full text on hover via the cell's `title` attribute.
+    return <span className="truncate block">{typeof details === 'string' ? details : JSON.stringify(details)}</span>;
+}
+
+// Quick date-range presets — dates are plain YYYY-MM-DD strings, resolved server-side
+// against the org's timezone (getDayRange/getOrgTimezone in getAuditLogs).
+function ymd(d: Date): string {
+    const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, '0'), day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+}
+
+function quickRange(preset: 'last7' | 'last30' | 'thisMonth' | 'lastMonth'): { from: string; to: string } {
+    const now = new Date();
+    if (preset === 'last7') {
+        const start = new Date(now); start.setDate(start.getDate() - 6);
+        return { from: ymd(start), to: ymd(now) };
+    }
+    if (preset === 'last30') {
+        const start = new Date(now); start.setDate(start.getDate() - 29);
+        return { from: ymd(start), to: ymd(now) };
+    }
+    if (preset === 'thisMonth') {
+        const start = new Date(now.getFullYear(), now.getMonth(), 1);
+        return { from: ymd(start), to: ymd(now) };
+    }
+    const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const end = new Date(now.getFullYear(), now.getMonth(), 0);
+    return { from: ymd(start), to: ymd(end) };
+}
+
 export default function AuditTrailPage() {
     const [logs, setLogs] = useState<any[]>([]);
     const [stats, setStats] = useState<any>(null);
@@ -18,6 +93,8 @@ export default function AuditTrailPage() {
     const [moduleFilter, setModuleFilter] = useState('');
     const [actionFilter, setActionFilter] = useState('');
     const [userFilter, setUserFilter] = useState('');
+    const [from, setFrom] = useState('');
+    const [to, setTo] = useState('');
 
     const loadData = async () => {
         setLoading(true);
@@ -27,6 +104,8 @@ export default function AuditTrailPage() {
                     module: moduleFilter || undefined,
                     action: actionFilter || undefined,
                     username: userFilter || undefined,
+                    from: from || undefined,
+                    to: to || undefined,
                 }),
                 getAuditStats(),
             ]);
@@ -41,7 +120,7 @@ export default function AuditTrailPage() {
         setLoading(false);
     };
 
-    useEffect(() => { loadData(); }, [pagination.page, moduleFilter, actionFilter, userFilter]);
+    useEffect(() => { loadData(); }, [pagination.page, moduleFilter, actionFilter, userFilter, from, to]);
 
     const exportCSV = () => {
         const headers = ['Timestamp', 'User', 'Role', 'Action', 'Module', 'Entity Type', 'Entity ID', 'Details'];
@@ -123,6 +202,34 @@ export default function AuditTrailPage() {
                             placeholder="Filter by username..."
                             className="pl-7 pr-3 py-1.5 bg-gray-100 border border-gray-200 rounded-lg text-xs text-gray-900 focus:outline-none w-44" />
                     </div>
+                    <input type="date" value={from} onChange={e => { setFrom(e.target.value); setPagination(p => ({ ...p, page: 1 })); }}
+                        className="px-3 py-1.5 bg-gray-100 border border-gray-200 rounded-lg text-xs text-gray-900 focus:outline-none" />
+                    <input type="date" value={to} onChange={e => { setTo(e.target.value); setPagination(p => ({ ...p, page: 1 })); }}
+                        className="px-3 py-1.5 bg-gray-100 border border-gray-200 rounded-lg text-xs text-gray-900 focus:outline-none" />
+                </div>
+
+                {/* QUICK DATE-RANGE PRESETS — pulls a month's worth of log in one click */}
+                <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-[10px] font-black text-gray-400 uppercase">Quick range:</span>
+                    {([
+                        ['last7', 'Last 7 Days'],
+                        ['last30', 'Last 30 Days'],
+                        ['thisMonth', 'This Month'],
+                        ['lastMonth', 'Last Month'],
+                    ] as const).map(([key, label]) => (
+                        <button key={key} type="button"
+                            onClick={() => { const r = quickRange(key); setFrom(r.from); setTo(r.to); setPagination(p => ({ ...p, page: 1 })); }}
+                            className="px-2.5 py-1 text-[11px] font-bold bg-gray-100 border border-gray-200 rounded-lg text-gray-500 hover:bg-gray-200 transition-all">
+                            {label}
+                        </button>
+                    ))}
+                    {(from || to) && (
+                        <button type="button"
+                            onClick={() => { setFrom(''); setTo(''); setPagination(p => ({ ...p, page: 1 })); }}
+                            className="px-2.5 py-1 text-[11px] font-bold text-gray-400 hover:text-gray-600 transition-all">
+                            Clear dates
+                        </button>
+                    )}
                 </div>
 
                 {/* TABLE */}
@@ -167,8 +274,8 @@ export default function AuditTrailPage() {
                                         <td className="px-4 py-2.5 text-[11px] text-gray-400 font-mono">
                                             {log.entity_type && `${log.entity_type}: ${log.entity_id || '-'}`}
                                         </td>
-                                        <td className="px-4 py-2.5 text-[11px] text-gray-400 max-w-[200px] truncate" title={log.details || ''}>
-                                            {log.details || '-'}
+                                        <td className="px-4 py-2.5 text-[11px] text-gray-400 max-w-[240px]" title={typeof log.details === 'string' ? log.details : ''}>
+                                            {renderDetails(log.details)}
                                         </td>
                                     </tr>
                                 ))}

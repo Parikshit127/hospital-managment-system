@@ -1,5 +1,6 @@
 import { prisma } from '@/backend/db';
 import { getSignedDownloadUrl } from '@/app/lib/s3';
+import { formatDateTime } from '@/app/lib/timezone';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -199,8 +200,20 @@ export function signatureBlockHtml(b: BillBranding): string {
     </div>`;
 }
 
-export function billFooterHtml(b: BillBranding): string {
+// Who actually clicked "print" — rendered as a small audit line in the footer so a
+// printed bill shows which staff account generated it. Optional and additive: when
+// omitted, the footer renders exactly as before (existing call sites keep compiling).
+export interface PrintedBy {
+    name: string;
+    role?: string | null;
+    at?: Date;
+}
+
+export function billFooterHtml(b: BillBranding, printedBy?: PrintedBy): string {
     const termsText = b.termsConditions || 'Payment due on receipt. Subject to local jurisdiction.';
+    const printedByLine = printedBy?.name
+        ? `<p style="font-size:9px;color:#9ca3af;text-align:center;margin-top:4px;">Printed by: ${escHtml(printedBy.name)}${printedBy.role ? ` (${escHtml(printedBy.role)})` : ''} &middot; ${formatDateTime(printedBy.at || new Date())}</p>`
+        : '';
     // Bank details are intentionally NOT in the shared footer — they belong on TPA
     // documents only (TPA invoice + insurance receipt), not on cash/OPD bills.
     return `
@@ -212,6 +225,7 @@ export function billFooterHtml(b: BillBranding): string {
             ${signatureBlockHtml(b)}
         </div>
         <p style="font-size:9px;color:#d1d5db;text-align:center;margin-top:16px;">Computer-generated document. ${escHtml(b.hospitalName)}</p>
+        ${printedByLine}
     </div>`;
 }
 

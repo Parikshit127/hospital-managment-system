@@ -12,13 +12,14 @@ import { getBillSections } from '@/app/lib/bill-sections';
 
 export async function GET(req: NextRequest) {
     try {
-        const { organizationId } = await requireRoleAndTenant(['admin']);
+        const { organizationId, session } = await requireRoleAndTenant(['admin']);
         const type = req.nextUrl.searchParams.get('type') || 'invoice';
 
         const branding = await getBillBranding(organizationId);
         const sections = await getBillSections(organizationId, type);
 
-        const html = generatePreviewHTML(branding, sections, type);
+        const printedBy = { name: session.name, role: session.role };
+        const html = generatePreviewHTML(branding, sections, type, printedBy);
 
         return new NextResponse(html, {
             headers: { 'Content-Type': 'text/html; charset=utf-8' },
@@ -28,7 +29,7 @@ export async function GET(req: NextRequest) {
     }
 }
 
-function generatePreviewHTML(branding: any, sections: any, type: string): string {
+function generatePreviewHTML(branding: any, sections: any, type: string, printedBy?: { name: string; role?: string }): string {
     const typeLabel = type.split('_').map((w: string) => w[0].toUpperCase() + w.slice(1)).join(' ');
     const useLetterhead = type === 'invoice' || type === 'discharge_summary';
     const today = new Date().toLocaleDateString('en-GB');
@@ -103,7 +104,7 @@ function generatePreviewHTML(branding: any, sections: any, type: string): string
                 ${patientHtml}
                 ${itemsHtml}
                 ${amountWordsHtml}
-                ${sections.showFooter ? billFooterHtml(branding) : ''}
+                ${sections.showFooter ? billFooterHtml(branding, printedBy) : ''}
             </div>
         </td></tr></tbody>
         <tfoot><tr><td class="print-layout-footer-spacer"></td></tr></tfoot>
@@ -126,7 +127,7 @@ function generatePreviewHTML(branding: any, sections: any, type: string): string
         ${patientHtml}
         ${itemsHtml}
         ${amountWordsHtml}
-        ${sections.showFooter ? billFooterHtml(branding) : ''}
+        ${sections.showFooter ? billFooterHtml(branding, printedBy) : ''}
     </div>
 </body></html>`;
 }

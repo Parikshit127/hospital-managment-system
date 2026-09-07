@@ -205,6 +205,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ adm
             patientPaid: 0,
             pending: isPayer ? 0 : totalAmount,
         },
+        printedBy: { name: session.name, role: session.role },
     });
 
     return new NextResponse(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });

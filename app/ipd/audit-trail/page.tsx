@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { AppShell } from '@/app/components/layout/AppShell';
 import { Shield, Search, Download, AlertTriangle, Loader2 } from 'lucide-react';
 import { exportAuditReport } from '@/app/actions/report-export-actions';
+import { getUsersList } from '@/app/actions/admin-actions';
 import { ENTITY_TYPE_LABELS, AUDIT_ACTION_GROUPS, auditActionLabel } from '@/app/lib/audit-actions';
 
 const IPD_ACTION_TYPES = [
@@ -32,6 +33,83 @@ function formatDetails(details: any): string {
     .join(' · ');
 }
 
+// A second, structured shape some writers now use: { summary?, changes?: [{field, from, to}] }.
+// Render it as a compact "Field: from → to" list when present; otherwise fall back to the
+// plain-string / generic-object formatting above so older rows keep displaying exactly as before.
+function formatChangeValue(v: any): string {
+  if (v === null || v === undefined || v === '') return '—';
+  if (typeof v === 'object') return JSON.stringify(v);
+  return String(v);
+}
+
+function renderAuditDetails(details: any): React.ReactNode {
+  if (!details) return null;
+  let parsed: any = null;
+  if (typeof details === 'string') {
+    try { parsed = JSON.parse(details); } catch { parsed = null; }
+  } else if (details && typeof details === 'object') {
+    parsed = details;
+  }
+
+  const changes = parsed && typeof parsed === 'object' && Array.isArray(parsed.changes) ? parsed.changes : null;
+  const summary = parsed && typeof parsed === 'object' && typeof parsed.summary === 'string' && parsed.summary.trim()
+    ? parsed.summary.trim()
+    : null;
+
+  if ((changes && changes.length > 0) || summary) {
+    return (
+      <div className="space-y-1">
+        {summary && <div className="text-gray-700 font-medium">{summary}</div>}
+        {changes && changes.length > 0 && (
+          <ul className="space-y-0.5">
+            {changes.map((c: any, idx: number) => (
+              <li key={idx} className="text-[11px] text-gray-500">
+                <span className="font-semibold text-gray-600 capitalize">{String(c?.field ?? '').replace(/_/g, ' ')}</span>
+                {': '}
+                <span className="font-mono">{formatChangeValue(c?.from)}</span>
+                <span className="mx-1">→</span>
+                <span className="font-mono">{formatChangeValue(c?.to)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    );
+  }
+
+  // Legacy shape (plain string, or generic JSON without a `changes` array) — unchanged.
+  const text = formatDetails(details);
+  return text ? <span>{text}</span> : null;
+}
+
+// Quick date-range presets. Dates are plain YYYY-MM-DD strings — the API route
+// resolves them against the org's timezone (getDayRange/getOrgTimezone), so no
+// timezone math is needed here.
+function ymd(d: Date): string {
+  const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, '0'), day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function quickRange(preset: 'last7' | 'last30' | 'thisMonth' | 'lastMonth'): { from: string; to: string } {
+  const now = new Date();
+  if (preset === 'last7') {
+    const start = new Date(now); start.setDate(start.getDate() - 6);
+    return { from: ymd(start), to: ymd(now) };
+  }
+  if (preset === 'last30') {
+    const start = new Date(now); start.setDate(start.getDate() - 29);
+    return { from: ymd(start), to: ymd(now) };
+  }
+  if (preset === 'thisMonth') {
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    return { from: ymd(start), to: ymd(now) };
+  }
+  // lastMonth
+  const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const end = new Date(now.getFullYear(), now.getMonth(), 0);
+  return { from: ymd(start), to: ymd(end) };
+}
+
 export default function IPDAuditTrailPage() {
   const [logs, setLogs] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
@@ -39,22 +117,36 @@ export default function IPDAuditTrailPage() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [actionFilter, setActionFilter] = useState('');
+  const [userFilter, setUserFilter] = useState('');
+  const [users, setUsers] = useState<{ id: string; username: string; name?: string | null; role?: string | null }[]>([]);
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [tab, setTab] = useState<'edits' | 'all'>('edits');
   const [exporting, setExporting] = useState(false);
   const [page, setPage] = useState(0);
 
+  // Populate the user filter from the org's staff list — a monthful of activity
+  // can span far more users than happen to appear on the current page of results.
+  useEffect(() => {
+    let cancelled = false;
+    getUsersList({ limit: 500 }).then(res => {
+      if (cancelled || !res.success) return;
+      setUsers((res.data?.users ?? []).map((u: any) => ({ id: u.id, username: u.username, name: u.name, role: u.role })));
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
   const buildParams = useCallback((overrides: Record<string, string> = {}) => new URLSearchParams({
     search,
     action: actionFilter,
+    user: userFilter,
     from,
     to,
     scope: tab === 'edits' ? 'edits' : '',
     offset: String(page * PAGE_SIZE),
     limit: String(PAGE_SIZE),
     ...overrides,
-  }), [search, actionFilter, from, to, tab, page]);
+  }), [search, actionFilter, userFilter, from, to, tab, page]);
 
   useEffect(() => {
     let cancelled = false;
@@ -74,7 +166,7 @@ export default function IPDAuditTrailPage() {
 
   // Reset to the first page whenever the filters change, otherwise a narrow
   // filter on page 4 shows an empty table.
-  useEffect(() => { setPage(0); }, [search, actionFilter, from, to, tab]);
+  useEffect(() => { setPage(0); }, [search, actionFilter, userFilter, from, to, tab]);
 
   // Exports the whole filtered result set as a titled .xlsx — not just the rows
   // currently on screen, and not a bare CSV that opens as an unlabelled grid.
@@ -83,7 +175,7 @@ export default function IPDAuditTrailPage() {
     setError(null);
     try {
       const res = await exportAuditReport({
-        search, action: actionFilter, from, to,
+        search, action: actionFilter, user: userFilter, from, to,
         scope: tab === 'edits' ? 'edits' : '',
       });
       if (!res.success || !res.base64) {
@@ -157,6 +249,13 @@ export default function IPDAuditTrailPage() {
                 placeholder="Search by receipt / bill no, action, user or reason…"
                 className="w-full pl-9 pr-3 py-2.5 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-gray-400" />
             </div>
+            <select value={userFilter} onChange={e => setUserFilter(e.target.value)}
+              className="text-xs border border-gray-200 rounded-xl px-3 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-gray-400 max-w-[180px]">
+              <option value="">All Users</option>
+              {users.map(u => (
+                <option key={u.id} value={u.username}>{u.name || u.username}{u.role ? ` (${u.role})` : ''}</option>
+              ))}
+            </select>
             <input type="date" value={from} onChange={e => setFrom(e.target.value)}
               className="text-xs border border-gray-200 rounded-xl px-3 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-gray-400" />
             <input type="date" value={to} onChange={e => setTo(e.target.value)}
@@ -166,6 +265,30 @@ export default function IPDAuditTrailPage() {
               <option value="">All Actions</option>
               {actionOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
+          </div>
+
+          {/* Quick date-range presets — lets a user pull "a month's log" in one click
+              instead of hand-picking from/to dates. */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-[10px] font-bold text-gray-400 uppercase mr-0.5">Quick range:</span>
+            {([
+              ['last7', 'Last 7 Days'],
+              ['last30', 'Last 30 Days'],
+              ['thisMonth', 'This Month'],
+              ['lastMonth', 'Last Month'],
+            ] as const).map(([key, label]) => (
+              <button key={key} type="button"
+                onClick={() => { const r = quickRange(key); setFrom(r.from); setTo(r.to); }}
+                className="px-2.5 py-1 text-[11px] font-bold border border-gray-200 rounded-lg bg-white hover:bg-gray-50 text-gray-600">
+                {label}
+              </button>
+            ))}
+            {(from || to) && (
+              <button type="button" onClick={() => { setFrom(''); setTo(''); }}
+                className="px-2.5 py-1 text-[11px] font-bold rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-50">
+                Clear dates
+              </button>
+            )}
           </div>
 
           {error && (
@@ -246,7 +369,7 @@ export default function IPDAuditTrailPage() {
                         )}
                       </td>
                       <td className="px-4 py-3 text-gray-500 max-w-md">
-                        {formatDetails(log.details) || <span className="text-gray-300 italic">—</span>}
+                        {renderAuditDetails(log.details) || <span className="text-gray-300 italic">—</span>}
                       </td>
                     </tr>
                   ))}

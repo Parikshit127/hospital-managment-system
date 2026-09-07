@@ -243,7 +243,7 @@ export async function admitPatientIPD(data: {
   insurance_validity_end?: string;
 }) {
   try {
-    const { db, organizationId } = await requireTenantContext();
+    const { db, session, organizationId } = await requireTenantContext();
 
     // Parse optional admission_date (datetime-local string, treated as IST).
     // Bounds: not before 1y ago, not more than 7d in the future — guards
@@ -326,6 +326,8 @@ export async function admitPatientIPD(data: {
                 admission_type: data.admission_type,
                 line_of_treatment: data.line_of_treatment,
                 ...(admissionDate && { admission_date: admissionDate }),
+                created_by: session?.username || null,
+                created_by_name: session?.name || session?.username || null,
                 organizationId
             },
         });
@@ -959,7 +961,7 @@ export async function accrueIPDDailyCharges(admissionId: string) {
 // Discharge a patient from IPD
 export async function dischargePatientIPD(admissionId: string, notes?: string, dischargeDate?: string) {
   try {
-    const { db, organizationId } = await requireTenantContext();
+    const { db, session, organizationId } = await requireTenantContext();
     const admission = await db.admissions.findUnique({
       where: { admission_id: admissionId },
       include: { patient: true, ward: true, bed: { include: { wards: true } } },
@@ -999,6 +1001,8 @@ export async function dischargePatientIPD(admissionId: string, notes?: string, d
       data: {
         status: "Discharged",
         discharge_date: resolvedDischarge,
+        discharged_by: session?.username || null,
+        discharged_by_name: session?.name || session?.username || null,
       },
     });
 
@@ -1059,10 +1063,14 @@ export async function dischargePatientIPD(admissionId: string, notes?: string, d
 
     await db.system_audit_logs.create({
       data: {
+        user_id: session?.id ? String(session.id) : null,
+        username: session?.username || null,
+        role: session?.role || null,
         action: "DISCHARGE_IPD",
         module: "ipd",
         entity_type: "admission",
         entity_id: admissionId,
+        organizationId,
         details: JSON.stringify({
           patient_id: admission.patient_id,
           daysAdmitted,
@@ -1757,6 +1765,8 @@ export async function admitEmergency(data: {
           attending_doctor_id: data.attending_doctor_id,
           admission_category: 'Emergency',
           admission_source: 'Emergency',
+          created_by: session?.username || null,
+          created_by_name: session?.name || session?.username || null,
           organizationId,
         },
       });

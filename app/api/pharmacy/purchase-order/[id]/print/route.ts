@@ -67,6 +67,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
             phone: po.vendor?.phone || po.supplier?.phone || null,
         },
         lines,
+        printedBy: { name: session.name, role: session.role },
     });
 
     return new NextResponse(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });

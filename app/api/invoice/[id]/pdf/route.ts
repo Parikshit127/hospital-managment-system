@@ -16,6 +16,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         const apiKeyHeader = req.headers.get('X-Api-Key');
         let organizationId: string | null = null;
         let isApiKeyAuth = false;
+        let printedBy: { name: string; role?: string } | undefined;
 
         if (apiKeyHeader) {
             // Zealthix API authentication
@@ -36,6 +37,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
             });
             if (!auth.ok) return auth.response;
             organizationId = auth.context.organizationId;
+            if (auth.context.kind === 'staff') {
+                printedBy = { name: auth.context.session.name, role: auth.context.session.role };
+            }
         }
 
         const { id } = await params;
@@ -132,7 +136,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         const medsAvailable = !isPharmacyInvoice && (invoice.items || []).some(isMedicineItem);
 
         const medsToggle = medsToggleHtml(req.url, medsAvailable, includeMeds)
-        const html = generateInvoiceHTML(invoice, branding, pharmacy, sections, opdDoctor, tpaProviderName, medsToggle, includeMeds)
+        const html = generateInvoiceHTML(invoice, branding, pharmacy, sections, opdDoctor, tpaProviderName, medsToggle, includeMeds, printedBy)
 
         // Return HTML for browser viewing (works for both API key and regular auth)
         return new NextResponse(html, {
@@ -167,7 +171,7 @@ function numberToWords(n: number): string {
     return (n < 0 ? 'Minus ' : '') + result + ' Only';
 }
 
-function generateInvoiceHTML(invoice: any, branding: BillBranding, pharmacy: { name: string; division: string; address: string; gstin: string }, sections: any, opdDoctor: string = '', tpaProviderName: string = '', medsToggle: string = '', includeMeds: boolean = true) {
+function generateInvoiceHTML(invoice: any, branding: BillBranding, pharmacy: { name: string; division: string; address: string; gstin: string }, sections: any, opdDoctor: string = '', tpaProviderName: string = '', medsToggle: string = '', includeMeds: boolean = true, printedBy?: { name: string; role?: string }) {
     const items = invoice.items || []
     const payments = invoice.payments || []
     const creditNotes = (invoice as any).credit_notes || []
@@ -507,7 +511,7 @@ function generateInvoiceHTML(invoice: any, branding: BillBranding, pharmacy: { n
                 <div style="border-top:1px dashed #999;margin:12px 0;"></div>
 
                 <!-- Signature Footer -->
-                ${billFooterHtml(branding)}
+                ${billFooterHtml(branding, printedBy)}
             </div>
         ${isPharmacyBill ? '</div>' : '</td></tr></tbody><tfoot><tr><td class="print-layout-footer-spacer"></td></tr></tfoot></table>'}
 </body>

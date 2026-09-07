@@ -2,6 +2,7 @@
 
 import { requireTenantContext } from '@/backend/tenant';
 import { logAudit } from '@/app/lib/audit';
+import { diffObjects } from '@/app/lib/audit-diff';
 import { createJournalEntry } from './gl-actions';
 import { accrueIPDDailyCharges } from '@/app/actions/ipd-actions';
 import { getPackageGSTRate, getRoomGSTRate } from '@/app/lib/gst';
@@ -1229,7 +1230,9 @@ export async function breakOpenPackage(admissionPackageId: number) {
             module: 'ipd',
             entity_type: 'ipd_admission_package',
             entity_id: String(admissionPackageId),
-            details: JSON.stringify(summary),
+            summary: `Package "${admPkg.package?.package_name || admissionPackageId}" broken open — ${summary.restored_lines} line(s) restored, ₹${summary.restored_amount} re-billed`,
+            before: { status: admPkg.status, is_broken_open: admPkg.is_broken_open },
+            after: { status: ADMISSION_PACKAGE_STATUS.BROKEN_OPEN, is_broken_open: true },
         });
 
         return { success: true, data: serialize({ id: admPkg.id, ...summary }) };
@@ -1392,12 +1395,9 @@ export async function updateAdmissionPackageAmount(admissionPackageId: number, n
             module: 'ipd',
             entity_type: 'ipd_admission_package',
             entity_id: String(admissionPackageId),
-            details: JSON.stringify({
-                package_name: admPkg.package?.package_name,
-                old_amount: Number(admPkg.applied_amount),
-                new_amount: newAmount,
-                updated_by: session.id,
-            }),
+            summary: `Package amount for "${admPkg.package?.package_name ?? admissionPackageId}" changed from ₹${Number(admPkg.applied_amount)} to ₹${newAmount}`,
+            before: { applied_amount: Number(admPkg.applied_amount) },
+            after: { applied_amount: newAmount },
         });
 
         return { success: true };
@@ -1515,12 +1515,9 @@ export async function reclassifyChargeDisposition(
             module: 'ipd',
             entity_type: 'ipd_charge_posting',
             entity_id: String(postingId),
-            details: JSON.stringify({
-                description: posting.description,
-                amount: Number(posting.amount),
-                from: posting.disposition,
-                to: target,
-            }),
+            summary: `Charge "${posting.description}" (₹${Number(posting.amount)}) reclassified from ${posting.disposition} to ${target}`,
+            before: { disposition: posting.disposition },
+            after: { disposition: target },
         });
 
         return { success: true, data: serialize({ posting_id: postingId, disposition: target }) };
@@ -1644,7 +1641,9 @@ export async function removeAbsorbedCharge(postingId: number) {
             module: 'ipd',
             entity_type: 'ipd_charge_posting',
             entity_id: String(postingId),
-            details: JSON.stringify({ description: posting.description, amount: Number(posting.amount) }),
+            summary: `Absorbed charge "${posting.description}" (₹${Number(posting.amount)}) removed`,
+            before: { description: posting.description, quantity: Number(posting.quantity), unit_price: Number(posting.unit_price), amount: Number(posting.amount) },
+            after: { description: null, quantity: null, unit_price: null, amount: null },
         });
 
         return { success: true, data: serialize({ posting_id: postingId }) };
@@ -1710,7 +1709,9 @@ export async function updateAbsorbedCharge(postingId: number, patch: {
             module: 'ipd',
             entity_type: 'ipd_charge_posting',
             entity_id: String(postingId),
-            details: JSON.stringify({ before: { description: posting.description, quantity: Number(posting.quantity), unit_price: Number(posting.unit_price), amount: Number(posting.amount) }, patch }),
+            summary: `Absorbed charge "${posting.description}" corrected`,
+            before: { description: posting.description, quantity: Number(posting.quantity), unit_price: Number(posting.unit_price), amount: Number(posting.amount) },
+            after: { description: patch.description ?? posting.description, quantity, unit_price, amount },
         });
 
         return { success: true, data: serialize({ posting_id: postingId, amount }) };
@@ -2595,6 +2596,8 @@ export async function settleAndDischarge(data: {
                         tpa_provider_id: invoice.tpa_provider_id,
                         by: session.username,
                     }),
+                    user_id: session?.id,
+                    username: session?.username,
                     organizationId,
                 },
             });
@@ -2679,7 +2682,12 @@ export async function settleAndDischarge(data: {
         // 6. Discharge patient
         await db.admissions.update({
             where: { admission_id: data.admission_id },
-            data: { status: 'Discharged', discharge_date: dischargeDate },
+            data: {
+                status: 'Discharged',
+                discharge_date: dischargeDate,
+                discharged_by: session?.username || null,
+                discharged_by_name: session?.name || session?.username || null,
+            },
         });
 
         // 7. Free the bed
@@ -2703,6 +2711,8 @@ export async function settleAndDischarge(data: {
                     outstanding_balance: finalBalance,
                     settled_by: session.username,
                 }),
+                user_id: session?.id,
+                username: session?.username,
                 organizationId,
             },
         });
@@ -2753,19 +2763,23 @@ export async function requestDiscount(data: {
 
         // For auto-approved discounts (≤5%), apply immediately
         if (approval_level === 'auto') {
+            const discBefore = { total_discount: Number(invoice.total_discount) || 0, net_amount: Number(invoice.net_amount) };
+            const discAfter = {
+                total_discount: (Number(invoice.total_discount) || 0) + data.discount_amount,
+                net_amount: Number(invoice.net_amount) - data.discount_amount,
+            };
             await db.invoices.update({
                 where: { id: data.invoice_id },
-                data: {
-                    total_discount: (Number(invoice.total_discount) || 0) + data.discount_amount,
-                    net_amount: Number(invoice.net_amount) - data.discount_amount,
-                },
+                data: discAfter,
             });
             await logAudit({
                 action: 'discount_applied',
                 module: 'ipd',
                 entity_type: 'invoice',
                 entity_id: String(data.invoice_id),
-                details: JSON.stringify({ amount: data.discount_amount, percentage: data.discount_percentage, reason: data.reason, auto_approved: true }),
+                summary: `Discount of ₹${data.discount_amount} (${data.discount_percentage}%) auto-applied: ${data.reason}`,
+                before: discBefore,
+                after: discAfter,
             });
             return { success: true, data: { status: 'auto_approved' } };
         }
@@ -2809,12 +2823,14 @@ export async function applyApprovedDiscount(data: {
         });
         if (!invoice) return { success: false, error: 'Invoice not found' };
 
+        const approvedDiscBefore = { total_discount: Number(invoice.total_discount) || 0, net_amount: Number(invoice.net_amount) };
+        const approvedDiscAfter = {
+            total_discount: (Number(invoice.total_discount) || 0) + data.discount_amount,
+            net_amount: Number(invoice.net_amount) - data.discount_amount,
+        };
         await db.invoices.update({
             where: { id: data.invoice_id },
-            data: {
-                total_discount: (Number(invoice.total_discount) || 0) + data.discount_amount,
-                net_amount: Number(invoice.net_amount) - data.discount_amount,
-            },
+            data: approvedDiscAfter,
         });
 
         await logAudit({
@@ -2822,7 +2838,9 @@ export async function applyApprovedDiscount(data: {
             module: 'ipd',
             entity_type: 'invoice',
             entity_id: String(data.invoice_id),
-            details: JSON.stringify({ amount: data.discount_amount, approved_by: data.approved_by, notes: data.approval_notes }),
+            summary: `Approved discount of ₹${data.discount_amount} applied by ${data.approved_by}${data.approval_notes ? `: ${data.approval_notes}` : ''}`,
+            before: approvedDiscBefore,
+            after: approvedDiscAfter,
         });
 
         return { success: true };

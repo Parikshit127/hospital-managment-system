@@ -217,7 +217,7 @@ export function renderDischargeSummaryHtml(
     branding: BillBranding,
     header: DischargeHeaderContext,
     data: DischargeSummaryData,
-    opts?: { withPrintButton?: boolean },
+    opts?: { withPrintButton?: boolean; printedBy?: { name: string; role?: string } },
 ): string {
     const printBar = opts?.withPrintButton
         ? `<div class="no-print" style="background:#f3f4f6;padding:12px;text-align:center;">
@@ -332,7 +332,7 @@ ${printBar}
         </div>
     </div>
 
-    ${billFooterHtml(branding)}
+    ${billFooterHtml(branding, opts?.printedBy)}
 </div>
 </body>
 </html>`;

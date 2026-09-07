@@ -68,8 +68,9 @@ export async function GET(
         const fullHistory = url.searchParams.get('full') === '1';
         const includeAudit = url.searchParams.get('audit') === '1';
 
-        const { db, organizationId } = await requireTenantContext();
+        const { db, organizationId, session } = await requireTenantContext();
         const branding = await getBillBranding(organizationId);
+        const printedBy = session?.name ? { name: session.name, role: session.role } : undefined;
 
         // Reuses the same action the screen uses, so the printed record and the
         // on-screen trail can never disagree. The action carries its own role guard.
@@ -237,7 +238,7 @@ ${printButtonHtml(branding, `${events.length} event(s)${includeAudit ? ` · ${au
                 </table>
             </div>` : ''}
 
-            ${billFooterHtml(branding)}
+            ${billFooterHtml(branding, printedBy)}
         </div>
     </td></tr></tbody>
     <tfoot><tr><td class="print-layout-footer-spacer"></td></tr></tfoot>

@@ -47,6 +47,7 @@ async function hospitalName(db: any, organizationId: string): Promise<string | u
 export async function exportAuditReport(params: {
     search?: string;
     action?: string;
+    user?: string;
     from?: string;
     to?: string;
     scope?: string;
@@ -56,6 +57,8 @@ export async function exportAuditReport(params: {
 
         const where: any = { organizationId };
         if (params.action) where.action = resolveAuditActionFilter(params.action);
+        // Exact match on username — mirrors the user picker in app/api/ipd/audit-logs/route.ts.
+        if (params.user) where.username = { equals: params.user, mode: 'insensitive' };
         if (params.scope === 'edits' && !params.action) where.action = { in: EDIT_CANCEL_ACTIONS };
         if (params.from || params.to) {
             // Date-only inputs resolved in the org's timezone — see the same fix
@@ -96,10 +99,22 @@ export async function exportAuditReport(params: {
             if (l.details) {
                 try {
                     const obj = JSON.parse(l.details);
-                    details = Object.entries(obj)
-                        .filter(([, v]) => v !== null && v !== undefined && v !== '')
-                        .map(([k, v]) => `${k.replace(/_/g, ' ')}: ${typeof v === 'object' ? JSON.stringify(v) : v}`)
-                        .join(' · ');
+                    // Structured diff shape { summary?, changes?: [{field, from, to}] } — render as
+                    // readable "Field: from → to" text; anything else keeps the generic key:value dump.
+                    if (obj && typeof obj === 'object' && Array.isArray(obj.changes) && obj.changes.length > 0) {
+                        const parts: string[] = [];
+                        if (typeof obj.summary === 'string' && obj.summary.trim()) parts.push(obj.summary.trim());
+                        parts.push(...obj.changes.map((c: any) => {
+                            const fmt = (v: any) => (v === null || v === undefined || v === '' ? '—' : (typeof v === 'object' ? JSON.stringify(v) : String(v)));
+                            return `${String(c?.field ?? '').replace(/_/g, ' ')}: ${fmt(c?.from)} → ${fmt(c?.to)}`;
+                        }));
+                        details = parts.join(' · ');
+                    } else {
+                        details = Object.entries(obj)
+                            .filter(([, v]) => v !== null && v !== undefined && v !== '')
+                            .map(([k, v]) => `${k.replace(/_/g, ' ')}: ${typeof v === 'object' ? JSON.stringify(v) : v}`)
+                            .join(' · ');
+                    }
                 } catch { details = String(l.details); }
             }
             return {

@@ -1,6 +1,47 @@
 import { prisma } from '@/backend/db'
 import { getSession, getPatientSession } from '@/app/lib/session'
 import { headers } from 'next/headers'
+import { diffObjects } from '@/app/lib/audit-diff'
+
+/**
+ * Builds the `details` column value for logAudit()/logCriticalAction().
+ *
+ * When `before`/`after` are supplied, the diff is computed and stored as
+ * `{ summary?, changes? }` JSON — the contract the audit UI renders against.
+ * `changes` is omitted entirely when there is nothing to diff (no before/after
+ * given, or before/after are identical), in which case behavior falls back to
+ * the plain `details` string exactly as before — existing callers that only
+ * pass `details` are unaffected.
+ */
+function buildAuditDetails({
+    details,
+    before,
+    after,
+    summary,
+}: {
+    details?: string
+    before?: Record<string, any>
+    after?: Record<string, any>
+    summary?: string
+}): string | null {
+    const hasBeforeAfter = before !== undefined || after !== undefined
+    if (!hasBeforeAfter && summary === undefined) {
+        return details ?? null
+    }
+
+    const changes = hasBeforeAfter ? diffObjects(before, after) : []
+    const payload: { summary?: string; changes?: { field: string; from: any; to: any }[] } = {}
+    if (summary !== undefined) payload.summary = summary
+    if (changes.length > 0) payload.changes = changes
+
+    // Nothing structured ended up in the payload (e.g. before === after) —
+    // fall back to the plain details string for backward compatibility.
+    if (payload.summary === undefined && payload.changes === undefined) {
+        return details ?? null
+    }
+
+    return JSON.stringify(payload)
+}
 
 async function getClientIP(): Promise<string | null> {
     try {
@@ -65,12 +106,21 @@ export async function logCriticalAction({
     entity_type,
     entity_id,
     details,
+    before,
+    after,
+    summary,
 }: {
     action: string
     module: string
     entity_type?: string
     entity_id?: string
     details?: string
+    /** Record state before the mutation, for field-level "what changed" diffing. */
+    before?: Record<string, any>
+    /** Record state after the mutation, for field-level "what changed" diffing. */
+    after?: Record<string, any>
+    /** Optional short human-readable summary stored alongside the diff. */
+    summary?: string
 }) {
     try {
         const session = await getSession()
@@ -85,7 +135,7 @@ export async function logCriticalAction({
                 module,
                 entity_type: entity_type ?? null,
                 entity_id: entity_id ?? null,
-                details: details ?? null,
+                details: buildAuditDetails({ details, before, after, summary }),
                 ip_address: ip,
                 organizationId: session?.organization_id ?? null,
             }
@@ -101,12 +151,21 @@ export async function logAudit({
     entity_type,
     entity_id,
     details,
+    before,
+    after,
+    summary,
 }: {
     action: string
     module: string
     entity_type?: string
     entity_id?: string
     details?: string
+    /** Record state before the mutation, for field-level "what changed" diffing. */
+    before?: Record<string, any>
+    /** Record state after the mutation, for field-level "what changed" diffing. */
+    after?: Record<string, any>
+    /** Optional short human-readable summary stored alongside the diff. */
+    summary?: string
 }) {
     try {
         const session = await getSession()
@@ -121,7 +180,7 @@ export async function logAudit({
                 module,
                 entity_type: entity_type ?? null,
                 entity_id: entity_id ?? null,
-                details: details ?? null,
+                details: buildAuditDetails({ details, before, after, summary }),
                 ip_address: ip,
                 organizationId: session?.organization_id ?? null,
             }

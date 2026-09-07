@@ -144,7 +144,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ admi
 
         const isFinal = admission.status === 'Discharged';
         const medsToggle = medsToggleHtml(req.url, medsAvailable, includeMeds);
-        const html = generateDischargeBillHTML(admission, invoice, org, deposits, isFinal, branding, sections, tpaProviderName, policyNumber, isInsuranceBill, medsToggle, includeMeds);
+        const printedBy = auth.context.kind === 'staff'
+            ? { name: auth.context.session.name, role: auth.context.session.role }
+            : undefined;
+        const html = generateDischargeBillHTML(admission, invoice, org, deposits, isFinal, branding, sections, tpaProviderName, policyNumber, isInsuranceBill, medsToggle, includeMeds, printedBy);
 
         return new NextResponse(html, {
             headers: { 'Content-Type': 'text/html; charset=utf-8' },
@@ -176,7 +179,7 @@ function numberToWords(n: number): string {
     return (n < 0 ? 'Minus ' : '') + result + ' Only';
 }
 
-function generateDischargeBillHTML(admission: any, invoice: any, org: any, deposits: any[], isFinal: boolean, branding: BillBranding, sections: any, tpaProviderName: string = '', policyNumber: string = '', isInsuranceBill: boolean = false, medsToggle: string = '', includeMeds: boolean = true) {
+function generateDischargeBillHTML(admission: any, invoice: any, org: any, deposits: any[], isFinal: boolean, branding: BillBranding, sections: any, tpaProviderName: string = '', policyNumber: string = '', isInsuranceBill: boolean = false, medsToggle: string = '', includeMeds: boolean = true, printedBy?: { name: string; role?: string }) {
     const patient = admission.patient || {};
     const items = invoice.items || [];
     const payments = invoice.payments || [];
@@ -456,6 +459,8 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
                                 ${tpaProviderName ? `<p style="font-size:11px;"><strong>TPA/Insurer:</strong> ${tpaProviderName}${policyNumber ? ` &nbsp;|&nbsp; Policy: ${policyNumber}` : ''}</p>` : (isInsuranceBill ? `<p style="font-size:11px;color:#b04a00;"><strong>TPA/Insurer:</strong> (not configured — add via patient registration)</p>` : '')}
                                 ${(admission.patient as any)?.corporate ? `<p style="font-size:11px;"><strong>Corporate:</strong> ${(admission.patient as any).corporate.company_name}${(admission.patient as any).corporate.company_code ? ` (${(admission.patient as any).corporate.company_code})` : ''}</p>` : ''}
                                 <p style="font-size:11px;"><strong>Diagnosis:</strong> ${admission.diagnosis || '-'}</p>
+                                <p style="font-size:11px;"><strong>Admission created by:</strong> ${admission.created_by_name || admission.created_by || '-'}${admission.created_by ? ` (ID: ${admission.created_by})` : ''}</p>
+                                <p style="font-size:11px;"><strong>Discharge billed by:</strong> ${admission.discharged_by_name || admission.discharged_by || '-'}${admission.discharged_by ? ` (ID: ${admission.discharged_by})` : ''}</p>
                             </div>
                         </div>` : ''}
 
@@ -562,7 +567,7 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
                             </table>
                         </div>` : ''}
 
-                        ${sections.showFooter ? billFooterHtml(branding) : `
+                        ${sections.showFooter ? billFooterHtml(branding, printedBy) : `
                         <div style="border-top:1px solid #e5e7eb;padding-top:12px;margin-top:16px;">
                             <div style="display:flex;justify-content:space-between;">
                                 <p style="font-size:9px;color:#9ca3af;">Terms: Payment due on receipt.</p>
@@ -571,6 +576,7 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
                                     <p style="font-size:9px;border-top:1px solid #d1d5db;padding-top:3px;color:#9ca3af;">For ${hospitalName}</p>
                                 </div>
                             </div>
+                            ${printedBy ? `<p style="font-size:9px;color:#9ca3af;text-align:center;margin-top:16px;">Printed by: ${printedBy.name}${printedBy.role ? ` (${printedBy.role})` : ''} &middot; ${fmtBillDateTime(new Date())}</p>` : ''}
                         </div>`}
                     </div>
                 </td>
