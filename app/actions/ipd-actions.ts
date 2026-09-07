@@ -1149,10 +1149,14 @@ export async function undischargeAdmission(admissionId: string, reason?: string)
 
     await db.system_audit_logs.create({
       data: {
+        user_id: session?.id ? String(session.id) : null,
+        username: session?.username || null,
+        role: session?.role || null,
         action: "UNDISCHARGE_IPD",
         module: "ipd",
         entity_type: "admission",
         entity_id: admissionId,
+        organizationId: session?.organization_id || null,
         details: JSON.stringify({
           patient_id: admission.patient_id,
           by_role: session.role,
@@ -1928,10 +1932,14 @@ export async function updateAdmissionBasicDetails(data: {
         existing.admission_date.getTime() !== nextAdmissionDate.getTime()) {
       await db.system_audit_logs.create({
         data: {
+          user_id: session?.id ? String(session.id) : null,
+          username: session?.username || null,
+          role: session?.role || null,
           action: 'EDIT_ADMISSION_DATE',
           module: 'ipd',
           entity_type: 'admission',
           entity_id: data.admission_id,
+          organizationId: session?.organization_id || null,
           details: JSON.stringify({
             old: existing.admission_date.toISOString(),
             new: nextAdmissionDate.toISOString(),
@@ -1947,10 +1955,14 @@ export async function updateAdmissionBasicDetails(data: {
       if (oldIso !== newIso) {
         await db.system_audit_logs.create({
           data: {
+            user_id: session?.id ? String(session.id) : null,
+            username: session?.username || null,
+            role: session?.role || null,
             action: 'EDIT_DISCHARGE_DATE',
             module: 'ipd',
             entity_type: 'admission',
             entity_id: data.admission_id,
+            organizationId: session?.organization_id || null,
             details: JSON.stringify({
               old: oldIso,
               new: newIso,
@@ -2096,6 +2108,9 @@ export async function updateAdmissionPatientCategory(data: {
     if (oldPatientType !== data.patient_type) {
       await db.system_audit_logs.create({
         data: {
+          user_id: session?.id ? String(session.id) : null,
+          username: session?.username || null,
+          role: session?.role || null,
           action: 'CHANGE_PATIENT_CATEGORY',
           module: 'ipd',
           entity_type: 'admission',

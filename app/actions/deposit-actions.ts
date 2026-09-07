@@ -328,7 +328,7 @@ export async function applyDepositToInvoice(depositId: number, invoiceId: number
 
 export async function refundDeposit(depositId: number, amount: number, paymentMethod?: string) {
     try {
-        const { db, organizationId } = await requireTenantContext();
+        const { db, organizationId, session } = await requireTenantContext();
 
         const deposit = await db.patientDeposit.findFirst({ where: { id: depositId } });
         if (!deposit) return { success: false, error: 'Deposit not found' };
@@ -356,6 +356,9 @@ export async function refundDeposit(depositId: number, amount: number, paymentMe
                 entity_type: 'deposit',
                 entity_id: deposit.deposit_number,
                 details: JSON.stringify({ amount, payment_method: paymentMethod || 'Cash' }),
+                user_id: session?.id ? String(session.id) : null,
+                username: session?.username || null,
+                role: session?.role || null,
                 organizationId,
             },
         });
@@ -401,6 +404,7 @@ export async function cancelDeposit(depositId: number, reason?: string) {
                 }),
                 user_id: session?.id,
                 username: session?.username,
+                role: session?.role || null,
                 organizationId,
             },
         });
@@ -554,6 +558,7 @@ export async function updateDeposit(
                 }),
                 user_id: session?.id,
                 username: session?.username,
+                role: session?.role || null,
                 organizationId,
             },
         });
@@ -600,7 +605,7 @@ export async function createCreditNote(data: {
     notes?: string;
 }) {
     try {
-        const { db, organizationId } = await requireTenantContext();
+        const { db, organizationId, session } = await requireTenantContext();
         const cn = await db.creditNote.create({
             data: {
                 credit_note_number: generateCreditNoteNumber(),
@@ -620,6 +625,9 @@ export async function createCreditNote(data: {
                 entity_type: 'credit_note',
                 entity_id: cn.credit_note_number,
                 details: JSON.stringify({ invoice_id: data.original_invoice_id, amount: data.total_amount }),
+                user_id: session?.id ? String(session.id) : null,
+                username: session?.username || null,
+                role: session?.role || null,
                 organizationId,
             },
         });

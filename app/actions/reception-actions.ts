@@ -1115,6 +1115,9 @@ export async function cancelAppointment(appointmentId: string, reason: string) {
                     cancelled_at: new Date().toISOString(),
                     previous_status: existing.status,
                 }),
+                user_id: session?.id ? String(session.id) : null,
+                username: session?.username || null,
+                role: session?.role || null,
                 organizationId,
             },
         });

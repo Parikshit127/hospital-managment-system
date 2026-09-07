@@ -979,7 +979,7 @@ export async function unlockInvoice(invoiceId: number) {
             data: {
                 action: 'UNLOCK_INVOICE', module: 'finance', entity_type: 'invoice',
                 entity_id: String(invoiceId), details: JSON.stringify({ by: session.username }),
-                user_id: session?.id, username: session?.username, organizationId,
+                user_id: session?.id, username: session?.username, role: session?.role || null, organizationId,
             },
         });
         return { success: true };
@@ -1038,6 +1038,7 @@ export async function updateInvoiceDoctor(invoiceId: number, doctor_id: string |
                 // answer "who changed this", and these rows were anonymous.
                 user_id: session?.id,
                 username: session?.username,
+                role: session?.role || null,
                 organizationId,
             },
         });
@@ -1149,6 +1150,7 @@ export async function cancelInvoice(invoiceId: number, reason: string) {
                 }),
                 user_id: session?.id,
                 username: session?.username,
+                role: session?.role || null,
                 organizationId,
             },
         });
@@ -1211,6 +1213,7 @@ export async function revertInvoice(invoiceId: number, reason?: string) {
                 }),
                 user_id: session?.id,
                 username: session?.username,
+                role: session?.role || null,
                 organizationId,
             },
         });
@@ -1288,6 +1291,7 @@ export async function revertInvoiceToDraft(invoiceId: number, reason?: string) {
                 }),
                 user_id: session?.id,
                 username: session?.username,
+                role: session?.role || null,
                 organizationId,
             },
         });
@@ -2391,6 +2395,7 @@ export async function performCashClosure(data: { notes?: string }) {
                 details: `Drawer closed by ${session.username}. Cash: ${cash_total}`,
                 user_id: session?.id,
                 username: session?.username,
+                role: session?.role || null,
                 organizationId
             }
         });
@@ -2740,6 +2745,7 @@ export async function processRefund(input: {
                     }),
                     username: session?.username,
                     user_id: session?.id,
+                    role: session?.role || null,
                     organizationId,
                 },
             });
@@ -2864,6 +2870,7 @@ export async function approveInvoice(id: string | number, source: string) {
                 details: `Approved ${source} payment via registry`,
                 user_id: session?.id,
                 username: session?.username,
+                role: session?.role || null,
                 organizationId,
             },
         });
@@ -3351,6 +3358,7 @@ export async function updateInvoiceItem(itemId: number, patch: {
                 }),
                 user_id: session?.id,
                 username: session?.username,
+                role: session?.role || null,
                 organizationId,
             },
         });
@@ -3441,6 +3449,7 @@ export async function updateInvoiceHeader(invoiceId: number, patch: {
                 }),
                 user_id: session?.id,
                 username: session?.username,
+                role: session?.role || null,
                 organizationId,
             },
         });
@@ -3865,6 +3874,7 @@ export async function saveInvoiceEdits(invoiceId: number, payload: {
                 }),
                 user_id: session?.id,
                 username: session?.username,
+                role: session?.role || null,
                 organizationId,
             },
         });

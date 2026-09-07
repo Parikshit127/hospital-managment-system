@@ -11,7 +11,7 @@ import { requireTenantContext } from '@/backend/tenant';
 import { revalidatePath } from 'next/cache';
 
 export async function mergePatients(primaryPatientId: string, secondaryPatientId: string, mergedBy: string) {
-    const { db, organizationId } = await requireTenantContext();
+    const { db, organizationId, session } = await requireTenantContext();
 
     if (primaryPatientId === secondaryPatientId) {
         return { success: false, error: 'Cannot merge a patient with themselves' };
@@ -48,6 +48,9 @@ export async function mergePatients(primaryPatientId: string, secondaryPatientId
                 entity_type: 'patient',
                 entity_id: primaryPatientId,
                 details: JSON.stringify({ primary: primaryPatientId, secondary: secondaryPatientId, merged_by: mergedBy }),
+                user_id: session?.id ? String(session.id) : null,
+                username: session?.username || null,
+                role: session?.role || null,
                 organizationId,
             },
         });
@@ -63,7 +66,7 @@ export async function mergePatients(primaryPatientId: string, secondaryPatientId
 }
 
 export async function unmergePatient(secondaryPatientId: string, unmergedBy: string) {
-    const { db, organizationId } = await requireTenantContext();
+    const { db, organizationId, session } = await requireTenantContext();
 
     try {
         const secondary = await (db.oPD_REG.findFirst as any)({
@@ -90,6 +93,9 @@ export async function unmergePatient(secondaryPatientId: string, unmergedBy: str
                 entity_type: 'patient',
                 entity_id: secondaryPatientId,
                 details: JSON.stringify({ secondary: secondaryPatientId, unmerged_by: unmergedBy }),
+                user_id: session?.id ? String(session.id) : null,
+                username: session?.username || null,
+                role: session?.role || null,
                 organizationId,
             },
         });

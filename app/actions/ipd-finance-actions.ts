@@ -2598,6 +2598,7 @@ export async function settleAndDischarge(data: {
                     }),
                     user_id: session?.id,
                     username: session?.username,
+                    role: session?.role || null,
                     organizationId,
                 },
             });
@@ -2713,6 +2714,7 @@ export async function settleAndDischarge(data: {
                 }),
                 user_id: session?.id,
                 username: session?.username,
+                role: session?.role || null,
                 organizationId,
             },
         });
