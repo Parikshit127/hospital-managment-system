@@ -179,14 +179,20 @@ export function buildTrail(sources: TrailSources): TrailEvent[] {
 
     for (const a of sources.admissions ?? []) {
         pushEvent(out, a.admission_date, 'admission', `Admitted — ${a.admission_id ?? 'IPD'}`, {
-            meta: [a.diagnosis, a.admission_type].filter(Boolean).join(' · ') || undefined,
-            actor: who(a.doctor_name),
+            meta: [a.diagnosis, a.admission_type, a.doctor_name && `under ${a.doctor_name}`]
+                .filter(Boolean)
+                .join(' · ') || undefined,
+            // doctor_name is the CONSULTANT the patient was admitted under, not the
+            // staff member who recorded the admission — showing it as the actor said
+            // a doctor did the data entry. created_by_name is the real recorder.
+            actor: who(a.created_by_name || a.created_by),
         });
         pushEvent(out, a.fit_for_discharge_at, 'discharge', 'Marked fit for discharge', {
             actor: who(a.fit_for_discharge_by),
         });
         pushEvent(out, a.discharge_date, 'discharge', `Discharged — ${a.discharge_type ?? a.status ?? 'Discharged'}`, {
             meta: a.discharge_disposition ?? undefined,
+            actor: who(a.discharged_by_name || a.discharged_by),
         });
         pushEvent(out, a.cancellation_date, 'discharge', 'Admission cancelled', {
             meta: a.cancellation_reason ?? undefined,

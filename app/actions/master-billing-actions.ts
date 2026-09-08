@@ -1188,6 +1188,8 @@ export async function getPatientTimeline(patientId: string) {
           diagnosis: true, admission_type: true, doctor_name: true,
           fit_for_discharge_at: true, fit_for_discharge_by: true,
           cancellation_date: true, cancellation_reason: true, cancelled_by: true,
+          created_by: true, created_by_name: true,
+          discharged_by: true, discharged_by_name: true,
         },
       }),
       db.patientDeposit.findMany({
