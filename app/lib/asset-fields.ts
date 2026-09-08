@@ -210,3 +210,94 @@ export function deriveAssetName(row: Record<string, unknown>): string {
     const parts = [row.asset_type, row.manufacturer, row.model_number].map(v => String(v ?? '').trim()).filter(Boolean);
     return parts.join(' ');
 }
+
+// ---------------------------------------------------------------------------
+// Reading a sheet the hospital actually keeps
+//
+// A real inventory file is not the template we generate. Its headers are the
+// human labels ("Asset ID", "Brand", "Remarks / Issue"), not our column keys,
+// and it usually has no `category` column at all because the whole sheet is one
+// category. Everything below maps such a file onto the keys the importer wants.
+// ---------------------------------------------------------------------------
+
+/** Compare headers on letters and digits only: "S.No." / "S No" / "s_no" are one header. */
+function normHeader(h: string): string {
+    return String(h ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+/**
+ * Extra spellings a hospital sheet uses. The field labels themselves are picked
+ * up automatically below, so this only covers what a label does not already say.
+ *
+ * `status` maps to working_status on purpose: on an inventory sheet "Status"
+ * means Working / Under Repair. The Active-Disposed lifecycle is never imported.
+ */
+const EXTRA_ALIASES: Record<string, string> = {
+    sno: 's_no', slno: 's_no', srno: 's_no', sernumber: 's_no',
+    assetid: 'asset_code', assetcode: 'asset_code', assettag: 'asset_code', assettagid: 'asset_code',
+    assetcategory: 'category', category: 'category',
+    type: 'asset_type',
+    make: 'manufacturer',
+    modelno: 'model_number', modelnumber: 'model_number',
+    serialno: 'serial_number', serialnum: 'serial_number',
+    dept: 'department',
+    assignedto: 'assigned_to', user: 'assigned_to', userrole: 'assigned_to', assigneduser: 'assigned_to',
+    cpu: 'cpu_details', processor: 'cpu_details', cpudetails: 'cpu_details',
+    os: 'operating_system',
+    vendor: 'vendor_name', supplier: 'vendor_name',
+    status: 'working_status', workingstatus: 'working_status',
+    remarks: 'notes', issue: 'notes', remark: 'notes', comments: 'notes',
+    cost: 'acquisition_cost', purchasecost: 'acquisition_cost',
+    purchasedate: 'acquisition_date', acquiredon: 'acquisition_date',
+    warranty: 'warranty_expiry', warrantyuntil: 'warranty_expiry',
+    invoiceno: 'invoice_number', invoicenumber: 'invoice_number',
+    // Not a bare "code" — that reads as Asset Code on half the sheets out there.
+    password: 'access_code', accesscode: 'access_code', passwordcode: 'access_code',
+};
+
+/** normalised header -> field key. Built once from every key and every label in use. */
+const HEADER_TO_KEY: Record<string, string> = (() => {
+    const map: Record<string, string> = {};
+    // Every column key is its own header (that is what our template ships).
+    for (const key of ['s_no', 'asset_code', 'category', 'access_code', ...Object.values(CATALOGUE).map(f => f.key)]) {
+        map[normHeader(key)] = key;
+    }
+    // Every label a category shows, including per-category wording ("Brand").
+    for (const list of [COMPUTER_LAPTOP, GENERAL, IT_EQUIPMENT, NON_IT]) {
+        for (const field of list) map[normHeader(field.label)] = field.key;
+    }
+    // Explicit spellings last so they win over a coincidental label match.
+    for (const [alias, key] of Object.entries(EXTRA_ALIASES)) map[alias] = key;
+    return map;
+})();
+
+/** Headers the parser should look for when hunting the real header row in a sheet. */
+export function assetHeaderHints(): string[] {
+    return Object.keys(HEADER_TO_KEY);
+}
+
+/**
+ * Sheet row -> a row keyed by column name. Unrecognised headers are kept as-is
+ * so a hospital's own extra column is never silently dropped from the preview.
+ */
+export function normalizeAssetRow(row: Record<string, unknown>): Record<string, unknown> {
+    const out: Record<string, unknown> = {};
+    for (const [header, value] of Object.entries(row)) {
+        const key = HEADER_TO_KEY[normHeader(header)];
+        // A blank cell must not overwrite a value an earlier alias already set
+        // (a sheet can carry both "Status" and "Working Status").
+        if (key && (out[key] === undefined || String(out[key] ?? '').trim() === '')) out[key] = value;
+        else if (!key) out[header] = value;
+    }
+    return out;
+}
+
+/**
+ * True for a row that is only a pre-printed serial number and blank cells — the
+ * numbered empty rows every hospital template carries below its real data.
+ * These are not import failures; they are not rows.
+ */
+export function isBlankAssetRow(row: Record<string, unknown>): boolean {
+    return Object.entries(row).every(([key, v]) =>
+        key === 's_no' || String(v ?? '').trim() === '');
+}

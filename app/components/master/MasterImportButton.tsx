@@ -7,6 +7,7 @@ import * as XLSX from 'xlsx';
 import { parseFile } from '@/app/lib/import/parser';
 import { validateMasterRows, MASTER_IMPORT_MAX_ROWS } from '@/app/lib/import/master-validators';
 import { downloadMasterTemplate } from '@/app/lib/import/master-templates';
+import { assetHeaderHints } from '@/app/lib/asset-fields';
 import { importMasterData } from '@/app/actions/master-import-actions';
 import type { MasterImportType, RowError } from '@/app/lib/import/master-validators';
 import type { ImportRowFailure } from '@/app/actions/master-import-actions';
@@ -30,6 +31,10 @@ interface PreviewState {
   validCount: number;
   errors: RowError[];
   validRows: Record<string, unknown>[];
+  /** Kept so the preview can be re-validated when a fallback category is picked. */
+  rawRows: Record<string, unknown>[];
+  /** True when the sheet carries no category column and one must be chosen. */
+  needsCategory: boolean;
 }
 
 export default function MasterImportButton({ type, onImportComplete, templateVariants }: Props) {
@@ -38,6 +43,8 @@ export default function MasterImportButton({ type, onImportComplete, templateVar
   const [preview, setPreview] = useState<PreviewState | null>(null);
   const [importResult, setImportResult] = useState<{ imported: number; updated?: number; failed: ImportRowFailure[] } | null>(null);
   const [validationErrors, setValidationErrors] = useState<RowError[]>([]);
+  // asset_master only: the category to assume for a sheet with no category column.
+  const [fallbackCategory, setFallbackCategory] = useState('');
 
   function handleTemplateDownload(variant?: string) {
     try {
@@ -51,7 +58,11 @@ export default function MasterImportButton({ type, onImportComplete, templateVar
     setStage('parsing');
     try {
       const buffer = await file.arrayBuffer();
-      const parsed = parseFile(buffer, file.name);
+      // Header hints let the parser skip a title banner above the real headers —
+      // a hospital's own sheet rarely starts with its column names on row 1.
+      const parsed = parseFile(buffer, file.name, {
+        headerHints: type === 'asset_master' ? assetHeaderHints() : undefined,
+      });
 
       if (parsed.totalRows > MASTER_IMPORT_MAX_ROWS) {
         toast.error(`File has ${parsed.totalRows} rows. Maximum is ${MASTER_IMPORT_MAX_ROWS}.`);
@@ -60,14 +71,20 @@ export default function MasterImportButton({ type, onImportComplete, templateVar
         return;
       }
 
-      const { valid, errors } = validateMasterRows(type, parsed.data as Record<string, unknown>[]);
+      const rawRows = parsed.data as Record<string, unknown>[];
+      const needsCategory = type === 'asset_master'
+        && !parsed.headers.some(h => h.toLowerCase().replace(/[^a-z]/g, '') === 'category');
+      setFallbackCategory('');
 
+      const { valid, errors } = validateMasterRows(type, rawRows);
       setPreview({
         totalRows: parsed.totalRows,
         previewRows: (valid as unknown as Record<string, unknown>[]).slice(0, 5),
         validCount: valid.length,
         errors,
         validRows: valid as unknown as Record<string, unknown>[],
+        rawRows,
+        needsCategory,
       });
       setValidationErrors(errors);
       setStage('preview');
@@ -77,6 +94,21 @@ export default function MasterImportButton({ type, onImportComplete, templateVar
     }
     // reset file input so the same file can be re-selected
     if (fileRef.current) fileRef.current.value = '';
+  }
+
+  /** Re-run validation against a chosen category without re-reading the file. */
+  function applyCategory(category: string) {
+    setFallbackCategory(category);
+    if (!preview) return;
+    const { valid, errors } = validateMasterRows(type, preview.rawRows, category || undefined);
+    setPreview({
+      ...preview,
+      previewRows: (valid as unknown as Record<string, unknown>[]).slice(0, 5),
+      validCount: valid.length,
+      errors,
+      validRows: valid as unknown as Record<string, unknown>[],
+    });
+    setValidationErrors(errors);
   }
 
   async function handleProceed() {
@@ -156,6 +188,7 @@ export default function MasterImportButton({ type, onImportComplete, templateVar
     setPreview(null);
     setImportResult(null);
     setValidationErrors([]);
+    setFallbackCategory('');
   }
 
   return (
@@ -222,8 +255,38 @@ export default function MasterImportButton({ type, onImportComplete, templateVar
               </button>
             </div>
 
-            {/* Validation error summary */}
-            {preview.errors.length > 0 && stage === 'preview' && (
+            {/* A sheet that is entirely one category carries no category column.
+                Ask once rather than failing every row. */}
+            {preview.needsCategory && stage === 'preview' && (
+              <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-xl">
+                <p className="text-sm font-semibold text-blue-900">This file has no category column.</p>
+                <p className="text-xs text-blue-800 mt-0.5 mb-2">
+                  Choose the category these rows belong to — it decides which columns are read.
+                </p>
+                <select
+                  value={fallbackCategory}
+                  onChange={e => applyCategory(e.target.value)}
+                  className="px-3 py-2 border border-blue-300 rounded-lg text-sm bg-white"
+                >
+                  <option value="">Select category…</option>
+                  {(templateVariants ?? []).map(v => <option key={v} value={v}>{v}</option>)}
+                </select>
+              </div>
+            )}
+
+            {/* Blank rows are not failures — every hospital template has numbered
+                empty rows under its data. Say so instead of staying silent. */}
+            {stage === 'preview' && !(preview.needsCategory && !fallbackCategory) && preview.totalRows - preview.validCount - preview.errors.length > 0 && (
+              <p className="mb-3 text-xs text-gray-500">
+                {preview.totalRows - preview.validCount - preview.errors.length} empty row
+                {preview.totalRows - preview.validCount - preview.errors.length > 1 ? 's' : ''} ignored.
+              </p>
+            )}
+
+            {/* Validation error summary. Hidden until a category is chosen when
+                one is still needed — every row "fails" for that reason alone,
+                and the list would blame columns that are not even in play. */}
+            {preview.errors.length > 0 && stage === 'preview' && !(preview.needsCategory && !fallbackCategory) && (
               <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl">
                 <div className="flex items-start gap-2">
                   <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />

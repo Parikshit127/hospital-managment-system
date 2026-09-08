@@ -12,7 +12,7 @@
 import assert from 'node:assert/strict';
 import {
     assetFieldsFor, assetFieldsForAll, assetTemplateHeaders, assetTemplateSample,
-    deriveAssetName, KNOWN_ASSET_CATEGORIES,
+    deriveAssetName, KNOWN_ASSET_CATEGORIES, normalizeAssetRow, isBlankAssetRow, assetHeaderHints,
 } from '../app/lib/asset-fields';
 import { validateAssetRows } from '../app/lib/import/master-validators';
 
@@ -98,3 +98,60 @@ assert.equal(keyed.valid[0].s_no, 7);
 assert.equal(typeof keyed.valid[0].s_no, 'number');
 
 console.log('OK — asset field registry, template and importer agree.');
+
+// --- reading a sheet the hospital actually keeps ---------------------------
+// Their file's headers are human labels, there is no category column, and the
+// rows below the data are numbered but empty.
+const HOSPITAL_HEADERS = {
+    'S.No': '1', 'Asset ID': 'ASSET-IT-001', 'Asset Type': 'Laptop', 'Brand': 'Dell',
+    'Model': 'Latitude 5420', 'Serial Number': 'SN-7788XJ22', 'Department': 'Accounts',
+    'Location': '2nd Floor - Room 204', 'Assigned User': 'Rahul Sharma',
+    'Processor (CPU)': 'Intel Core i5 11th Gen', 'RAM': '8 GB', 'Storage': '512 GB SSD',
+    'Operating System': 'Windows 11 Pro', 'Vendor / Supplier': 'ABC Computers Pvt Ltd',
+    'Status': 'Working', 'Condition': 'Good', 'Remarks / Issue': 'in use',
+};
+
+const mapped = normalizeAssetRow(HOSPITAL_HEADERS);
+assert.equal(mapped.asset_code, 'ASSET-IT-001', '"Asset ID" did not map to asset_code');
+assert.equal(mapped.manufacturer, 'Dell', '"Brand" did not map to manufacturer');
+assert.equal(mapped.s_no, '1', '"S.No" did not map to s_no');
+assert.equal(mapped.serial_number, 'SN-7788XJ22', '"S.No" and "Serial Number" must not collide');
+assert.equal(mapped.cpu_details, 'Intel Core i5 11th Gen', '"Processor (CPU)" did not map');
+assert.equal(mapped.vendor_name, 'ABC Computers Pvt Ltd', '"Vendor / Supplier" did not map');
+assert.equal(mapped.notes, 'in use', '"Remarks / Issue" did not map to notes');
+// A sheet's "Status" column means Working/Under Repair, never the Active/Disposed lifecycle.
+assert.equal(mapped.working_status, 'Working', '"Status" did not map to working_status');
+assert.equal(mapped.status, undefined, 'sheet Status leaked into the lifecycle column');
+
+// An unrecognised column is kept, not dropped, so the preview still shows it.
+assert.equal(normalizeAssetRow({ 'Floor Warden': 'Anita' })['Floor Warden'], 'Anita');
+
+// Every header the parser is told to hunt for must actually resolve to a column.
+assert.ok(assetHeaderHints().length > 20, 'too few header hints to find a header row');
+for (const h of ['sno', 'assetid', 'brand', 'ram', 'storage', 'operatingsystem', 'condition']) {
+    assert.ok(assetHeaderHints().includes(h), `header hint "${h}" is missing`);
+}
+
+// Numbered-but-empty rows are not failures.
+assert.equal(isBlankAssetRow({ s_no: '7' }), true);
+assert.equal(isBlankAssetRow({ s_no: '7', 'Asset ID': '' }), true);
+assert.equal(isBlankAssetRow({ s_no: '7', asset_type: 'Laptop' }), false);
+
+// The whole file: one real row, no category column, 3 numbered blanks.
+const hospitalFile = validateAssetRows(
+    [HOSPITAL_HEADERS, { 'S.No': '2' }, { 'S.No': '3' }, { 'S.No': '4' }] as any,
+    'Computer/Laptop',
+);
+assert.equal(hospitalFile.errors.length, 0, `hospital sheet rejected: ${JSON.stringify(hospitalFile.errors)}`);
+assert.equal(hospitalFile.valid.length, 1, 'blank numbered rows were not dropped');
+assert.equal(hospitalFile.valid[0].asset_name, 'Laptop Dell Latitude 5420');
+assert.equal(hospitalFile.valid[0].ram, '8 GB');
+
+// Without a category — no column and nothing chosen — it must still say so clearly.
+const noCategory = validateAssetRows([HOSPITAL_HEADERS] as any);
+assert.equal(noCategory.valid.length, 0);
+assert.match(noCategory.errors[0].reason, /category is required/);
+// The error report must show the user their own row, not the remapped one.
+assert.ok('Asset ID' in (noCategory.errors[0].originalData as any), 'error report lost the original columns');
+
+console.log('OK — hospital-shaped sheets map onto the register.');

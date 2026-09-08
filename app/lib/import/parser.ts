@@ -3,8 +3,45 @@ import type { ParsedFile } from '@/app/types/import';
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 const PREVIEW_ROWS = 5;
+/** How far down a sheet to look for the header row before giving up on row 1. */
+const HEADER_SCAN_ROWS = 15;
 
-export function parseFile(buffer: ArrayBuffer, fileName: string): ParsedFile {
+/** Compare headers on letters and digits only, so "S.No." and "s_no" are one header. */
+function normHeader(h: unknown): string {
+    return String(h ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+/**
+ * A real hospital sheet opens with a merged title banner, a subtitle and a blank
+ * line before its actual headers — `sheet_to_json` would take that banner as the
+ * header row and every column would then be unrecognised. Given the headers we
+ * expect, find the row that actually carries them.
+ *
+ * Returns 0 (the old behaviour) when nothing scores well enough, so a file we
+ * cannot read this way fails the same way it always did rather than differently.
+ */
+function findHeaderRow(rows: unknown[][], hints: string[]): number {
+    const wanted = new Set(hints.map(normHeader));
+    let best = 0;
+    let bestScore = 0;
+    for (let i = 0; i < Math.min(rows.length, HEADER_SCAN_ROWS); i++) {
+        const cells = (rows[i] ?? []).map(normHeader).filter(Boolean);
+        // Count distinct matches: a banner row repeating one word must not win.
+        const score = new Set(cells.filter(c => wanted.has(c))).size;
+        if (score > bestScore) { bestScore = score; best = i; }
+    }
+    // Two matching headers is enough to be a header row and not a coincidence.
+    return bestScore >= 2 ? best : 0;
+}
+
+export function parseFile(
+    buffer: ArrayBuffer,
+    fileName: string,
+    opts?: {
+        /** Headers this import type understands. Enables header-row detection. */
+        headerHints?: string[];
+    },
+): ParsedFile {
     const ext = fileName.toLowerCase().split('.').pop();
     if (!ext || !['csv', 'xlsx', 'xls'].includes(ext)) {
         throw new Error('Unsupported file format. Please upload a CSV or Excel file (.csv, .xlsx, .xls)');
@@ -21,9 +58,18 @@ export function parseFile(buffer: ArrayBuffer, fileName: string): ParsedFile {
     }
 
     const sheet = workbook.Sheets[sheetName];
+
+    // Skip any title/subtitle rows above the real headers.
+    let headerRow = 0;
+    if (opts?.headerHints?.length) {
+        const grid = XLSX.utils.sheet_to_json(sheet, { header: 1, blankrows: true, raw: false }) as unknown[][];
+        headerRow = findHeaderRow(grid, opts.headerHints);
+    }
+
     const rawData: Record<string, string>[] = XLSX.utils.sheet_to_json(sheet, {
         defval: '',
         raw: false, // return formatted strings
+        ...(headerRow > 0 && { range: headerRow }),
     });
 
     if (rawData.length === 0) {

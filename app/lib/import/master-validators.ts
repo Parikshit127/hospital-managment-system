@@ -1,7 +1,7 @@
 // Client-safe — no 'use server', no Prisma imports.
 // Returns validated+coerced rows OR per-row errors.
 
-import { assetFieldsFor, deriveAssetName } from '@/app/lib/asset-fields';
+import { assetFieldsFor, deriveAssetName, normalizeAssetRow, isBlankAssetRow } from '@/app/lib/asset-fields';
 
 export type MasterImportType =
   | 'doctor_master'
@@ -309,19 +309,33 @@ export interface AssetRow {
  * has RAM and Storage and no acquisition cost, a Medical Equipment row is the
  * other way round. Unknown extra columns are carried through untouched so a
  * hospital can keep its own notes column in the sheet.
+ *
+ * `defaultCategory` covers the common real-world file: a sheet that is entirely
+ * one category and therefore has no category column at all. A category cell in
+ * the row still wins over it.
+ *
+ * Rows that are blank apart from a pre-printed serial number are dropped, not
+ * failed — every hospital template carries numbered empty rows under its data,
+ * and reporting 25 of them as errors buries the one real problem.
  */
-export function validateAssetRows(rows: Record<string, unknown>[]): ValidateResult<AssetRow> {
+export function validateAssetRows(
+  rows: Record<string, unknown>[],
+  defaultCategory?: string,
+): ValidateResult<AssetRow> {
   const valid: AssetRow[] = [];
   const errors: RowError[] = [];
   const seenSNo = new Map<number, number>();
 
   for (let i = 0; i < rows.length; i++) {
-    const r = rows[i];
+    // Map the sheet's own headers ("Asset ID", "Brand") onto column keys.
+    const r = normalizeAssetRow(rows[i]);
     const rowNum = i + 1;
     const errs: string[] = [];
 
-    const category = str(r.category);
-    if (!category) errs.push('category is required');
+    if (isBlankAssetRow(r)) continue;
+
+    const category = str(r.category) || str(defaultCategory);
+    if (!category) errs.push('category is required — add a category column or pick one above');
     const fields = assetFieldsFor(category);
 
     // A blank s_no creates a new asset; a filled one must match an existing
@@ -358,7 +372,7 @@ export function validateAssetRows(rows: Record<string, unknown>[]): ValidateResu
       } else out[field.key] = str(raw);
     }
 
-    if (errs.length > 0) { errors.push({ rowIndex: rowNum, reason: errs.join('; '), originalData: r }); continue; }
+    if (errs.length > 0) { errors.push({ rowIndex: rowNum, reason: errs.join('; '), originalData: rows[i] }); continue; }
     valid.push(out);
   }
   return { valid, errors };
@@ -367,6 +381,8 @@ export function validateAssetRows(rows: Record<string, unknown>[]): ValidateResu
 export function validateMasterRows(
   type: MasterImportType,
   rows: Record<string, unknown>[],
+  /** asset_master only: category to assume for rows whose sheet has no category column. */
+  defaultCategory?: string,
 ): ValidateResult<DoctorRow | ServiceRow | LabTestRow | PackageRow | MedicineRow | RadiologyRow | AssetRow> {
   switch (type) {
     case 'doctor_master': return validateDoctorRows(rows);
@@ -375,6 +391,6 @@ export function validateMasterRows(
     case 'package_master': return validatePackageRows(rows);
     case 'medicine_master': return validateMedicineRows(rows);
     case 'radiology_master': return validateRadiologyRows(rows);
-    case 'asset_master': return validateAssetRows(rows);
+    case 'asset_master': return validateAssetRows(rows, defaultCategory);
   }
 }
