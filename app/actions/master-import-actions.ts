@@ -40,9 +40,12 @@ const UPSERT_CONFIG: Record<MasterImportType, { model: string; key: string; wher
   package_master: { model: 'ipdPackage', key: 'package_code' },
   medicine_master: { model: 'pharmacy_medicine_master', key: 'brand_name' },
   radiology_master: { model: 'radiology_imaging', key: 'procedure_code' },
-  // s_no, not asset_code: the hospital assigns its own Asset ID by hand and
-  // re-uses it, so the register's own row number is the dependable key.
-  asset_master: { model: 'fixedAsset', key: 's_no' },
+  // asset_code, NOT s_no. A hospital inventory sheet carries its own S.No
+  // column numbered 1, 2, 3... down the page — a row counter, not a register
+  // ID. Matching on it made importing such a sheet overwrite whichever assets
+  // happened to hold register numbers 1..n. The Asset ID is the only value in
+  // the file that the hospital means as "this particular asset".
+  asset_master: { model: 'fixedAsset', key: 'asset_code' },
 };
 
 async function createRow(type: MasterImportType, row: Record<string, unknown>): Promise<{ success: boolean; error?: string }> {

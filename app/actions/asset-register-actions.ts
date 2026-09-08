@@ -307,8 +307,33 @@ export async function createAssetFromImportRow(row: Record<string, unknown>) {
  */
 export async function updateAssetFromImportRow(id: string, row: Record<string, unknown>) {
     try {
-        await requireTenantContext();
+        const { db, organizationId, session } = await requireTenantContext();
         const picked = pickAssetFields(row);
+
+        // What the row looked like before, so the audit entry can say what an
+        // import actually changed. An import that silently rewrites a register
+        // row with no trace is how a bad match goes unnoticed.
+        const before = await db.fixedAsset.findFirst({
+            where: { id, organizationId },
+            include: { category: true },
+        });
+        if (!before) return { success: false, error: 'Asset not found.' };
+
+        // A category correction has to be possible: an asset filed under the
+        // wrong category shows the wrong columns and cannot be found by filter,
+        // and nothing else in the UI can move it.
+        const categoryName = String(row.category ?? '').trim();
+        let categoryChange: { id: string; name: string } | null = null;
+        if (categoryName && categoryName.toLowerCase() !== String(before.category?.category_name ?? '').toLowerCase()) {
+            const target = await resolveCategoryId(organizationId, categoryName);
+            if (!target) return { success: false, error: `Category "${categoryName}" not found.` };
+            categoryChange = { id: target.id, name: target.category_name };
+            // Depreciation is driven by the category, so move the rate with it.
+            await db.fixedAsset.update({
+                where: { id },
+                data: { category_id: target.id, depreciation_rate: target.depreciation_rate ?? before.depreciation_rate },
+            });
+        }
         const res: any = await updateFixedAsset(id, {
             asset_name: deriveAssetName(row) || undefined,
             location: picked.location,
@@ -334,6 +359,22 @@ export async function updateAssetFromImportRow(id: string, row: Record<string, u
             access_code: encryptSecret(picked.access_code ?? null) || undefined,
         });
         if (!res.success) return { success: false, error: res.error };
+
+        const changed = Object.keys(picked).filter(
+            k => picked[k as keyof typeof picked] !== undefined
+                && String((before as any)[k] ?? '') !== String(picked[k as keyof typeof picked] ?? ''),
+        );
+        await logAudit({
+            action: 'ASSET_UPDATED_BY_IMPORT',
+            module: 'Assets',
+            entity_type: 'FixedAsset',
+            entity_id: id,
+            details: `Import matched Asset ID ${before.asset_code} (S.No ${before.s_no ?? '—'}) and updated `
+                + `${changed.length ? changed.join(', ') : 'no fields'}`
+                + (categoryChange ? `; category ${before.category?.category_name ?? '—'} -> ${categoryChange.name}` : '')
+                + ` (by ${session?.username ?? 'unknown'})`,
+        });
+
         const updated: any = serialize(res.asset);
         return { success: true, data: { ...updated, access_code: updated.access_code ? maskSecret(updated.access_code) : null } };
     } catch (error: any) {

@@ -182,19 +182,21 @@ export function assetFieldsForAll(categoryNames: (string | null | undefined)[]):
 }
 
 /**
- * Import sheet headers for a category. `s_no` leads because it is the match key
- * — a row carrying one updates that asset, a blank one creates a new asset.
- * `asset_code` (the hospital's own Asset ID) follows; `category` tells the
+ * Import sheet headers for a category.
+ *
+ * `asset_code` (the hospital's own Asset ID) leads because it is the match key:
+ * a row whose Asset ID already exists updates that asset, anything else creates
+ * one. There is deliberately no `s_no` column — the register's row number is
+ * allocated by the system and is never read from a file. `category` tells the
  * importer which column set the rest of the row belongs to.
  */
 export function assetTemplateHeaders(categoryName?: string): string[] {
-    return ['s_no', 'asset_code', 'category', ...assetFieldsFor(categoryName).map(x => x.key), 'access_code'];
+    return ['asset_code', 'category', ...assetFieldsFor(categoryName).map(x => x.key), 'access_code'];
 }
 
 /** Sample row for a downloaded template - the "replace with real data" line. */
 export function assetTemplateSample(categoryName?: string): Record<string, string> {
     const row: Record<string, string> = {
-        s_no: '',
         asset_code: 'ASSET-IT-001',
         category: categoryName ?? 'IT Equipment',
         access_code: '',

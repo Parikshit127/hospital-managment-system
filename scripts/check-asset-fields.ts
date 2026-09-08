@@ -27,10 +27,14 @@ assert.deepEqual(assetFieldsFor('Computer/Laptop').map(f => f.key), SHEET,
 assert.equal(assetFieldsFor('computer/laptop')[0].label, 'Asset Type', 'category lookup is case-sensitive');
 assert.equal(assetFieldsFor('Computer/Laptop')[1].label, 'Brand', 'manufacturer should read "Brand" here');
 
-// s_no leads the template because it is the import upsert key.
-assert.equal(assetTemplateHeaders('Computer/Laptop')[0], 's_no');
+// asset_code leads the template because it is the import upsert key. There must
+// be NO s_no column: a hospital sheet numbers its own rows 1,2,3 down the page,
+// and matching on that overwrote whichever assets held register numbers 1..n.
+assert.equal(assetTemplateHeaders('Computer/Laptop')[0], 'asset_code');
+assert.ok(!assetTemplateHeaders('Computer/Laptop').includes('s_no'),
+    's_no is back in the template — a sheet row counter must never be an import key');
 assert.deepEqual(assetTemplateHeaders('Computer/Laptop'),
-    ['s_no', 'asset_code', 'category', ...SHEET, 'access_code']);
+    ['asset_code', 'category', ...SHEET, 'access_code']);
 
 // Every category the register seeds must have real columns, and every template
 // header must have a sample cell — a header with no sample means a silent gap.
@@ -70,7 +74,6 @@ const ok = validateAssetRows([{
     working_status: 'Working', condition: 'Good', notes: 'Example row',
 }]);
 assert.equal(ok.errors.length, 0, `valid Computer/Laptop row rejected: ${JSON.stringify(ok.errors)}`);
-assert.equal(ok.valid[0].s_no, undefined, 'a blank s_no must mean "create", not 0');
 assert.equal(ok.valid[0].asset_name, 'Laptop Dell Latitude 5420');
 assert.equal(ok.valid[0].ram, '8 GB');
 
@@ -84,18 +87,24 @@ const noType = validateAssetRows([{ category: 'Computer/Laptop', manufacturer: '
 assert.equal(noType.valid.length, 0, 'Computer/Laptop row passed with no asset type');
 assert.match(noType.errors[0].reason, /asset_type is required/);
 
-// s_no is the upsert key, so a repeat inside one file would overwrite silently.
+// asset_code is the upsert key, so a repeat inside one file would overwrite silently.
 const dupe = validateAssetRows([
-    { s_no: '4', category: 'Computer/Laptop', asset_type: 'Laptop' },
-    { s_no: '4', category: 'Computer/Laptop', asset_type: 'Desktop' },
+    { asset_code: 'PC-9', category: 'Computer/Laptop', asset_type: 'Laptop' },
+    { asset_code: 'PC-9', category: 'Computer/Laptop', asset_type: 'Desktop' },
 ]);
-assert.equal(dupe.valid.length, 1, 'a duplicate s_no was allowed through');
+assert.equal(dupe.valid.length, 1, 'a duplicate asset_code was allowed through');
 assert.match(dupe.errors[0].reason, /used twice/);
 
-// The key must reach the DB as a number — the upsert lookup queries an Int column.
-const keyed = validateAssetRows([{ s_no: '7', category: 'Computer/Laptop', asset_type: 'Laptop' }]);
-assert.equal(keyed.valid[0].s_no, 7);
-assert.equal(typeof keyed.valid[0].s_no, 'number');
+// THE REGRESSION THAT BROKE A LIVE ASSET: a hospital sheet's own S.No column is
+// a row counter. It must never reach the importer as an identity, or row 1 of
+// any sheet silently overwrites whichever asset holds register number 1.
+const withSNo = validateAssetRows([
+    { s_no: '1', 'S.No': '1', category: 'Computer/Laptop', asset_type: 'Laptop', manufacturer: 'Dell' },
+]);
+assert.equal(withSNo.errors.length, 0);
+assert.equal((withSNo.valid[0] as any).s_no, undefined,
+    "a sheet's S.No leaked through as an identity — this overwrites existing assets");
+assert.equal(withSNo.valid[0].asset_code, undefined, 'no Asset ID must mean create, not match');
 
 console.log('OK — asset field registry, template and importer agree.');
 

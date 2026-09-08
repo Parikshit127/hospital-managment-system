@@ -295,8 +295,7 @@ export function validateRadiologyRows(rows: Record<string, unknown>[]): Validate
 }
 
 export interface AssetRow {
-  /** Register row number and the upsert key. Blank in the sheet = create a new asset. */
-  s_no?: number;
+  /** The hospital's own Asset ID and the upsert key. Unknown = create a new asset. */
   asset_code?: string;
   asset_name?: string;
   category: string;
@@ -324,7 +323,7 @@ export function validateAssetRows(
 ): ValidateResult<AssetRow> {
   const valid: AssetRow[] = [];
   const errors: RowError[] = [];
-  const seenSNo = new Map<number, number>();
+  const seenCode = new Map<string, number>();
 
   for (let i = 0; i < rows.length; i++) {
     // Map the sheet's own headers ("Asset ID", "Brand") onto column keys.
@@ -338,14 +337,13 @@ export function validateAssetRows(
     if (!category) errs.push('category is required — add a category column or pick one above');
     const fields = assetFieldsFor(category);
 
-    // A blank s_no creates a new asset; a filled one must match an existing
-    // row, so a duplicate within the same sheet would silently overwrite.
-    let s_no: number | undefined;
-    if (str(r.s_no) !== '') {
-      const n = parseInt(str(r.s_no), 10);
-      if (isNaN(n) || n < 1) errs.push(`s_no must be a whole number (got "${r.s_no}")`);
-      else if (seenSNo.has(n)) errs.push(`s_no ${n} is used twice in this file (also row ${seenSNo.get(n)})`);
-      else { s_no = n; seenSNo.set(n, rowNum); }
+    // asset_code is the upsert key, so the same one twice in one file would
+    // have the second row silently overwrite the first.
+    const asset_code = optStr(r.asset_code);
+    if (asset_code) {
+      const seen = seenCode.get(asset_code.toLowerCase());
+      if (seen) errs.push(`asset_code "${asset_code}" is used twice in this file (also row ${seen})`);
+      else seenCode.set(asset_code.toLowerCase(), rowNum);
     }
 
     // asset_name is NOT NULL in the DB. Categories whose sheet has no such
@@ -357,7 +355,8 @@ export function validateAssetRows(
         : 'asset_type, brand or model is required (the asset name is built from those)');
     }
 
-    const out: AssetRow = { s_no, category, asset_name, asset_code: optStr(r.asset_code), access_code: optStr(r.access_code) };
+    // A sheet's own S.No is a row counter, not a register ID — never carried through.
+    const out: AssetRow = { category, asset_name, asset_code, access_code: optStr(r.access_code) };
 
     for (const field of fields) {
       const raw = r[field.key];
