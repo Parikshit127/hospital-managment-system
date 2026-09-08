@@ -103,25 +103,20 @@ export function WardManager({ wards, departments, organizationId }: { wards: any
     const handleSaveWard = async () => {
         if (!wardForm.ward_name.trim()) { toast.error('Ward name is required'); return; }
         setSubmitting(true);
-        try {
-            const payload = {
-                ward_name: wardForm.ward_name.trim(),
-                ward_type: wardForm.ward_type,
-                department_id: wardForm.department_id || undefined,
-                floor_number: wardForm.floor_number || undefined,
-                cost_per_day: wardForm.cost_per_day ? Number(wardForm.cost_per_day) : 0,
-                nursing_charge: wardForm.nursing_charge ? Number(wardForm.nursing_charge) : 0,
-            };
-            if (editingWardId) {
-                await updateWard(editingWardId, payload);
-                toast.success('Ward updated');
-            } else {
-                await createWard(payload);
-                toast.success('Ward created');
-            }
+        const payload = {
+            ward_name: wardForm.ward_name.trim(),
+            ward_type: wardForm.ward_type,
+            department_id: wardForm.department_id || undefined,
+            floor_number: wardForm.floor_number || undefined,
+            cost_per_day: wardForm.cost_per_day ? Number(wardForm.cost_per_day) : 0,
+            nursing_charge: wardForm.nursing_charge ? Number(wardForm.nursing_charge) : 0,
+        };
+        const result = editingWardId ? await updateWard(editingWardId, payload) : await createWard(payload);
+        if (result.success) {
+            toast.success(editingWardId ? 'Ward updated' : 'Ward created');
             setWardModalOpen(false);
-        } catch (e: any) {
-            toast.error(e.message || 'Failed to save ward');
+        } else {
+            toast.error(result.error || 'Failed to save ward');
         }
         setSubmitting(false);
     };
@@ -132,38 +127,39 @@ export function WardManager({ wards, departments, organizationId }: { wards: any
         const end = parseInt(bedsForm.end_number);
         if (isNaN(start) || isNaN(end) || start > end) { toast.warning('Invalid bed range'); return; }
         setSubmitting(true);
-        try {
-            await bulkAddBeds({
-                ward_id: activeWardId,
-                start_number: start,
-                end_number: end,
-                prefix: bedsForm.prefix,
-                bed_category: bedsForm.bed_category,
-                pricing_tier: bedsForm.pricing_tier,
-                is_isolation: bedsForm.is_isolation,
-            });
+        const result = await bulkAddBeds({
+            ward_id: activeWardId,
+            start_number: start,
+            end_number: end,
+            prefix: bedsForm.prefix,
+            bed_category: bedsForm.bed_category,
+            pricing_tier: bedsForm.pricing_tier,
+            is_isolation: bedsForm.is_isolation,
+        });
+        if (result.success) {
             toast.success(`${end - start + 1} beds added`);
             setBedsModalOpen(false);
             setBedsForm(EMPTY_BEDS);
-        } catch (e: any) {
-            toast.error(e.message || 'Failed to add beds');
+        } else {
+            toast.error(result.error || 'Failed to add beds');
         }
         setSubmitting(false);
     };
 
     const handleToggleActive = async (wardId: number, current: boolean, e: React.MouseEvent) => {
         e.stopPropagation();
-        await toggleWardActive(wardId, !current);
+        const result = await toggleWardActive(wardId, !current);
+        if (!result.success) toast.error(result.error || 'Failed to update ward status');
     };
 
     const handleDeleteWard = async (wardId: number, wardName: string, e: React.MouseEvent) => {
         e.stopPropagation();
         if (!confirm(`Delete ward "${wardName}" permanently? This cannot be undone.`)) return;
-        try {
-            await deleteWard(wardId);
+        const result = await deleteWard(wardId);
+        if (result.success) {
             toast.success('Ward deleted');
-        } catch (err: any) {
-            toast.error(err.message || 'Failed to delete ward');
+        } else {
+            toast.error(result.error || 'Failed to delete ward');
         }
     };
 

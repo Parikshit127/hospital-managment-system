@@ -47,13 +47,12 @@ export function BedGrid({ beds, wardName }: { beds: any[]; wardName: string }) {
     const handleSave = async () => {
         if (!editBed) return;
         setSaving(true);
-        try {
-            await updateBedStatus(editBed.bed_id, editForm.status, editForm.bed_category, editForm.pricing_tier, editForm.is_isolation);
-            await renameBed(editBed.bed_id, editForm.bed_name);
+        const statusResult = await updateBedStatus(editBed.bed_id, editForm.status, editForm.bed_category, editForm.pricing_tier, editForm.is_isolation);
+        const renameResult = statusResult.success ? await renameBed(editBed.bed_id, editForm.bed_name) : statusResult;
+        if (renameResult.success) {
             setEditBed(null);
-        } catch (e) {
-            console.error('Failed to update bed', e);
-            alert((e as any)?.message || 'Failed to update bed');
+        } else {
+            alert(renameResult.error || 'Failed to update bed');
         }
         setSaving(false);
     };
@@ -62,11 +61,11 @@ export function BedGrid({ beds, wardName }: { beds: any[]; wardName: string }) {
         if (!editBed) return;
         if (!confirm(`Delete bed "${bedLabel(editBed)}" permanently? This cannot be undone.`)) return;
         setDeleting(true);
-        try {
-            await deleteBed(editBed.bed_id);
+        const result = await deleteBed(editBed.bed_id);
+        if (result.success) {
             setEditBed(null);
-        } catch (e) {
-            alert((e as any)?.message || 'Failed to delete bed');
+        } else {
+            alert(result.error || 'Failed to delete bed');
         }
         setDeleting(false);
     };
