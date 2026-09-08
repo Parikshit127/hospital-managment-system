@@ -1,6 +1,8 @@
 // Client-safe — no 'use server', no Prisma imports.
 // Returns validated+coerced rows OR per-row errors.
 
+import { assetFieldsFor, deriveAssetName } from '@/app/lib/asset-fields';
+
 export type MasterImportType =
   | 'doctor_master'
   | 'service_master'
@@ -293,45 +295,71 @@ export function validateRadiologyRows(rows: Record<string, unknown>[]): Validate
 }
 
 export interface AssetRow {
-  asset_code?: string; asset_name: string; category: string;
-  location?: string; department?: string;
-  serial_number?: string; manufacturer?: string; model_number?: string;
-  invoice_number?: string;
-  acquisition_date: string; acquisition_cost: number;
-  warranty_expiry?: string;
-  assigned_to?: string; cpu_details?: string; hardware_specs?: string;
-  peripherals?: string; printer_details?: string; ups_network?: string;
-  notes?: string; access_code?: string;
+  /** Register row number and the upsert key. Blank in the sheet = create a new asset. */
+  s_no?: number;
+  asset_code?: string;
+  asset_name?: string;
+  category: string;
+  [key: string]: unknown;
 }
 
+/**
+ * Asset rows are validated against the column set their own `category` uses
+ * (app/lib/asset-fields.ts) rather than one fixed list — a Computer/Laptop row
+ * has RAM and Storage and no acquisition cost, a Medical Equipment row is the
+ * other way round. Unknown extra columns are carried through untouched so a
+ * hospital can keep its own notes column in the sheet.
+ */
 export function validateAssetRows(rows: Record<string, unknown>[]): ValidateResult<AssetRow> {
   const valid: AssetRow[] = [];
   const errors: RowError[] = [];
+  const seenSNo = new Map<number, number>();
+
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i];
     const rowNum = i + 1;
     const errs: string[] = [];
-    const asset_name = str(r.asset_name); if (!asset_name) errs.push('asset_name is required');
-    const category = str(r.category); if (!category) errs.push('category is required');
-    const costRaw = toNum(r.acquisition_cost, 'acquisition_cost');
-    if (typeof costRaw === 'string') errs.push(costRaw);
-    const acquisition_date = checkDate(r.acquisition_date, 'acquisition_date', true, errs);
-    const warranty_expiry = checkDate(r.warranty_expiry, 'warranty_expiry', false, errs);
+
+    const category = str(r.category);
+    if (!category) errs.push('category is required');
+    const fields = assetFieldsFor(category);
+
+    // A blank s_no creates a new asset; a filled one must match an existing
+    // row, so a duplicate within the same sheet would silently overwrite.
+    let s_no: number | undefined;
+    if (str(r.s_no) !== '') {
+      const n = parseInt(str(r.s_no), 10);
+      if (isNaN(n) || n < 1) errs.push(`s_no must be a whole number (got "${r.s_no}")`);
+      else if (seenSNo.has(n)) errs.push(`s_no ${n} is used twice in this file (also row ${seenSNo.get(n)})`);
+      else { s_no = n; seenSNo.set(n, rowNum); }
+    }
+
+    // asset_name is NOT NULL in the DB. Categories whose sheet has no such
+    // column (Computer/Laptop) build it from type + brand + model instead.
+    const asset_name = deriveAssetName(r);
+    if (!asset_name) {
+      errs.push(fields.some(f => f.key === 'asset_name')
+        ? 'asset_name is required'
+        : 'asset_type, brand or model is required (the asset name is built from those)');
+    }
+
+    const out: AssetRow = { s_no, category, asset_name, asset_code: optStr(r.asset_code), access_code: optStr(r.access_code) };
+
+    for (const field of fields) {
+      const raw = r[field.key];
+      const blank = str(raw) === '';
+      if (field.required && blank) { errs.push(`${field.key} is required`); continue; }
+      if (blank) continue;
+
+      if (field.type === 'date') out[field.key] = checkDate(raw, field.key, false, errs);
+      else if (field.type === 'number') {
+        const n = toNum(raw, field.key);
+        if (typeof n === 'string') errs.push(n); else out[field.key] = n;
+      } else out[field.key] = str(raw);
+    }
+
     if (errs.length > 0) { errors.push({ rowIndex: rowNum, reason: errs.join('; '), originalData: r }); continue; }
-    valid.push({
-      asset_code: optStr(r.asset_code),
-      asset_name, category,
-      location: optStr(r.location), department: optStr(r.department),
-      serial_number: optStr(r.serial_number), manufacturer: optStr(r.manufacturer), model_number: optStr(r.model_number),
-      invoice_number: optStr(r.invoice_number),
-      acquisition_date: acquisition_date as string,
-      acquisition_cost: costRaw as number,
-      warranty_expiry,
-      assigned_to: optStr(r.assigned_to), cpu_details: optStr(r.cpu_details),
-      hardware_specs: optStr(r.hardware_specs), peripherals: optStr(r.peripherals),
-      printer_details: optStr(r.printer_details), ups_network: optStr(r.ups_network),
-      notes: optStr(r.notes), access_code: optStr(r.access_code),
-    });
+    valid.push(out);
   }
   return { valid, errors };
 }

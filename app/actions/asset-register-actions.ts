@@ -12,6 +12,8 @@
  */
 
 import { requireTenantContext, requireRoleAndTenant } from '@/backend/tenant';
+import { assetFieldsFor, deriveAssetName } from '@/app/lib/asset-fields';
+import { createWithUniqueRetry } from '@/app/lib/sequence-generator';
 import { encryptSecret, decryptSecret, maskSecret } from '@/app/lib/secure-config';
 import { logAudit } from '@/app/lib/audit';
 import {
@@ -31,6 +33,7 @@ function serialize<T>(v: T): T {
 
 /** Seeded on first use so the register is usable without an accounting setup. */
 const DEFAULT_CATEGORIES = [
+    { category_name: 'Computer/Laptop', category_code: 'PC', asset_type: 'IT Equipment', depreciation_rate: 33.33, useful_life_years: 3 },
     { category_name: 'IT Equipment', category_code: 'IT', asset_type: 'IT Equipment', depreciation_rate: 33.33, useful_life_years: 3 },
     { category_name: 'Housekeeping', category_code: 'HK', asset_type: 'Housekeeping', depreciation_rate: 20, useful_life_years: 5 },
     { category_name: 'Reception & Office', category_code: 'OFF', asset_type: 'Office Equipment', depreciation_rate: 15, useful_life_years: 7 },
@@ -44,11 +47,14 @@ export async function listAssetCategories() {
         const res: any = await getAssetCategories(organizationId, { is_active: true });
         if (!res.success) return { success: false, error: res.error };
 
-        // A brand-new tenant has no categories, which would leave the "Add
-        // asset" form with an empty required dropdown. Seed the common ones
-        // once rather than making the user set up accounting first.
-        if (!res.categories?.length) {
-            for (const c of DEFAULT_CATEGORIES) {
+        // Seed any default category this org is missing — not just when it has
+        // none. Orgs onboarded before a category existed (Computer/Laptop) would
+        // otherwise never see it, because the old "only if empty" guard never
+        // fired again after the first seed.
+        const have = new Set((res.categories ?? []).map((c: any) => String(c.category_name).trim().toLowerCase()));
+        const missing = DEFAULT_CATEGORIES.filter(c => !have.has(c.category_name.toLowerCase()));
+        if (missing.length) {
+            for (const c of missing) {
                 await createAssetCategory({
                     organizationId,
                     ...c,
@@ -100,13 +106,13 @@ export async function listAssets(filters?: { status?: string; category_id?: stri
 
 export async function addAsset(input: {
     asset_code?: string;
-    asset_name: string;
+    asset_name?: string;
     category_id: string;
     description?: string;
     location?: string;
     department?: string;
-    acquisition_date: string;
-    acquisition_cost: number;
+    acquisition_date?: string;
+    acquisition_cost?: number;
     serial_number?: string;
     manufacturer?: string;
     model_number?: string;
@@ -120,55 +126,113 @@ export async function addAsset(input: {
     peripherals?: string;
     printer_details?: string;
     ups_network?: string;
+    // Computer/Laptop sheet columns
+    asset_type?: string;
+    ram?: string;
+    storage?: string;
+    operating_system?: string;
+    vendor_name?: string;
+    working_status?: string;
+    condition?: string;
     notes?: string;
     access_code?: string;
 }) {
     try {
-        const { organizationId } = await requireTenantContext();
+        const { db, organizationId } = await requireTenantContext();
 
-        if (!input.asset_name?.trim()) return { success: false, error: 'Asset name is required.' };
         if (!input.category_id) return { success: false, error: 'Category is required.' };
-        const cost = Number(input.acquisition_cost);
-        if (!Number.isFinite(cost) || cost < 0) return { success: false, error: 'Enter a valid acquisition cost.' };
 
         const categories: any = await getAssetCategories(organizationId, { is_active: true });
         const category = (categories.categories ?? []).find((c: any) => c.id === input.category_id);
         if (!category) return { success: false, error: 'Category not found.' };
 
-        // Auto-number within the category (IT-0001, HK-0002…) so staff never
-        // have to invent an asset code at the counter.
-        let assetCode = (input.asset_code || '').trim();
-        if (!assetCode) {
-            const existing: any = await getFixedAssets(organizationId, { category_id: input.category_id });
-            const n = (existing.assets?.length ?? 0) + 1;
-            assetCode = `${category.category_code}-${String(n).padStart(4, '0')}`;
+        // Which columns this category actually uses decides what is required.
+        // The Computer/Laptop sheet has no Asset Name column, so the name is
+        // built from Asset Type + Brand + Model rather than demanded of the user.
+        const fields = assetFieldsFor(category.category_name);
+        const assetName = deriveAssetName(input as Record<string, unknown>).trim();
+        if (!assetName) {
+            return {
+                success: false,
+                error: fields.some(f => f.key === 'asset_name')
+                    ? 'Asset name is required.'
+                    : 'Enter at least an asset type, brand or model — the asset name is built from those.',
+            };
+        }
+        for (const field of fields) {
+            if (!field.required) continue;
+            if (String((input as any)[field.key] ?? '').trim() === '') {
+                return { success: false, error: `${field.label} is required.` };
+            }
         }
 
-        const res: any = await createFixedAsset({
-            organizationId,
-            asset_code: assetCode,
-            asset_name: input.asset_name.trim(),
-            category_id: input.category_id,
-            description: input.description || undefined,
-            location: input.location || undefined,
-            department: input.department || undefined,
-            acquisition_date: new Date(input.acquisition_date),
-            acquisition_cost: cost,
-            invoice_number: input.invoice_number || undefined,
-            warranty_expiry: input.warranty_expiry ? new Date(input.warranty_expiry) : undefined,
-            depreciation_method: category.depreciation_method || 'SLM',
-            depreciation_rate: Number(input.depreciation_rate ?? category.depreciation_rate ?? 0),
-            serial_number: input.serial_number || undefined,
-            manufacturer: input.manufacturer || undefined,
-            model_number: input.model_number || undefined,
-            assigned_to: input.assigned_to?.trim() || undefined,
-            cpu_details: input.cpu_details?.trim() || undefined,
-            hardware_specs: input.hardware_specs?.trim() || undefined,
-            peripherals: input.peripherals?.trim() || undefined,
-            printer_details: input.printer_details?.trim() || undefined,
-            ups_network: input.ups_network?.trim() || undefined,
-            notes: input.notes?.trim() || undefined,
-            access_code: encryptSecret(input.access_code?.trim()) || undefined,
+        // Cost and acquisition date are not on every category's sheet (the IT
+        // inventory list has neither). Default rather than reject: a register
+        // row with no purchase price is still a register row, it just
+        // depreciates from zero.
+        const cost = Number(input.acquisition_cost ?? 0);
+        if (!Number.isFinite(cost) || cost < 0) return { success: false, error: 'Enter a valid acquisition cost.' };
+        const acquiredOn = input.acquisition_date ? new Date(input.acquisition_date) : new Date();
+        if (isNaN(acquiredOn.getTime())) return { success: false, error: 'Enter a valid acquisition date.' };
+
+        // The hospital types its own Asset ID. Auto-number only as a fallback so
+        // a blank field still produces a usable tag (IT-0001, PC-0002…).
+        let assetCode = (input.asset_code || '').trim();
+
+        // s_no is the register's key, so allocate and insert inside the retry —
+        // two concurrent adds can read the same max before either commits.
+        const res: any = await createWithUniqueRetry(async () => {
+            const [maxSNo, inCategory] = await Promise.all([
+                db.fixedAsset.aggregate({ _max: { s_no: true } }),
+                assetCode ? Promise.resolve(0) : db.fixedAsset.count({ where: { category_id: input.category_id } }),
+            ]);
+            const code = assetCode || `${category.category_code}-${String(inCategory + 1).padStart(4, '0')}`;
+
+            const created: any = await createFixedAsset({
+                organizationId,
+                s_no: (maxSNo._max.s_no ?? 0) + 1,
+                asset_code: code,
+                asset_name: assetName,
+                category_id: input.category_id,
+                description: input.description || undefined,
+                location: input.location || undefined,
+                department: input.department || undefined,
+                acquisition_date: acquiredOn,
+                acquisition_cost: cost,
+                invoice_number: input.invoice_number || undefined,
+                warranty_expiry: input.warranty_expiry ? new Date(input.warranty_expiry) : undefined,
+                depreciation_method: category.depreciation_method || 'SLM',
+                depreciation_rate: Number(input.depreciation_rate ?? category.depreciation_rate ?? 0),
+                serial_number: input.serial_number || undefined,
+                manufacturer: input.manufacturer || undefined,
+                model_number: input.model_number || undefined,
+                assigned_to: input.assigned_to?.trim() || undefined,
+                cpu_details: input.cpu_details?.trim() || undefined,
+                hardware_specs: input.hardware_specs?.trim() || undefined,
+                peripherals: input.peripherals?.trim() || undefined,
+                printer_details: input.printer_details?.trim() || undefined,
+                ups_network: input.ups_network?.trim() || undefined,
+                asset_type: input.asset_type?.trim() || undefined,
+                ram: input.ram?.trim() || undefined,
+                storage: input.storage?.trim() || undefined,
+                operating_system: input.operating_system?.trim() || undefined,
+                vendor_name: input.vendor_name?.trim() || undefined,
+                working_status: input.working_status?.trim() || undefined,
+                condition: input.condition?.trim() || undefined,
+                notes: input.notes?.trim() || undefined,
+                access_code: encryptSecret(input.access_code?.trim()) || undefined,
+            });
+            // createFixedAsset swallows Prisma errors into { success:false }, so
+            // re-throw for createWithUniqueRetry — but only for s_no. A clash on
+            // asset_code means the hospital typed an Asset ID it has already
+            // used; retrying would just fail four more times.
+            if (!created.success && /unique constraint/i.test(String(created.error ?? ''))) {
+                if (/s_no/i.test(String(created.error))) {
+                    throw Object.assign(new Error(created.error), { code: 'P2002' });
+                }
+                return { success: false, error: `Asset ID "${code}" is already used by another asset.` };
+            }
+            return created;
         });
 
         if (!res.success) return { success: false, error: res.error };
@@ -177,6 +241,28 @@ export async function addAsset(input: {
     } catch (error: any) {
         return { success: false, error: error.message };
     }
+}
+
+/** Blank cells mean "not supplied", never "clear this field" — an import sheet
+ *  often carries only the columns one category uses. */
+function optCell(row: Record<string, unknown>, key: string): string | undefined {
+    const v = String(row[key] ?? '').trim();
+    return v === '' ? undefined : v;
+}
+
+/** Sheet row -> the descriptive fields addAsset / updateFixedAsset accept. */
+function pickAssetFields(row: Record<string, unknown>) {
+    const keys = [
+        'asset_code', 'asset_name', 'location', 'department', 'serial_number', 'manufacturer',
+        'model_number', 'invoice_number', 'acquisition_date', 'warranty_expiry', 'assigned_to',
+        'cpu_details', 'hardware_specs', 'peripherals', 'printer_details', 'ups_network',
+        'asset_type', 'ram', 'storage', 'operating_system', 'vendor_name', 'working_status',
+        'condition', 'notes', 'access_code',
+    ] as const;
+    const out: Record<string, string | undefined> = {};
+    for (const k of keys) out[k] = optCell(row, k);
+    out.asset_name = deriveAssetName(row) || undefined;
+    return out as Record<(typeof keys)[number], string | undefined>;
 }
 
 /** Case-insensitive category name -> id, for import rows that carry a category name, not an id. */
@@ -202,26 +288,9 @@ export async function createAssetFromImportRow(row: Record<string, unknown>) {
             return { success: false, error: `Category "${categoryName}" not found — check spelling or add it in Asset Categories first.` };
         }
         return addAsset({
-            asset_code: row.asset_code ? String(row.asset_code) : undefined,
-            asset_name: String(row.asset_name ?? ''),
+            ...pickAssetFields(row),
             category_id: category.id,
-            location: row.location ? String(row.location) : undefined,
-            department: row.department ? String(row.department) : undefined,
-            acquisition_date: String(row.acquisition_date ?? ''),
-            acquisition_cost: Number(row.acquisition_cost ?? 0),
-            serial_number: row.serial_number ? String(row.serial_number) : undefined,
-            manufacturer: row.manufacturer ? String(row.manufacturer) : undefined,
-            model_number: row.model_number ? String(row.model_number) : undefined,
-            invoice_number: row.invoice_number ? String(row.invoice_number) : undefined,
-            warranty_expiry: row.warranty_expiry ? String(row.warranty_expiry) : undefined,
-            assigned_to: row.assigned_to ? String(row.assigned_to) : undefined,
-            cpu_details: row.cpu_details ? String(row.cpu_details) : undefined,
-            hardware_specs: row.hardware_specs ? String(row.hardware_specs) : undefined,
-            peripherals: row.peripherals ? String(row.peripherals) : undefined,
-            printer_details: row.printer_details ? String(row.printer_details) : undefined,
-            ups_network: row.ups_network ? String(row.ups_network) : undefined,
-            notes: row.notes ? String(row.notes) : undefined,
-            access_code: row.access_code ? String(row.access_code) : undefined,
+            acquisition_cost: row.acquisition_cost === undefined || row.acquisition_cost === '' ? 0 : Number(row.acquisition_cost),
         });
     } catch (error: any) {
         return { success: false, error: error.message };
@@ -229,7 +298,7 @@ export async function createAssetFromImportRow(row: Record<string, unknown>) {
 }
 
 /**
- * Bulk-import row -> update an existing asset (matched on asset_code).
+ * Bulk-import row -> update an existing asset (matched on `s_no`).
  * Only touches the fields `updateFixedAsset` actually supports — descriptive
  * and location fields. Category, cost, acquisition date and invoice number
  * are set once at creation and deliberately left alone here: changing them
@@ -239,22 +308,30 @@ export async function createAssetFromImportRow(row: Record<string, unknown>) {
 export async function updateAssetFromImportRow(id: string, row: Record<string, unknown>) {
     try {
         await requireTenantContext();
+        const picked = pickAssetFields(row);
         const res: any = await updateFixedAsset(id, {
-            asset_name: row.asset_name ? String(row.asset_name) : undefined,
-            location: row.location ? String(row.location) : undefined,
-            department: row.department ? String(row.department) : undefined,
-            serial_number: row.serial_number ? String(row.serial_number) : undefined,
-            manufacturer: row.manufacturer ? String(row.manufacturer) : undefined,
-            model_number: row.model_number ? String(row.model_number) : undefined,
-            warranty_expiry: row.warranty_expiry ? new Date(String(row.warranty_expiry)) : undefined,
-            assigned_to: row.assigned_to ? String(row.assigned_to) : undefined,
-            cpu_details: row.cpu_details ? String(row.cpu_details) : undefined,
-            hardware_specs: row.hardware_specs ? String(row.hardware_specs) : undefined,
-            peripherals: row.peripherals ? String(row.peripherals) : undefined,
-            printer_details: row.printer_details ? String(row.printer_details) : undefined,
-            ups_network: row.ups_network ? String(row.ups_network) : undefined,
-            notes: row.notes ? String(row.notes) : undefined,
-            access_code: encryptSecret(row.access_code ? String(row.access_code) : null) || undefined,
+            asset_name: deriveAssetName(row) || undefined,
+            location: picked.location,
+            department: picked.department,
+            serial_number: picked.serial_number,
+            manufacturer: picked.manufacturer,
+            model_number: picked.model_number,
+            warranty_expiry: picked.warranty_expiry ? new Date(picked.warranty_expiry) : undefined,
+            assigned_to: picked.assigned_to,
+            cpu_details: picked.cpu_details,
+            hardware_specs: picked.hardware_specs,
+            peripherals: picked.peripherals,
+            printer_details: picked.printer_details,
+            ups_network: picked.ups_network,
+            asset_type: picked.asset_type,
+            ram: picked.ram,
+            storage: picked.storage,
+            operating_system: picked.operating_system,
+            vendor_name: picked.vendor_name,
+            working_status: picked.working_status,
+            condition: picked.condition,
+            notes: picked.notes,
+            access_code: encryptSecret(picked.access_code ?? null) || undefined,
         });
         if (!res.success) return { success: false, error: res.error };
         const updated: any = serialize(res.asset);

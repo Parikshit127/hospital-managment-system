@@ -3766,6 +3766,10 @@ model AssetCategory {
 model FixedAsset {
   id                       String              @id @default(uuid())
   organizationId           String
+  // The register's own row number and the key bulk imports match on. The
+  // hospital writes `asset_code` (their "Asset ID") by hand and re-uses their
+  // own numbering, so it is not a dependable identity — s_no is.
+  s_no                     Int?
   asset_code               String
   asset_name               String
   category_id              String
@@ -3795,14 +3799,28 @@ model FixedAsset {
   model_number             String?
   // IT asset inventory sheet columns (Admin -> Asset Register). Free text on
   // purpose: the source is a spreadsheet whose cells hold things like
-  // "Intel Core i5 @ 3.2 GHz, 8 GB RAM, 477 GB HDD" — normalising those into
-  // structured RAM/storage columns loses the half of them that don't parse.
+  // "Intel Core i5 @ 3.2 GHz, 8 GB RAM, 477 GB HDD" — `hardware_specs` keeps
+  // that blob for the older IT Equipment sheet. The Computer/Laptop sheet
+  // splits the same information into ram / storage / operating_system, so both
+  // shapes exist; which columns a category uses is decided in app/lib/asset-fields.ts.
   assigned_to              String?
   cpu_details              String?
   hardware_specs           String?
   peripherals              String?
   printer_details          String?
   ups_network              String?
+  ram                      String?
+  storage                  String?
+  operating_system         String?
+  asset_type               String?
+  // Free-text supplier name. Distinct from `vendor_id` -> Vendor, which is the
+  // accounting/purchase-order vendor; an IT sheet just says "ABC Computers Pvt Ltd".
+  vendor_name              String?
+  // Does it work (Working / Not Working / Under Repair). Deliberately NOT the
+  // `status` column above — that is the Active/Disposed lifecycle and drives
+  // disposal, the Active count and the register filter.
+  working_status           String?
+  condition                String?
   notes                    String?
   // Encrypted at rest with app/lib/secure-config.ts (enc:v1: prefix) and
   // masked everywhere except an explicit admin-only reveal.
@@ -3819,6 +3837,7 @@ model FixedAsset {
   vendor                   Vendor?             @relation(fields: [vendor_id], references: [id])
 
   @@unique([asset_code, organizationId])
+  @@unique([s_no, organizationId])
   @@index([organizationId])
   @@index([category_id])
   @@index([status])

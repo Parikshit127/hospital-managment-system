@@ -1,10 +1,11 @@
 // Client-safe — no 'use server'. Generates Excel template files in-browser.
 import { generateTemplateFile } from './parser';
 import { getTemplateHeaders } from './templates';
+import { assetTemplateHeaders, assetTemplateSample } from '@/app/lib/asset-fields';
 import type { MasterImportType } from './master-validators';
 
 // Sample rows shown in each template so admins understand the expected format.
-const SAMPLE_ROWS: Record<MasterImportType, Record<string, string>> = {
+const SAMPLE_ROWS: Partial<Record<MasterImportType, Record<string, string>>> = {
   doctor_master: {
     name: 'Dr. Priya Sharma', username: 'priya.sharma', password: 'Welcome@123',
     specialty: 'Cardiology', doctor_registration_no: 'MH-12345', qualifications: 'MBBS, MD',
@@ -40,22 +41,8 @@ const SAMPLE_ROWS: Record<MasterImportType, Record<string, string>> = {
     hsn_sac_code: '9993', description: 'Chest X-ray, posteroanterior view',
     turnaround_time: '30 min', requires_prescription: 'false', is_available: 'true',
   },
-  asset_master: {
-    asset_code: '', asset_name: 'Dell Latitude 5420 — Reception', category: 'IT Equipment',
-    location: 'Reception desk', department: 'Front Office',
-    serial_number: 'SN-8842091', manufacturer: 'Dell', model_number: 'Latitude 5420',
-    invoice_number: 'INV-3321',
-    acquisition_date: '2026-04-01', acquisition_cost: '55000',
-    warranty_expiry: '2029-04-01',
-    assigned_to: 'Front Desk Executive',
-    cpu_details: 'HP CPU (Black) + HP Compaq Silver',
-    hardware_specs: 'Intel Core i5 @ 3.2 GHz, 8 GB RAM, 477 GB HDD',
-    peripherals: 'HP K/B + Mouse, Dell 19" monitor, Intercom 204',
-    printer_details: 'Canon Oplu Printer',
-    ups_network: 'APC 600VA UPS, LAN port 12',
-    notes: 'Working; keyboard replaced Jul-26',
-    access_code: '',
-  },
+  // asset_master is not here: its columns depend on the category, so both the
+  // headers and the sample row come from app/lib/asset-fields.ts.
 };
 
 function triggerDownload(buffer: ArrayBuffer, fileName: string) {
@@ -72,13 +59,20 @@ function triggerDownload(buffer: ArrayBuffer, fileName: string) {
   URL.revokeObjectURL(url);
 }
 
-export function downloadMasterTemplate(type: MasterImportType) {
-  const headers = getTemplateHeaders(type);
-  const sampleRow = SAMPLE_ROWS[type];
+/**
+ * `categoryName` only applies to asset_master, where each asset category has
+ * its own column set — a Computer/Laptop sheet has RAM and Storage columns a
+ * Furniture sheet has no use for.
+ */
+export function downloadMasterTemplate(type: MasterImportType, categoryName?: string) {
+  const isAsset = type === 'asset_master';
+  const headers = isAsset ? assetTemplateHeaders(categoryName) : getTemplateHeaders(type);
+  const sampleRow = isAsset ? assetTemplateSample(categoryName) : SAMPLE_ROWS[type];
   // Only include keys that are in headers (in the correct order)
   const orderedSample: Record<string, string> = {};
-  for (const h of headers) { orderedSample[h] = sampleRow[h] ?? ''; }
+  for (const h of headers) { orderedSample[h] = sampleRow?.[h] ?? ''; }
   const buffer = generateTemplateFile(headers, [orderedSample], 'xlsx');
-  const label = type.replace('_master', '').replaceAll('_', '-');
-  triggerDownload(buffer, `${label}-master-template.xlsx`);
+  const label = (isAsset && categoryName ? categoryName : type.replace('_master', ''))
+    .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  triggerDownload(buffer, `${label}-template.xlsx`);
 }

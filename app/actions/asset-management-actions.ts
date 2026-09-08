@@ -98,6 +98,8 @@ export async function getAssetCategories(organizationId: string, filters?: { is_
 
 export async function createFixedAsset(data: {
   organizationId: string;
+  /** Register row number. Allocated by the caller (asset-register-actions), unique per org. */
+  s_no?: number;
   asset_code: string;
   asset_name: string;
   category_id: string;
@@ -121,6 +123,13 @@ export async function createFixedAsset(data: {
   peripherals?: string;
   printer_details?: string;
   ups_network?: string;
+  ram?: string;
+  storage?: string;
+  operating_system?: string;
+  asset_type?: string;
+  vendor_name?: string;
+  working_status?: string;
+  condition?: string;
   notes?: string;
   access_code?: string;
   is_capitalized?: boolean;
@@ -133,6 +142,7 @@ export async function createFixedAsset(data: {
     const asset = await prisma.fixedAsset.create({
       data: {
         organizationId: data.organizationId,
+        s_no: data.s_no,
         asset_code: data.asset_code,
         asset_name: data.asset_name,
         category_id: data.category_id,
@@ -158,6 +168,13 @@ export async function createFixedAsset(data: {
         peripherals: data.peripherals,
         printer_details: data.printer_details,
         ups_network: data.ups_network,
+        ram: data.ram,
+        storage: data.storage,
+        operating_system: data.operating_system,
+        asset_type: data.asset_type,
+        vendor_name: data.vendor_name,
+        working_status: data.working_status,
+        condition: data.condition,
         notes: data.notes,
         access_code: data.access_code,
         is_capitalized: data.is_capitalized ?? true,
@@ -194,6 +211,13 @@ export async function updateFixedAsset(
     peripherals?: string;
     printer_details?: string;
     ups_network?: string;
+    ram?: string;
+    storage?: string;
+    operating_system?: string;
+    asset_type?: string;
+    vendor_name?: string;
+    working_status?: string;
+    condition?: string;
     notes?: string;
     access_code?: string;
   }
@@ -237,7 +261,8 @@ export async function getFixedAssets(
         category: true,
         vendor: true,
       },
-      orderBy: { asset_code: 'asc' },
+      // s_no is the register's row number; pre-migration nulls sort last.
+      orderBy: [{ s_no: 'asc' }, { asset_code: 'asc' }],
     });
 
     return { success: true, assets };
@@ -692,7 +717,8 @@ export async function getAssetRegister(organizationId: string, filters?: { statu
         category: true,
         vendor: true,
       },
-      orderBy: { asset_code: 'asc' },
+      // s_no is the register's row number; pre-migration nulls sort last.
+      orderBy: [{ s_no: 'asc' }, { asset_code: 'asc' }],
     });
 
     const summary = {

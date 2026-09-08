@@ -1,4 +1,5 @@
 import { ImportColumn, ImportTemplate, ImportType } from '@/app/types/import';
+import { assetFieldsFor } from '@/app/lib/asset-fields';
 
 const patientColumns: ImportColumn[] = [
     { name: 'full_name', required: true, type: 'string', description: 'Patient full name', example: 'Rajesh Kumar', maxLength: 200 },
@@ -158,28 +159,30 @@ const radiologyMasterColumns: ImportColumn[] = [
     { name: 'is_available', required: false, type: 'boolean', description: 'Available for ordering', example: 'true' },
 ];
 
-const assetMasterColumns: ImportColumn[] = [
-    { name: 'asset_code', required: false, type: 'string', description: 'Leave blank to auto-generate (e.g. IT-0001); fill in to update an existing asset', example: 'IT-0001' },
-    { name: 'asset_name', required: true, type: 'string', description: 'Asset name', example: 'Dell Latitude 5420 — Reception' },
-    { name: 'category', required: true, type: 'string', description: 'Must match an existing asset category name', example: 'IT Equipment' },
-    { name: 'location', required: false, type: 'string', description: 'Where the asset is kept', example: 'Reception desk' },
-    { name: 'department', required: false, type: 'string', description: 'Owning department', example: 'Front Office' },
-    { name: 'serial_number', required: false, type: 'string', description: 'Serial number', example: 'SN-8842091' },
-    { name: 'manufacturer', required: false, type: 'string', description: 'Manufacturer', example: 'Dell' },
-    { name: 'model_number', required: false, type: 'string', description: 'Model number', example: 'Latitude 5420' },
-    { name: 'invoice_number', required: false, type: 'string', description: 'Purchase invoice number', example: 'INV-3321' },
-    { name: 'acquisition_date', required: true, type: 'date', description: 'Date acquired (YYYY-MM-DD)', example: '2026-04-01' },
-    { name: 'acquisition_cost', required: true, type: 'number', description: 'Acquisition cost (INR)', example: '55000' },
-    { name: 'warranty_expiry', required: false, type: 'date', description: 'Warranty expiry date (YYYY-MM-DD)', example: '2029-04-01' },
-    { name: 'assigned_to', required: false, type: 'string', description: 'User / role the asset is issued to', example: 'Front Desk Executive' },
-    { name: 'cpu_details', required: false, type: 'string', description: 'CPU unit / cabinet description', example: 'HP CPU (Black) + HP Compaq Silver' },
-    { name: 'hardware_specs', required: false, type: 'string', description: 'CPU / RAM / storage specification', example: 'Intel Core i5 @ 3.2 GHz, 8 GB RAM, 477 GB HDD' },
-    { name: 'peripherals', required: false, type: 'string', description: 'Keyboard, mouse, monitor, telephone', example: 'HP K/B + Mouse, Dell 19" monitor, Intercom 204' },
-    { name: 'printer_details', required: false, type: 'string', description: 'Attached printer make / model', example: 'Canon Oplu Printer' },
-    { name: 'ups_network', required: false, type: 'string', description: 'UPS, power and network details', example: 'APC 600VA UPS, LAN port 12' },
-    { name: 'notes', required: false, type: 'string', description: 'Status notes / remarks', example: 'Working; keyboard replaced Jul-26' },
-    { name: 'access_code', required: false, type: 'string', description: 'Password / code — stored encrypted, shown masked', example: 'BIOS: ****' },
-];
+/**
+ * Asset columns are not one fixed list — each category has its own (see
+ * app/lib/asset-fields.ts). This is the documentation/default shape used by the
+ * generic Data Import screen; the download button on the Asset Register offers
+ * a per-category template built from the same registry.
+ */
+export function assetColumnsFor(categoryName?: string): ImportColumn[] {
+    return [
+        { name: 's_no', required: false, type: 'number', description: "The register's row number. Leave blank to add a new asset; fill it in to update that asset.", example: '1' },
+        { name: 'asset_code', required: false, type: 'string', description: 'Asset ID as the hospital assigns it. Leave blank to auto-generate (e.g. PC-0001).', example: 'ASSET-IT-001' },
+        { name: 'category', required: true, type: 'string', description: 'Must match an existing asset category name — it decides which columns below apply', example: categoryName ?? 'IT Equipment' },
+        ...assetFieldsFor(categoryName).map((f): ImportColumn => ({
+            name: f.key,
+            required: Boolean(f.required),
+            type: f.type === 'text' ? 'string' : f.type === 'select' ? 'enum' : f.type,
+            description: f.hint ? `${f.label} (${f.hint})` : f.label,
+            example: f.example,
+            ...(f.options && { values: f.options }),
+        })),
+        { name: 'access_code', required: false, type: 'string', description: 'Password / code — stored encrypted, shown masked', example: '' },
+    ];
+}
+
+const assetMasterColumns: ImportColumn[] = assetColumnsFor();
 
 const TEMPLATES: Record<ImportType, Omit<ImportTemplate, 'import_type'>> = {
     patients: {
@@ -244,7 +247,7 @@ const TEMPLATES: Record<ImportType, Omit<ImportTemplate, 'import_type'>> = {
     },
     asset_master: {
         name: 'Asset Register',
-        description: 'Bulk import fixed assets — IT equipment, housekeeping, reception and other owned items',
+        description: 'Bulk import fixed assets — computers/laptops, IT equipment, housekeeping, reception and other owned items. Columns vary by category; download the template for the category you are importing.',
         columns: assetMasterColumns,
     },
 };

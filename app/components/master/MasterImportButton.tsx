@@ -14,6 +14,12 @@ import type { ImportRowFailure } from '@/app/actions/master-import-actions';
 interface Props {
   type: MasterImportType;
   onImportComplete: () => void;
+  /**
+   * Optional template variants. The Asset Register passes its categories,
+   * because each has a different column set — one template would be wrong for
+   * every category but the one it was built from.
+   */
+  templateVariants?: string[];
 }
 
 type Stage = 'idle' | 'parsing' | 'preview' | 'importing' | 'done';
@@ -26,16 +32,16 @@ interface PreviewState {
   validRows: Record<string, unknown>[];
 }
 
-export default function MasterImportButton({ type, onImportComplete }: Props) {
+export default function MasterImportButton({ type, onImportComplete, templateVariants }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [stage, setStage] = useState<Stage>('idle');
   const [preview, setPreview] = useState<PreviewState | null>(null);
   const [importResult, setImportResult] = useState<{ imported: number; updated?: number; failed: ImportRowFailure[] } | null>(null);
   const [validationErrors, setValidationErrors] = useState<RowError[]>([]);
 
-  function handleTemplateDownload() {
+  function handleTemplateDownload(variant?: string) {
     try {
-      downloadMasterTemplate(type);
+      downloadMasterTemplate(type, variant);
     } catch (e: any) {
       toast.error('Failed to generate template: ' + e.message);
     }
@@ -165,12 +171,30 @@ export default function MasterImportButton({ type, onImportComplete }: Props) {
 
       {/* Buttons */}
       <div className="flex gap-2">
-        <button
-          onClick={handleTemplateDownload}
-          className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-600 border border-gray-300 rounded-xl hover:bg-gray-50"
-        >
-          <Download className="h-4 w-4" /> Template
-        </button>
+        {templateVariants?.length ? (
+          /* A native select: it needs no dropdown state, no outside-click
+             handling, and is reachable by keyboard for free. Resets to the
+             placeholder so the same template can be downloaded twice. */
+          <label className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-600 border border-gray-300 rounded-xl hover:bg-gray-50 cursor-pointer">
+            <Download className="h-4 w-4 shrink-0" />
+            <select
+              value=""
+              onChange={e => { if (e.target.value) { handleTemplateDownload(e.target.value); e.target.value = ''; } }}
+              className="bg-transparent outline-none cursor-pointer text-sm font-medium"
+              aria-label="Download import template for a category"
+            >
+              <option value="">Template…</option>
+              {templateVariants.map(v => <option key={v} value={v}>{v}</option>)}
+            </select>
+          </label>
+        ) : (
+          <button
+            onClick={() => handleTemplateDownload()}
+            className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-600 border border-gray-300 rounded-xl hover:bg-gray-50"
+          >
+            <Download className="h-4 w-4" /> Template
+          </button>
+        )}
         <button
           onClick={() => fileRef.current?.click()}
           disabled={stage === 'parsing' || stage === 'importing'}
