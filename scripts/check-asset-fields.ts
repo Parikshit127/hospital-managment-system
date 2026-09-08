@@ -13,7 +13,9 @@ import assert from 'node:assert/strict';
 import {
     assetFieldsFor, assetFieldsForAll, assetTemplateHeaders, assetTemplateSample,
     deriveAssetName, KNOWN_ASSET_CATEGORIES, normalizeAssetRow, isBlankAssetRow, assetHeaderHints,
+    allAssetFieldKeys,
 } from '../app/lib/asset-fields';
+import { Prisma } from '@prisma/client';
 import { validateAssetRows } from '../app/lib/import/master-validators';
 
 // --- the hospital's sheet, column for column -------------------------------
@@ -164,3 +166,54 @@ assert.match(noCategory.errors[0].reason, /category is required/);
 assert.ok('Asset ID' in (noCategory.errors[0].originalData as any), 'error report lost the original columns');
 
 console.log('OK — hospital-shaped sheets map onto the register.');
+
+// --- is the registry safe against future edits? ---------------------------
+// These are the guards that answer "if someone changes one category tomorrow,
+// does everything else still work". They do not test today's lists; they test
+// the properties that must hold for ANY list anyone writes later.
+
+// 1. Every column key must be a real FixedAsset column. A typo'd key would
+//    otherwise render a permanently blank column and drop that cell on import,
+//    with nothing anywhere to say so.
+const dbColumns = new Set(
+    Prisma.dmmf.datamodel.models.find(m => m.name === 'FixedAsset')!.fields
+        .filter(f => f.kind === 'scalar').map(f => f.name),
+);
+for (const key of allAssetFieldKeys()) {
+    assert.ok(dbColumns.has(key), `asset field "${key}" is not a column on FixedAsset`);
+}
+
+// 2. Whatever the lists say, the mixed view must contain every column of every
+//    category present — adding a field to one category cannot hide another's.
+for (const a of KNOWN_ASSET_CATEGORIES) {
+    for (const b of KNOWN_ASSET_CATEGORIES) {
+        const union = new Set(assetFieldsForAll([a, b]).map(f => f.key));
+        for (const f of [...assetFieldsFor(a), ...assetFieldsFor(b)]) {
+            assert.ok(union.has(f.key), `union of ${a} + ${b} dropped "${f.key}"`);
+        }
+        assert.equal(union.size, assetFieldsForAll([a, b]).length, `union of ${a} + ${b} repeated a column`);
+    }
+}
+
+// 3. A category's private wording must not leak into the mixed view — otherwise
+//    the header text depends on which asset happens to sort first.
+const mixed = assetFieldsForAll(['Computer/Laptop', 'IT Equipment']);
+assert.equal(mixed.find(f => f.key === 'manufacturer')!.label, 'Manufacturer',
+    'Computer/Laptop\'s "Brand" leaked into the all-categories view');
+assert.equal(assetFieldsFor('Computer/Laptop').find(f => f.key === 'manufacturer')!.label, 'Brand',
+    'filtering to Computer/Laptop must still say "Brand"');
+assert.equal(mixed.find(f => f.key === 'cpu_details')!.label, 'Processor (CPU)');
+
+// 4. Filtering to one category must be unaffected by what other categories hold.
+for (const name of KNOWN_ASSET_CATEGORIES) {
+    const alone = assetFieldsFor(name).map(f => f.key + '|' + f.label);
+    assetFieldsForAll([...KNOWN_ASSET_CATEGORIES]); // building the union must not mutate anything
+    assert.deepEqual(assetFieldsFor(name).map(f => f.key + '|' + f.label), alone,
+        `${name} changed after the union was built — the registry is being mutated`);
+}
+
+// 5. Hardware Specifications no longer claims to hold CPU/RAM/Storage; those are columns.
+assert.equal(assetFieldsFor('IT Equipment').find(f => f.key === 'hardware_specs')!.hint, undefined,
+    'hardware_specs still carries the CPU/RAM/Storage subtitle');
+
+console.log('OK — the column registry holds up under future edits.');

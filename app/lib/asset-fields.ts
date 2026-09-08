@@ -52,7 +52,9 @@ const CATALOGUE: Record<string, AssetField> = {
     acquisition_cost: { key: 'acquisition_cost', label: 'Acquisition Cost (INR)', type: 'number', required: true, example: '55000' },
     warranty_expiry: { key: 'warranty_expiry', label: 'Warranty Expiry', type: 'date', example: '2029-04-01' },
     invoice_number: { key: 'invoice_number', label: 'Purchase Invoice No', type: 'string', example: 'INV-3321' },
-    hardware_specs: { key: 'hardware_specs', label: 'Hardware Specifications', type: 'text', wide: true, hint: 'CPU / RAM / Storage', example: 'Intel Core i5 @ 3.2 GHz, 8 GB RAM, 477 GB HDD' },
+    // No hint: Processor / RAM / Storage are their own columns now. This is the
+    // older IT Equipment sheet's single free-text blob, kept because live rows hold it.
+    hardware_specs: { key: 'hardware_specs', label: 'Hardware Specifications', type: 'text', wide: true, example: 'Intel Core i5 @ 3.2 GHz, 8 GB RAM, 477 GB HDD' },
     peripherals: { key: 'peripherals', label: 'Peripherals', type: 'text', wide: true, hint: 'K/B, Mouse, Monitor, Telephone', example: 'HP K/B + Mouse, Dell 19in monitor, Intercom 204' },
     printer_details: { key: 'printer_details', label: 'Printer Details', type: 'string', example: 'Canon Oplu Printer' },
     ups_network: { key: 'ups_network', label: 'UPS / Power & Network', type: 'string', example: 'APC 600VA UPS, LAN port 12' },
@@ -164,9 +166,22 @@ export function assetFieldsFor(categoryName: string | null | undefined): AssetFi
     return BY_CATEGORY[String(categoryName ?? '').trim().toLowerCase()] ?? GENERAL;
 }
 
+/** The neutral definition of a column, ignoring any category's own wording. */
+const CANONICAL: Record<string, AssetField> = Object.values(CATALOGUE).reduce((m, field) => {
+    // CATALOGUE order decides: the first entry for a key is the neutral one
+    // (`notes` before `status_notes`), so a re-worded variant never wins.
+    if (!m[field.key]) m[field.key] = field;
+    return m;
+}, {} as Record<string, AssetField>);
+
 /**
  * Union of several categories' columns, in first-seen order — what the register
  * table shows when no category filter is applied.
+ *
+ * Labels come from the catalogue, not from whichever category happened to be
+ * listed first: `manufacturer` reads "Brand" only while the table is filtered to
+ * Computer/Laptop, and "Manufacturer" in a mixed view. Otherwise the header
+ * text would depend on which asset sorted to the top.
  */
 export function assetFieldsForAll(categoryNames: (string | null | undefined)[]): AssetField[] {
     const seen = new Set<string>();
@@ -175,10 +190,15 @@ export function assetFieldsForAll(categoryNames: (string | null | undefined)[]):
         for (const field of assetFieldsFor(name)) {
             if (seen.has(field.key)) continue;
             seen.add(field.key);
-            out.push(field);
+            out.push(CANONICAL[field.key] ?? field);
         }
     }
     return out.length ? out : GENERAL;
+}
+
+/** Every column key the registry can produce — used to assert they are real DB columns. */
+export function allAssetFieldKeys(): string[] {
+    return Array.from(new Set(Object.values(CATALOGUE).map(f => f.key)));
 }
 
 /**

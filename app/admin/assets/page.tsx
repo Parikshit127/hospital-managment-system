@@ -183,10 +183,14 @@ export default function AssetRegisterPage() {
 
     const categoryName = (id: string) => categories.find((c: any) => c.id === id)?.category_name;
 
-    /** Columns to show: the filtered category's, or the union across whatever is listed. */
+    /**
+     * Columns to show: the filtered category's, or the union across every category
+     * present. Built from `assets`, never from `filtered` — deriving it from the
+     * search results made columns appear and disappear as the user typed.
+     */
     const columns: AssetField[] = (categoryFilter
         ? assetFieldsFor(categoryName(categoryFilter))
-        : assetFieldsForAll(Array.from(new Set(filtered.map((a: any) => a.category?.category_name)))))
+        : assetFieldsForAll(Array.from(new Set(assets.map((a: any) => a.category?.category_name)))))
         // asset_name has its own frozen "Asset" column.
         .filter(f => f.key !== 'asset_name');
 
@@ -438,7 +442,6 @@ export default function AssetRegisterPage() {
                                             <td className={`px-4 py-3 font-mono text-xs font-bold align-top ${stickyTag}`}>{a.asset_code}</td>
                                             <td className="px-4 py-3 align-top">
                                                 <div className="text-xs font-bold text-gray-900">{a.asset_name}</div>
-                                                {a.manufacturer && <div className="text-[10px] text-gray-400">{a.manufacturer} {a.model_number}</div>}
                                             </td>
                                             <td className="px-4 py-3 text-xs text-gray-600 align-top">{a.category?.category_name ?? '—'}</td>
                                             {columns.map(f => <AssetCell key={f.key} field={f} asset={a} />)}
