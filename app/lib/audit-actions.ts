@@ -138,10 +138,23 @@ export function auditActorFromDetails(details?: string | null): string | null {
         return null; // Free-text details, not JSON.
     }
     if (!obj || typeof obj !== 'object') return null;
+    const usable = (v: unknown): v is string =>
+        typeof v === 'string' && !!v.trim() && v.trim().toLowerCase() !== 'system';
+
     for (const key of ACTOR_DETAIL_KEYS) {
         const v = obj[key];
-        if (typeof v === 'string' && v.trim() && v.trim().toLowerCase() !== 'system') {
+        if (usable(v)) {
             return v.trim();
+        }
+    }
+    // The explicit list will never keep up — `settled_by`, `verified_by`,
+    // `collected_by` and friends kept turning up as "actor unknown" on the change
+    // log while the name sat right there in the details. Any *_by / *By key holding
+    // a plain string is an actor, so match the shape instead of enumerating forever.
+    // `by_role` deliberately does not match: it holds a role, not a person.
+    for (const [key, value] of Object.entries(obj)) {
+        if (/(_by|By)$/.test(key) && usable(value)) {
+            return value.trim();
         }
     }
     return null;

@@ -373,15 +373,23 @@ function AuditTable({ rows, loading }: { rows: any[]; loading: boolean }) {
 }
 
 /**
- * Many actions log with user_id 'system' and bury the real actor inside `details`
- * ("by: mohitk", "cancelled by: Admin.Gauttam"). A "Who" column that says "system"
- * for every row is worse than useless on an accountability view, so fall back to
- * the existing extractor before giving up.
+ * Many actions bury the real actor inside `details` ("by: mohitk", "cancelled by:
+ * Admin.Gauttam") rather than in the username column. A "Who" column that says
+ * "system" for every row is worse than useless on an accountability view, so fall
+ * back to the existing extractor, then distinguish "genuinely no session" from
+ * "nobody recorded it".
  */
 function auditWho(row: any): string {
     const name = String(row.username || '').trim();
-    if (name && name !== 'system' && name !== 'unknown') return name;
-    return auditActorFromDetails(row.details) || name || 'system';
+    const lower = name.toLowerCase();
+    if (name && lower !== 'unknown' && lower !== 'system') return name;
+    const fromDetails = auditActorFromDetails(row.details);
+    if (fromDetails) return fromDetails;
+    // logAudit() stamps user_id 'system' when there genuinely was no session (cron,
+    // background job) — that is a real answer. A missing user_id means nobody
+    // recorded one, which is not the same thing and should not read as "the system
+    // did it". Rows written before backend/db.ts started backfilling the actor land here.
+    return row.user_id === 'system' ? 'System' : '—';
 }
 
 /** Some actions are logged SHOUTING ("ADMIT PATIENT IPD"); even them out. */

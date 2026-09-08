@@ -121,6 +121,41 @@ const NULLABLE_ORG_MODELS = new Set([
     'system_audit_logs', 'lab_audit_logs', 'pharmacy_sales_audit',
 ]);
 
+/**
+ * Backfill who performed an audited action.
+ *
+ * 164 call sites across ~50 files write to system_audit_logs directly instead of
+ * going through logAudit(), and roughly 63 of them never set user_id/username/role
+ * — ADMIT_PATIENT_IPD and CREATE_PATIENT among them. Those rows stored a NULL user,
+ * so the IPD trail's change log could only render them as "system", which reads as
+ * "automated" when it actually means "nobody recorded it".
+ *
+ * Filling it here catches every existing call site and every future one, instead of
+ * editing 63 files and hoping the 64th remembers. Anything the caller supplied wins,
+ * so an explicit actor (impersonation, cron, dev portal) is never overwritten.
+ *
+ * getSession() is imported lazily: it pulls next/headers, which is unavailable in
+ * plain node contexts (seed scripts, standalone tsx). It already swallows its own
+ * errors and returns null, and this is wrapped again — audit enrichment must never
+ * break the write it is decorating.
+ */
+async function withAuditActor(data: any): Promise<any> {
+    if (!data || (data.user_id && data.username && data.role)) return data;
+    try {
+        const { getSession } = await import('@/app/lib/session');
+        const session = await getSession();
+        if (!session) return data;
+        return {
+            ...data,
+            user_id: data.user_id ?? (session.id ? String(session.id) : undefined),
+            username: data.username ?? (session.username || undefined),
+            role: data.role ?? (session.role || undefined),
+        };
+    } catch {
+        return data;
+    }
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function getTenantPrisma(organizationId: string): any {
     return prisma.$extends({
@@ -136,6 +171,9 @@ export function getTenantPrisma(organizationId: string): any {
                             }
                         } else if (operation === 'create') {
                             args.data = { ...args.data, organizationId };
+                            if (model === 'system_audit_logs') {
+                                args.data = await withAuditActor(args.data);
+                            }
                         } else if (operation === 'createMany' && args.data) {
                             if (Array.isArray(args.data)) {
                                 args.data = args.data.map((d: any) => ({ ...d, organizationId }));

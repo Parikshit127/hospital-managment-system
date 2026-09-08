@@ -132,10 +132,14 @@ export async function GET(
         // ── Audit table ──────────────────────────────────────────────────────
         const auditRows = audit
             .map((r: any) => {
-                const who =
+                // Same rule as the on-screen change log: a real username wins, then the
+                // actor buried in details, then "System" only when there genuinely was no
+                // session. An unrecorded actor prints as a dash, not as "System".
+                const named =
                     r.username && !['system', 'unknown'].includes(String(r.username).toLowerCase())
-                        ? r.username
-                        : auditActorFromDetails(r.details) || r.username || 'system';
+                        ? String(r.username)
+                        : '';
+                const who = named || auditActorFromDetails(r.details) || (r.user_id === 'system' ? 'System' : '—');
                 const label = auditActionLabel(r.action);
                 const tidy =
                     label && label === label.toUpperCase()
