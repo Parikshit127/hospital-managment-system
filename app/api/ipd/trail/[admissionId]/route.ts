@@ -26,7 +26,7 @@ import {
     fmtBillDateTime,
 } from '@/app/lib/bill-branding';
 import { getAdmissionTrail } from '@/app/actions/ipd-actions';
-import { auditActionLabel, auditActorFromDetails, ENTITY_TYPE_LABELS } from '@/app/lib/audit-actions';
+import { auditActionLabel, auditActorFromDetails, formatAuditDetailsText, ENTITY_TYPE_LABELS } from '@/app/lib/audit-actions';
 import type { TrailEvent } from '@/app/lib/patient-trail';
 
 function esc(s: unknown): string {
@@ -150,6 +150,7 @@ export async function GET(
                     <td style="padding:4px 8px;border-bottom:1px solid #ddd;font-size:10px;">${esc(who)}${r.role ? ` <span style="color:#9ca3af;">(${esc(r.role)})</span>` : ''}</td>
                     <td style="padding:4px 8px;border-bottom:1px solid #ddd;font-size:10px;font-weight:600;">${esc(tidy)}</td>
                     <td style="padding:4px 8px;border-bottom:1px solid #ddd;font-size:10px;">${esc(ENTITY_TYPE_LABELS[r.entity_type] ?? r.entity_type ?? '')}</td>
+                    <td style="padding:4px 8px;border-bottom:1px solid #ddd;font-size:10px;color:#4b5563;">${esc(formatAuditDetailsText(r.details))}</td>
                 </tr>`;
             })
             .join('');
@@ -235,10 +236,11 @@ ${printButtonHtml(branding, `${events.length} event(s)${includeAudit ? ` · ${au
                             <th style="width:120px;">When</th>
                             <th style="width:150px;">User</th>
                             <th>Action</th>
-                            <th style="width:110px;">Record</th>
+                            <th style="width:90px;">Record</th>
+                            <th>Details</th>
                         </tr>
                     </thead>
-                    <tbody>${auditRows || '<tr><td colspan="4" style="padding:12px;text-align:center;color:#999;font-size:11px;">No recorded changes</td></tr>'}</tbody>
+                    <tbody>${auditRows || '<tr><td colspan="5" style="padding:12px;text-align:center;color:#999;font-size:11px;">No recorded changes</td></tr>'}</tbody>
                 </table>
             </div>` : ''}
 

@@ -173,3 +173,44 @@ export const ENTITY_TYPE_LABELS: Record<string, string> = {
     pharmacy_batch: 'Medicine batch',
     insurance_receipt: 'TPA receipt',
 };
+
+/**
+ * Plain-text rendering of `system_audit_logs.details`.
+ *
+ * Two shapes exist in the column. The newer writers store
+ * `{ summary?, changes?: [{ field, from, to }] }` (see buildAuditDetails in
+ * app/lib/audit.ts); older rows hold a plain string or a flat JSON object.
+ * `app/ipd/audit-trail/page.tsx` renders both as JSX. This is the string
+ * equivalent, for the contexts that cannot take JSX — the IPD trail's change-log
+ * table and the printed Admission Trail — so all three agree rather than each
+ * inventing its own reading of the same column.
+ */
+export function formatAuditDetailsText(details: unknown): string {
+    if (!details) return '';
+    let obj: any = details;
+    if (typeof details === 'string') {
+        try {
+            obj = JSON.parse(details);
+        } catch {
+            return details; // free text, not JSON
+        }
+    }
+    if (!obj || typeof obj !== 'object') return String(obj);
+
+    const summary = typeof obj.summary === 'string' && obj.summary.trim() ? obj.summary.trim() : '';
+    const changes = Array.isArray(obj.changes) ? obj.changes : null;
+    if (summary || (changes && changes.length > 0)) {
+        const val = (v: unknown) =>
+            v === null || v === undefined || v === '' ? '—' : typeof v === 'object' ? JSON.stringify(v) : String(v);
+        const parts = (changes ?? []).map(
+            (c: any) => `${String(c?.field ?? '').replace(/_/g, ' ')}: ${val(c?.from)} → ${val(c?.to)}`,
+        );
+        return [summary, ...parts].filter(Boolean).join(' · ');
+    }
+
+    // Legacy flat object.
+    return Object.entries(obj)
+        .filter(([, v]) => v !== null && v !== undefined && v !== '')
+        .map(([k, v]) => `${k.replace(/_/g, ' ')}: ${typeof v === 'object' ? JSON.stringify(v) : v}`)
+        .join(' · ');
+}

@@ -22,7 +22,7 @@ import {
     Search, CalendarDays, Package, HeartPulse, X,
 } from 'lucide-react';
 import type { TrailEvent, TrailKind } from '@/app/lib/patient-trail';
-import { auditActionLabel, auditActorFromDetails, ENTITY_TYPE_LABELS } from '@/app/lib/audit-actions';
+import { auditActionLabel, auditActorFromDetails, formatAuditDetailsText, ENTITY_TYPE_LABELS } from '@/app/lib/audit-actions';
 
 const KIND_ICON: Record<TrailKind, any> = {
     admission: LogIn,
@@ -362,7 +362,7 @@ function AuditTable({ rows, loading }: { rows: any[]; loading: boolean }) {
                                 {ENTITY_TYPE_LABELS[r.entity_type] ?? r.entity_type ?? '—'}
                             </td>
                             <td className="px-3 py-2 text-[11px] text-gray-500 max-w-md">
-                                {formatAuditDetails(r.details)}
+                                {formatAuditDetailsText(r.details)}
                             </td>
                         </tr>
                     ))}
@@ -400,20 +400,4 @@ function tidyActionLabel(action?: string | null): string {
     return lower.charAt(0).toUpperCase() + lower.slice(1);
 }
 
-/** Audit details are stored as a JSON string; raw JSON is unreadable in a table cell. */
-function formatAuditDetails(details: any): string {
-    if (!details) return '';
-    let obj = details;
-    if (typeof details === 'string') {
-        try {
-            obj = JSON.parse(details);
-        } catch {
-            return details;
-        }
-    }
-    if (!obj || typeof obj !== 'object') return String(obj);
-    return Object.entries(obj)
-        .filter(([, v]) => v !== null && v !== undefined && v !== '')
-        .map(([k, v]) => `${k.replace(/_/g, ' ')}: ${typeof v === 'object' ? JSON.stringify(v) : v}`)
-        .join(' · ');
-}
+
