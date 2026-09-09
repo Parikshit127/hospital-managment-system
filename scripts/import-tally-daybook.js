@@ -171,6 +171,29 @@ function slugCode(name) {
   return 'TLY-LEDGER-' + name.toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 }
 
+// SheetJS's raw:false + dateNF formatting is inconsistent across versions/environments —
+// on some it reformats to the requested dateNF, on others it passes through the cell's
+// own display format (Tally exports typically use "D-MMM-YY", e.g. "1-Apr-26"). Parse
+// whatever comes through into a reliable 'YYYY-MM-DD' string rather than trusting dateNF.
+const MONTHS = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
+function toISODate(raw) {
+  if (raw instanceof Date && !isNaN(raw)) return raw.toISOString().slice(0, 10);
+  const s = String(raw).trim();
+  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  m = s.match(/^(\d{1,2})-([A-Za-z]{3})-(\d{2,4})$/); // Tally: "1-Apr-26"
+  if (m) {
+    const mon = MONTHS[m[2].toLowerCase()];
+    let year = parseInt(m[3], 10);
+    if (year < 100) year += 2000;
+    if (mon !== undefined) return `${year}-${String(mon + 1).padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+  }
+  m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+  const fallback = new Date(s);
+  return isNaN(fallback) ? null : fallback.toISOString().slice(0, 10);
+}
+
 // ---- Parse the Day Book sheet into balanced vouchers ----
 function parseDayBook(filePath, sheetName) {
   const wb = XLSX.readFile(filePath, { cellDates: true });
@@ -195,7 +218,9 @@ function parseDayBook(filePath, sheetName) {
     if (vchType) {
       if (cur) vouchers.push(cur);
       if (!date) { anomalies.push({ row: i, issue: 'header row missing date', r }); cur = null; continue; }
-      cur = { date, vch_type: vchType, vch_no: vchNo ? String(vchNo).trim() : '', lines: [{ ledger: String(particulars).trim(), debit: d, credit: c }], narration: [] };
+      const isoDate = toISODate(date);
+      if (!isoDate) { anomalies.push({ row: i, issue: `unparseable date "${date}"`, r }); cur = null; continue; }
+      cur = { date: isoDate, vch_type: vchType, vch_no: vchNo ? String(vchNo).trim() : '', lines: [{ ledger: String(particulars).trim(), debit: d, credit: c }], narration: [] };
     } else if (date === '' && particulars && (debit || credit)) {
       if (!cur) { anomalies.push({ row: i, issue: 'sub-line with no open voucher', r }); continue; }
       cur.lines.push({ ledger: String(particulars).trim(), debit: d, credit: c });
@@ -323,7 +348,7 @@ async function main() {
   if (last) { const m = last.journal_number.match(/JV-\d{4}-(\d+)/); if (m) nextNumber = parseInt(m[1], 10) + 1; }
 
   const balanceDelta = new Map();
-  let ok = 0, failed = 0;
+  let ok = 0, failed = 0, consecutiveFailures = 0;
   const failures = [];
 
   for (let vi = 0; vi < vouchers.length; vi++) {
@@ -352,8 +377,19 @@ async function main() {
         const change = l.account.normal_balance === 'Debit' ? (l.debit - l.credit) : (l.credit - l.debit);
         balanceDelta.set(l.account.id, (balanceDelta.get(l.account.id) || 0) + change);
       }
-      ok++; nextNumber++;
-    } catch (e) { failed++; failures.push({ voucher: v, reason: e.message }); }
+      ok++;
+      consecutiveFailures = 0;
+    } catch (e) {
+      failed++;
+      consecutiveFailures++;
+      failures.push({ voucher: v, reason: e.message });
+    }
+    nextNumber++; // always advance, even on failure — otherwise a stuck first failure retries the same journal_number forever
+
+    if (consecutiveFailures >= 5) {
+      console.error(`\nAborting after ${consecutiveFailures} consecutive failures. Last error: ${failures[failures.length - 1].reason}`);
+      break;
+    }
 
     if ((vi + 1) % 300 === 0) console.log(`... ${vi + 1}/${vouchers.length} (ok=${ok}, failed=${failed})`);
   }
