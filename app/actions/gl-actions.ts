@@ -3,20 +3,34 @@
 
 import { prisma } from '@/backend/db';
 import { revalidatePath } from 'next/cache';
-import { Decimal } from '@prisma/client/runtime/library';
 import {
   receivableCode, RECEIVABLE_FALLBACK,
   resolveIncomeHeadCode, REVENUE_FALLBACK,
   GST_CODE, GST_FALLBACK, round2,
 } from '@/app/lib/gl-income-head-map';
 
+// Duck-typed, not `instanceof Decimal` — Next.js can bundle the Prisma runtime into more
+// than one chunk (e.g. server actions vs the shared server bundle), so a Decimal instance
+// returned by a query can fail `instanceof` against the class reference imported in *this*
+// file even though it's the exact same logical type. Structural shape (decimal.js's own
+// sign/exponent/digits fields + toString) is reliable across bundle boundaries.
+function isDecimalLike(value: unknown): value is { toString(): string } {
+  return (
+    typeof value === 'object' && value !== null &&
+    typeof (value as any).toString === 'function' &&
+    typeof (value as any).s !== 'undefined' &&
+    typeof (value as any).e !== 'undefined' &&
+    typeof (value as any).d !== 'undefined'
+  );
+}
+
 function serialize<T>(data: T): T {
   // Plain JSON.stringify(data, replacer) never sees a raw Decimal here — Decimal.prototype.toJSON
-  // (inherited from decimal.js) runs first and turns it into a string, so the replacer's
-  // constructor-name check below never fires and Decimal fields silently come out as strings
-  // (breaking any caller that does value.toFixed(2)). Walk the object graph directly instead.
+  // (inherited from decimal.js) runs first and turns it into a string, so a replacer-based
+  // check never fires and Decimal fields silently come out as strings (breaking any caller
+  // that does value.toFixed(2)). Walk the object graph directly instead.
   if (data === null || data === undefined) return data;
-  if (data instanceof Decimal) return Number(data) as unknown as T;
+  if (isDecimalLike(data)) return Number(data.toString()) as unknown as T;
   if (data instanceof Date) return data.toISOString() as unknown as T;
   if (Array.isArray(data)) return data.map((item) => serialize(item)) as unknown as T;
   if (typeof data === 'object') {
