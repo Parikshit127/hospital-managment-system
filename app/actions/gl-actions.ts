@@ -11,11 +11,22 @@ import {
 } from '@/app/lib/gl-income-head-map';
 
 function serialize<T>(data: T): T {
-  return JSON.parse(JSON.stringify(data, (_, value) =>
-    typeof value === 'object' && value !== null && value.constructor?.name === 'Decimal'
-      ? Number(value)
-      : value
-  ));
+  // Plain JSON.stringify(data, replacer) never sees a raw Decimal here — Decimal.prototype.toJSON
+  // (inherited from decimal.js) runs first and turns it into a string, so the replacer's
+  // constructor-name check below never fires and Decimal fields silently come out as strings
+  // (breaking any caller that does value.toFixed(2)). Walk the object graph directly instead.
+  if (data === null || data === undefined) return data;
+  if (data instanceof Decimal) return Number(data) as unknown as T;
+  if (data instanceof Date) return data.toISOString() as unknown as T;
+  if (Array.isArray(data)) return data.map((item) => serialize(item)) as unknown as T;
+  if (typeof data === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const key of Object.keys(data as Record<string, unknown>)) {
+      out[key] = serialize((data as Record<string, unknown>)[key]);
+    }
+    return out as unknown as T;
+  }
+  return data;
 }
 
 // ========================================
