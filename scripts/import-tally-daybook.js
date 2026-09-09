@@ -111,16 +111,23 @@ const KNOWN_CATEGORY = {
   'SHAHJAHAN for Garbage': 'CREDITOR',
 };
 
+// Ledgers that are almost always ambiguous from name alone (payment-mode sub-ledgers,
+// suspense-ish heads) — these still get the CREDITOR fallback, but are called out
+// separately in the report as "verify manually" rather than blending into the generic
+// AUTO-GUESSED pile.
+const AMBIGUOUS_NAMES = new Set(['upi', 'card', 'cash', 'cheque', 'phone', 'website', 'advance', 'disallowed', 'short & excess', 'rtgs_neft']);
+
 function guessCategory(name) {
   const n = name.toLowerCase();
   if (/payroll|paroll/.test(n)) return 'STAFF';
   if (/credit card/.test(n)) return 'CREDIT_CARD';
-  if (/^tds|duties|payable.*tax|tax.*payable/.test(n)) return 'DUTIES_TAXES';
+  if (/^tds|\btds\b|\bgst\b|\bepfo\b|\besic\b|duties|payable.*tax|tax.*payable/.test(n)) return 'DUTIES_TAXES';
   if (/\bloan\b/.test(n)) return 'LOAN_LIABILITY';
   if (/^(indian |icici |hdfc |axis |sbi |dbs |federal |bank of|kotak).*bank/i.test(name) || /bank\b/.test(n) && /\d{3,}/.test(n)) return 'BANK';
   if (/imprest|advance a\/c/.test(n)) return 'ADVANCE_ASSET';
+  if (/\bsales\b/.test(n)) return 'INCOME';
   if (/interest (on|from)|dividend|rent income|other income/.test(n)) return 'INCOME';
-  if (/expense|exp\.?$| exp$|charges|fee|subscri|conveyance|travel|petrol|donation|repair|maintenance|insurance exp|incentive|recruitment/.test(n)) return 'EXPENSE';
+  if (/expense|exp\.?$| exp$|\bcharges?\b|fee|subscri|conveyance|travel|petrol|donation|repair|maintenance|insurance exp|incentive|recruitment|welfare|benefit/.test(n)) return 'EXPENSE';
   return 'CREDITOR'; // default: a named vendor/individual/company being paid — treat as a payable
 }
 
@@ -276,6 +283,11 @@ async function main() {
   }
   if (autoGuessed.length) {
     console.log(`\n${autoGuessed.length} ledger name(s) were not in the known list and got a keyword-based guess — double check these above before the real run.`);
+  }
+  const ambiguous = toCreate.filter(a => AMBIGUOUS_NAMES.has(a.name.trim().toLowerCase()));
+  if (ambiguous.length) {
+    console.log(`\n!! ${ambiguous.length} name(s) are generic/payment-mode ledgers the script cannot classify from name alone — VERIFY THESE MANUALLY before the real run:`);
+    for (const a of ambiguous) console.log(`   ${a.name}  ->  currently: ${a.type} / ${a.group}`);
   }
 
   if (DRY_RUN) {
