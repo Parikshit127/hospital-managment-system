@@ -136,6 +136,7 @@ function generateSummaryBillHTML(admission: any, invoice: any, org: any, deposit
     const items = invoice.items || [];
 
     const gstin = branding.gstin;
+    const finalizedByName: string | null = invoice.status === 'Final' ? (invoice.finalized_by_name || null) : null;
 
     const admissionDate = fmtBillDate(admission.admission_date);
     // Only a real discharge date — never default to today for a still-admitted patient.
@@ -236,8 +237,6 @@ function generateSummaryBillHTML(admission: any, invoice: any, org: any, deposit
                                 <p style="font-size:11px;"><strong>Discharged:</strong> ${dischargeDate || '—'}</p>
                                 <p style="font-size:11px;"><strong>LOS:</strong> ${los} day(s)</p>
                                 <p style="font-size:11px;"><strong>Diagnosis:</strong> ${admission.diagnosis || '-'}</p>
-                                <p style="font-size:11px;"><strong>Admission created by:</strong> ${admission.created_by_name || admission.created_by || '-'}${admission.created_by ? ` (ID: ${admission.created_by})` : ''}</p>
-                                <p style="font-size:11px;"><strong>Discharge billed by:</strong> ${admission.discharged_by_name || admission.discharged_by || '-'}${admission.discharged_by ? ` (ID: ${admission.discharged_by})` : ''}</p>
                             </div>
                         </div>` : ''}
 
@@ -282,7 +281,7 @@ function generateSummaryBillHTML(admission: any, invoice: any, org: any, deposit
                             <p style="font-size:10px;color:#059669;"><strong>Amount in Words:</strong> ${numberToWords(net)}</p>
                         </div>` : ''}
 
-                        ${sections.showFooter ? billFooterHtml(branding, printedBy) : ''}
+                        ${sections.showFooter ? billFooterHtml(branding, printedBy, finalizedByName) : ''}
                     </div>
                 </td>
             </tr>

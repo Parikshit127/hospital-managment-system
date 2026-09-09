@@ -2658,7 +2658,13 @@ export async function settleAndDischarge(data: {
             || await genInvNum(organizationId, 'IPD', true, db);
         await db.invoices.update({
             where: { id: invoice.id },
-            data: { status: 'Final', finalized_at: new Date(), invoice_number: billNumber },
+            data: {
+                status: 'Final',
+                finalized_at: new Date(),
+                finalized_by: session?.id,
+                finalized_by_name: session?.name || session?.username || null,
+                invoice_number: billNumber,
+            },
         });
 
         // Close the package lifecycle with the bill — after this, the posting

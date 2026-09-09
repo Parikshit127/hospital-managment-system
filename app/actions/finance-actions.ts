@@ -843,6 +843,8 @@ export async function finalizeInvoice(invoiceId: number) {
             data: {
                 status: 'Final',
                 finalized_at: new Date(),
+                finalized_by: session?.id,
+                finalized_by_name: session?.name || session?.username || null,
                 invoice_number: billNumber,
                 version: { increment: 1 },
             },

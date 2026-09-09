@@ -190,13 +190,14 @@ export function minimalHeaderHtml(b: BillBranding): string {
 
 // ─── Shared footer ───────────────────────────────────────────────────────────
 
-export function signatureBlockHtml(b: BillBranding): string {
+export function signatureBlockHtml(b: BillBranding, finalizedByName?: string | null): string {
     const title = b.signatureTitle || 'Authorized Signatory';
     const name = b.signatureName || b.hospitalName;
     return `
     <div style="text-align:right;">
         <p style="font-size:10px;color:#6b7280;margin-bottom:30px;">${escHtml(title)}</p>
         <p style="font-size:10px;border-top:1px solid #d1d5db;padding-top:4px;color:#9ca3af;">For ${escHtml(name)}</p>
+        ${finalizedByName ? `<p style="font-size:9px;color:#9ca3af;margin-top:4px;">Finalized by: ${escHtml(finalizedByName)}</p>` : ''}
     </div>`;
 }
 
@@ -209,7 +210,7 @@ export interface PrintedBy {
     at?: Date;
 }
 
-export function billFooterHtml(b: BillBranding, printedBy?: PrintedBy): string {
+export function billFooterHtml(b: BillBranding, printedBy?: PrintedBy, finalizedByName?: string | null): string {
     const termsText = b.termsConditions || 'Payment due on receipt. Subject to local jurisdiction.';
     const printedByLine = printedBy?.name
         ? `<p style="font-size:9px;color:#9ca3af;text-align:center;margin-top:4px;">Printed by: ${escHtml(printedBy.name)}${printedBy.role ? ` (${escHtml(printedBy.role)})` : ''} &middot; ${formatDateTime(printedBy.at || new Date())}</p>`
@@ -222,7 +223,7 @@ export function billFooterHtml(b: BillBranding, printedBy?: PrintedBy): string {
             <div>
                 <p style="font-size:10px;color:#9ca3af;">Terms: ${escHtml(termsText)}</p>
             </div>
-            ${signatureBlockHtml(b)}
+            ${signatureBlockHtml(b, finalizedByName)}
         </div>
         <p style="font-size:9px;color:#d1d5db;text-align:center;margin-top:16px;">Computer-generated document. ${escHtml(b.hospitalName)}</p>
         ${printedByLine}
