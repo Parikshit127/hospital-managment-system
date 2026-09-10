@@ -211,6 +211,10 @@ async function main() {
   // ---------------------------------------------------------------- stock plan
   type Restore = { batchId: number; qty: number; label: string; current: number };
   const restores: Restore[] = [];
+  // The same batch can appear on more than one of the targeted bills, and the apply
+  // step increments cumulatively. Track a running projection so the preview shows the
+  // real end state rather than re-reporting the same starting stock for each bill.
+  const projected = new Map<number, number>();
   if (!SKIP_STOCK) {
     console.log('\n▸ Stock to put back:');
     for (const inv of invoices) {
@@ -238,8 +242,11 @@ async function main() {
           blockers.push(`batch ${it.batch_no} of "${brand}" no longer exists`);
           continue;
         }
-        restores.push({ batchId: batch.id, qty: Math.round(it.quantity), label: `${brand} [${it.batch_no}]`, current: batch.current_stock });
-        console.log(`    ${brand} [${it.batch_no}]: ${batch.current_stock} → ${batch.current_stock + Math.round(it.quantity)}  (+${Math.round(it.quantity)})`);
+        const qty = Math.round(it.quantity);
+        const before = projected.get(batch.id) ?? batch.current_stock;
+        projected.set(batch.id, before + qty);
+        restores.push({ batchId: batch.id, qty, label: `${brand} [${it.batch_no}]`, current: batch.current_stock });
+        console.log(`    ${brand} [${it.batch_no}]: ${before} → ${before + qty}  (+${qty})`);
       }
     }
   }
@@ -359,8 +366,9 @@ async function main() {
 
   console.log('\n' + '='.repeat(78));
   console.log('✅ DONE');
-  console.log(`⚠️  Bill numbers are count-based — the next ${invoiceIds.length} counter sale(s) will re-issue`);
-  console.log(`   ${INVOICE_NUMBERS.join(', ')}. Confirm that is acceptable before taking new sales.`);
+  console.log(`⚠️  Bill AND receipt numbers are count-based — the next ${invoiceIds.length} counter sale(s) will re-issue`);
+  console.log(`   ${INVOICE_NUMBERS.join(', ')} and receipts ${invoices.flatMap((i) => i.payments.map((p) => p.receipt_number)).join(', ')}.`);
+  console.log(`   Confirm that is acceptable before taking new sales.`);
   console.log('='.repeat(78) + '\n');
 }
 
