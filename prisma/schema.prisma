@@ -1251,6 +1251,8 @@ model invoices {
   created_at               DateTime  @default(now())
   updated_at               DateTime  @updatedAt
   finalized_at             DateTime?
+  finalized_by             String?
+  finalized_by_name        String?
   total_tax                Decimal   @default(0)
   cgst_amount              Decimal   @default(0)
   sgst_amount              Decimal   @default(0)

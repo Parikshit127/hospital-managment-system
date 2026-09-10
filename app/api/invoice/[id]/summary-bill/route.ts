@@ -143,6 +143,7 @@ function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposit
     // invoice="Paid" wrongly stamped admitted patients as discharged with today's date.)
     const isDischarged = admission?.status === 'Discharged' || !!admission?.discharge_date;
     const isFinal = isIPD ? isDischarged : (invoice.status === 'Paid' || invoice.status === 'Final');
+    const finalizedByName: string | null = invoice.status === 'Final' ? ((invoice as any).finalized_by_name || null) : null;
     const billType = isIPD
         ? (detailed ? 'BILL' : 'SUMMARY BILL')
         : 'TAX INVOICE';
@@ -413,7 +414,7 @@ function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposit
                             : `<tr><td style="padding:3px 8px;font-size:11px;font-weight:bold;">Balance :</td><td style="font-size:11px;">${balance.toFixed(2)} - ${numberToWords(balance)}</td></tr>`)}
                 </table>
                 <p style="font-size:10px;text-align:right;color:#666;margin-bottom:10px;">(All figures are in Rupees (INR) only)</p>
-                ${sections.showFooter ? billFooterHtml(branding, printedBy) : ''}
+                ${sections.showFooter ? billFooterHtml(branding, printedBy, finalizedByName) : ''}
             </div>
         </td></tr></tbody>
         <tfoot><tr><td class="print-layout-footer-spacer"></td></tr></tfoot>

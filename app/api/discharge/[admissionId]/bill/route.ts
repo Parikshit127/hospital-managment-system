@@ -186,6 +186,7 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
 
     const hospitalName = branding.hospitalName;
     const gstin = branding.gstin;
+    const finalizedByName: string | null = invoice.status === 'Final' ? (invoice.finalized_by_name || null) : null;
 
     const admissionDate = fmtBillDateTime(admission.admission_date);
     const dischargeDate = admission.discharge_date ? fmtBillDateTime(admission.discharge_date) : '';
@@ -459,8 +460,6 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
                                 ${tpaProviderName ? `<p style="font-size:11px;"><strong>TPA/Insurer:</strong> ${tpaProviderName}${policyNumber ? ` &nbsp;|&nbsp; Policy: ${policyNumber}` : ''}</p>` : (isInsuranceBill ? `<p style="font-size:11px;color:#b04a00;"><strong>TPA/Insurer:</strong> (not configured — add via patient registration)</p>` : '')}
                                 ${(admission.patient as any)?.corporate ? `<p style="font-size:11px;"><strong>Corporate:</strong> ${(admission.patient as any).corporate.company_name}${(admission.patient as any).corporate.company_code ? ` (${(admission.patient as any).corporate.company_code})` : ''}</p>` : ''}
                                 <p style="font-size:11px;"><strong>Diagnosis:</strong> ${admission.diagnosis || '-'}</p>
-                                <p style="font-size:11px;"><strong>Admission created by:</strong> ${admission.created_by_name || admission.created_by || '-'}${admission.created_by ? ` (ID: ${admission.created_by})` : ''}</p>
-                                <p style="font-size:11px;"><strong>Discharge billed by:</strong> ${admission.discharged_by_name || admission.discharged_by || '-'}${admission.discharged_by ? ` (ID: ${admission.discharged_by})` : ''}</p>
                             </div>
                         </div>` : ''}
 
@@ -567,13 +566,14 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
                             </table>
                         </div>` : ''}
 
-                        ${sections.showFooter ? billFooterHtml(branding, printedBy) : `
+                        ${sections.showFooter ? billFooterHtml(branding, printedBy, finalizedByName) : `
                         <div style="border-top:1px solid #e5e7eb;padding-top:12px;margin-top:16px;">
                             <div style="display:flex;justify-content:space-between;">
                                 <p style="font-size:9px;color:#9ca3af;">Terms: Payment due on receipt.</p>
                                 <div style="text-align:right;">
                                     <p style="font-size:9px;color:#6b7280;margin-bottom:28px;">Authorized Signatory</p>
                                     <p style="font-size:9px;border-top:1px solid #d1d5db;padding-top:3px;color:#9ca3af;">For ${hospitalName}</p>
+                                    ${finalizedByName ? `<p style="font-size:9px;color:#9ca3af;margin-top:4px;">Finalized by: ${finalizedByName}</p>` : ''}
                                 </div>
                             </div>
                             ${printedBy ? `<p style="font-size:9px;color:#9ca3af;text-align:center;margin-top:16px;">Printed by: ${printedBy.name}${printedBy.role ? ` (${printedBy.role})` : ''} &middot; ${fmtBillDateTime(new Date())}</p>` : ''}
