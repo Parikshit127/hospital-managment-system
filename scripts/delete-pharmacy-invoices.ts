@@ -209,7 +209,7 @@ async function main() {
   }
 
   // ---------------------------------------------------------------- stock plan
-  type Restore = { batchId: number; qty: number; label: string; current: number };
+  type Restore = { batchId: number; qty: number; label: string };
   const restores: Restore[] = [];
   // The same batch can appear on more than one of the targeted bills, and the apply
   // step increments cumulatively. Track a running projection so the preview shows the
@@ -245,7 +245,7 @@ async function main() {
         const qty = Math.round(it.quantity);
         const before = projected.get(batch.id) ?? batch.current_stock;
         projected.set(batch.id, before + qty);
-        restores.push({ batchId: batch.id, qty, label: `${brand} [${it.batch_no}]`, current: batch.current_stock });
+        restores.push({ batchId: batch.id, qty, label: `${brand} [${it.batch_no}]` });
         console.log(`    ${brand} [${it.batch_no}]: ${before} → ${before + qty}  (+${qty})`);
       }
     }
@@ -301,7 +301,10 @@ async function main() {
           reason: `Stock restored — duplicate pharmacy bill(s) ${INVOICE_NUMBERS.join(', ')} deleted; goods were never dispensed`,
         },
       });
-      console.log(`  ✓ stock ${r.label}: ${r.current} → ${updated.current_stock}`);
+      // Derive the "before" from the post-increment value, not from the planning read —
+      // a batch appearing on two of the targeted bills increments twice, and the stale
+      // read would print the original stock on both lines.
+      console.log(`  ✓ stock ${r.label}: ${updated.current_stock - r.qty} → ${updated.current_stock}`);
     }
 
     // 2. Ledger. Lines cascade with the entry; only the optional store-issue FK needs clearing.
