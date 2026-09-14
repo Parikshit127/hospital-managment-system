@@ -469,7 +469,7 @@ function generateInvoiceHTML(invoice: any, branding: BillBranding, pharmacy: { n
                         <tr style="border-top:2px solid #000;font-weight:bold;">
                             <td colspan="3" style="padding:6px 8px;font-size:11px;">Total</td>
                             <td style="padding:6px 8px;font-size:11px;text-align:right;">${total.toFixed(2)}</td>
-                            <td style="padding:6px 8px;font-size:11px;text-align:right;">${totalDiscount.toFixed(2)}</td>
+                            <td style="padding:6px 8px;font-size:11px;text-align:right;">${branding.hideSubtotalDiscount ? '-' : totalDiscount.toFixed(2)}</td>
                             <td style="padding:6px 8px;font-size:11px;text-align:right;">${(total - totalDiscount).toFixed(2)}</td>
                         </tr>
                     </tbody>
@@ -491,8 +491,8 @@ function generateInvoiceHTML(invoice: any, branding: BillBranding, pharmacy: { n
 
                 <!-- Amount Summary -->
                 <table style="width:100%;margin-bottom:12px;">
-                    <tr><td style="padding:3px 8px;font-size:11px;font-weight:bold;width:120px;">Bill Amount :</td><td style="font-size:11px;">${total.toFixed(2)} - ${numberToWords(total)}</td></tr>
-                    ${totalDiscount > 0 ? `<tr><td style="padding:3px 8px;font-size:11px;font-weight:bold;">Discount :</td><td style="font-size:11px;">${totalDiscount.toFixed(2)}</td></tr>` : ''}
+                    ${!branding.hideSubtotalDiscount ? `<tr><td style="padding:3px 8px;font-size:11px;font-weight:bold;width:120px;">Bill Amount :</td><td style="font-size:11px;">${total.toFixed(2)} - ${numberToWords(total)}</td></tr>` : ''}
+                    ${totalDiscount > 0 && !branding.hideSubtotalDiscount ? `<tr><td style="padding:3px 8px;font-size:11px;font-weight:bold;">Discount :</td><td style="font-size:11px;">${totalDiscount.toFixed(2)}</td></tr>` : ''}
                     <tr><td style="padding:3px 8px;font-size:11px;font-weight:bold;">Net Amount :</td><td style="font-size:11px;">${net.toFixed(2)} - ${numberToWords(net)}</td></tr>
                     ${creditNoteTotal > 0 ? `<tr><td style="padding:3px 8px;font-size:11px;font-weight:bold;color:#0891b2;">Less: Credit Note :</td><td style="font-size:11px;color:#0891b2;">-${creditNoteTotal.toFixed(2)} - ${numberToWords(creditNoteTotal)}</td></tr>` : ''}
                     <tr><td style="padding:3px 8px;font-size:11px;font-weight:bold;">Paid Amount :</td><td style="font-size:11px;">${paid.toFixed(2)} - ${numberToWords(paid)}</td></tr>

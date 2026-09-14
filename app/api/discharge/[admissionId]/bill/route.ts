@@ -302,7 +302,7 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
         // breakdown here, mirroring the source pharmacy invoice, instead of only
         // showing the already-discounted net in the header and burying the
         // discount in the whole-bill total at the bottom.
-        if (data.discount > 0.01) {
+        if (data.discount > 0.01 && !branding.hideSubtotalDiscount) {
             itemRows += `<tr style="background:#f0fdf4;"><td colspan="8" style="padding:0 12px 5px;font-size:9px;color:#6b7280;text-align:right;">Subtotal: ${data.gross.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })} &nbsp;&nbsp; Discount: -${data.discount.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })} &nbsp;&nbsp; Net: ${data.total.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>`;
         }
         // Medicine-name toggle: when off, keep the Pharmacy total line but hide the
@@ -482,8 +482,8 @@ function generateDischargeBillHTML(admission: any, invoice: any, org: any, depos
                         <!-- Totals -->
                         <div style="display:flex;justify-content:flex-end;margin-bottom:14px;">
                             <table style="width:300px;border-collapse:collapse;">
-                                <tr><td style="padding:4px 12px;font-size:11px;color:#6b7280;">Subtotal</td><td style="padding:4px 12px;font-size:11px;text-align:right;">${total.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>
-                                ${totalDiscount > 0 ? `<tr><td style="padding:4px 12px;font-size:11px;color:#6b7280;">Discount</td><td style="padding:4px 12px;font-size:11px;text-align:right;color:#dc2626;">-${totalDiscount.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>` : ''}
+                                ${!branding.hideSubtotalDiscount ? `<tr><td style="padding:4px 12px;font-size:11px;color:#6b7280;">Subtotal</td><td style="padding:4px 12px;font-size:11px;text-align:right;">${total.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>` : ''}
+                                ${totalDiscount > 0 && !branding.hideSubtotalDiscount ? `<tr><td style="padding:4px 12px;font-size:11px;color:#6b7280;">Discount</td><td style="padding:4px 12px;font-size:11px;text-align:right;color:#dc2626;">-${totalDiscount.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>` : ''}
                                 ${totalTax > 0 ? `
                                 <tr><td style="padding:4px 12px;font-size:11px;color:#6b7280;">CGST</td><td style="padding:4px 12px;font-size:11px;text-align:right;">${(totalTax / 2).toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>
                                 <tr><td style="padding:4px 12px;font-size:11px;color:#6b7280;">SGST</td><td style="padding:4px 12px;font-size:11px;text-align:right;">${(totalTax / 2).toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>

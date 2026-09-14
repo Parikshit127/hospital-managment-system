@@ -29,6 +29,7 @@ export interface BillBranding {
     bankIfsc: string | null;
     bankBranch: string | null;
     bankUpiId: string | null;
+    hideSubtotalDiscount?: boolean;
 }
 
 // ─── Fetch branding from DB ──────────────────────────────────────────────────
@@ -51,6 +52,8 @@ export async function getBillBranding(organizationId: string): Promise<BillBrand
     if (letterheadUrl && !letterheadUrl.startsWith('http') && !letterheadUrl.startsWith('/')) {
         try { letterheadUrl = await getSignedDownloadUrl(letterheadUrl, 86400); } catch { /* keep raw */ }
     }
+
+    const isNulife = org?.slug === 'axten-nulife-hospitals' || org?.code === 'AXTE' || (org?.name || '').toLowerCase().includes('nulife');
 
     return {
         hospitalName: org?.name || 'Hospital',
@@ -76,6 +79,7 @@ export async function getBillBranding(organizationId: string): Promise<BillBrand
         bankIfsc: org?.bank_ifsc || null,
         bankBranch: org?.bank_branch || null,
         bankUpiId: org?.bank_upi_id || null,
+        hideSubtotalDiscount: isNulife,
     };
 }
 

@@ -258,8 +258,8 @@ function generateSummaryBillHTML(admission: any, invoice: any, org: any, deposit
                         <!-- Totals -->
                         <div style="display:flex;justify-content:flex-end;margin-bottom:14px;">
                             <table style="width:320px;border-collapse:collapse;">
-                                <tr><td style="padding:5px 12px;font-size:12px;color:#6b7280;">Subtotal</td><td style="padding:5px 12px;font-size:12px;text-align:right;">${total.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>
-                                ${totalDiscount > 0 ? `<tr><td style="padding:5px 12px;font-size:12px;color:#6b7280;">Discount</td><td style="padding:5px 12px;font-size:12px;text-align:right;color:#dc2626;">-${totalDiscount.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>` : ''}
+                                ${!branding.hideSubtotalDiscount ? `<tr><td style="padding:5px 12px;font-size:12px;color:#6b7280;">Subtotal</td><td style="padding:5px 12px;font-size:12px;text-align:right;">${total.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>` : ''}
+                                ${totalDiscount > 0 && !branding.hideSubtotalDiscount ? `<tr><td style="padding:5px 12px;font-size:12px;color:#6b7280;">Discount</td><td style="padding:5px 12px;font-size:12px;text-align:right;color:#dc2626;">-${totalDiscount.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>` : ''}
                                 ${totalTax > 0 ? `
                                 <tr><td style="padding:5px 12px;font-size:12px;color:#6b7280;">CGST</td><td style="padding:5px 12px;font-size:12px;text-align:right;">${(totalTax / 2).toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>
                                 <tr><td style="padding:5px 12px;font-size:12px;color:#6b7280;">SGST</td><td style="padding:5px 12px;font-size:12px;text-align:right;">${(totalTax / 2).toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>
