@@ -119,7 +119,6 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ adm
         return { name: name || s, batch: batch && !/^n\/?a$/i.test(batch) ? batch : (batchM ? batch : null) };
     };
 
-    // Enrich expiry from batch inventory for the parsed batch numbers.
     const sales: BreakupSale[] = [];
     let purchased = 0;
     if (pharmItems.length > 0) {
