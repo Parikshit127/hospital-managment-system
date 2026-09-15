@@ -47,22 +47,43 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ adm
     //    "Pharmacy") on the admission's invoice(s) — that is the real source of
     //    "all meds added to the patient". We group them by their shared dispensing
     //    timestamp (created_at) so each cluster prints as one "Sale", like MEDNET.
-    const invoices = await prisma.invoices.findMany({
-        where: { organizationId: orgId, admission_id: admissionId, status: { not: 'Cancelled' } },
-        select: {
-            id: true, billing_patient_type: true,
-            items: {
-                where: {
-                    OR: [
-                        { service_category: { equals: 'Pharmacy', mode: 'insensitive' } },
-                        { department: { equals: 'Pharmacy', mode: 'insensitive' } },
-                        { description: { startsWith: 'Pharmacy:' } },
-                    ],
+    //
+    //    Exception: while a package is active, pharmacy dispenses absorbed under
+    //    it never get an invoice_items row at all (postChargeToIpdBill posts to
+    //    ipd_charge_postings only, invoice_item_id stays null — see
+    //    app/actions/ipd-finance-actions.ts). Those are pulled in separately
+    //    below so the breakup matches what the IPD billing tab shows as
+    //    "Consumed under package". Once reclassified to "Bill as extra" they get
+    //    a real invoice_items row and disposition flips off 'package_consumed',
+    //    so they naturally move from this second query into the first with no
+    //    double-count.
+    const [invoices, consumedPostings] = await Promise.all([
+        prisma.invoices.findMany({
+            where: { organizationId: orgId, admission_id: admissionId, status: { not: 'Cancelled' } },
+            select: {
+                id: true, billing_patient_type: true,
+                items: {
+                    where: {
+                        OR: [
+                            { service_category: { equals: 'Pharmacy', mode: 'insensitive' } },
+                            { department: { equals: 'Pharmacy', mode: 'insensitive' } },
+                            { description: { startsWith: 'Pharmacy:' } },
+                        ],
+                    },
+                    orderBy: { created_at: 'asc' },
                 },
-                orderBy: { created_at: 'asc' },
             },
-        },
-    });
+        }),
+        prisma.ipdChargePosting.findMany({
+            where: {
+                organizationId: orgId,
+                admission_id: admissionId,
+                source_module: 'pharmacy',
+                disposition: 'package_consumed',
+            },
+            orderBy: { posted_at: 'asc' },
+        }),
+    ]);
 
     const invoiceIds = new Set<number>();
     const pharmItems: any[] = [];
@@ -71,6 +92,20 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ adm
         invoiceIds.add(inv.id);
         if (inv.billing_patient_type && inv.billing_patient_type !== 'cash') coveredFlag = 'Y';
         for (const it of inv.items || []) pharmItems.push(it);
+    }
+    for (const p of consumedPostings as any[]) {
+        // Same shape the invoice_items branch produces below (description,
+        // created_at, quantity, unit_price, total_price) so it flows through
+        // the existing parseDesc/grouping logic unchanged.
+        pharmItems.push({
+            description: p.description,
+            created_at: p.posted_at,
+            quantity: p.quantity,
+            unit_price: p.unit_price,
+            net_price: null,
+            total_price: p.amount,
+            discount: 0,
+        });
     }
 
     // Parse "Pharmacy: <name> (Batch <batch>) × <qty> — Dr. <doctor>" → name + batch.
