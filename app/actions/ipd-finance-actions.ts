@@ -1443,8 +1443,18 @@ export async function reclassifyChargeDisposition(
             where: { id: posting.admission_package_id },
             include: { package: true },
         });
-        if (!admPkg || admPkg.status !== ADMISSION_PACKAGE_STATUS.ACTIVE) {
-            return { success: false, error: 'The package is no longer active' };
+        if (!admPkg) {
+            return { success: false, error: 'Package record not found' };
+        }
+        // Billing a leftover consumed charge (package_consumed → billable_extra)
+        // never depends on the package still being open — it's exactly the
+        // recovery path for charges left stranded when a package was removed/
+        // closed without fully reconciling. Only the reverse direction (pulling
+        // a billed charge back under the package to be absorbed) requires the
+        // package to still be active, since there's nothing to absorb it into
+        // otherwise.
+        if (target === CHARGE_DISPOSITION.PACKAGE_CONSUMED && admPkg.status !== ADMISSION_PACKAGE_STATUS.ACTIVE) {
+            return { success: false, error: 'The package is no longer active — this charge cannot be moved back under it' };
         }
 
         const invoice = await db.invoices.findFirst({
@@ -1615,11 +1625,11 @@ export async function removeAbsorbedCharge(postingId: number) {
 
         const admPkg = await db.ipdAdmissionPackage.findUnique({
             where: { id: posting.admission_package_id },
-            include: { package: true },
         });
-        if (!admPkg || admPkg.status !== ADMISSION_PACKAGE_STATUS.ACTIVE) {
-            return { success: false, error: 'The package is no longer active' };
-        }
+        // Deleting a leftover absorbed charge doesn't depend on the package
+        // still being active — same reasoning as the billable_extra direction
+        // in reclassifyChargeDisposition above.
+        if (!admPkg) return { success: false, error: 'Package record not found' };
 
         const invoice = await db.invoices.findFirst({
             where: { admission_id: posting.admission_id, status: { not: 'Cancelled' } },

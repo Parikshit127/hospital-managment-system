@@ -2628,7 +2628,7 @@ export default function AdmissionDetailPage() {
                                                                                     <p className="text-[10px] text-gray-400">{new Date(p.posted_at).toLocaleDateString('en-IN')} · {p.source_module}</p>
                                                                                 </div>
                                                                                 <p className="font-bold text-gray-700 ml-3">₹{Number(p.amount).toLocaleString('en-IN')}</p>
-                                                                                {data.status === 'Admitted' && pkgUtil.status === 'active' && (
+                                                                                {data.status === 'Admitted' && (
                                                                                     <>
                                                                                         <button
                                                                                             onClick={() => handleReclassify(p.id, 'billable_extra')}
