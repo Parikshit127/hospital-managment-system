@@ -601,8 +601,24 @@ export async function updateOrganizationProfile(orgId: string, data: any) {
                     specialties: d.specialties || [],
                     latitude: d.latitude ?? null,
                     longitude: d.longitude ?? null,
-                },
             });
+
+            // Synchronize uhid_prefix if the organization code was changed and uhid_prefix was tied to the old code
+            if (existing.code !== d.code) {
+                await tx.organizationConfig.updateMany({
+                    where: {
+                        organizationId: orgId,
+                        OR: [
+                            { uhid_prefix: existing.code },
+                            { uhid_prefix: 'AVN' },
+                            { uhid_prefix: '' },
+                        ],
+                    },
+                    data: {
+                        uhid_prefix: d.code,
+                    },
+                });
+            }
 
             await tx.system_audit_logs.create({
                 data: {
