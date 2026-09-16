@@ -601,6 +601,7 @@ export async function updateOrganizationProfile(orgId: string, data: any) {
                     specialties: d.specialties || [],
                     latitude: d.latitude ?? null,
                     longitude: d.longitude ?? null,
+                },
             });
 
             // Synchronize uhid_prefix if the organization code was changed and uhid_prefix was tied to the old code
