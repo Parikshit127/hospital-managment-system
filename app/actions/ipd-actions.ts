@@ -80,6 +80,9 @@ export async function getWardsWithBeds() {
     const wards = await db.wards.findMany({
       include: {
         beds: {
+          where: {
+            status: { not: "Archived" },
+          },
           orderBy: { bed_id: "asc" },
         },
       },
@@ -126,6 +129,9 @@ export async function getAllBeds() {
       await autoReleaseStaleCleaningBeds();
     } catch { /* non-critical */ }
     const beds = await db.beds.findMany({
+      where: {
+        status: { not: "Archived" },
+      },
       include: {
         wards: true,
         admissions: {
@@ -1220,7 +1226,7 @@ export async function getIPDStats() {
     ] = await Promise.all([
       db.admissions.count({ where: { status: "Admitted" } }),
       db.admissions.count({ where: { status: "Discharged" } }),
-      db.beds.count(),
+      db.beds.count({ where: { status: { not: "Archived" } } }),
       db.beds.count({ where: { status: "Available" } }),
       db.beds.count({ where: { status: "Occupied" } }),
     ]);
