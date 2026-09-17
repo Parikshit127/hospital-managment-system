@@ -247,7 +247,9 @@ export async function getInvestorDashboardData(params?: {
         // NOT used here, since it can be stale or larger than the real ward setup.
         const bedRows = await prisma.beds.groupBy({
             by: ['organizationId'],
-            where: { organizationId: { in: orgIds } },
+            // Archived beds are retained only for historical admission/billing
+            // references and must not contribute to current capacity.
+            where: { organizationId: { in: orgIds }, status: { not: 'Archived' } },
             _count: true,
         }).catch(() => [] as Array<{ organizationId: string; _count: number }>);
 
@@ -996,7 +998,9 @@ export async function getInvestorUnitSummaries(): Promise<Array<{ code: string; 
         // organization.bed_capacity is deliberately not used as a fallback.
         const bedRows = await prisma.beds.groupBy({
             by: ['organizationId'],
-            where: { organizationId: { in: orgIds } },
+            // Keep this header summary aligned with the dashboard and IPD setup:
+            // archived beds remain for history but are no longer operational.
+            where: { organizationId: { in: orgIds }, status: { not: 'Archived' } },
             _count: true,
         }).catch(() => [] as Array<{ organizationId: string; _count: number }>);
 

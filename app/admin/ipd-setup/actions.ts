@@ -20,7 +20,11 @@ export async function getIpdInventory() {
     const wards = await db.wards.findMany({
         where: { organizationId },
         include: {
-            beds: true,
+            beds: {
+                where: {
+                    status: { not: 'Archived' },
+                },
+            },
             department: true,
         },
         orderBy: { ward_name: 'asc' }
@@ -182,19 +186,42 @@ export async function renameBed(bed_id: string, bed_name: string): Promise<Actio
     }
 }
 
-// Permanently delete a bed. Blocked if it has any admission history. Admin only.
+// Delete or archive a bed. If it has past (discharged) admissions, it is archived
+// so that past invoices, bills, and discharge summaries retain the bed label.
+// Blocked only if a patient is actively admitted. Admin only.
 export async function deleteBed(bed_id: string): Promise<ActionResult> {
     try {
         const { db } = await requireRoleAndTenant(['admin']);
-        const admissionCount = await db.admissions.count({ where: { bed_id } });
-        if (admissionCount > 0) {
-            return { success: false, error: 'This bed has admission history and cannot be deleted. Set its status to "Blocked" instead.' };
+
+        // 1. Block if a patient is currently occupying this bed
+        const activeAdmission = await db.admissions.findFirst({
+            where: { bed_id, status: 'Admitted' },
+            include: { patient: { select: { full_name: true } } },
+        });
+        if (activeAdmission) {
+            return {
+                success: false,
+                error: `Cannot remove bed: Patient "${activeAdmission.patient?.full_name || 'Active Patient'}" is currently admitted to it. Discharge or transfer the patient first.`,
+            };
         }
-        await db.beds.delete({ where: { bed_id } });
+
+        // 2. Check past admission history
+        const totalAdmissions = await db.admissions.count({ where: { bed_id } });
+        if (totalAdmissions > 0) {
+            // Has past history: Archive so past bills & discharge summaries retain the bed label
+            await db.beds.update({
+                where: { bed_id },
+                data: { status: 'Archived' },
+            });
+        } else {
+            // No history at all: Safe to permanently delete
+            await db.beds.delete({ where: { bed_id } });
+        }
+
         revalidatePath('/admin/ipd-setup');
         return { success: true };
     } catch (err: any) {
-        return { success: false, error: err.message || 'Failed to delete bed' };
+        return { success: false, error: err.message || 'Failed to remove bed' };
     }
 }
 
