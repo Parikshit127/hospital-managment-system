@@ -2,7 +2,15 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/backend/db'
 import { resolveRouteAuth } from '@/app/lib/route-auth'
 import { validateZealthixApiKey } from '@/app/lib/zealthix/auth'
-import { getBillBranding, inlineHeaderHtml, billFooterHtml, fmtBillDate } from '@/app/lib/bill-branding'
+import {
+    getBillBranding,
+    inlineHeaderHtml,
+    billFooterHtml,
+    letterheadBackgroundHtml,
+    letterheadCss,
+    printButtonHtml,
+    fmtBillDate,
+} from '@/app/lib/bill-branding'
 
 const ALLOWED_STAFF_ROLES = ['admin', 'doctor', 'ipd_manager', 'nurse', 'finance'];
 
@@ -118,27 +126,33 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ admi
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Segoe UI', Arial, sans-serif; color: #1f2937; background: #fff; font-size: 12px; }
-        @media print { body { margin: 0; } .no-print { display: none !important; } }
+        ${letterheadCss(branding)}
         .section { margin-bottom: 16px; }
         .section-title { font-size: 10px; font-weight: 800; color: #6b7280; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px; }
         table { width: 100%; border-collapse: collapse; }
         th, td { padding: 6px 10px; text-align: left; border-bottom: 1px solid #f3f4f6; font-size: 11px; }
         th { font-weight: 700; color: #6b7280; background: #f9fafb; font-size: 10px; text-transform: uppercase; }
+        tr { break-inside: avoid; }
     </style>
 </head>
 <body>
-    <div class="no-print" style="background:#f3f4f6;padding:12px;text-align:center;">
-        <button onclick="window.print()" style="padding:8px 24px;background:#7c3aed;color:white;border:none;border-radius:6px;font-weight:bold;cursor:pointer;font-size:14px;">
-            Print / Download PDF
-        </button>
-    </div>
+    ${letterheadBackgroundHtml(branding)}
+    ${printButtonHtml(branding, 'Discharge Summary · Admission ' + admissionId)}
 
-    <div style="max-width:800px;margin:0 auto;padding:40px;">
-        <!-- Header -->
-        ${inlineHeaderHtml(branding, `
-                <h2 style="font-size:18px;font-weight:800;color:${branding.accentColor};">DISCHARGE SUMMARY</h2>
-                <p style="font-size:11px;color:#6b7280;">Admission: ${admissionId}</p>
-        `)}
+    <table class="print-layout-table">
+        <thead><tr><td class="print-layout-header-spacer"></td></tr></thead>
+        <tbody><tr><td>
+            <div class="bill-container" style="padding-top:${branding.letterheadUrl ? '8px' : '24px'};">
+                <!-- Header -->
+                ${branding.letterheadUrl ? `
+                    <div style="text-align:center;margin-bottom:16px;">
+                        <h2 style="font-size:18px;font-weight:800;color:${branding.accentColor};">DISCHARGE SUMMARY</h2>
+                        <p style="font-size:11px;color:#6b7280;">Admission: ${admissionId}</p>
+                    </div>
+                ` : inlineHeaderHtml(branding, `
+                    <h2 style="font-size:18px;font-weight:800;color:${branding.accentColor};">DISCHARGE SUMMARY</h2>
+                    <p style="font-size:11px;color:#6b7280;">Admission: ${admissionId}</p>
+                `)}
 
         <!-- Patient Demographics -->
         <div class="section">
@@ -254,6 +268,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ admi
         <!-- Footer -->
         ${billFooterHtml(branding, printedBy)}
     </div>
+</td></tr></tbody>
+<tfoot><tr><td class="print-layout-footer-spacer"></td></tr></tfoot>
+</table>
 </body>
 </html>`
 

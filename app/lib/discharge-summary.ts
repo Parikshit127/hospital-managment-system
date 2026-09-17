@@ -7,6 +7,9 @@ import {
     BillBranding,
     inlineHeaderHtml,
     billFooterHtml,
+    letterheadBackgroundHtml,
+    letterheadCss,
+    printButtonHtml,
     fmtBillDateTime,
     fmtBillDate,
 } from '@/app/lib/bill-branding';
@@ -220,9 +223,7 @@ export function renderDischargeSummaryHtml(
     opts?: { withPrintButton?: boolean; printedBy?: { name: string; role?: string } },
 ): string {
     const printBar = opts?.withPrintButton
-        ? `<div class="no-print" style="background:#f3f4f6;padding:12px;text-align:center;">
-            <button onclick="window.print()" style="padding:8px 24px;background:${branding.accentColor};color:#fff;border:none;border-radius:6px;font-weight:bold;cursor:pointer;font-size:14px;">Print / Download PDF</button>
-           </div>`
+        ? printButtonHtml(branding, `UHID: ${header.uhid || '—'}`)
         : '';
 
     const hasProcedure =
@@ -239,101 +240,114 @@ export function renderDischargeSummaryHtml(
 <style>
     * { margin:0; padding:0; box-sizing:border-box; }
     body { font-family:'Segoe UI', Arial, sans-serif; color:#1f2937; background:#fff; font-size:12px; line-height:1.5; }
-    .page { max-width:820px; margin:0 auto; padding:24px 32px; }
+    ${letterheadCss(branding)}
+    .page { max-width:800px; margin:0 auto; padding:${branding.letterheadUrl ? '8px 40px 16px' : '24px 32px'}; position:relative; z-index:1; }
     .doc-title { text-align:center; font-size:16px; font-weight:900; letter-spacing:1px; color:${branding.accentColor}; margin:6px 0 14px; }
     table.info { width:100%; border-collapse:collapse; }
     .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:0 24px; }
     .body-text { white-space:normal; color:#111827; }
-    @media print { body { margin:0; } .no-print { display:none !important; } .page { padding:0 18px; } }
+    tr { break-inside: avoid; }
+    @media print {
+        body { margin:0; }
+        .no-print { display:none !important; }
+        .page { max-width:100%; margin:0; padding:${branding.letterheadUrl ? '0 40px' : '0 18px'}; }
+    }
 </style>
 </head>
 <body>
+${letterheadBackgroundHtml(branding)}
 ${printBar}
-<div class="page">
-    ${inlineHeaderHtml(branding)}
-    <div class="doc-title">DISCHARGE SUMMARY</div>
+<table class="print-layout-table">
+    <thead><tr><td class="print-layout-header-spacer"></td></tr></thead>
+    <tbody><tr><td>
+        <div class="page">
+            ${branding.letterheadUrl ? '' : inlineHeaderHtml(branding)}
+            <div class="doc-title">DISCHARGE SUMMARY</div>
 
-    <div style="${titleCss}">Patient Information</div>
-    <div class="grid2">
-        <table class="info">
-            ${infoRow('Patient Name', header.patient_name)}
-            ${infoRow('Age / Gender', header.age_gender)}
-            ${infoRow('Indoor No.', header.indoor_no)}
-            ${infoRow('UHID No.', header.uhid)}
-            ${infoRow('Consulting Doctor', header.consulting_doctor)}
-            ${infoRow('Ward', header.ward)}
-        </table>
-        <table class="info">
-            ${infoRow('Bed No.', header.bed_no)}
-            ${infoRow('Floor', header.floor)}
-            ${infoRow('Class Applicable', header.class_applicable)}
-            ${infoRow('Admitted', header.admission_dt)}
-            ${infoRow('Discharged', header.discharge_dt)}
-            ${infoRow('Discharge Status', header.discharge_status)}
-            ${infoRow('Discharge Type', header.discharge_type === 'Not set' ? '—' : header.discharge_type)}
-        </table>
-    </div>
+            <div style="${titleCss}">Patient Information</div>
+            <div class="grid2">
+                <table class="info">
+                    ${infoRow('Patient Name', header.patient_name)}
+                    ${infoRow('Age / Gender', header.age_gender)}
+                    ${infoRow('Indoor No.', header.indoor_no)}
+                    ${infoRow('UHID No.', header.uhid)}
+                    ${infoRow('Consulting Doctor', header.consulting_doctor)}
+                    ${infoRow('Ward', header.ward)}
+                </table>
+                <table class="info">
+                    ${infoRow('Bed No.', header.bed_no)}
+                    ${infoRow('Floor', header.floor)}
+                    ${infoRow('Class Applicable', header.class_applicable)}
+                    ${infoRow('Admitted', header.admission_dt)}
+                    ${infoRow('Discharged', header.discharge_dt)}
+                    ${infoRow('Discharge Status', header.discharge_status)}
+                    ${infoRow('Discharge Type', header.discharge_type === 'Not set' ? '—' : header.discharge_type)}
+                </table>
+            </div>
 
-    <div style="${titleCss}">Final Diagnosis</div>
-    <div class="body-text">
-        ${data.final_diagnosis_primary.trim() ? `<div>${esc(data.final_diagnosis_primary)}</div>` : '<span style="color:#9ca3af;">—</span>'}
-        ${data.final_diagnosis_secondary.trim() ? `<div>${esc(data.final_diagnosis_secondary)}</div>` : ''}
-        ${data.icd_code.trim() ? `<div style="margin-top:4px;font-size:11px;color:#475569;"><strong>ICD Code:</strong> ${esc(data.icd_code)}</div>` : ''}
-    </div>
+            <div style="${titleCss}">Final Diagnosis</div>
+            <div class="body-text">
+                ${data.final_diagnosis_primary.trim() ? `<div>${esc(data.final_diagnosis_primary)}</div>` : '<span style="color:#9ca3af;">—</span>'}
+                ${data.final_diagnosis_secondary.trim() ? `<div>${esc(data.final_diagnosis_secondary)}</div>` : ''}
+                ${data.icd_code.trim() ? `<div style="margin-top:4px;font-size:11px;color:#475569;"><strong>ICD Code:</strong> ${esc(data.icd_code)}</div>` : ''}
+            </div>
 
-    <div style="${titleCss}">Complaints on Admission</div>
-    <div class="body-text">${bulletList(data.complaints)}</div>
+            <div style="${titleCss}">Complaints on Admission</div>
+            <div class="body-text">${bulletList(data.complaints)}</div>
 
-    <div style="${titleCss}">Medical History</div>
-    <div class="body-text">${multiline(data.medical_history || 'N/A')}</div>
+            <div style="${titleCss}">Medical History</div>
+            <div class="body-text">${multiline(data.medical_history || 'N/A')}</div>
 
-    <div style="${titleCss}">Investigations</div>
-    <div class="body-text">${bulletList(data.investigations)}</div>
+            <div style="${titleCss}">Investigations</div>
+            <div class="body-text">${bulletList(data.investigations)}</div>
 
-    ${hasProcedure ? `
-    <div style="${titleCss}">Surgery / Procedure Performed</div>
-    <table class="info">
-        ${infoRow('Name of Surgery/Procedure', data.procedure_name || '—')}
-        ${infoRow('Surgeon', data.surgeon || '—')}
-        ${infoRow('Assistant Surgeon', data.assistant_surgeon || '—')}
-        ${infoRow('Anaesthetist', data.anaesthetist || '—')}
-        ${infoRow('Anaesthesia Type', data.anaesthesia_type || '—')}
-        ${infoRow('Procedure Date', data.procedure_date || '—')}
-    </table>
+            ${hasProcedure ? `
+            <div style="${titleCss}">Surgery / Procedure Performed</div>
+            <table class="info">
+                ${infoRow('Name of Surgery/Procedure', data.procedure_name || '—')}
+                ${infoRow('Surgeon', data.surgeon || '—')}
+                ${infoRow('Assistant Surgeon', data.assistant_surgeon || '—')}
+                ${infoRow('Anaesthetist', data.anaesthetist || '—')}
+                ${infoRow('Anaesthesia Type', data.anaesthesia_type || '—')}
+                ${infoRow('Procedure Date', data.procedure_date || '—')}
+            </table>
 
-    <div style="${titleCss}">Operative Notes</div>
-    <div class="body-text">${multiline(data.operative_notes)}</div>
-    ` : ''}
+            <div style="${titleCss}">Operative Notes</div>
+            <div class="body-text">${multiline(data.operative_notes)}</div>
+            ` : ''}
 
-    <div style="${titleCss}">Course During Hospitalization</div>
-    <div class="body-text">${multiline(data.course)}</div>
+            <div style="${titleCss}">Course During Hospitalization</div>
+            <div class="body-text">${multiline(data.course)}</div>
 
-    <div style="${titleCss}">Discharge Medications</div>
-    <div class="body-text">${bulletList(data.discharge_medications)}</div>
+            <div style="${titleCss}">Discharge Medications</div>
+            <div class="body-text">${bulletList(data.discharge_medications)}</div>
 
-    <div style="${titleCss}">Discharge Instructions</div>
-    <div class="body-text">${bulletList(data.discharge_instructions)}</div>
+            <div style="${titleCss}">Discharge Instructions</div>
+            <div class="body-text">${bulletList(data.discharge_instructions)}</div>
 
-    <div style="${titleCss}">Follow-Up</div>
-    <div class="body-text">${multiline(data.follow_up)}</div>
+            <div style="${titleCss}">Follow-Up</div>
+            <div class="body-text">${multiline(data.follow_up)}</div>
 
-    <div style="${titleCss}">Discharge Condition</div>
-    <div class="body-text">${multiline(data.discharge_condition || DEFAULT_DISCHARGE_CONDITION)}</div>
+            <div style="${titleCss}">Discharge Condition</div>
+            <div class="body-text">${multiline(data.discharge_condition || DEFAULT_DISCHARGE_CONDITION)}</div>
 
-    <div style="display:flex;justify-content:space-between;margin-top:32px;gap:24px;">
-        <div style="flex:1;">
-            <div style="border-top:1px solid #94a3b8;padding-top:4px;font-size:11px;color:#475569;">Prepared By: <strong>${esc(data.prepared_by || header.consulting_doctor)}</strong></div>
+            <div style="display:flex;justify-content:space-between;margin-top:32px;gap:24px;">
+                <div style="flex:1;">
+                    <div style="border-top:1px solid #94a3b8;padding-top:4px;font-size:11px;color:#475569;">Prepared By: <strong>${esc(data.prepared_by || header.consulting_doctor)}</strong></div>
+                </div>
+                <div style="flex:1;">
+                    <div style="border-top:1px solid #94a3b8;padding-top:4px;font-size:11px;color:#475569;">Verified By: <strong>${esc(data.verified_by || '—')}</strong></div>
+                </div>
+                <div style="flex:1;text-align:right;">
+                    <div style="font-size:11px;color:#475569;">Date: <strong>${esc(fmtBillDate(new Date()))}</strong></div>
+                </div>
+            </div>
+
+            ${billFooterHtml(branding, opts?.printedBy)}
         </div>
-        <div style="flex:1;">
-            <div style="border-top:1px solid #94a3b8;padding-top:4px;font-size:11px;color:#475569;">Verified By: <strong>${esc(data.verified_by || '—')}</strong></div>
-        </div>
-        <div style="flex:1;text-align:right;">
-            <div style="font-size:11px;color:#475569;">Date: <strong>${esc(fmtBillDate(new Date()))}</strong></div>
-        </div>
-    </div>
-
-    ${billFooterHtml(branding, opts?.printedBy)}
-</div>
+    </td></tr></tbody>
+    <tfoot><tr><td class="print-layout-footer-spacer"></td></tr></tfoot>
+</table>
 </body>
 </html>`;
 }

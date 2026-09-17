@@ -53,7 +53,7 @@ export async function getBillBranding(organizationId: string): Promise<BillBrand
         try { letterheadUrl = await getSignedDownloadUrl(letterheadUrl, 86400); } catch { /* keep raw */ }
     }
 
-    const isNulife = org?.slug === 'axten-nulife-hospitals' || org?.code === 'AXTE' || (org?.name || '').toLowerCase().includes('nulife');
+    const isNulife = org?.slug === 'axten-nulife-hospitals' || org?.code === 'AXTE' || org?.code === 'ANH' || (org?.name || '').toLowerCase().includes('nulife');
 
     return {
         hospitalName: org?.name || 'Hospital',
