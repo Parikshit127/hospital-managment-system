@@ -182,10 +182,6 @@ function generateDepositReceiptHTML(deposit: any, patient: any, org: any, logoSi
                         <span style="display:inline-block;padding:2px 10px;border-radius:999px;font-size:11px;font-weight:700;background:#d1fae5;color:#065f46;">${deposit.status}</span>
                     </td>
                 </tr>
-                ${deposit.notes ? `<tr>
-                    <td style="padding:8px 16px;font-size:12px;color:#6b7280;font-weight:600;">Notes</td>
-                    <td style="padding:8px 16px;font-size:12px;">${deposit.notes}</td>
-                </tr>` : ''}
             </table>
         </div>
 
