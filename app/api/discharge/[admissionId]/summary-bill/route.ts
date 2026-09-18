@@ -1,297 +1,45 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/backend/db';
 import { resolveRouteAuth } from '@/app/lib/route-auth';
-import { ensureIPDRoomChargesAccrued } from '@/app/actions/ipd-billing-helpers';
-import { getBillBranding, letterheadBackgroundHtml, letterheadCss, billFooterHtml, printButtonHtml, fmtBillDate, fmtBillDateTime, deriveInvoiceTotals, type BillBranding } from '@/app/lib/bill-branding';
-import { getBillSections } from '@/app/lib/bill-sections';
-import { formatDoctorName } from '@/app/lib/format-name';
 
 const ALLOWED_STAFF_ROLES = ['admin', 'finance', 'receptionist', 'doctor', 'ipd_manager'];
 
+/**
+ * Compatibility URL for the IPD summary bill.
+ *
+ * The master invoice renderer is the one source of truth for both IPD and OPD
+ * bills. Its default layout is the summary bill; /bill routes there with
+ * detailed=true for the itemized version.
+ */
 export async function GET(req: NextRequest, { params }: { params: Promise<{ admissionId: string }> }) {
-    try {
-        const auth = await resolveRouteAuth({
-            allowPatient: true,
-            allowedStaffRoles: ALLOWED_STAFF_ROLES,
-        });
-        if (!auth.ok) return auth.response;
+    const auth = await resolveRouteAuth({
+        allowPatient: true,
+        allowedStaffRoles: ALLOWED_STAFF_ROLES,
+    });
+    if (!auth.ok) return auth.response;
 
-        const { admissionId } = await params;
+    const { admissionId } = await params;
+    const invoice = await prisma.invoices.findFirst({
+        where: {
+            admission_id: admissionId,
+            organizationId: auth.context.organizationId,
+            status: { not: 'Cancelled' },
+        },
+        orderBy: { created_at: 'desc' },
+        select: { id: true },
+    }) ?? await prisma.invoices.findFirst({
+        where: { admission_id: admissionId, organizationId: auth.context.organizationId },
+        orderBy: { created_at: 'desc' },
+        select: { id: true },
+    });
 
-        // Auto-accrual disabled — room/nursing charges are added manually
-        // await ensureIPDRoomChargesAccrued(admissionId).catch(() => null);
-
-        const admission = await prisma.admissions.findFirst({
-            where: { admission_id: admissionId, organizationId: auth.context.organizationId },
-            include: {
-                patient: { select: { full_name: true, patient_id: true, phone: true, age: true, gender: true } },
-                ward: { select: { ward_name: true } },
-                bed: { select: { bed_id: true, bed_name: true } },
-            },
-        });
-        if (!admission) return NextResponse.json({ error: 'Admission not found' }, { status: 404 });
-
-        let invoice = await prisma.invoices.findFirst({
-            where: { admission_id: admissionId, status: { not: 'Cancelled' } },
-            include: {
-                items: true,
-                payments: { where: { status: { not: 'Reversed' } } },
-                credit_notes: { where: { status: { in: ['Approved', 'Applied'] } }, orderBy: { created_at: 'desc' } },
-            },
-            orderBy: { created_at: 'desc' },
-        });
-
-        if (!invoice) {
-            invoice = await prisma.invoices.findFirst({
-                where: { admission_id: admissionId },
-                include: {
-                    items: true,
-                    payments: { where: { status: { not: 'Reversed' } } },
-                    credit_notes: { where: { status: { in: ['Approved', 'Applied'] } }, orderBy: { created_at: 'desc' } },
-                },
-                orderBy: { created_at: 'desc' },
-            });
-        }
-
-        if (!invoice) {
-            const html = `<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><title>No Bill Generated</title>
-<style>
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f8fafc; color: #1e293b; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 20px; }
-  .card { background: white; border-radius: 12px; padding: 32px; max-width: 480px; width: 100%; box-shadow: 0 4px 20px rgba(0,0,0,0.06); text-align: center; border: 1px solid #e2e8f0; }
-  .badge { display: inline-block; padding: 4px 12px; border-radius: 9999px; font-weight: 700; font-size: 12px; text-transform: uppercase; background: #fee2e2; color: #991b1b; margin-bottom: 16px; }
-  h2 { font-size: 20px; font-weight: 700; margin-bottom: 8px; color: #0f172a; }
-  p { font-size: 14px; color: #64748b; margin-bottom: 20px; line-height: 1.5; }
-  .info { background: #f1f5f9; padding: 12px 16px; border-radius: 8px; font-size: 13px; text-align: left; margin-bottom: 24px; }
-  .btn { display: inline-flex; align-items: center; gap: 8px; padding: 8px 20px; background: #2563eb; color: white; border-radius: 6px; text-decoration: none; font-size: 14px; font-weight: 600; cursor: pointer; border: none; }
-</style>
-</head>
-<body>
-  <div class="card">
-    <span class="badge">${admission.status}</span>
-    <h2>No Bill Generated</h2>
-    <p>This admission was marked as <strong>${admission.status}</strong> before an invoice or bill was raised.</p>
-    <div class="info">
-      <div><strong>Admission ID:</strong> ${admission.admission_id}</div>
-      <div style="margin-top:4px;"><strong>Patient:</strong> ${admission.patient?.full_name || 'N/A'} (${admission.patient_id})</div>
-      ${admission.cancellation_reason ? `<div style="margin-top:4px;"><strong>Cancellation Reason:</strong> ${admission.cancellation_reason}</div>` : ''}
-    </div>
-    <button class="btn" onclick="window.close()">Close Window</button>
-  </div>
-</body>
-</html>`;
-            return new NextResponse(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
-        }
-        // Note: this is a category-LEVEL summary (totals per category, no item names), so
-        // there are no individual medicine names to hide — the medicine-name toggle lives
-        // on the detailed bills, not here.
-
-        const org = await prisma.organization.findUnique({
-            where: { id: auth.context.organizationId },
-            include: { branding: true },
-        });
-
-        const branding = await getBillBranding(auth.context.organizationId);
-        const sections = await getBillSections(auth.context.organizationId, 'discharge_summary');
-
-        const deposits = await prisma.patientDeposit.findMany({
-            where: { patient_id: admission.patient_id, applied_to_invoice: invoice.id },
-        });
-
-        const isFinal = admission.status === 'Discharged';
-        const printedBy = auth.context.kind === 'staff'
-            ? { name: auth.context.session.name, role: auth.context.session.role }
-            : undefined;
-        const html = generateSummaryBillHTML(admission, invoice, org, deposits, isFinal, branding, sections, printedBy);
-
-        return new NextResponse(html, {
-            headers: { 'Content-Type': 'text/html; charset=utf-8' },
-        });
-    } catch (error: any) {
-        console.error('Summary bill error:', error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-}
-
-function numberToWords(n: number): string {
-    const rupees = Math.abs(Math.floor(n || 0));
-    if (rupees === 0) return 'Zero';
-    const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten',
-        'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
-    const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
-    function convert(num: number): string {
-        if (num < 20) return ones[num];
-        if (num < 100) return tens[Math.floor(num / 10)] + (num % 10 ? ' ' + ones[num % 10] : '');
-        if (num < 1000) return ones[Math.floor(num / 100)] + ' Hundred' + (num % 100 ? ' ' + convert(num % 100) : '');
-        if (num < 100000) return convert(Math.floor(num / 1000)) + ' Thousand' + (num % 1000 ? ' ' + convert(num % 1000) : '');
-        if (num < 10000000) return convert(Math.floor(num / 100000)) + ' Lakh' + (num % 100000 ? ' ' + convert(num % 100000) : '');
-        return convert(Math.floor(num / 10000000)) + ' Crore' + (num % 10000000 ? ' ' + convert(num % 10000000) : '');
-    }
-    return (n < 0 ? 'Minus ' : '') + 'Rupees ' + convert(rupees) + ' Only';
-}
-
-function generateSummaryBillHTML(admission: any, invoice: any, org: any, deposits: any[], isFinal: boolean, branding: BillBranding, sections: any, printedBy?: { name: string; role?: string }) {
-    const patient = admission.patient || {};
-    const items = invoice.items || [];
-
-    const gstin = branding.gstin;
-    const finalizedByName: string | null = invoice.status === 'Final' ? (invoice.finalized_by_name || null) : null;
-
-    const admissionDate = fmtBillDate(admission.admission_date);
-    // Only a real discharge date — never default to today for a still-admitted patient.
-    // Recorded when the discharge summary is authored, so it prints from semi-discharge on.
-    const dischargeDate = admission.discharge_date ? fmtBillDateTime(admission.discharge_date) : '';
-    const los = Math.max(
-        1,
-        Math.ceil(
-            (new Date(admission.discharge_date || new Date()).getTime() -
-                new Date(admission.admission_date).getTime()) /
-                (1000 * 60 * 60 * 24),
-        ),
-    );
-
-    // Derive totals from line items so the summary always matches the charges shown.
-    const { gross: total, discount: totalDiscount, tax: totalTax, net, paid, balance } = deriveInvoiceTotals(invoice);
-
-    const billColor = isFinal ? branding.accentColor : '#f97316';
-
-    // Aggregate items by service_category (one row per category)
-    const categoryAgg: Record<string, { qty: number; amount: number; tax: number }> = {};
-    for (const item of items) {
-        const cat = item.service_category || item.department || 'Other';
-        if (!categoryAgg[cat]) categoryAgg[cat] = { qty: 0, amount: 0, tax: 0 };
-        categoryAgg[cat].qty += Number(item.quantity || 0);
-        categoryAgg[cat].amount += Number(item.net_price || 0);
-        categoryAgg[cat].tax += Number(item.tax_amount || 0);
-    }
-    const sortedCategories = Object.entries(categoryAgg).sort(
-        ([, a], [, b]) => b.amount + b.tax - (a.amount + a.tax),
-    );
-
-    let categoryRows = '';
-    for (const [cat, data] of sortedCategories) {
-        const subtotal = data.amount + data.tax;
-        categoryRows += `<tr>
-            <td style="padding:8px 12px;border-bottom:1px solid #f3f4f6;font-size:12px;font-weight:600;">${cat}</td>
-            <td style="padding:8px 12px;border-bottom:1px solid #f3f4f6;font-size:11px;text-align:center;color:#6b7280;">${data.qty}</td>
-            <td style="padding:8px 12px;border-bottom:1px solid #f3f4f6;font-size:11px;text-align:right;color:#6b7280;">${data.tax.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-            <td style="padding:8px 12px;border-bottom:1px solid #f3f4f6;font-size:12px;text-align:right;font-weight:700;">${subtotal.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td>
-        </tr>`;
+    if (!invoice) {
+        return NextResponse.json({ error: 'No invoice found for this admission' }, { status: 404 });
     }
 
-    const depositTotal = deposits.reduce((s, d) => s + Number(d.applied_amount || 0), 0);
+    const sourceUrl = new URL(req.url);
+    const billUrl = new URL(`/api/invoice/${invoice.id}/summary-bill`, sourceUrl.origin);
+    if (sourceUrl.searchParams.get('meds') === '0') billUrl.searchParams.set('meds', '0');
 
-    const creditNotes = invoice.credit_notes || [];
-    const creditNoteTotal = creditNotes.reduce((s: number, c: any) => s + Number(c.total_amount || 0), 0);
-
-    return `<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8">
-    <title>SUMMARY BILL - ${admission.admission_id}</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Segoe UI', Arial, sans-serif; color: #1f2937; background: #fff; }
-        ${letterheadCss(branding)}
-    </style>
-</head>
-<body>
-    ${letterheadBackgroundHtml(branding)}
-
-    ${printButtonHtml(branding, 'This is a category-level summary. For line-by-line details, see the Detailed Bill.')}
-
-    <table class="print-layout-table">
-        <thead>
-            <tr>
-                <td class="print-layout-header-spacer"></td>
-            </tr>
-        </thead>
-        <tbody>
-            <tr>
-                <td>
-                    <div class="bill-container">
-                        <!-- Header details matching pharmacy layout (no logo since it is on the letterhead) -->
-                        <div style="display:flex;justify-content:flex-end;border-bottom:2px solid ${branding.accentColor};padding-bottom:12px;margin-bottom:20px;">
-                            <div style="text-align:right;">
-                                <h2 style="font-size:16px;font-weight:800;color:${billColor};">SUMMARY BILL</h2>
-                                <p style="font-size:12px;font-weight:700;color:${branding.accentColor};">${(isFinal && (invoice as any).final_bill_number ? (invoice as any).final_bill_number : invoice.invoice_number) || '—'}</p>
-                                ${isFinal && (invoice as any).final_bill_number ? `<p style="font-size:9px;color:#9ca3af;">Ref: ${invoice.invoice_number}</p>` : ''}
-                                <p style="font-size:10px;color:#6b7280;">Type: <strong>${invoice.invoice_type || 'IPD'}</strong></p>
-                                <p style="font-size:10px;color:#6b7280;">Date: ${fmtBillDate(isFinal && admission.discharge_date ? admission.discharge_date : invoice.created_at)}</p>
-                                <p style="font-size:10px;color:#6b7280;">GSTIN: ${gstin}</p>
-                            </div>
-                        </div>
-
-                        ${sections.showPatientInfo ? `
-                        <!-- Patient & Admission -->
-                        <div style="background:#f9fafb;border-radius:8px;padding:12px;margin-bottom:16px;">
-                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
-                                <p style="font-size:11px;"><strong>Patient:</strong> ${patient.full_name || '-'}</p>
-                                <p style="font-size:11px;"><strong>UHID:</strong> ${patient.patient_id || '-'}</p>
-                                <p style="font-size:11px;"><strong>Age/Gender:</strong> ${patient.age || '-'} / ${patient.gender || '-'}</p>
-                                <p style="font-size:11px;"><strong>Admission ID:</strong> ${admission.admission_id}</p>
-                                <p style="font-size:11px;"><strong>Doctor:</strong> ${formatDoctorName(admission.doctor_name) || '-'}</p>
-                                <p style="font-size:11px;"><strong>Ward/Bed:</strong> ${admission.ward?.ward_name || '-'} / ${admission.bed?.bed_name || admission.bed?.bed_id || '-'}</p>
-                                <p style="font-size:11px;"><strong>Admitted:</strong> ${admissionDate}</p>
-                                <p style="font-size:11px;"><strong>Discharged:</strong> ${dischargeDate || '—'}</p>
-                                <p style="font-size:11px;"><strong>LOS:</strong> ${los} day(s)</p>
-                                <p style="font-size:11px;"><strong>Diagnosis:</strong> ${admission.diagnosis || '-'}</p>
-                            </div>
-                        </div>` : ''}
-
-                        ${sections.showLineItems ? `
-                        <!-- Category-level Summary -->
-                        <h3 style="font-size:11px;font-weight:800;color:${branding.accentColor};text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px;">Charges Summary</h3>
-                        <table style="width:100%;border-collapse:collapse;margin-bottom:14px;border:1px solid #e5e7eb;border-radius:6px;overflow:hidden;">
-                            <thead>
-                                <tr style="border-bottom:2px solid ${branding.accentColor};background:#f9fafb;">
-                                    <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:800;color:${branding.accentColor};">Category</th>
-                                    <th style="padding:8px 12px;text-align:center;font-size:10px;font-weight:800;color:${branding.accentColor};">Items</th>
-                                    <th style="padding:8px 12px;text-align:right;font-size:10px;font-weight:800;color:${branding.accentColor};">GST</th>
-                                    <th style="padding:8px 12px;text-align:right;font-size:10px;font-weight:800;color:${branding.accentColor};">Amount</th>
-                                </tr>
-                            </thead>
-                            <tbody>${categoryRows || '<tr><td colspan="4" style="padding:16px;text-align:center;color:#9ca3af;font-size:11px;">No charges yet</td></tr>'}</tbody>
-                        </table>` : ''}
-
-                        <!-- Totals -->
-                        <div style="display:flex;justify-content:flex-end;margin-bottom:14px;">
-                            <table style="width:320px;border-collapse:collapse;">
-                                ${!branding.hideSubtotalDiscount ? `<tr><td style="padding:5px 12px;font-size:12px;color:#6b7280;">Subtotal</td><td style="padding:5px 12px;font-size:12px;text-align:right;">${total.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>` : ''}
-                                ${totalDiscount > 0 && !branding.hideSubtotalDiscount ? `<tr><td style="padding:5px 12px;font-size:12px;color:#6b7280;">Discount</td><td style="padding:5px 12px;font-size:12px;text-align:right;color:#dc2626;">-${totalDiscount.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>` : ''}
-                                ${totalTax > 0 ? `
-                                <tr><td style="padding:5px 12px;font-size:12px;color:#6b7280;">CGST</td><td style="padding:5px 12px;font-size:12px;text-align:right;">${(totalTax / 2).toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>
-                                <tr><td style="padding:5px 12px;font-size:12px;color:#6b7280;">SGST</td><td style="padding:5px 12px;font-size:12px;text-align:right;">${(totalTax / 2).toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>
-                                ` : ''}
-                                <tr style="border-top:2px solid #1f2937;"><td style="padding:7px 12px;font-size:14px;font-weight:800;">Net Amount</td><td style="padding:7px 12px;font-size:14px;text-align:right;font-weight:800;">${net.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>
-                                ${creditNoteTotal > 0 ? `<tr><td style="padding:5px 12px;font-size:12px;color:#0891b2;">Credit Notes Applied</td><td style="padding:5px 12px;font-size:12px;text-align:right;color:#0891b2;">-${creditNoteTotal.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>` : ''}
-                                ${depositTotal > 0 ? `<tr><td style="padding:5px 12px;font-size:12px;color:#7c3aed;">Deposits Applied</td><td style="padding:5px 12px;font-size:12px;text-align:right;color:#7c3aed;">-${depositTotal.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>` : ''}
-                                <tr><td style="padding:5px 12px;font-size:12px;color:#059669;">Total Paid</td><td style="padding:5px 12px;font-size:12px;text-align:right;color:#059669;">${paid.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>
-                                ${balance > 0
-                                    ? `<tr style="background:#fef2f2;"><td style="padding:7px 12px;font-size:13px;font-weight:800;color:#dc2626;">Balance Due</td><td style="padding:7px 12px;font-size:13px;text-align:right;font-weight:800;color:#dc2626;">${balance.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>`
-                                    : balance < 0
-                                        ? `<tr style="background:#eff6ff;"><td style="padding:7px 12px;font-size:13px;font-weight:800;color:#1d4ed8;">Advance / Credit Balance</td><td style="padding:7px 12px;font-size:13px;text-align:right;font-weight:800;color:#1d4ed8;">${Math.abs(balance).toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</td></tr>`
-                                        : `<tr style="background:#f0fdf4;"><td style="padding:7px 12px;font-size:13px;font-weight:800;color:#059669;">FULLY PAID</td><td style="padding:7px 12px;font-size:13px;text-align:right;font-weight:800;color:#059669;">&#10003;</td></tr>`}
-                            </table>
-                        </div>
-
-                        ${sections.showAmountInWords ? `
-                        <div style="background:#f0fdf4;border-radius:6px;padding:8px 14px;margin-bottom:14px;">
-                            <p style="font-size:10px;color:#059669;"><strong>Amount in Words:</strong> ${numberToWords(net)}</p>
-                        </div>` : ''}
-
-                        ${sections.showFooter ? billFooterHtml(branding, printedBy, finalizedByName) : ''}
-                    </div>
-                </td>
-            </tr>
-        </tbody>
-        <tfoot>
-            <tr>
-                <td class="print-layout-footer-spacer"></td>
-            </tr>
-        </tfoot>
-    </table>
-</body>
-</html>`;
+    return NextResponse.redirect(billUrl);
 }

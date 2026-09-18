@@ -275,6 +275,7 @@ function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposit
     const creditNoteTotal = creditNotes.reduce((s: number, c: any) => s + Number(c.total_amount || 0), 0);
 
     let patientInfoHTML = `
+        ${branding.patientHeaderLabel ? `<p style="font-size:11px;font-weight:700;color:${branding.accentColor};grid-column:1 / -1;">${branding.patientHeaderLabel}</p>` : ''}
         <p style="font-size:11px;"><strong>Patient:</strong> ${patient.full_name || '-'}</p>
         <p style="font-size:11px;"><strong>UHID:</strong> ${patient.patient_id || '-'}</p>
         <p style="font-size:11px;"><strong>Age/Gender:</strong> ${patient.age || '-'} / ${patient.gender || '-'}</p>

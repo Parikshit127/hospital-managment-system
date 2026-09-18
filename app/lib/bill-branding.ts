@@ -30,7 +30,13 @@ export interface BillBranding {
     bankBranch: string | null;
     bankUpiId: string | null;
     hideSubtotalDiscount?: boolean;
+    /** Optional hospital label rendered immediately above the patient name. */
+    patientHeaderLabel?: string | null;
 }
+
+// This is intentionally scoped by the organization UUID rather than by a name or
+// code, so the extra patient-section label cannot appear for another hospital.
+export const NULIFE_ORGANIZATION_ID = '660c8b5e-5822-48a6-8159-72dfed851703';
 
 // ─── Fetch branding from DB ──────────────────────────────────────────────────
 
@@ -80,6 +86,7 @@ export async function getBillBranding(organizationId: string): Promise<BillBrand
         bankBranch: org?.bank_branch || null,
         bankUpiId: org?.bank_upi_id || null,
         hideSubtotalDiscount: isNulife,
+        patientHeaderLabel: org?.id === NULIFE_ORGANIZATION_ID ? 'Nulife Hospital' : null,
     };
 }
 
