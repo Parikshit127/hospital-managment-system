@@ -37,9 +37,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ admi
     }
 
     const sourceUrl = new URL(req.url);
-    const billUrl = new URL(`/api/invoice/${invoice.id}/summary-bill`, sourceUrl.origin);
-    billUrl.searchParams.set('detailed', 'true');
-    if (sourceUrl.searchParams.get('meds') === '0') billUrl.searchParams.set('meds', '0');
+    const billParams = new URLSearchParams({ detailed: 'true' });
+    if (sourceUrl.searchParams.get('meds') === '0') billParams.set('meds', '0');
 
-    return NextResponse.redirect(billUrl);
+    // Use a relative Location header. In production the app sits behind a proxy
+    // which forwards requests to localhost:3000; an absolute redirect based on
+    // req.url would expose that internal host to the browser.
+    return new NextResponse(null, {
+        status: 307,
+        headers: { Location: `/api/invoice/${invoice.id}/summary-bill?${billParams}` },
+    });
 }

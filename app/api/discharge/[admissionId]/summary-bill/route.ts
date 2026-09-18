@@ -38,8 +38,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ admi
     }
 
     const sourceUrl = new URL(req.url);
-    const billUrl = new URL(`/api/invoice/${invoice.id}/summary-bill`, sourceUrl.origin);
-    if (sourceUrl.searchParams.get('meds') === '0') billUrl.searchParams.set('meds', '0');
+    const billParams = new URLSearchParams();
+    if (sourceUrl.searchParams.get('meds') === '0') billParams.set('meds', '0');
+    const query = billParams.toString();
 
-    return NextResponse.redirect(billUrl);
+    // See the detailed route above: this must remain relative so the browser
+    // retains the public host rather than the proxy's localhost upstream.
+    return new NextResponse(null, {
+        status: 307,
+        headers: { Location: `/api/invoice/${invoice.id}/summary-bill${query ? `?${query}` : ''}` },
+    });
 }
