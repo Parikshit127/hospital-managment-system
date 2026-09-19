@@ -147,6 +147,42 @@ export function DischargeSettlementContent({ adminMode = false }: { adminMode?: 
             }
             setTimeout(() => router.push(adminMode ? '/admin/ipd' : '/ipd'), 2000);
         } else {
+            if (res.error && res.error.includes('pending package assignment')) {
+                const proceedAsExtra = confirm(
+                    'There are billed service line(s) not covered under any active package.\n\n' +
+                    'Do you want to bill them as EXTRA charges outside the packages and proceed with discharge?'
+                );
+                if (proceedAsExtra) {
+                    setSettling(true);
+                    const retryRes = await settleAndDischarge({
+                        admission_id: admissionId,
+                        apply_deposits: applyDeposits,
+                        tpa_approved_amount: tpaApprovedAmount > 0 ? tpaApprovedAmount : undefined,
+                        discount_amount: discount > 0 ? discount : undefined,
+                        discount_reason: discountReason || undefined,
+                        approved_by: approvedBy || undefined,
+                        splits: hasSplits ? splits.filter(s => parseFloat(s.amount) > 0).map(s => ({
+                            amount: parseFloat(s.amount),
+                            payment_method: s.method,
+                            reference: s.reference || undefined,
+                        })) : undefined,
+                        discharge_date: new Date(dischargeDateTime),
+                        bill_strays_as_extra: true,
+                    });
+                    setSettling(false);
+                    if (retryRes.success) {
+                        const remBal = (retryRes.data as any)?.remaining_balance || 0;
+                        showToast(remBal > 0
+                            ? `Discharged with outstanding balance: ${remBal.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}`
+                            : 'Patient discharged and bill settled successfully');
+                        setTimeout(() => router.push(adminMode ? '/admin/ipd' : '/ipd'), 2000);
+                        return;
+                    } else {
+                        showToast(retryRes.error || 'Settlement failed', 'error');
+                        return;
+                    }
+                }
+            }
             showToast(res.error || 'Settlement failed', 'error');
         }
     }

@@ -26,6 +26,7 @@ import {
     getPackageUtilization, reconcilePackageBilling, reclassifyChargeDisposition,
     breakOpenPackage, updateAdmissionPackageAmount, removeAdmissionPackage,
     getPackagesForAdmission, removeAbsorbedCharge, assignChargeToPackage,
+    markChargeAsExtra,
 } from '@/app/actions/ipd-finance-actions';
 import { removeInvoiceItem, updateInvoiceItem } from '@/app/actions/finance-actions';
 import {
@@ -412,6 +413,18 @@ export default function AdmissionDetailPage() {
             setBill(null); loadBill();
         } else {
             toast.error(res.error || 'Failed to absorb charge into package');
+        }
+    }, [toast, loadBill]);
+
+    const handleMarkAsExtra = useCallback(async (invoiceItemId: number) => {
+        setAssigningItemId(invoiceItemId);
+        const res = await markChargeAsExtra(invoiceItemId);
+        setAssigningItemId(null);
+        if (res.success) {
+            toast.success('Charge confirmed as billable extra (outside package)');
+            setBill(null); loadBill();
+        } else {
+            toast.error(res.error || 'Failed to mark charge as extra');
         }
     }, [toast, loadBill]);
 
@@ -2583,35 +2596,27 @@ export default function AdmissionDetailPage() {
                                                                                 <>
                                                                                     {pkgUtils.some((p: any) => p.status === 'active') && (() => {
                                                                                         const activePkgs = pkgUtils.filter((p: any) => p.status === 'active');
-                                                                                        if (activePkgs.length === 1) {
-                                                                                            return (
-                                                                                                <button
-                                                                                                    type="button"
-                                                                                                    onClick={() => handleAssignToPackage(item.id, activePkgs[0].admission_package_id)}
-                                                                                                    disabled={assigningItemId === item.id || removingItemId === item.id}
-                                                                                                    title={`Absorb this charge under package "${activePkgs[0].package_name}" (hospital expense)`}
-                                                                                                    className="ml-3 shrink-0 text-[10px] font-bold text-indigo-500 hover:text-indigo-700 hover:underline disabled:opacity-40"
-                                                                                                >
-                                                                                                    {assigningItemId === item.id ? '…' : 'Absorb in package'}
-                                                                                                </button>
-                                                                                            );
-                                                                                        }
                                                                                         return (
                                                                                             <select
                                                                                                 value=""
                                                                                                 onChange={(e) => {
-                                                                                                    if (e.target.value) handleAssignToPackage(item.id, Number(e.target.value));
+                                                                                                    if (e.target.value === '__mark_extra__') {
+                                                                                                        handleMarkAsExtra(item.id);
+                                                                                                    } else if (e.target.value) {
+                                                                                                        handleAssignToPackage(item.id, Number(e.target.value));
+                                                                                                    }
                                                                                                 }}
                                                                                                 disabled={assigningItemId === item.id || removingItemId === item.id}
-                                                                                                title="Assign this charge to an active package"
+                                                                                                title="Absorb this charge into a package or keep as billable extra"
                                                                                                 className="ml-3 text-[10px] font-bold text-indigo-600 bg-indigo-50 border border-indigo-200 rounded px-1.5 py-0.5 hover:bg-indigo-100 cursor-pointer disabled:opacity-40"
                                                                                             >
-                                                                                                <option value="">{assigningItemId === item.id ? 'Assigning…' : 'Absorb in package…'}</option>
+                                                                                                <option value="">{assigningItemId === item.id ? 'Updating…' : 'Package options…'}</option>
                                                                                                 {activePkgs.map((p: any) => (
                                                                                                     <option key={p.admission_package_id} value={p.admission_package_id}>
-                                                                                                        {p.package_name}
+                                                                                                        Absorb in: {p.package_name}
                                                                                                     </option>
                                                                                                 ))}
+                                                                                                <option value="__mark_extra__">★ Keep as Billable Extra</option>
                                                                                             </select>
                                                                                         );
                                                                                     })()}

@@ -1680,6 +1680,78 @@ export async function assignChargeToPackage(
     }
 }
 
+/**
+ * Explicitly designates an unassigned billed line item as a billable extra outside
+ * active packages. Creates or updates an ipdChargePosting row with disposition
+ * BILLABLE_EXTRA linked to the invoice_item, so multi-package discharge gates recognize
+ * it as an intentional exclusion rather than an unresolved stray.
+ */
+export async function markChargeAsExtra(invoiceItemId: number) {
+    try {
+        const { db, session, organizationId } = await requireTenantContext();
+        const allowed = canManagePackageCharge(session?.role);
+        if (!allowed) {
+            return { success: false, error: 'Only reception/admin/finance/ipd_manager/pharmacist can mark charges as extra.' };
+        }
+
+        const invItem = await db.invoice_items.findUnique({
+            where: { id: invoiceItemId },
+            include: { invoice: true },
+        });
+        if (!invItem) return { success: false, error: 'Invoice item not found' };
+        if (!invItem.invoice) return { success: false, error: 'Invoice not found' };
+        if (invItem.invoice.is_locked || invItem.invoice.status !== 'Draft') {
+            return { success: false, error: 'The bill is finalized/locked — charges can no longer be modified.' };
+        }
+
+        const admissionId = invItem.invoice.admission_id;
+        if (!admissionId) return { success: false, error: 'Item is not linked to an admission' };
+
+        const existingPosting = await db.ipdChargePosting.findFirst({
+            where: { invoice_item_id: invItem.id },
+        });
+
+        if (existingPosting) {
+            await db.ipdChargePosting.update({
+                where: { id: existingPosting.id },
+                data: {
+                    disposition: CHARGE_DISPOSITION.BILLABLE_EXTRA,
+                    exclusion_reason: 'Marked as billable extra by staff',
+                },
+            });
+        } else {
+            await db.ipdChargePosting.create({
+                data: {
+                    admission_id: admissionId,
+                    invoice_item_id: invItem.id,
+                    source_module: invItem.department || 'manual',
+                    service_category: invItem.service_category || invItem.department || 'Other',
+                    description: invItem.description,
+                    quantity: invItem.quantity,
+                    unit_price: invItem.unit_price,
+                    amount: invItem.net_price,
+                    disposition: CHARGE_DISPOSITION.BILLABLE_EXTRA,
+                    posted_by: session?.userId || 'system',
+                    exclusion_reason: 'Marked as billable extra by staff',
+                },
+            });
+        }
+
+        await logAudit({
+            action: 'MARK_CHARGE_AS_EXTRA',
+            module: 'ipd',
+            entity_type: 'invoice_item',
+            entity_id: String(invoiceItemId),
+            details: JSON.stringify({ description: invItem.description, amount: Number(invItem.net_price) }),
+        });
+
+        return { success: true };
+    } catch (error: any) {
+        console.error('markChargeAsExtra error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
 // Delete an absorbed (package-consumed) charge — for entries added by mistake.
 // Removes the consumption-ledger posting (and any linked invoice line) and
 // rebuilds the absorbed-cost expense. Does not touch inventory/stock.
@@ -2447,6 +2519,7 @@ export async function settleAndDischarge(data: {
         reference?: string;
     }>;
     discharge_date?: Date | string;
+    bill_strays_as_extra?: boolean;
 }) {
     try {
         const { db, session, organizationId } = await requireTenantContext();
@@ -2502,23 +2575,57 @@ export async function settleAndDischarge(data: {
             );
             if (strays.length > 0 || legacyAdjustments.length > 0) {
                 if (activeAdmPkgs.length > 1) {
-                    return {
-                        success: false,
-                        error: `${strays.length} billed service line(s) are pending package assignment across ${activeAdmPkgs.length} active packages and cannot be auto-resolved. Contact admin/finance to reassign these charges before discharge can proceed.`,
-                    };
+                    if (data.bill_strays_as_extra) {
+                        for (const stray of strays) {
+                            const existingPosting = await db.ipdChargePosting.findFirst({
+                                where: { invoice_item_id: stray.id },
+                            });
+                            if (existingPosting) {
+                                await db.ipdChargePosting.update({
+                                    where: { id: existingPosting.id },
+                                    data: {
+                                        disposition: CHARGE_DISPOSITION.BILLABLE_EXTRA,
+                                        exclusion_reason: 'Confirmed as extra by staff during discharge',
+                                    },
+                                });
+                            } else {
+                                await db.ipdChargePosting.create({
+                                    data: {
+                                        admission_id: data.admission_id,
+                                        invoice_item_id: stray.id,
+                                        source_module: stray.department || 'manual',
+                                        service_category: stray.service_category || stray.department || 'Other',
+                                        description: stray.description,
+                                        quantity: stray.quantity,
+                                        unit_price: stray.unit_price,
+                                        amount: stray.net_price,
+                                        disposition: CHARGE_DISPOSITION.BILLABLE_EXTRA,
+                                        posted_by: session?.userId || 'system',
+                                        exclusion_reason: 'Confirmed as extra by staff during discharge',
+                                    },
+                                });
+                            }
+                        }
+                    } else {
+                        return {
+                            success: false,
+                            error: `${strays.length} billed service line(s) are pending package assignment across ${activeAdmPkgs.length} active packages and cannot be auto-resolved. Contact admin/finance to reassign these charges before discharge can proceed.`,
+                        };
+                    }
+                } else {
+                    const reconciled = await reconcilePackageBillingInternal(db, organizationId, session, data.admission_id);
+                    if (!reconciled.success) {
+                        return {
+                            success: false,
+                            error: `Package billing is not clean (${strays.length} billed service line(s) pending absorption) and could not be auto-reconciled: ${reconciled.error}`,
+                        };
+                    }
+                    // Re-fetch — totals changed.
+                    invoice = await db.invoices.findFirst({
+                        where: { admission_id: data.admission_id, status: { not: 'Cancelled' } },
+                    });
+                    if (!invoice) return { success: false, error: 'No active invoice found after package reconciliation' };
                 }
-                const reconciled = await reconcilePackageBillingInternal(db, organizationId, session, data.admission_id);
-                if (!reconciled.success) {
-                    return {
-                        success: false,
-                        error: `Package billing is not clean (${strays.length} billed service line(s) pending absorption) and could not be auto-reconciled: ${reconciled.error}`,
-                    };
-                }
-                // Re-fetch — totals changed.
-                invoice = await db.invoices.findFirst({
-                    where: { admission_id: data.admission_id, status: { not: 'Cancelled' } },
-                });
-                if (!invoice) return { success: false, error: 'No active invoice found after package reconciliation' };
             }
         }
 
