@@ -20,7 +20,7 @@ import type { BillBranding } from '@/app/lib/bill-branding';
 import type { PharmacyBranding } from '@/app/lib/pharmacy-branding';
 import { formatDoctorName } from '@/app/lib/format-name';
 import { getIPDAdmissions } from '@/app/actions/ipd-actions';
-import { generateInterimBill, postChargeToIpdBill, getPackageUtilization, updateAbsorbedCharge } from '@/app/actions/ipd-finance-actions';
+import { generateInterimBill, postChargeToIpdBill, getPackageUtilization, updateAbsorbedCharge, assignChargeToPackage, reclassifyChargeDisposition } from '@/app/actions/ipd-finance-actions';
 import { bedLabel } from '@/app/lib/bed-label';
 
 type InventoryItem = {
@@ -95,6 +95,7 @@ export default function PharmacyPage() {
     // Pharmacy charges absorbed under an active package never become invoice_items
     // (they're hospital expense, not billed), so they need their own load/edit state.
     const [ipdPkgUtils, setIpdPkgUtils] = useState<any[]>([]);
+    const ipdActivePackages = (ipdPkgUtils || []).filter((p: any) => p.status === 'Active');
     const [ipdAbsorbedEditingId, setIpdAbsorbedEditingId] = useState<number | null>(null);
     const [ipdAbsorbedEditRow, setIpdAbsorbedEditRow] = useState<{ description: string; quantity: number; unit_price: number }>({ description: '', quantity: 1, unit_price: 0 });
     const [ipdAbsorbedSaving, setIpdAbsorbedSaving] = useState<number | null>(null);
@@ -110,6 +111,11 @@ export default function PharmacyPage() {
     const [ipdAddDesc, setIpdAddDesc] = useState('');
     const [ipdAddDisposition, setIpdAddDisposition] = useState<'auto' | 'package_consumed' | 'billable_extra'>('auto');
     const [ipdAddTargetPkgId, setIpdAddTargetPkgId] = useState<number | ''>('');
+    const [ipdReclassifyingId, setIpdReclassifyingId] = useState<number | null>(null);
+    const [ipdAssigningItemId, setIpdAssigningItemId] = useState<number | null>(null);
+    const [patientPackages, setPatientPackages] = useState<any[]>([]);
+    const [counterPkgDisposition, setCounterPkgDisposition] = useState<'auto' | 'package_consumed' | 'billable_extra'>('auto');
+    const [counterTargetPkgId, setCounterTargetPkgId] = useState<string>('');
     const [selectedOrder, setSelectedOrder] = useState<any>(null);
 
     // Patient search state
@@ -379,6 +385,30 @@ export default function PharmacyPage() {
         }
     }
 
+    async function handleIpdReclassify(postingId: number, target: 'package_consumed' | 'billable_extra') {
+        setIpdReclassifyingId(postingId);
+        const res = await reclassifyChargeDisposition(postingId, target);
+        setIpdReclassifyingId(null);
+        if (res.success) {
+            showIpdToast(target === 'billable_extra' ? 'Charge is now billed over the package' : 'Charge absorbed into package ✓');
+            await refreshIpdBill();
+        } else {
+            showIpdToast(res.error || 'Failed to reclassify charge', 'error');
+        }
+    }
+
+    async function handleIpdAssignToPackage(itemId: number, admissionPackageId: number) {
+        setIpdAssigningItemId(itemId);
+        const res = await assignChargeToPackage(itemId, admissionPackageId, 'invoice_item');
+        setIpdAssigningItemId(null);
+        if (res.success) {
+            showIpdToast('Pharmacy item absorbed into package ✓');
+            await refreshIpdBill();
+        } else {
+            showIpdToast(res.error || 'Failed to absorb item into package', 'error');
+        }
+    }
+
     async function handleIpdAddCharge() {
         if (!selectedAdmission || !ipdAddItem || !ipdAddDesc.trim()) return;
         setIpdActionLoading(-1);
@@ -449,7 +479,35 @@ export default function PharmacyPage() {
         setSelectedPatient(null);
         setPatientId('');
         setPatientSearch('');
+        setPatientPackages([]);
+        setCounterTargetPkgId('');
+        setCounterPkgDisposition('auto');
     };
+
+    // Load active packages when an admitted patient is selected for counter billing
+    useEffect(() => {
+        const admissionId = selectedPatient?.active_admission?.admission_id;
+        if (admissionId) {
+            getPackageUtilization(admissionId).then(res => {
+                if (res.success && Array.isArray(res.data)) {
+                    const activePkgs = res.data.filter((p: any) => p.status === 'Active');
+                    setPatientPackages(activePkgs);
+                    if (activePkgs.length === 1) {
+                        setCounterTargetPkgId(String(activePkgs[0].admission_package_id));
+                    } else {
+                        setCounterTargetPkgId('');
+                    }
+                } else {
+                    setPatientPackages([]);
+                    setCounterTargetPkgId('');
+                }
+            });
+        } else {
+            setPatientPackages([]);
+            setCounterTargetPkgId('');
+            setCounterPkgDisposition('auto');
+        }
+    }, [selectedPatient?.active_admission?.admission_id]);
 
     const addToCart = (item: InventoryItem) => {
         setCart(prev => {
@@ -547,6 +605,8 @@ export default function PharmacyPage() {
                 paymentMethod: isHospitalUse ? 'Credit' : paymentMethod,
                 discountPct: discountMode === 'pct' ? (discountPct || undefined) : undefined,
                 discount: discountMode === 'flat' ? (discountFlat || undefined) : undefined,
+                disposition_override: counterPkgDisposition !== 'auto' ? counterPkgDisposition : undefined,
+                admission_package_id: counterTargetPkgId ? Number(counterTargetPkgId) : undefined,
             });
             if (res.success) {
                 setInvoiceResult(res);
@@ -580,6 +640,9 @@ export default function PharmacyPage() {
         setDoctorRegNo('');
         setExternalDoctorName('');
         setIsHospitalUse(false);
+        setPatientPackages([]);
+        setCounterTargetPkgId('');
+        setCounterPkgDisposition('auto');
     };
 
     // Name shown on the bill / receipt for the current sale.
@@ -950,6 +1013,40 @@ export default function PharmacyPage() {
                                                                                     </>
                                                                                 ) : (
                                                                                     <>
+                                                                                        {ipdActivePackages.length > 0 && (
+                                                                                            ipdActivePackages.length === 1 ? (
+                                                                                                <button
+                                                                                                    onClick={() => handleIpdAssignToPackage(item.id, ipdActivePackages[0].admission_package_id)}
+                                                                                                    disabled={ipdAssigningItemId === item.id}
+                                                                                                    title={`Absorb into package: ${ipdActivePackages[0].package_name}`}
+                                                                                                    className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-[10px] font-bold rounded-lg border border-emerald-200 transition-all flex items-center gap-1 shrink-0"
+                                                                                                >
+                                                                                                    {ipdAssigningItemId === item.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Package className="h-3 w-3" />}
+                                                                                                    Absorb in pkg
+                                                                                                </button>
+                                                                                            ) : (
+                                                                                                <select
+                                                                                                    defaultValue=""
+                                                                                                    disabled={ipdAssigningItemId === item.id}
+                                                                                                    onChange={e => {
+                                                                                                        const pkgId = Number(e.target.value);
+                                                                                                        if (pkgId) {
+                                                                                                            handleIpdAssignToPackage(item.id, pkgId);
+                                                                                                            e.target.value = '';
+                                                                                                        }
+                                                                                                    }}
+                                                                                                    className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-emerald-400 shrink-0"
+                                                                                                    title="Absorb this item into an active package"
+                                                                                                >
+                                                                                                    <option value="" disabled>Absorb in pkg…</option>
+                                                                                                    {ipdActivePackages.map((p: any) => (
+                                                                                                        <option key={p.admission_package_id} value={p.admission_package_id}>
+                                                                                                            {p.package_name} (₹{p.package_amount})
+                                                                                                        </option>
+                                                                                                    ))}
+                                                                                                </select>
+                                                                                            )
+                                                                                        )}
                                                                                         <button
                                                                                             onClick={() => startIpdEdit(item)}
                                                                                             title="Edit this item"
@@ -1108,13 +1205,24 @@ export default function PharmacyPage() {
                                                                                         </button>
                                                                                     </div>
                                                                                 ) : (
-                                                                                    <button
-                                                                                        onClick={() => startIpdAbsorbedEdit(p)}
-                                                                                        title="Edit this absorbed charge"
-                                                                                        className="p-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-lg transition-all"
-                                                                                    >
-                                                                                        <Pencil className="h-3.5 w-3.5" />
-                                                                                    </button>
+                                                                                    <div className="flex items-center justify-center gap-1.5">
+                                                                                        <button
+                                                                                            onClick={() => handleIpdReclassify(p.id, 'billable_extra')}
+                                                                                            disabled={ipdReclassifyingId === p.id}
+                                                                                            title="Bill as extra outside package"
+                                                                                            className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 text-[10px] font-bold rounded-lg border border-amber-200 transition-all flex items-center gap-1 disabled:opacity-50"
+                                                                                        >
+                                                                                            {ipdReclassifyingId === p.id ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+                                                                                            Bill as extra
+                                                                                        </button>
+                                                                                        <button
+                                                                                            onClick={() => startIpdAbsorbedEdit(p)}
+                                                                                            title="Edit this absorbed charge"
+                                                                                            className="p-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 rounded-lg transition-all"
+                                                                                        >
+                                                                                            <Pencil className="h-3.5 w-3.5" />
+                                                                                        </button>
+                                                                                    </div>
                                                                                 )}
                                                                             </td>
                                                                         </tr>
@@ -1960,6 +2068,76 @@ export default function PharmacyPage() {
                                                             🏥 <strong>IPD Patient</strong> — also posted to IPD bill.
                                                         </div>
                                                     )}
+                                                    {patientPackages.length > 0 && (
+                                                        <div className="p-2.5 bg-indigo-50/80 border border-indigo-200 rounded-xl space-y-1.5 mt-2">
+                                                            <div className="flex items-center justify-between">
+                                                                <span className="text-[10px] font-black uppercase tracking-wider text-indigo-700 flex items-center gap-1">
+                                                                    <Package className="h-3 w-3 text-indigo-500" /> Package Routing
+                                                                </span>
+                                                                {patientPackages.length === 1 && (
+                                                                    <span className="text-[10px] text-indigo-600 font-semibold truncate max-w-[150px]">
+                                                                        {patientPackages[0].package_name}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                            {patientPackages.length > 1 && (
+                                                                <select
+                                                                    value={counterTargetPkgId}
+                                                                    onChange={e => setCounterTargetPkgId(e.target.value)}
+                                                                    className="w-full text-xs p-1.5 bg-white border border-indigo-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-400 font-medium text-gray-800"
+                                                                >
+                                                                    <option value="">— Auto / First Package —</option>
+                                                                    {patientPackages.map(p => (
+                                                                        <option key={p.admission_package_id} value={p.admission_package_id}>
+                                                                            {p.package_name} (₹{p.package_amount})
+                                                                        </option>
+                                                                    ))}
+                                                                </select>
+                                                            )}
+                                                            <div className="grid grid-cols-3 gap-1">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => setCounterPkgDisposition('auto')}
+                                                                    className={`py-1 text-[10px] font-bold rounded border transition-all ${
+                                                                        counterPkgDisposition === 'auto'
+                                                                            ? 'bg-white border-indigo-400 text-indigo-700 shadow-sm'
+                                                                            : 'border-transparent text-gray-500 hover:text-gray-700'
+                                                                    }`}
+                                                                >
+                                                                    Auto
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => setCounterPkgDisposition('package_consumed')}
+                                                                    className={`py-1 text-[10px] font-bold rounded border transition-all ${
+                                                                        counterPkgDisposition === 'package_consumed'
+                                                                            ? 'bg-emerald-50 border-emerald-400 text-emerald-700 shadow-sm'
+                                                                            : 'border-transparent text-gray-500 hover:text-gray-700'
+                                                                    }`}
+                                                                >
+                                                                    Absorb
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => setCounterPkgDisposition('billable_extra')}
+                                                                    className={`py-1 text-[10px] font-bold rounded border transition-all ${
+                                                                        counterPkgDisposition === 'billable_extra'
+                                                                            ? 'bg-amber-50 border-amber-400 text-amber-700 shadow-sm'
+                                                                            : 'border-transparent text-gray-500 hover:text-gray-700'
+                                                                    }`}
+                                                                >
+                                                                    Extra
+                                                                </button>
+                                                            </div>
+                                                            <p className="text-[9px] text-indigo-600 leading-tight">
+                                                                {counterPkgDisposition === 'package_consumed'
+                                                                    ? 'Absorbed under package (hospital expense).'
+                                                                    : counterPkgDisposition === 'billable_extra'
+                                                                    ? 'Billed as extra (added to patient bill).'
+                                                                    : 'Auto: Absorbed if covered by package.'}
+                                                            </p>
+                                                        </div>
+                                                    )}
                                                 </div>
                                             ) : (
                                                 <div className="grid grid-cols-3 gap-1.5 mb-3">
@@ -2169,6 +2347,76 @@ export default function PharmacyPage() {
                                     {paymentMethod === 'Credit' && !isHospitalUse && (
                                         <div className="px-2 py-1.5 bg-amber-50 border border-amber-200 rounded-lg text-[10px] text-amber-800">
                                             Payment will be tracked as pending under the patient&apos;s IPD admission. Collect at discharge.
+                                        </div>
+                                    )}
+                                    {selectedPatient?.is_admitted && patientPackages.length > 0 && (
+                                        <div className="p-2.5 bg-indigo-50/80 border border-indigo-200 rounded-xl space-y-1.5">
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-[10px] font-black uppercase tracking-wider text-indigo-700 flex items-center gap-1">
+                                                    <Package className="h-3 w-3 text-indigo-500" /> Package Routing
+                                                </span>
+                                                {patientPackages.length === 1 && (
+                                                    <span className="text-[10px] text-indigo-600 font-semibold truncate max-w-[150px]">
+                                                        {patientPackages[0].package_name}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            {patientPackages.length > 1 && (
+                                                <select
+                                                    value={counterTargetPkgId}
+                                                    onChange={e => setCounterTargetPkgId(e.target.value)}
+                                                    className="w-full text-xs p-1.5 bg-white border border-indigo-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-400 font-medium text-gray-800"
+                                                >
+                                                    <option value="">— Auto / First Package —</option>
+                                                    {patientPackages.map(p => (
+                                                        <option key={p.admission_package_id} value={p.admission_package_id}>
+                                                            {p.package_name} (₹{p.package_amount})
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            )}
+                                            <div className="grid grid-cols-3 gap-1">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setCounterPkgDisposition('auto')}
+                                                    className={`py-1 text-[10px] font-bold rounded border transition-all ${
+                                                        counterPkgDisposition === 'auto'
+                                                            ? 'bg-white border-indigo-400 text-indigo-700 shadow-sm'
+                                                            : 'border-transparent text-gray-500 hover:text-gray-700'
+                                                    }`}
+                                                >
+                                                    Auto
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setCounterPkgDisposition('package_consumed')}
+                                                    className={`py-1 text-[10px] font-bold rounded border transition-all ${
+                                                        counterPkgDisposition === 'package_consumed'
+                                                            ? 'bg-emerald-50 border-emerald-400 text-emerald-700 shadow-sm'
+                                                            : 'border-transparent text-gray-500 hover:text-gray-700'
+                                                    }`}
+                                                >
+                                                    Absorb
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setCounterPkgDisposition('billable_extra')}
+                                                    className={`py-1 text-[10px] font-bold rounded border transition-all ${
+                                                        counterPkgDisposition === 'billable_extra'
+                                                            ? 'bg-amber-50 border-amber-400 text-amber-700 shadow-sm'
+                                                            : 'border-transparent text-gray-500 hover:text-gray-700'
+                                                    }`}
+                                                >
+                                                    Extra
+                                                </button>
+                                            </div>
+                                            <p className="text-[9px] text-indigo-600 leading-tight">
+                                                {counterPkgDisposition === 'package_consumed'
+                                                    ? 'Absorbed under package (hospital expense).'
+                                                    : counterPkgDisposition === 'billable_extra'
+                                                    ? 'Billed as extra (added to patient bill).'
+                                                    : 'Auto: Absorbed if covered by package.'}
+                                            </p>
                                         </div>
                                     )}
                                 </div>

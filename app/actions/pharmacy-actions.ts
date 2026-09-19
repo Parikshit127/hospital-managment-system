@@ -511,7 +511,7 @@ export async function getInventoryForPO() {
 export async function generateInvoice(
     patientId: string,
     items: any[],
-    optionsOrWalkInName?: string | { walkInName?: string; walkInContact?: string; walkInAddress?: string; billDateTime?: string; doctorId?: string; doctorName?: string; paymentMethod?: string; discount?: number; discountPct?: number }
+    optionsOrWalkInName?: string | { walkInName?: string; walkInContact?: string; walkInAddress?: string; billDateTime?: string; doctorId?: string; doctorName?: string; paymentMethod?: string; discount?: number; discountPct?: number; disposition_override?: 'package_consumed' | 'billable_extra'; admission_package_id?: number }
 ) {
     const denied = await denyUnlessPharmacyRole(PHARMACY_OPERATE_ROLES);
     if (denied) return denied;
@@ -805,6 +805,8 @@ export async function generateInvoice(
                         batch_no: item.batch_no,
                         expiry_date: item.expiry_date,
                         mrp: item.mrp,
+                        disposition_override: (options as any).disposition_override,
+                        admission_package_id: (options as any).admission_package_id,
                     });
                     if (!chargeResult?.success) {
                         chargeFailures.push(`${item.medicine_name}: ${chargeResult?.error || 'failed to post charge'}`);

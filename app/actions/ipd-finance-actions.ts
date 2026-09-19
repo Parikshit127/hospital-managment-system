@@ -1412,6 +1412,12 @@ export async function updateAdmissionPackageAmount(admissionPackageId: number, n
  * afterwards are restricted to billing-facing roles (reception/admin/finance)
  * and audited.
  */
+function canManagePackageCharge(role?: string | null): boolean {
+    const r = String(role ?? '').toLowerCase();
+    return isPrivilegedBillingRole(role)
+        || ['receptionist', 'reception', 'ipd_manager', 'pharmacist'].includes(r);
+}
+
 export async function reclassifyChargeDisposition(
     postingId: number,
     target: 'package_consumed' | 'billable_extra',
@@ -1419,10 +1425,9 @@ export async function reclassifyChargeDisposition(
     try {
         const { db, session, organizationId } = await requireTenantContext();
 
-        const canReclassify = isPrivilegedBillingRole(session?.role)
-            || ['receptionist', 'reception'].includes(String(session?.role ?? '').toLowerCase());
+        const canReclassify = canManagePackageCharge(session?.role);
         if (!canReclassify) {
-            return { success: false, error: 'Only reception/admin/finance can reclassify package charges.' };
+            return { success: false, error: 'Only reception/admin/finance/ipd_manager/pharmacist can reclassify package charges.' };
         }
         if (target !== CHARGE_DISPOSITION.PACKAGE_CONSUMED && target !== CHARGE_DISPOSITION.BILLABLE_EXTRA) {
             return { success: false, error: 'Invalid target disposition' };
@@ -1540,18 +1545,92 @@ export async function reclassifyChargeDisposition(
 // while 2+ packages were active and no target was picked) into a specific
 // active package's consumption ledger. The invoice line is removed and the
 // amount moves to the absorbed-cost expense, mirroring the "extra → consumed"
-// half of reclassifyChargeDisposition.
-export async function assignChargeToPackage(postingId: number, admissionPackageId: number) {
+// half of reclassifyChargeDisposition. Accepts either a postingId or an invoiceItemId.
+export async function assignChargeToPackage(
+    id: number,
+    admissionPackageId: number,
+    idType: 'posting' | 'invoice_item' = 'posting',
+) {
     try {
-        const { db, organizationId } = await requireTenantContext();
-
-        const { session } = await requireTenantContext();
-        const allowed = isPrivilegedBillingRole(session?.role)
-            || ['receptionist', 'reception'].includes(String(session?.role ?? '').toLowerCase());
+        const { db, session, organizationId } = await requireTenantContext();
+        const allowed = canManagePackageCharge(session?.role);
         if (!allowed) {
-            return { success: false, error: 'Only reception/admin/finance can assign charges to a package.' };
+            return { success: false, error: 'Only reception/admin/finance/ipd_manager/pharmacist can assign charges to a package.' };
         }
 
+        const admPkg = await db.ipdAdmissionPackage.findUnique({ where: { id: admissionPackageId } });
+        if (!admPkg) {
+            return { success: false, error: 'Package not found on this admission' };
+        }
+        if (admPkg.status !== ADMISSION_PACKAGE_STATUS.ACTIVE) {
+            return { success: false, error: 'The package is no longer active' };
+        }
+
+        if (idType === 'invoice_item') {
+            const invItem = await db.invoice_items.findUnique({
+                where: { id },
+                include: { invoice: true },
+            });
+            if (!invItem) return { success: false, error: 'Invoice item not found' };
+            if (!invItem.invoice || invItem.invoice.admission_id !== admPkg.admission_id) {
+                return { success: false, error: 'Item does not belong to this admission package' };
+            }
+            if (invItem.invoice.is_locked || invItem.invoice.status !== 'Draft') {
+                return { success: false, error: 'The bill is finalized/locked — charges can no longer be reassigned.' };
+            }
+
+            const existingPosting = await db.ipdChargePosting.findFirst({
+                where: { invoice_item_id: invItem.id },
+            });
+
+            await db.$transaction(async (tx: any) => {
+                if (existingPosting) {
+                    await tx.ipdChargePosting.update({
+                        where: { id: existingPosting.id },
+                        data: {
+                            disposition: CHARGE_DISPOSITION.PACKAGE_CONSUMED,
+                            invoice_item_id: null,
+                            admission_package_id: admPkg.id,
+                        },
+                    });
+                } else {
+                    await tx.ipdChargePosting.create({
+                        data: {
+                            admission_id: admPkg.admission_id,
+                            invoice_item_id: null,
+                            source_module: invItem.service_category?.toLowerCase() || invItem.department?.toLowerCase() || 'manual',
+                            description: invItem.description,
+                            amount: invItem.net_price,
+                            organizationId,
+                            disposition: CHARGE_DISPOSITION.PACKAGE_CONSUMED,
+                            admission_package_id: admPkg.id,
+                            service_category: invItem.service_category || invItem.department,
+                            quantity: invItem.quantity,
+                            unit_price: invItem.unit_price,
+                            tax_rate: invItem.tax_rate,
+                            rendered_by_doctor_id: invItem.rendered_by_doctor_id,
+                            posted_at: invItem.created_at || new Date(),
+                            posted_by: session?.id,
+                        },
+                    });
+                }
+                await tx.invoice_items.delete({ where: { id: invItem.id } });
+                await recalculateInvoiceWithGstTx(tx, invItem.invoice_id);
+            });
+
+            await logAudit({
+                action: 'ASSIGN_CHARGE_TO_PACKAGE',
+                module: 'ipd',
+                entity_type: 'invoice_item',
+                entity_id: String(id),
+                details: JSON.stringify({ description: invItem.description, amount: Number(invItem.net_price), admission_package_id: admPkg.id }),
+            });
+
+            return { success: true, data: serialize({ invoice_item_id: id, admission_package_id: admPkg.id }) };
+        }
+
+        // idType === 'posting' (postingId passed)
+        const postingId = id;
         const posting = await db.ipdChargePosting.findUnique({ where: { id: postingId } });
         if (!posting) return { success: false, error: 'Charge posting not found' };
         if (posting.admission_package_id) {
@@ -1560,13 +1639,8 @@ export async function assignChargeToPackage(postingId: number, admissionPackageI
         if (posting.disposition !== CHARGE_DISPOSITION.BILLED) {
             return { success: false, error: `Charge disposition '${posting.disposition}' cannot be assigned to a package` };
         }
-
-        const admPkg = await db.ipdAdmissionPackage.findUnique({ where: { id: admissionPackageId } });
-        if (!admPkg || admPkg.admission_id !== posting.admission_id) {
+        if (admPkg.admission_id !== posting.admission_id) {
             return { success: false, error: 'Package not found on this admission' };
-        }
-        if (admPkg.status !== ADMISSION_PACKAGE_STATUS.ACTIVE) {
-            return { success: false, error: 'The package is no longer active' };
         }
 
         const invoice = await db.invoices.findFirst({
@@ -1612,8 +1686,9 @@ export async function assignChargeToPackage(postingId: number, admissionPackageI
 export async function removeAbsorbedCharge(postingId: number) {
     try {
         const { db, session, organizationId } = await requireTenantContext();
-        if (!isPrivilegedBillingRole(session?.role)) {
-            return { success: false, error: 'Only admin/finance can remove absorbed charges.' };
+        const allowed = canManagePackageCharge(session?.role);
+        if (!allowed) {
+            return { success: false, error: 'Only admin/finance/ipd_manager/pharmacist can remove absorbed charges.' };
         }
 
         const posting = await db.ipdChargePosting.findUnique({ where: { id: postingId } });
