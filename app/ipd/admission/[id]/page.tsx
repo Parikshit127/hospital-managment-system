@@ -2573,53 +2573,64 @@ export default function AdmissionDetailPage() {
                                                                     );
                                                                 }
                                                                 return (
-                                                                <div key={item.id} className="px-4 py-3 flex items-center justify-between text-xs">
-                                                                    <div className="flex-1 min-w-0">
-                                                                        <p className="font-medium text-gray-800 truncate">{item.description}</p>
-                                                                        <p className="text-gray-400 mt-0.5">
-                                                                            {item.quantity} × ₹{item.unit_price.toLocaleString()}
-                                                                            {Number(item.discount) > 0 && <span className="text-emerald-600"> − ₹{Number(item.discount).toLocaleString()} disc</span>}
-                                                                        </p>
-                                                                        <p className="text-[10px] text-gray-400 mt-0.5">
-                                                                            {new Date(item.created_at).toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                                                                        </p>
-                                                                        {item.rendered_by_doctor_id && (
-                                                                            <p className="text-[10px] text-teal-700 font-bold mt-0.5">
-                                                                                Rendered by: {renderedByDoctors.find((d: any) => d.id === item.rendered_by_doctor_id)?.name || item.rendered_by_doctor_id}
-                                                                            </p>
-                                                                        )}
-                                                                    </div>
-                                                                    <p className="font-black text-gray-900 ml-4">₹{item.net_price.toLocaleString()}</p>
-                                                                    {!bill.invoice.is_locked && (
-                                                                        <>
-                                                                            {!isPackageLine && (
-                                                                                <>
-                                                                                    {pkgUtils.some((p: any) => p.status === 'active') && (() => {
-                                                                                        const activePkgs = pkgUtils.filter((p: any) => p.status === 'active');
-                                                                                        return (
-                                                                                            <select
-                                                                                                value=""
-                                                                                                onChange={(e) => {
-                                                                                                    if (e.target.value === '__mark_extra__') {
-                                                                                                        handleMarkAsExtra(item.id);
-                                                                                                    } else if (e.target.value) {
-                                                                                                        handleAssignToPackage(item.id, Number(e.target.value));
-                                                                                                    }
-                                                                                                }}
-                                                                                                disabled={assigningItemId === item.id || removingItemId === item.id}
-                                                                                                title="Absorb this charge into a package or keep as billable extra"
-                                                                                                className="ml-3 text-[10px] font-bold text-indigo-600 bg-indigo-50 border border-indigo-200 rounded px-1.5 py-0.5 hover:bg-indigo-100 cursor-pointer disabled:opacity-40"
-                                                                                            >
-                                                                                                <option value="">{assigningItemId === item.id ? 'Updating…' : 'Package options…'}</option>
-                                                                                                {activePkgs.map((p: any) => (
-                                                                                                    <option key={p.admission_package_id} value={p.admission_package_id}>
-                                                                                                        Absorb in: {p.package_name}
-                                                                                                    </option>
-                                                                                                ))}
-                                                                                                <option value="__mark_extra__">★ Keep as Billable Extra</option>
-                                                                                            </select>
-                                                                                        );
-                                                                                    })()}
+                                                                  <div key={item.id} className="px-4 py-3 flex items-center justify-between text-xs">
+                                                                      <div className="flex-1 min-w-0">
+                                                                          <div className="flex items-center gap-2">
+                                                                              <p className="font-medium text-gray-800 truncate">{item.description}</p>
+                                                                              {item.is_billable_extra && (
+                                                                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200 shrink-0">
+                                                                                      ★ Billable Extra
+                                                                                  </span>
+                                                                              )}
+                                                                          </div>
+                                                                          <p className="text-gray-400 mt-0.5">
+                                                                              {item.quantity} × ₹{item.unit_price.toLocaleString()}
+                                                                              {Number(item.discount) > 0 && <span className="text-emerald-600"> − ₹{Number(item.discount).toLocaleString()} disc</span>}
+                                                                          </p>
+                                                                          <p className="text-[10px] text-gray-400 mt-0.5">
+                                                                              {new Date(item.created_at).toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                                                          </p>
+                                                                          {item.rendered_by_doctor_id && (
+                                                                              <p className="text-[10px] text-teal-700 font-bold mt-0.5">
+                                                                                  Rendered by: {renderedByDoctors.find((d: any) => d.id === item.rendered_by_doctor_id)?.name || item.rendered_by_doctor_id}
+                                                                              </p>
+                                                                          )}
+                                                                      </div>
+                                                                      <p className="font-black text-gray-900 ml-4">₹{item.net_price.toLocaleString()}</p>
+                                                                      {!bill.invoice.is_locked && (
+                                                                          <>
+                                                                              {!isPackageLine && (
+                                                                                  <>
+                                                                                      {pkgUtils.some((p: any) => p.status === 'active') && (() => {
+                                                                                          const activePkgs = pkgUtils.filter((p: any) => p.status === 'active');
+                                                                                          return (
+                                                                                              <select
+                                                                                                  value={item.is_billable_extra ? '__mark_extra__' : ''}
+                                                                                                  onChange={(e) => {
+                                                                                                      if (e.target.value === '__mark_extra__') {
+                                                                                                          handleMarkAsExtra(item.id);
+                                                                                                      } else if (e.target.value) {
+                                                                                                          handleAssignToPackage(item.id, Number(e.target.value));
+                                                                                                      }
+                                                                                                  }}
+                                                                                                  disabled={assigningItemId === item.id || removingItemId === item.id}
+                                                                                                  title="Absorb this charge into a package or keep as billable extra"
+                                                                                                  className={`ml-3 text-[10px] font-bold border rounded px-1.5 py-0.5 cursor-pointer disabled:opacity-40 ${
+                                                                                                      item.is_billable_extra
+                                                                                                          ? 'text-amber-800 bg-amber-50 border-amber-300 hover:bg-amber-100'
+                                                                                                          : 'text-indigo-600 bg-indigo-50 border-indigo-200 hover:bg-indigo-100'
+                                                                                                  }`}
+                                                                                              >
+                                                                                                  <option value="">{assigningItemId === item.id ? 'Updating…' : (item.is_billable_extra ? 'Change assignment…' : 'Package options…')}</option>
+                                                                                                  {activePkgs.map((p: any) => (
+                                                                                                      <option key={p.admission_package_id} value={p.admission_package_id}>
+                                                                                                          Absorb in: {p.package_name}
+                                                                                                      </option>
+                                                                                                  ))}
+                                                                                                  <option value="__mark_extra__">★ Keep as Billable Extra</option>
+                                                                                              </select>
+                                                                                          );
+                                                                                      })()}
                                                                                     <button
                                                                                         onClick={() => startEditItem(item)}
                                                                                         disabled={editingItemId !== null}

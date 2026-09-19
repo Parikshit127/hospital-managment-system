@@ -1716,7 +1716,6 @@ export async function markChargeAsExtra(invoiceItemId: number) {
                 where: { id: existingPosting.id },
                 data: {
                     disposition: CHARGE_DISPOSITION.BILLABLE_EXTRA,
-                    exclusion_reason: 'Marked as billable extra by staff',
                 },
             });
         } else {
@@ -1731,8 +1730,8 @@ export async function markChargeAsExtra(invoiceItemId: number) {
                     unit_price: invItem.unit_price,
                     amount: invItem.net_price,
                     disposition: CHARGE_DISPOSITION.BILLABLE_EXTRA,
-                    posted_by: session?.userId || 'system',
-                    exclusion_reason: 'Marked as billable extra by staff',
+                    posted_by: session?.id || session?.userId || 'system',
+                    organizationId,
                 },
             });
         }
@@ -2073,6 +2072,16 @@ export async function generateInterimBill(admissionId: string) {
         });
         if (!invoice) return { success: false, error: 'No active invoice found' };
 
+        const extraPostings = await db.ipdChargePosting.findMany({
+            where: {
+                admission_id: admissionId,
+                disposition: CHARGE_DISPOSITION.BILLABLE_EXTRA,
+                invoice_item_id: { not: null },
+            },
+            select: { invoice_item_id: true },
+        });
+        const extraItemIds = new Set(extraPostings.map((p: any) => p.invoice_item_id));
+
         // Get GST summary
         const gstResult = await getGstSummary(invoice.id);
         const gstSummary = gstResult.success ? gstResult.data : null;
@@ -2152,6 +2161,7 @@ export async function generateInterimBill(admissionId: string) {
                     hsn_sac_code: item.hsn_sac_code,
                     service_category: item.service_category,
                     created_at: item.created_at,
+                    is_billable_extra: extraItemIds.has(item.id),
                 })),
                 payments: invoice.payments.map((p: any) => ({
                     receipt_number: p.receipt_number,
@@ -2585,7 +2595,6 @@ export async function settleAndDischarge(data: {
                                     where: { id: existingPosting.id },
                                     data: {
                                         disposition: CHARGE_DISPOSITION.BILLABLE_EXTRA,
-                                        exclusion_reason: 'Confirmed as extra by staff during discharge',
                                     },
                                 });
                             } else {
@@ -2600,8 +2609,8 @@ export async function settleAndDischarge(data: {
                                         unit_price: stray.unit_price,
                                         amount: stray.net_price,
                                         disposition: CHARGE_DISPOSITION.BILLABLE_EXTRA,
-                                        posted_by: session?.userId || 'system',
-                                        exclusion_reason: 'Confirmed as extra by staff during discharge',
+                                        posted_by: session?.id || session?.userId || 'system',
+                                        organizationId,
                                     },
                                 });
                             }
