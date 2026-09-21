@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/backend/db'
 import { resolveRouteAuth } from '@/app/lib/route-auth'
 import { validateZealthixApiKey } from '@/app/lib/zealthix/auth'
-import { getBillBranding, inlineHeaderHtml, billFooterHtml, letterheadBackgroundHtml, letterheadCss, printButtonHtml, fmtBillDate, deriveInvoiceTotals, deriveInvoiceStatus, deriveTpaStatusPill, medsToggleHtml, type BillBranding } from '@/app/lib/bill-branding'
+import { getBillBranding, getInvoiceHospitalLabel, inlineHeaderHtml, billFooterHtml, letterheadBackgroundHtml, letterheadCss, printButtonHtml, fmtBillDate, deriveInvoiceTotals, deriveInvoiceStatus, deriveTpaStatusPill, medsToggleHtml, type BillBranding } from '@/app/lib/bill-branding'
 import { getPharmacyBranding } from '@/app/lib/pharmacy-branding'
 import { getBillSections } from '@/app/lib/bill-sections'
 import { formatDoctorName } from '@/app/lib/format-name'
@@ -415,7 +415,7 @@ function generateInvoiceHTML(invoice: any, branding: BillBranding, pharmacy: { n
                 <!-- Patient Row -->
                 <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
                     <div>
-                        ${branding.patientHeaderLabel ? `<p style="font-size:18px;font-weight:800;color:${branding.accentColor};margin-bottom:4px;">${branding.patientHeaderLabel}</p>` : ''}
+                        ${getInvoiceHospitalLabel(invoice.organizationId, invoice) ? `<p style="font-size:18px;font-weight:800;color:${branding.accentColor};margin-bottom:4px;">${getInvoiceHospitalLabel(invoice.organizationId, invoice)}</p>` : ''}
                         <p style="font-size:12px;font-weight:bold;">${patientDisplayName} [${patient.patient_id || '-'}]</p>
                         <p style="font-size:10px;color:#555;">Contact No.: ${patientContact}</p>
                     </div>

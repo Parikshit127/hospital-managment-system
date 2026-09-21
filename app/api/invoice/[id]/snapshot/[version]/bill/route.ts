@@ -3,6 +3,7 @@ import { prisma } from '@/backend/db';
 import { resolveRouteAuth } from '@/app/lib/route-auth';
 import {
     getBillBranding,
+    getInvoiceHospitalLabel,
     letterheadBackgroundHtml,
     letterheadCss,
     billFooterHtml,
@@ -51,7 +52,7 @@ export async function GET(
         // Fetch live invoice for patient_id / admission_id (these never change)
         const liveInvoice = await prisma.invoices.findFirst({
             where: { id: invoiceId, organizationId: auth.context.organizationId },
-            select: { patient_id: true, admission_id: true, doctor_name: true },
+            select: { patient_id: true, admission_id: true, doctor_name: true, billed_hospital_name: true },
         });
 
         const patientId = inv.patient_id || liveInvoice?.patient_id;
@@ -87,6 +88,13 @@ export async function GET(
             ? { name: auth.context.session.name, role: auth.context.session.role }
             : undefined;
 
+        // Prefer the value frozen in the snapshot itself; fall back to the live
+        // invoice for snapshots taken before this field existed.
+        const patientHeaderLabel = getInvoiceHospitalLabel(
+            org?.id,
+            { billed_hospital_name: inv.billed_hospital_name ?? liveInvoice?.billed_hospital_name },
+        );
+
         const html = renderSnapshotBillHTML({
             snapshot: inv,
             patient: patient || { full_name: '—', patient_id: '—', phone: null, age: null, gender: null },
@@ -98,6 +106,7 @@ export async function GET(
             detailed,
             opdDoctor: liveInvoice?.doctor_name || '',
             printedBy,
+            patientHeaderLabel,
         });
 
         return new NextResponse(html, {
@@ -137,6 +146,7 @@ function renderSnapshotBillHTML({
     detailed,
     opdDoctor,
     printedBy,
+    patientHeaderLabel,
 }: {
     snapshot: any;
     patient: any;
@@ -148,6 +158,7 @@ function renderSnapshotBillHTML({
     detailed: boolean;
     opdDoctor: string;
     printedBy?: { name: string; role?: string };
+    patientHeaderLabel: string | null;
 }) {
     const items: any[] = snapshot.items || [];
     const isIPD = !!admission;
@@ -213,7 +224,7 @@ function renderSnapshotBillHTML({
     const billColor = isFinal ? branding.accentColor : '#f97316';
 
     let patientInfoHTML = `
-        ${branding.patientHeaderLabel ? `<p style="font-size:18px;font-weight:800;color:${branding.accentColor};grid-column:1 / -1;margin-bottom:4px;">${branding.patientHeaderLabel}</p>` : ''}
+        ${patientHeaderLabel ? `<p style="font-size:18px;font-weight:800;color:${branding.accentColor};grid-column:1 / -1;margin-bottom:4px;">${patientHeaderLabel}</p>` : ''}
         <p style="font-size:11px;"><strong>Patient:</strong> ${patient.full_name || '—'}</p>
         <p style="font-size:11px;"><strong>UHID:</strong> ${patient.patient_id || '—'}</p>
         <p style="font-size:11px;"><strong>Age/Gender:</strong> ${patient.age || '—'} / ${patient.gender || '—'}</p>

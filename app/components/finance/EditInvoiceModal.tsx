@@ -15,6 +15,7 @@ import {
 } from '@/app/actions/finance-actions';
 import { getDoctorsForDropdown } from '@/app/actions/admin-actions';
 import { getAllBillableServices } from '@/app/actions/ipd-master-actions';
+import { HEAD_OFFICE_ORGANIZATION_ID } from '@/app/lib/head-office-org';
 
 // Numeric line-item inputs: hide the native number-spinner arrows (they eat the
 // cell width and clip the typed value) and use tabular figures + right align so
@@ -79,6 +80,7 @@ type HeaderState = {
     doctor_id: string;
     doctor_name: string;
     invoice_date: string;
+    billed_hospital_name: string;
 };
 
 type CatalogSvc = {
@@ -132,6 +134,7 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
         patient_name?: string;
         tpa_claim_status?: string | null;
         tpa_settled_amount?: number;
+        organizationId?: string;
     } | null>(null);
 
     const [items, setItems] = useState<EditableItem[]>([]);
@@ -227,6 +230,7 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
                 patient_name: inv.patient?.full_name,
                 tpa_claim_status: inv.tpa_claim_status ?? null,
                 tpa_settled_amount: Number(inv.tpa_settled_amount ?? 0),
+                organizationId: inv.organizationId,
             });
 
             const loadedItems: EditableItem[] = (inv.items || []).map((it: any) => {
@@ -269,6 +273,7 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
                 doctor_id: inv.doctor_id ?? '',
                 doctor_name: inv.doctor_name ?? '',
                 invoice_date: inv.created_at ? new Date(inv.created_at).toISOString().slice(0, 10) : '',
+                billed_hospital_name: inv.billed_hospital_name ?? '',
             };
             setHeader(h);
             setHeaderOrig(h);
@@ -429,7 +434,8 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
             header.is_inter_state !== headerOrig.is_inter_state ||
             Number(header.bill_discount) !== Number(headerOrig.bill_discount) ||
             header.discount_remark !== headerOrig.discount_remark ||
-            header.invoice_date !== headerOrig.invoice_date
+            header.invoice_date !== headerOrig.invoice_date ||
+            header.billed_hospital_name !== headerOrig.billed_hospital_name
         );
     }
 
@@ -509,6 +515,8 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
                     header_diff.discount_remark = header.discount_remark;
                 if (header.invoice_date && header.invoice_date !== headerOrig.invoice_date)
                     header_diff.invoice_date = header.invoice_date;
+                if (header.billed_hospital_name !== headerOrig.billed_hospital_name)
+                    header_diff.billed_hospital_name = header.billed_hospital_name;
             }
 
             const nothingChanged =
@@ -1015,6 +1023,16 @@ export function EditInvoiceModal({ invoiceId, isOpen, onClose, onSaved }: EditIn
                             Header Details
                         </summary>
                         <div className="p-3 space-y-3">
+                            {/* Head-office only: this bill's own hospital name — varies per bill */}
+                            {invoiceMeta?.organizationId === HEAD_OFFICE_ORGANIZATION_ID && (
+                                <Input
+                                    label="Billed Hospital Name"
+                                    value={header.billed_hospital_name}
+                                    onChange={e => setHeader({ ...header, billed_hospital_name: e.target.value })}
+                                    disabled={readOnly || saving}
+                                    placeholder="e.g. City Care Hospital"
+                                />
+                            )}
                             {/* Bill Date — all staff on Draft bills; admin/finance on Final */}
                             {(canEditPaid || invoiceMeta?.status === 'Draft') && (
                                 <div className="grid grid-cols-2 gap-3">

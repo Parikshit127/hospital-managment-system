@@ -18,7 +18,6 @@ import {
     createTemplate,
     getDefaultTemplate,
 } from '@/app/actions/template-actions';
-import { HEAD_OFFICE_ORGANIZATION_ID } from '@/app/lib/head-office-org';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -631,20 +630,6 @@ export default function BillSettingsPage() {
                             />
                             <p className="text-[10px] text-gray-400 mt-1">Appears at the bottom of all bills</p>
                         </div>
-
-                        {branding.organizationId === HEAD_OFFICE_ORGANIZATION_ID && (
-                            <div className={cardCls}>
-                                <h3 className="text-sm font-black text-gray-900 mb-1">Bill Hospital Name</h3>
-                                <p className="text-xs text-gray-500 mb-4">Shown bigger and bold directly above the patient name on OPD &amp; IPD bills. Use this to name which hospital this bill is being issued to. Leave blank to hide.</p>
-                                <input
-                                    type="text"
-                                    value={branding.patient_header_label || ''}
-                                    onChange={(e) => setBranding((p: any) => ({ ...p, patient_header_label: e.target.value }))}
-                                    className={inputCls}
-                                    placeholder="e.g. City Care Hospital"
-                                />
-                            </div>
-                        )}
 
                         <div className={cardCls}>
                             <h3 className="text-sm font-black text-gray-900 mb-4">Signature Block</h3>

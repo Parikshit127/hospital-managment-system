@@ -31,8 +31,16 @@ export interface BillBranding {
     bankBranch: string | null;
     bankUpiId: string | null;
     hideSubtotalDiscount?: boolean;
-    /** Optional hospital name rendered immediately above the patient name, editable per-org in Bill Settings. */
-    patientHeaderLabel?: string | null;
+}
+
+// ─── Per-bill "billed to hospital" label ──────────────────────────────────────
+// Head-office org only: each bill is issued to a different receiving hospital,
+// so this is edited per-invoice (EditInvoiceModal "Header Details"), NOT a
+// shared org-level setting. Rendered bigger/bold immediately above the patient
+// name on OPD & IPD bills.
+export function getInvoiceHospitalLabel(organizationId: string | null | undefined, invoice: any): string | null {
+    if (organizationId !== HEAD_OFFICE_ORGANIZATION_ID) return null;
+    return invoice?.billed_hospital_name || null;
 }
 
 // ─── Fetch branding from DB ──────────────────────────────────────────────────
@@ -83,7 +91,6 @@ export async function getBillBranding(organizationId: string): Promise<BillBrand
         bankBranch: org?.bank_branch || null,
         bankUpiId: org?.bank_upi_id || null,
         hideSubtotalDiscount: isNulife,
-        patientHeaderLabel: org?.id === HEAD_OFFICE_ORGANIZATION_ID ? (b?.patient_header_label || null) : null,
     };
 }
 

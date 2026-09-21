@@ -15,6 +15,7 @@ import { recomputeInvoiceDoctorCommission } from '@/app/lib/doctor-commission';
 import { dispensingKey } from '@/app/lib/pharmacy-bill-group';
 import { isPrivilegedBillingRole, canEditBill, canFinalizeInvoice, BILL_FINALIZED_INTENT_MSG } from '@/app/lib/bill-status';
 import { isDepositSettlement } from '@/app/lib/payment-tender';
+import { HEAD_OFFICE_ORGANIZATION_ID } from '@/app/lib/head-office-org';
 
 
 // Convert Prisma Decimal/Date objects to plain JS for client serialization
@@ -3390,6 +3391,7 @@ export async function updateInvoiceHeader(invoiceId: number, patch: {
     doctor_name?: string | null;
     discount_remark?: string | null;
     invoice_date?: string | null;
+    billed_hospital_name?: string | null;
 }) {
     try {
         const { db, organizationId, session } = await requireTenantContext();
@@ -3419,6 +3421,11 @@ export async function updateInvoiceHeader(invoiceId: number, patch: {
         if (patch.doctor_name !== undefined) data.doctor_name = (patch.doctor_name || '').trim() || null;
         if (patch.discount_remark !== undefined) data.discount_remark = patch.discount_remark;
         if (patch.invoice_date !== undefined && patch.invoice_date) data.created_at = new Date(patch.invoice_date);
+        // Head-office only — the field per-bill hospital name is only meaningful for
+        // the org that issues bills on behalf of other hospitals.
+        if (patch.billed_hospital_name !== undefined && organizationId === HEAD_OFFICE_ORGANIZATION_ID) {
+            data.billed_hospital_name = patch.billed_hospital_name || null;
+        }
         data.version = { increment: 1 };
 
         await db.invoices.update({ where: { id: invoiceId }, data });
@@ -3666,6 +3673,7 @@ export async function saveInvoiceEdits(invoiceId: number, payload: {
             bill_discount: Number((invoice as any).bill_discount || 0),
             concession_amount: Number((invoice as any).concession_amount || 0),
             concession_reason: (invoice as any).concession_reason,
+            billed_hospital_name: (invoice as any).billed_hospital_name,
             created_at: invoice.created_at,
             items: snapshotItems.map((it: any) => ({
                 id: it.id,
@@ -3817,6 +3825,9 @@ export async function saveInvoiceEdits(invoiceId: number, payload: {
                 if ((p as any).bill_discount !== undefined) h.bill_discount = Math.max(0, Number((p as any).bill_discount) || 0);
                 if (p.discount_remark !== undefined) h.discount_remark = p.discount_remark;
                 if (p.invoice_date !== undefined && p.invoice_date) h.created_at = new Date(p.invoice_date);
+                if ((p as any).billed_hospital_name !== undefined && organizationId === HEAD_OFFICE_ORGANIZATION_ID) {
+                    h.billed_hospital_name = (p as any).billed_hospital_name || null;
+                }
                 if (Object.keys(h).length) {
                     await tx.invoices.update({ where: { id: invoiceId }, data: h });
                 }

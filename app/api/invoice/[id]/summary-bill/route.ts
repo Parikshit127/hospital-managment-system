@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/backend/db';
 import { resolveRouteAuth } from '@/app/lib/route-auth';
-import { getBillBranding, letterheadBackgroundHtml, letterheadCss, billFooterHtml, printButtonHtml, fmtBillDate, fmtBillDateTime, deriveInvoiceTotals, deriveInvoiceStatus, deriveTpaStatusPill, medsToggleHtml, type BillBranding } from '@/app/lib/bill-branding';
+import { getBillBranding, getInvoiceHospitalLabel, letterheadBackgroundHtml, letterheadCss, billFooterHtml, printButtonHtml, fmtBillDate, fmtBillDateTime, deriveInvoiceTotals, deriveInvoiceStatus, deriveTpaStatusPill, medsToggleHtml, type BillBranding } from '@/app/lib/bill-branding';
 import { getBillSections } from '@/app/lib/bill-sections';
 import { formatDoctorName } from '@/app/lib/format-name';
 
@@ -274,8 +274,9 @@ function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposit
     const creditNotes = invoice.credit_notes || [];
     const creditNoteTotal = creditNotes.reduce((s: number, c: any) => s + Number(c.total_amount || 0), 0);
 
+    const patientHeaderLabel = getInvoiceHospitalLabel(org?.id, invoice);
     let patientInfoHTML = `
-        ${branding.patientHeaderLabel ? `<p style="font-size:18px;font-weight:800;color:${branding.accentColor};grid-column:1 / -1;margin-bottom:4px;">${branding.patientHeaderLabel}</p>` : ''}
+        ${patientHeaderLabel ? `<p style="font-size:18px;font-weight:800;color:${branding.accentColor};grid-column:1 / -1;margin-bottom:4px;">${patientHeaderLabel}</p>` : ''}
         <p style="font-size:11px;"><strong>Patient:</strong> ${patient.full_name || '-'}</p>
         <p style="font-size:11px;"><strong>UHID:</strong> ${patient.patient_id || '-'}</p>
         <p style="font-size:11px;"><strong>Age/Gender:</strong> ${patient.age || '-'} / ${patient.gender || '-'}</p>

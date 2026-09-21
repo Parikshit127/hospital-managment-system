@@ -20,6 +20,7 @@ import { prisma } from '@/backend/db';
 import { resolveRouteAuth } from '@/app/lib/route-auth';
 import {
     getBillBranding,
+    getInvoiceHospitalLabel,
     letterheadBackgroundHtml,
     letterheadCss,
     billFooterHtml,
@@ -257,8 +258,9 @@ function generateTpaBillHTML(
         <p style="font-size:11px;"><strong>Claim Status:</strong> <span style="display:inline-block;padding:2px 8px;font-size:10px;font-weight:700;border-radius:9999px;background:${tpaPillStyle.bg};color:${tpaPillStyle.fg};border:1px solid ${tpaPillStyle.border};">${tpaPill.label}</span></p>
     `;
 
+    const patientHeaderLabel = getInvoiceHospitalLabel(invoice.organizationId, invoice);
     let beneficiaryHTML = `
-        ${branding.patientHeaderLabel ? `<p style="font-size:18px;font-weight:800;color:${branding.accentColor};grid-column:1 / -1;margin-bottom:4px;">${branding.patientHeaderLabel}</p>` : ''}
+        ${patientHeaderLabel ? `<p style="font-size:18px;font-weight:800;color:${branding.accentColor};grid-column:1 / -1;margin-bottom:4px;">${patientHeaderLabel}</p>` : ''}
         <p style="font-size:11px;"><strong>Patient (Beneficiary):</strong> ${patient.full_name || '-'}</p>
         <p style="font-size:11px;"><strong>UHID:</strong> ${patient.patient_id || '-'}</p>
         <p style="font-size:11px;"><strong>Age/Gender:</strong> ${patient.age || '-'} / ${patient.gender || '-'}</p>

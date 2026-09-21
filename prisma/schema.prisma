@@ -1305,6 +1305,11 @@ model invoices {
   bill_discount Decimal @default(0)
   discount_remark String?
 
+  // Head-office bills: name of the receiving hospital this specific bill is
+  // issued to (varies per bill, unlike anything org-level). Only used/shown
+  // for HEAD_OFFICE_ORGANIZATION_ID (see app/lib/head-office-org.ts).
+  billed_hospital_name String?
+
   // Hard edit-lock
   is_locked Boolean   @default(false)
   locked_at DateTime?
