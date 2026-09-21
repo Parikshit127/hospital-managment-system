@@ -422,6 +422,7 @@ model OrganizationBranding {
   terms_conditions String?
   signature_title  String?
   signature_name   String?
+  patient_header_label String?
   organization     Organization @relation(fields: [organizationId], references: [id])
 
   @@map("organization_brandings")

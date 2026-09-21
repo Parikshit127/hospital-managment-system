@@ -7,7 +7,7 @@
 # Install with:   bash aws/cron/install-cron.sh
 # Inspect with:   crontab -l
 # Logs:           /home/ubuntu/hospitalos/logs/cron.log
-#
+
 # Every endpoint is called with GET — most of these routes only implement GET
 # (they answer 405 to POST), which is also how Vercel Cron invokes them.
 #

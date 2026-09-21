@@ -44,7 +44,7 @@ function generatePreviewHTML(branding: any, sections: any, type: string, printed
     const patientHtml = sections.showPatientInfo ? `
         <div style="background:#f9fafb;border-radius:8px;padding:14px;margin-bottom:20px;">
             <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;">
-                ${branding.patientHeaderLabel ? `<p style="font-size:12px;font-weight:700;color:${branding.accentColor};grid-column:1 / -1;">${branding.patientHeaderLabel}</p>` : ''}
+                ${branding.patientHeaderLabel ? `<p style="font-size:18px;font-weight:800;color:${branding.accentColor};grid-column:1 / -1;margin-bottom:4px;">${branding.patientHeaderLabel}</p>` : ''}
                 <p style="font-size:12px;"><strong>Name:</strong> John Doe</p>
                 <p style="font-size:12px;"><strong>UHID:</strong> HOSP-00001</p>
                 <p style="font-size:12px;"><strong>Age/Gender:</strong> 45 / Male</p>
