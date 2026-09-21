@@ -43,6 +43,13 @@ export function getInvoiceHospitalLabel(organizationId: string | null | undefine
     return invoice?.billed_hospital_name || null;
 }
 
+// Head-office only: the bill totals' "Discount" row reads "Hospital Revenue
+// Sharing" instead — same figure, different label. Every other org keeps
+// "Discount".
+export function getDiscountLabel(organizationId: string | null | undefined): string {
+    return organizationId === HEAD_OFFICE_ORGANIZATION_ID ? 'Hospital Revenue Sharing' : 'Discount';
+}
+
 // ─── Fetch branding from DB ──────────────────────────────────────────────────
 
 export async function getBillBranding(organizationId: string): Promise<BillBranding> {

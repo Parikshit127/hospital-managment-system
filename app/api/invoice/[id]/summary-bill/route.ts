@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/backend/db';
 import { resolveRouteAuth } from '@/app/lib/route-auth';
-import { getBillBranding, getInvoiceHospitalLabel, letterheadBackgroundHtml, letterheadCss, billFooterHtml, printButtonHtml, fmtBillDate, fmtBillDateTime, deriveInvoiceTotals, deriveInvoiceStatus, deriveTpaStatusPill, medsToggleHtml, type BillBranding } from '@/app/lib/bill-branding';
+import { getBillBranding, getInvoiceHospitalLabel, getDiscountLabel, letterheadBackgroundHtml, letterheadCss, billFooterHtml, printButtonHtml, fmtBillDate, fmtBillDateTime, deriveInvoiceTotals, deriveInvoiceStatus, deriveTpaStatusPill, medsToggleHtml, type BillBranding } from '@/app/lib/bill-branding';
 import { getBillSections } from '@/app/lib/bill-sections';
 import { formatDoctorName } from '@/app/lib/format-name';
 
@@ -399,7 +399,7 @@ function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposit
                 <!-- Amount Summary (MEDNET format with words) -->
                 <table style="width:100%;margin-bottom:12px;">
                     ${!branding.hideSubtotalDiscount ? `<tr><td style="padding:3px 8px;font-size:11px;font-weight:bold;width:120px;">Bill Amount :</td><td style="font-size:11px;">${total.toFixed(2)} - ${numberToWords(total)}</td></tr>` : ''}
-                    ${totalDiscount > 0 && !branding.hideSubtotalDiscount ? `<tr><td style="padding:3px 8px;font-size:11px;font-weight:bold;">Discount :</td><td style="font-size:11px;">${totalDiscount.toFixed(2)}</td></tr>` : ''}
+                    ${totalDiscount > 0 && !branding.hideSubtotalDiscount ? `<tr><td style="padding:3px 8px;font-size:11px;font-weight:bold;">${getDiscountLabel(org?.id)} :</td><td style="font-size:11px;">${totalDiscount.toFixed(2)}</td></tr>` : ''}
                     <tr><td style="padding:3px 8px;font-size:11px;font-weight:bold;">Net Amount :</td><td style="font-size:11px;">${net.toFixed(2)} - ${numberToWords(net)}</td></tr>
                     ${creditNoteTotal > 0 ? `<tr><td style="padding:3px 8px;font-size:11px;font-weight:bold;color:#0891b2;">Less: Credit Note :</td><td style="font-size:11px;color:#0891b2;">-${creditNoteTotal.toFixed(2)} - ${numberToWords(creditNoteTotal)}</td></tr>` : ''}
                     <tr><td style="padding:3px 8px;font-size:11px;font-weight:bold;">Paid Amount :</td><td style="font-size:11px;">${paid.toFixed(2)} - ${numberToWords(paid)}</td></tr>

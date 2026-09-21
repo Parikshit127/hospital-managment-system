@@ -4,6 +4,7 @@ import { resolveRouteAuth } from '@/app/lib/route-auth';
 import {
     getBillBranding,
     getInvoiceHospitalLabel,
+    getDiscountLabel,
     letterheadBackgroundHtml,
     letterheadCss,
     billFooterHtml,
@@ -310,7 +311,7 @@ function renderSnapshotBillHTML({
                 <!-- Amount Summary -->
                 <table style="width:100%;margin-bottom:12px;">
                     <tr><td style="padding:3px 8px;font-size:11px;font-weight:bold;width:140px;">Bill Amount:</td><td style="font-size:11px;">${total.toFixed(2)} - ${numberToWords(total)}</td></tr>
-                    ${totalDiscount > 0 ? `<tr><td style="padding:3px 8px;font-size:11px;font-weight:bold;">Discount:</td><td style="font-size:11px;">${totalDiscount.toFixed(2)}</td></tr>` : ''}
+                    ${totalDiscount > 0 ? `<tr><td style="padding:3px 8px;font-size:11px;font-weight:bold;">${getDiscountLabel(org?.id)}:</td><td style="font-size:11px;">${totalDiscount.toFixed(2)}</td></tr>` : ''}
                     <tr><td style="padding:3px 8px;font-size:11px;font-weight:bold;">Net Amount:</td><td style="font-size:11px;">${net.toFixed(2)} - ${numberToWords(net)}</td></tr>
                     <tr><td style="padding:3px 8px;font-size:11px;font-weight:bold;">Paid Amount:</td><td style="font-size:11px;">${paid.toFixed(2)} - ${numberToWords(paid)}</td></tr>
                     <tr><td style="padding:3px 8px;font-size:11px;font-weight:bold;">Balance:</td><td style="font-size:11px;">${balance.toFixed(2)} - ${numberToWords(balance)}</td></tr>
