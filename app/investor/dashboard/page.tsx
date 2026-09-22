@@ -622,13 +622,17 @@ export default function PromoterDashboardPage() {
                 </div>
             </div>
 
-            {/* Executive Financial Health Strip */}
+            {/* Executive Financial Health Strip — every card opens a drill-down of the real records behind it */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 print:grid-cols-4 print:gap-2">
-                <div className={`p-5 rounded-3xl shadow-sm relative overflow-hidden border print:bg-white print:p-3 print:border-slate-300 ${
-                    isDark
-                        ? 'bg-slate-900 border-slate-800 backdrop-blur-md'
-                        : 'bg-gradient-to-br from-orange-500 to-amber-600 text-white border-orange-500 shadow-orange-500/10'
-                }`}>
+                <div
+                    role="button" tabIndex={0}
+                    onClick={() => openDrilldown('profitLoss', 'total', 'EBITDA Margin — Reconciliation', 'all', 'All Hospitals (Consolidated)')}
+                    onKeyDown={(e) => { if (e.key === 'Enter') openDrilldown('profitLoss', 'total', 'EBITDA Margin — Reconciliation', 'all', 'All Hospitals (Consolidated)'); }}
+                    className={`p-5 rounded-3xl shadow-sm relative overflow-hidden border print:bg-white print:p-3 print:border-slate-300 cursor-pointer hover:ring-2 hover:ring-white/60 transition-all print:cursor-auto ${
+                        isDark
+                            ? 'bg-slate-900 border-slate-800 backdrop-blur-md'
+                            : 'bg-gradient-to-br from-orange-500 to-amber-600 text-white border-orange-500 shadow-orange-500/10'
+                    }`}>
                     <div className={`flex items-center justify-between text-xs font-black uppercase tracking-wider mb-2 ${
                         isDark ? 'text-orange-400 print:text-orange-800' : 'text-orange-100'
                     }`}>
@@ -639,13 +643,18 @@ export default function PromoterDashboardPage() {
                         isDark ? 'text-white' : 'text-white'
                     }`}>{executiveKPIs.ebitdaMarginPct}%</div>
                     <div className={`text-xs font-medium mt-1 ${isDark ? 'text-slate-400' : 'text-orange-100'}`}>Operating Performance Yield</div>
+                    <div className={`text-[10px] font-bold mt-2 flex items-center gap-1 print:hidden ${isDark ? 'text-orange-400/80' : 'text-orange-50/90'}`}><ExternalLink className="w-3 h-3" /> View calculation</div>
                 </div>
 
-                <div className={`p-5 rounded-3xl shadow-sm relative overflow-hidden border print:bg-white print:p-3 print:border-slate-300 ${
-                    isDark
-                        ? 'bg-slate-900 border-slate-800 backdrop-blur-md'
-                        : 'bg-white border-slate-200 text-slate-900 shadow-slate-200/50'
-                }`}>
+                <div
+                    role="button" tabIndex={0}
+                    onClick={() => openDrilldown('beds', 'total', 'Bed Occupancy — Bed Roster', 'all', 'All Hospitals (Consolidated)')}
+                    onKeyDown={(e) => { if (e.key === 'Enter') openDrilldown('beds', 'total', 'Bed Occupancy — Bed Roster', 'all', 'All Hospitals (Consolidated)'); }}
+                    className={`p-5 rounded-3xl shadow-sm relative overflow-hidden border print:bg-white print:p-3 print:border-slate-300 cursor-pointer hover:ring-2 hover:ring-orange-400/60 transition-all print:cursor-auto ${
+                        isDark
+                            ? 'bg-slate-900 border-slate-800 backdrop-blur-md'
+                            : 'bg-white border-slate-200 text-slate-900 shadow-slate-200/50'
+                    }`}>
                     <div className={`flex items-center justify-between text-xs font-black uppercase tracking-wider mb-2 ${
                         isDark ? 'text-amber-400 print:text-slate-800' : 'text-orange-600'
                     }`}>
@@ -656,13 +665,18 @@ export default function PromoterDashboardPage() {
                         isDark ? 'text-white' : 'text-slate-900'
                     }`}>{executiveKPIs.bedOccupancyRate}%</div>
                     <div className={`text-xs font-medium mt-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{currentAdmittedPatients.total.total} / {arpob.noOfBeds.total} Beds Occupied</div>
+                    <div className={`text-[10px] font-bold mt-2 flex items-center gap-1 print:hidden ${isDark ? 'text-amber-400/80' : 'text-orange-500/80'}`}><ExternalLink className="w-3 h-3" /> View bed roster</div>
                 </div>
 
-                <div className={`p-5 rounded-3xl shadow-sm relative overflow-hidden border print:bg-white print:p-3 print:border-slate-300 ${
-                    isDark
-                        ? 'bg-slate-900 border-slate-800 backdrop-blur-md'
-                        : 'bg-slate-900 text-white border-slate-800 shadow-slate-900/10'
-                }`}>
+                <div
+                    role="button" tabIndex={0}
+                    onClick={() => openDrilldown('alos', 'total', 'Avg Length of Stay — Discharges', 'all', 'All Hospitals (Consolidated)')}
+                    onKeyDown={(e) => { if (e.key === 'Enter') openDrilldown('alos', 'total', 'Avg Length of Stay — Discharges', 'all', 'All Hospitals (Consolidated)'); }}
+                    className={`p-5 rounded-3xl shadow-sm relative overflow-hidden border print:bg-white print:p-3 print:border-slate-300 cursor-pointer hover:ring-2 hover:ring-orange-400/60 transition-all print:cursor-auto ${
+                        isDark
+                            ? 'bg-slate-900 border-slate-800 backdrop-blur-md'
+                            : 'bg-slate-900 text-white border-slate-800 shadow-slate-900/10'
+                    }`}>
                     <div className={`flex items-center justify-between text-xs font-black uppercase tracking-wider mb-2 ${
                         isDark ? 'text-orange-400 print:text-orange-800' : 'text-orange-400'
                     }`}>
@@ -671,13 +685,18 @@ export default function PromoterDashboardPage() {
                     </div>
                     <div className="text-3xl font-black font-mono text-white print:text-xl print:text-slate-900">{executiveKPIs.alosDays} Days</div>
                     <div className="text-xs font-medium mt-1 text-slate-400">Optimal Inpatient Turnover</div>
+                    <div className="text-[10px] font-bold mt-2 flex items-center gap-1 text-orange-400/80 print:hidden"><ExternalLink className="w-3 h-3" /> View discharges</div>
                 </div>
 
-                <div className={`p-5 rounded-3xl shadow-sm relative overflow-hidden border print:bg-white print:p-3 print:border-slate-300 ${
-                    isDark
-                        ? 'bg-slate-900 border-slate-800 backdrop-blur-md'
-                        : 'bg-white border-slate-200 text-slate-900 shadow-slate-200/50'
-                }`}>
+                <div
+                    role="button" tabIndex={0}
+                    onClick={() => openDrilldown('collectionEfficiency', 'total', 'Collection Efficiency — Billed vs Collected', 'all', 'All Hospitals (Consolidated)')}
+                    onKeyDown={(e) => { if (e.key === 'Enter') openDrilldown('collectionEfficiency', 'total', 'Collection Efficiency — Billed vs Collected', 'all', 'All Hospitals (Consolidated)'); }}
+                    className={`p-5 rounded-3xl shadow-sm relative overflow-hidden border print:bg-white print:p-3 print:border-slate-300 cursor-pointer hover:ring-2 hover:ring-amber-400/60 transition-all print:cursor-auto ${
+                        isDark
+                            ? 'bg-slate-900 border-slate-800 backdrop-blur-md'
+                            : 'bg-white border-slate-200 text-slate-900 shadow-slate-200/50'
+                    }`}>
                     <div className={`flex items-center justify-between text-xs font-black uppercase tracking-wider mb-2 ${
                         isDark ? 'text-amber-400 print:text-amber-800' : 'text-amber-700'
                     }`}>
@@ -688,16 +707,21 @@ export default function PromoterDashboardPage() {
                         isDark ? 'text-white' : 'text-slate-900'
                     }`}>{executiveKPIs.collectionEfficiencyPct}%</div>
                     <div className={`text-xs font-medium mt-1 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Billed vs Cash Realized</div>
+                    <div className={`text-[10px] font-bold mt-2 flex items-center gap-1 print:hidden ${isDark ? 'text-amber-400/80' : 'text-amber-600/80'}`}><ExternalLink className="w-3 h-3" /> View invoices</div>
                 </div>
             </div>
 
-            {/* Top KPI Summary Cards */}
+            {/* Top KPI Summary Cards — every card opens a drill-down of the real records behind it */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 print:grid-cols-5 print:gap-2">
-                <div className={`p-5 rounded-3xl shadow-sm border print:bg-white print:p-3 print:border-slate-300 ${
-                    isDark
-                        ? 'bg-slate-900 border-slate-800 backdrop-blur-md'
-                        : 'bg-white border-slate-200 shadow-slate-200/50'
-                }`}>
+                <div
+                    role="button" tabIndex={0}
+                    onClick={() => openDrilldown('beds', 'total', 'Total Capacity — Bed Roster', 'all', 'All Hospitals (Consolidated)')}
+                    onKeyDown={(e) => { if (e.key === 'Enter') openDrilldown('beds', 'total', 'Total Capacity — Bed Roster', 'all', 'All Hospitals (Consolidated)'); }}
+                    className={`p-5 rounded-3xl shadow-sm border print:bg-white print:p-3 print:border-slate-300 cursor-pointer hover:ring-2 hover:ring-orange-400/50 transition-all print:cursor-auto ${
+                        isDark
+                            ? 'bg-slate-900 border-slate-800 backdrop-blur-md'
+                            : 'bg-white border-slate-200 shadow-slate-200/50'
+                    }`}>
                     <div className={`flex items-center justify-between text-xs font-black uppercase tracking-wider mb-2 print:mb-1 ${
                         isDark ? 'text-slate-400 print:text-slate-600' : 'text-slate-500'
                     }`}>
@@ -712,13 +736,18 @@ export default function PromoterDashboardPage() {
                     }`}>
                         {units.map((u) => `${u.name}: ${arpob.noOfBeds.byOrg[u.code] || 0}`).join(' • ')}
                     </div>
+                    <div className={`text-[10px] font-bold mt-2 flex items-center gap-1 print:hidden ${isDark ? 'text-orange-400/80' : 'text-orange-600/80'}`}><ExternalLink className="w-3 h-3" /> View bed roster</div>
                 </div>
 
-                <div className={`p-5 rounded-3xl shadow-sm border print:bg-white print:p-3 print:border-slate-300 ${
-                    isDark
-                        ? 'bg-slate-900 border-slate-800 backdrop-blur-md'
-                        : 'bg-white border-slate-200 shadow-slate-200/50'
-                }`}>
+                <div
+                    role="button" tabIndex={0}
+                    onClick={() => openDrilldown('admitted', 'all', 'Currently Admitted Patients', 'all', 'All Hospitals (Consolidated)')}
+                    onKeyDown={(e) => { if (e.key === 'Enter') openDrilldown('admitted', 'all', 'Currently Admitted Patients', 'all', 'All Hospitals (Consolidated)'); }}
+                    className={`p-5 rounded-3xl shadow-sm border print:bg-white print:p-3 print:border-slate-300 cursor-pointer hover:ring-2 hover:ring-orange-400/50 transition-all print:cursor-auto ${
+                        isDark
+                            ? 'bg-slate-900 border-slate-800 backdrop-blur-md'
+                            : 'bg-white border-slate-200 shadow-slate-200/50'
+                    }`}>
                     <div className={`flex items-center justify-between text-xs font-black uppercase tracking-wider mb-2 print:mb-1 ${
                         isDark ? 'text-slate-400 print:text-slate-600' : 'text-slate-500'
                     }`}>
@@ -733,13 +762,18 @@ export default function PromoterDashboardPage() {
                     }`}>
                         {currentAdmittedPatients.insurance.total} Ins • {currentAdmittedPatients.cash.total} Cash
                     </div>
+                    <div className={`text-[10px] font-bold mt-2 flex items-center gap-1 print:hidden ${isDark ? 'text-amber-400/80' : 'text-orange-600/80'}`}><ExternalLink className="w-3 h-3" /> View patient list</div>
                 </div>
 
-                <div className={`p-5 rounded-3xl shadow-sm border print:bg-white print:p-3 print:border-slate-300 ${
-                    isDark
-                        ? 'bg-slate-900 border-slate-800 backdrop-blur-md'
-                        : 'bg-white border-slate-200 shadow-slate-200/50'
-                }`}>
+                <div
+                    role="button" tabIndex={0}
+                    onClick={() => openDrilldown('revenue', 'all', 'Period Revenue — Invoices', 'all', 'All Hospitals (Consolidated)')}
+                    onKeyDown={(e) => { if (e.key === 'Enter') openDrilldown('revenue', 'all', 'Period Revenue — Invoices', 'all', 'All Hospitals (Consolidated)'); }}
+                    className={`p-5 rounded-3xl shadow-sm border print:bg-white print:p-3 print:border-slate-300 cursor-pointer hover:ring-2 hover:ring-orange-400/50 transition-all print:cursor-auto ${
+                        isDark
+                            ? 'bg-slate-900 border-slate-800 backdrop-blur-md'
+                            : 'bg-white border-slate-200 shadow-slate-200/50'
+                    }`}>
                     <div className={`flex items-center justify-between text-xs font-black uppercase tracking-wider mb-2 print:mb-1 ${
                         isDark ? 'text-slate-400 print:text-slate-600' : 'text-slate-500'
                     }`}>
@@ -754,13 +788,18 @@ export default function PromoterDashboardPage() {
                     }`}>
                         Insurance: {fmtINR(revenue.insurance.total, true)}
                     </div>
+                    <div className={`text-[10px] font-bold mt-2 flex items-center gap-1 print:hidden ${isDark ? 'text-orange-400/80' : 'text-orange-600/80'}`}><ExternalLink className="w-3 h-3" /> View invoices</div>
                 </div>
 
-                <div className={`p-5 rounded-3xl shadow-sm border print:bg-white print:p-3 print:border-slate-300 ${
-                    isDark
-                        ? 'bg-slate-900 border-slate-800 backdrop-blur-md'
-                        : 'bg-white border-slate-200 shadow-slate-200/50'
-                }`}>
+                <div
+                    role="button" tabIndex={0}
+                    onClick={() => openDrilldown('arpob', 'total', 'Consolidated ARPOB — Monthly Breakdown', 'all', 'All Hospitals (Consolidated)')}
+                    onKeyDown={(e) => { if (e.key === 'Enter') openDrilldown('arpob', 'total', 'Consolidated ARPOB — Monthly Breakdown', 'all', 'All Hospitals (Consolidated)'); }}
+                    className={`p-5 rounded-3xl shadow-sm border print:bg-white print:p-3 print:border-slate-300 cursor-pointer hover:ring-2 hover:ring-amber-400/50 transition-all print:cursor-auto ${
+                        isDark
+                            ? 'bg-slate-900 border-slate-800 backdrop-blur-md'
+                            : 'bg-white border-slate-200 shadow-slate-200/50'
+                    }`}>
                     <div className={`flex items-center justify-between text-xs font-black uppercase tracking-wider mb-2 print:mb-1 ${
                         isDark ? 'text-slate-400 print:text-slate-600' : 'text-slate-500'
                     }`}>
@@ -775,13 +814,18 @@ export default function PromoterDashboardPage() {
                     }`}>
                         Avg Revenue / Bed / Day
                     </div>
+                    <div className={`text-[10px] font-bold mt-2 flex items-center gap-1 print:hidden ${isDark ? 'text-amber-400/80' : 'text-amber-600/80'}`}><ExternalLink className="w-3 h-3" /> View monthly calc</div>
                 </div>
 
-                <div className={`p-5 rounded-3xl shadow-sm border print:bg-white print:p-3 print:border-slate-300 ${
-                    isDark
-                        ? 'bg-slate-900 border-slate-800 backdrop-blur-md'
-                        : 'bg-white border-slate-200 shadow-slate-200/50'
-                }`}>
+                <div
+                    role="button" tabIndex={0}
+                    onClick={() => openDrilldown('profitLoss', 'total', 'Net Profit / Loss — Reconciliation', 'all', 'All Hospitals (Consolidated)')}
+                    onKeyDown={(e) => { if (e.key === 'Enter') openDrilldown('profitLoss', 'total', 'Net Profit / Loss — Reconciliation', 'all', 'All Hospitals (Consolidated)'); }}
+                    className={`p-5 rounded-3xl shadow-sm border print:bg-white print:p-3 print:border-slate-300 cursor-pointer hover:ring-2 hover:ring-orange-400/50 transition-all print:cursor-auto ${
+                        isDark
+                            ? 'bg-slate-900 border-slate-800 backdrop-blur-md'
+                            : 'bg-white border-slate-200 shadow-slate-200/50'
+                    }`}>
                     <div className={`flex items-center justify-between text-xs font-black uppercase tracking-wider mb-2 print:mb-1 ${
                         isDark ? 'text-slate-400 print:text-slate-600' : 'text-slate-500'
                     }`}>
@@ -797,6 +841,7 @@ export default function PromoterDashboardPage() {
                         <ArrowUpRight className="w-3.5 h-3.5 print:hidden" />
                         <span>Margin: {profitLoss.percentage.total}%</span>
                     </div>
+                    <div className={`text-[10px] font-bold mt-2 flex items-center gap-1 print:hidden ${isDark ? 'text-orange-400/80' : 'text-orange-600/80'}`}><ExternalLink className="w-3 h-3" /> View calculation</div>
                 </div>
             </div>
 

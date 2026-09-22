@@ -691,7 +691,8 @@ export async function getInvestorDashboardData(params?: {
 // ============================================================================
 export type DrilldownSection =
     | 'admitted' | 'admissions' | 'discharges' | 'revenue' | 'opdVsIpd' | 'department'
-    | 'expenses' | 'receivables' | 'insuranceAging' | 'payables' | 'salaries';
+    | 'expenses' | 'receivables' | 'insuranceAging' | 'payables' | 'salaries'
+    | 'profitLoss' | 'beds' | 'alos' | 'arpob' | 'collectionEfficiency';
 
 export interface DrilldownResult {
     columns: string[];
@@ -715,12 +716,17 @@ export async function getInvestorDrilldown(params: {
         const session = await getInvestorSession();
         if (!session) return { success: false, error: 'Unauthorized investor session' };
 
-        // Only allow drilling into an organization that's actually part of the
+        // Only allow drilling into organizations that are actually part of the
         // active investor-visible set — the org id comes from the client, so this
-        // is the tenant-isolation boundary, not just data lookup.
+        // is the tenant-isolation boundary, not just data lookup. 'all' (used by
+        // the executive/summary KPI cards, which are always consolidated across
+        // every active hospital, same as their own headline figure) resolves to
+        // every active org; anything else must name one real org exactly.
         const activeOrgs = await getActiveOrgs();
-        const orgId = activeOrgs.find((o) => o.id === params.unit)?.id;
-        if (!orgId) return { success: false, error: 'Unknown unit' };
+        const orgIds: string[] = params.unit === 'all'
+            ? activeOrgs.map((o) => o.id)
+            : (() => { const found = activeOrgs.find((o) => o.id === params.unit)?.id; return found ? [found] : []; })();
+        if (orgIds.length === 0) return { success: false, error: 'Unknown unit' };
         if (params.category === 'panel') {
             return { success: true, data: { columns: [], rows: [], totalCount: 0, truncated: false } };
         }
@@ -738,7 +744,7 @@ export async function getInvestorDrilldown(params: {
                         ? { status: { not: 'Cancelled' }, admission_date: { gte: start, lt: end } }
                         : { status: 'Discharged', discharge_date: { gte: start, lt: end } };
                 const rows = await prisma.admissions.findMany({
-                    where: { organizationId: orgId, is_archived: false, ...dateFilter },
+                    where: { organizationId: { in: orgIds }, is_archived: false, ...dateFilter },
                     select: {
                         admission_id: true, admission_date: true, discharge_date: true, status: true,
                         patient: { select: { full_name: true, patient_id: true, patient_type: true } },
@@ -746,7 +752,7 @@ export async function getInvestorDrilldown(params: {
                     orderBy: { admission_date: 'desc' },
                     take: ROW_CAP + 1,
                 });
-                const filtered = rows.filter((r) => categoryOf(r.patient?.patient_type) === params.category);
+                const filtered = params.category === 'all' ? rows : rows.filter((r) => categoryOf(r.patient?.patient_type) === params.category);
                 return { success: true, data: {
                     columns: ['Patient', 'UHID', 'Admission ID', 'Admitted', 'Discharged', 'Status'],
                     rows: filtered.slice(0, ROW_CAP).map((r) => [
@@ -760,12 +766,12 @@ export async function getInvestorDrilldown(params: {
 
             case 'revenue': {
                 const rows = await prisma.invoices.findMany({
-                    where: { organizationId: orgId, status: 'Final', created_at: { gte: start, lt: end } },
+                    where: { organizationId: { in: orgIds }, status: 'Final', created_at: { gte: start, lt: end } },
                     select: { id: true, invoice_number: true, patient_id: true, net_amount: true, billing_patient_type: true, invoice_type: true, created_at: true },
                     orderBy: { created_at: 'desc' },
                     take: 5000,
                 });
-                const filtered = rows.filter((r) => categoryOf(r.billing_patient_type) === params.category);
+                const filtered = params.category === 'all' ? rows : rows.filter((r) => categoryOf(r.billing_patient_type) === params.category);
                 return { success: true, data: {
                     columns: ['Invoice #', 'Patient ID', 'Type', 'Date', 'Amount (₹)'],
                     rows: filtered.slice(0, ROW_CAP).map((r) => [
@@ -778,7 +784,7 @@ export async function getInvestorDrilldown(params: {
 
             case 'opdVsIpd': {
                 const invoices = await prisma.invoices.findMany({
-                    where: { organizationId: orgId, status: 'Final', created_at: { gte: start, lt: end } },
+                    where: { organizationId: { in: orgIds }, status: 'Final', created_at: { gte: start, lt: end } },
                     select: { id: true, invoice_number: true, patient_id: true, invoice_type: true, created_at: true },
                 });
                 const invMetaById = new Map(invoices.map((i) => [i.id, i]));
@@ -812,7 +818,7 @@ export async function getInvestorDrilldown(params: {
 
             case 'department': {
                 const invoices = await prisma.invoices.findMany({
-                    where: { organizationId: orgId, status: 'Final', doctor_id: { not: null }, created_at: { gte: start, lt: end } },
+                    where: { organizationId: { in: orgIds }, status: 'Final', doctor_id: { not: null }, created_at: { gte: start, lt: end } },
                     select: { invoice_number: true, patient_id: true, net_amount: true, created_at: true, doctor_id: true, id: true },
                 });
                 const doctorIds = Array.from(new Set(invoices.map((i) => i.doctor_id).filter((d): d is string => !!d)));
@@ -838,7 +844,7 @@ export async function getInvestorDrilldown(params: {
                 const monthStart = new Date(mo.year, mo.monthIndex, 1);
                 const monthEnd = new Date(mo.year, mo.monthIndex + 1, 1);
                 const rows = await prisma.expense.findMany({
-                    where: { organizationId: orgId, status: { in: ['Approved', 'Paid'] }, created_at: { gte: monthStart, lt: monthEnd } },
+                    where: { organizationId: { in: orgIds }, status: { in: ['Approved', 'Paid'] }, created_at: { gte: monthStart, lt: monthEnd } },
                     select: { expense_number: true, description: true, total_amount: true, created_at: true, status: true, vendor: { select: { vendor_name: true } } },
                     orderBy: { created_at: 'desc' },
                     take: ROW_CAP + 1,
@@ -854,7 +860,7 @@ export async function getInvestorDrilldown(params: {
             case 'receivables': {
                 if (params.category === 'tdsReceivables') {
                     const rows = await prisma.invoices.findMany({
-                        where: { organizationId: orgId, tpa_tds_amount: { gt: 0 } },
+                        where: { organizationId: { in: orgIds }, tpa_tds_amount: { gt: 0 } },
                         select: { invoice_number: true, id: true, patient_id: true, tpa_tds_amount: true, tpa_settled_at: true, tpa_claim_status: true },
                         orderBy: { tpa_settled_at: 'desc' },
                         take: ROW_CAP + 1,
@@ -867,7 +873,7 @@ export async function getInvestorDrilldown(params: {
                     } };
                 }
                 const rows = await prisma.invoices.findMany({
-                    where: { organizationId: orgId, status: 'Final', balance_due: { gt: 0 } },
+                    where: { organizationId: { in: orgIds }, status: 'Final', balance_due: { gt: 0 } },
                     select: { invoice_number: true, patient_id: true, balance_due: true, billing_patient_type: true, created_at: true, id: true },
                     orderBy: { created_at: 'desc' },
                 });
@@ -882,7 +888,7 @@ export async function getInvestorDrilldown(params: {
 
             case 'insuranceAging': {
                 const rows = await prisma.invoices.findMany({
-                    where: { organizationId: orgId, tpa_payable: { gt: 0 } },
+                    where: { organizationId: { in: orgIds }, tpa_payable: { gt: 0 } },
                     select: { invoice_number: true, id: true, patient_id: true, tpa_payable: true, tpa_approved_at: true, finalized_at: true, created_at: true, tpa_claim_status: true },
                 });
                 const nowTs = Date.now();
@@ -906,7 +912,7 @@ export async function getInvestorDrilldown(params: {
             case 'payables': {
                 if (params.category === 'doctorsProfessional' || params.category === 'tdsPayable') {
                     const rows = await prisma.doctorCommission.findMany({
-                        where: { organizationId: orgId, status: { in: ['accrued', 'included_in_statement'] } },
+                        where: { organizationId: { in: orgIds }, status: { in: ['accrued', 'included_in_statement'] } },
                         select: { doctor_id: true, patient_id: true, invoice_id: true, invoice_type: true, commission_amount: true, tds_amount: true, status: true },
                         orderBy: { invoice_id: 'desc' },
                         take: ROW_CAP + 1,
@@ -927,12 +933,12 @@ export async function getInvestorDrilldown(params: {
                 if (params.category === 'vendors') {
                     const [expenseRows, pharmacyRows] = await Promise.all([
                         prisma.expense.findMany({
-                            where: { organizationId: orgId, status: 'Approved', vendor_id: { not: null } },
+                            where: { organizationId: { in: orgIds }, status: 'Approved', vendor_id: { not: null } },
                             select: { expense_number: true, description: true, total_amount: true, created_at: true, vendor: { select: { vendor_name: true } } },
                             orderBy: { created_at: 'desc' },
                         }),
                         prisma.pharmacyPurchaseInvoice.findMany({
-                            where: { organizationId: orgId, status: { not: 'Draft' } },
+                            where: { organizationId: { in: orgIds }, status: { not: 'Draft' } },
                             select: { invoice_number: true, total_amount: true, amount_paid: true, invoice_date: true, vendor: { select: { vendor_name: true } } },
                             orderBy: { invoice_date: 'desc' },
                         }),
@@ -949,7 +955,7 @@ export async function getInvestorDrilldown(params: {
                     } };
                 }
                 const rows = await prisma.expense.findMany({
-                    where: { organizationId: orgId, status: 'Approved', vendor_id: null },
+                    where: { organizationId: { in: orgIds }, status: 'Approved', vendor_id: null },
                     select: { expense_number: true, description: true, total_amount: true, created_at: true, vendor: { select: { vendor_name: true } } },
                     orderBy: { created_at: 'desc' },
                     take: ROW_CAP + 1,
@@ -967,7 +973,7 @@ export async function getInvestorDrilldown(params: {
                 if (!mo) return { success: true, data: { columns: [], rows: [], totalCount: 0, truncated: false } };
                 const monthEnd = new Date(mo.year, mo.monthIndex + 1, 1);
                 const rows = await prisma.employee.findMany({
-                    where: { organizationId: orgId, is_active: true, date_of_joining: { lt: monthEnd } },
+                    where: { organizationId: { in: orgIds }, is_active: true, date_of_joining: { lt: monthEnd } },
                     select: { employee_code: true, name: true, designation: true, salary_basic: true, date_of_joining: true },
                     orderBy: { name: 'asc' },
                     take: ROW_CAP + 1,
@@ -977,6 +983,146 @@ export async function getInvestorDrilldown(params: {
                     rows: rows.slice(0, ROW_CAP).map((r) => [r.employee_code, r.name, r.designation, fmtDate(r.date_of_joining), money(r.salary_basic)]),
                     totalCount: rows.length,
                     truncated: rows.length > ROW_CAP,
+                } };
+            }
+
+            case 'beds': {
+                const orgNameById = new Map(activeOrgs.map((o) => [o.id, o.name]));
+                const rows = await prisma.beds.findMany({
+                    where: { organizationId: { in: orgIds }, status: { not: 'Archived' } },
+                    select: { bed_id: true, bed_name: true, status: true, bed_category: true, organizationId: true, wards: { select: { ward_name: true } } },
+                    orderBy: [{ organizationId: 'asc' }, { bed_name: 'asc' }],
+                    take: ROW_CAP + 1,
+                });
+                return { success: true, data: {
+                    columns: ['Hospital', 'Bed', 'Ward', 'Category', 'Status'],
+                    rows: rows.slice(0, ROW_CAP).map((r) => [
+                        orgNameById.get(r.organizationId) || r.organizationId, r.bed_name || r.bed_id,
+                        r.wards?.ward_name || '—', r.bed_category || '—', r.status || 'Available',
+                    ]),
+                    totalCount: rows.length,
+                    truncated: rows.length > ROW_CAP,
+                } };
+            }
+
+            case 'alos': {
+                const orgNameById = new Map(activeOrgs.map((o) => [o.id, o.name]));
+                const rows = await prisma.admissions.findMany({
+                    where: { organizationId: { in: orgIds }, status: 'Discharged', discharge_date: { gte: start, lt: end, not: null } },
+                    select: {
+                        organizationId: true, admission_id: true, admission_date: true, discharge_date: true,
+                        patient: { select: { full_name: true, patient_id: true } },
+                    },
+                    orderBy: { discharge_date: 'desc' },
+                    take: ROW_CAP + 1,
+                });
+                return { success: true, data: {
+                    columns: ['Hospital', 'Patient', 'UHID', 'Admission ID', 'Admitted', 'Discharged', 'LOS (Days)'],
+                    rows: rows.slice(0, ROW_CAP).map((r) => {
+                        const los = Math.max(0, (new Date(r.discharge_date!).getTime() - new Date(r.admission_date).getTime()) / (1000 * 60 * 60 * 24));
+                        return [
+                            orgNameById.get(r.organizationId) || r.organizationId, r.patient?.full_name || 'Unknown', r.patient?.patient_id || '—',
+                            r.admission_id, fmtDate(r.admission_date), fmtDate(r.discharge_date), Number(los.toFixed(1)),
+                        ];
+                    }),
+                    totalCount: rows.length,
+                    truncated: rows.length > ROW_CAP,
+                } };
+            }
+
+            case 'collectionEfficiency': {
+                const orgNameById = new Map(activeOrgs.map((o) => [o.id, o.name]));
+                const rows = await prisma.invoices.findMany({
+                    where: { organizationId: { in: orgIds }, status: 'Final', created_at: { gte: start, lt: end } },
+                    select: { id: true, invoice_number: true, patient_id: true, net_amount: true, paid_amount: true, organizationId: true, created_at: true },
+                    orderBy: { created_at: 'desc' },
+                    take: ROW_CAP + 1,
+                });
+                return { success: true, data: {
+                    columns: ['Hospital', 'Invoice #', 'Patient ID', 'Date', 'Billed (₹)', 'Collected (₹)', 'Collected %'],
+                    rows: rows.slice(0, ROW_CAP).map((r) => {
+                        const billed = money(r.net_amount);
+                        const collected = money(r.paid_amount);
+                        const pct = billed > 0 ? Number(((collected / billed) * 100).toFixed(1)) : 0;
+                        return [orgNameById.get(r.organizationId) || r.organizationId, r.invoice_number || `Draft #${r.id}`, r.patient_id, fmtDate(r.created_at), billed, collected, pct];
+                    }),
+                    totalCount: rows.length,
+                    truncated: rows.length > ROW_CAP,
+                } };
+            }
+
+            case 'arpob': {
+                const ipdInvoices = await prisma.invoices.findMany({
+                    where: { organizationId: { in: orgIds }, invoice_type: 'IPD', status: 'Final', created_at: { gte: new Date(fyMonths[0].year, fyMonths[0].monthIndex, 1), lt: new Date(fyMonths[fyMonths.length - 1].year, fyMonths[fyMonths.length - 1].monthIndex + 1, 1) } },
+                    select: { net_amount: true, created_at: true },
+                });
+                const bedRows = await prisma.beds.groupBy({
+                    by: ['organizationId'],
+                    where: { organizationId: { in: orgIds }, status: { not: 'Archived' } },
+                    _count: true,
+                }).catch(() => [] as Array<{ organizationId: string; _count: number }>);
+                let totalBeds = 0;
+                for (const r of bedRows) totalBeds += r._count;
+                const todayForArpob = new Date();
+                const revByMonth = fyMonths.map(() => 0);
+                for (const inv of ipdInvoices) {
+                    const idx = fyMonths.findIndex((mo) => mo.year === inv.created_at.getFullYear() && mo.monthIndex === inv.created_at.getMonth());
+                    if (idx >= 0) revByMonth[idx] += money(inv.net_amount);
+                }
+                return { success: true, data: {
+                    columns: ['Month', 'IPD Revenue (₹)', 'Beds', 'Days', 'ARPOB (₹)'],
+                    rows: fyMonths.map((mo, i) => {
+                        const isCurrentMonth = mo.year === todayForArpob.getFullYear() && mo.monthIndex === todayForArpob.getMonth();
+                        const days = isCurrentMonth ? todayForArpob.getDate() : daysInMonth(mo.year, mo.monthIndex);
+                        const arpobVal = totalBeds > 0 ? Math.round(revByMonth[i] / (totalBeds * days)) : 0;
+                        return [mo.label, Math.round(revByMonth[i]), totalBeds, days, arpobVal];
+                    }),
+                    totalCount: fyMonths.length,
+                    truncated: false,
+                } };
+            }
+
+            case 'profitLoss': {
+                const fyRangeStart = new Date(fyMonths[0].year, fyMonths[0].monthIndex, 1);
+                const fyRangeEnd = new Date(fyMonths[fyMonths.length - 1].year, fyMonths[fyMonths.length - 1].monthIndex + 1, 1);
+                const [periodRevenue, fyExpenses, fyEmployees] = await Promise.all([
+                    prisma.invoices.findMany({
+                        where: { organizationId: { in: orgIds }, status: 'Final', created_at: { gte: start, lt: end } },
+                        select: { net_amount: true },
+                    }),
+                    prisma.expense.findMany({
+                        where: { organizationId: { in: orgIds }, status: { in: ['Approved', 'Paid'] }, created_at: { gte: fyRangeStart, lt: fyRangeEnd } },
+                        select: { total_amount: true },
+                    }),
+                    prisma.employee.findMany({
+                        where: { organizationId: { in: orgIds }, is_active: true },
+                        select: { salary_basic: true, date_of_joining: true },
+                    }),
+                ]);
+                const revenueTotal = periodRevenue.reduce((s, r) => s + money(r.net_amount), 0);
+                const expenseTotal = fyExpenses.reduce((s, r) => s + money(r.total_amount), 0);
+                // Same run-rate approximation as the headline figure: each active
+                // employee's salary counted once per FY month they'd already joined by.
+                let salaryTotal = 0;
+                for (const mo of fyMonths) {
+                    const monthEnd = new Date(mo.year, mo.monthIndex + 1, 1);
+                    for (const e of fyEmployees) {
+                        if (new Date(e.date_of_joining) < monthEnd) salaryTotal += money(e.salary_basic);
+                    }
+                }
+                const netProfit = revenueTotal - expenseTotal - salaryTotal;
+                const marginPct = revenueTotal > 0 ? Number(((netProfit / revenueTotal) * 100).toFixed(1)) : 0;
+                return { success: true, data: {
+                    columns: ['Line Item', 'Period Covered', 'Amount (₹)'],
+                    rows: [
+                        ['Revenue', 'Selected filter period', Math.round(revenueTotal)],
+                        ['Less: Expenses (Approved/Paid)', 'Fiscal-year-to-date', -Math.round(expenseTotal)],
+                        ['Less: Salaries (active roster run-rate)', 'Fiscal-year-to-date', -Math.round(salaryTotal)],
+                        ['Net Profit / (Loss)', '—', Math.round(netProfit)],
+                        ['EBITDA / Net Margin %', '—', marginPct],
+                    ],
+                    totalCount: 5,
+                    truncated: false,
                 } };
             }
 
