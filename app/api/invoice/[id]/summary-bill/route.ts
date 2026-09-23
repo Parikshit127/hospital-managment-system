@@ -274,7 +274,7 @@ function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposit
     const creditNotes = invoice.credit_notes || [];
     const creditNoteTotal = creditNotes.reduce((s: number, c: any) => s + Number(c.total_amount || 0), 0);
 
-    const patientHeaderLabel = getInvoiceHospitalLabel(org?.id, invoice);
+    const patientHeaderLabel = getInvoiceHospitalLabel(org?.id, invoice) || branding.patientHeaderLabel;
     let patientInfoHTML = `
         ${patientHeaderLabel ? `<p style="font-size:18px;font-weight:800;color:${branding.accentColor};grid-column:1 / -1;margin-bottom:4px;">${patientHeaderLabel}</p>` : ''}
         <p style="font-size:11px;"><strong>Patient:</strong> ${patient.full_name || '-'}</p>

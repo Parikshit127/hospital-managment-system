@@ -415,7 +415,7 @@ function generateInvoiceHTML(invoice: any, branding: BillBranding, pharmacy: { n
                 <!-- Patient Row -->
                 <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
                     <div>
-                        ${getInvoiceHospitalLabel(invoice.organizationId, invoice) ? `<p style="font-size:18px;font-weight:800;color:${branding.accentColor};margin-bottom:4px;">${getInvoiceHospitalLabel(invoice.organizationId, invoice)}</p>` : ''}
+                        ${(() => { const l = getInvoiceHospitalLabel(invoice.organizationId, invoice) || branding.patientHeaderLabel; return l ? `<p style="font-size:18px;font-weight:800;color:${branding.accentColor};margin-bottom:4px;">${l}</p>` : ''; })()}
                         <p style="font-size:12px;font-weight:bold;">${patientDisplayName} [${patient.patient_id || '-'}]</p>
                         <p style="font-size:10px;color:#555;">Contact No.: ${patientContact}</p>
                     </div>

@@ -90,11 +90,12 @@ export async function GET(
             : undefined;
 
         // Prefer the value frozen in the snapshot itself; fall back to the live
-        // invoice for snapshots taken before this field existed.
+        // invoice for snapshots taken before this field existed; then to a fixed
+        // org-level label (e.g. Nulife) when there's no per-bill value at all.
         const patientHeaderLabel = getInvoiceHospitalLabel(
             org?.id,
             { billed_hospital_name: inv.billed_hospital_name ?? liveInvoice?.billed_hospital_name },
-        );
+        ) || branding.patientHeaderLabel || null;
 
         const html = renderSnapshotBillHTML({
             snapshot: inv,
