@@ -426,7 +426,19 @@ export async function getJournalEntryDetails(journalId: string) {
       },
     });
 
-    return { success: true, journal: serialize(journal) };
+    // Attach the source expense when this JV was created from the Expenses module
+    let source_expense = null;
+    if (journal?.reference_type === 'Expense' && journal.reference_id) {
+      source_expense = await prisma.expense.findUnique({
+        where: { id: parseInt(journal.reference_id) },
+        include: {
+          category: { select: { name: true } },
+          vendor: { select: { vendor_name: true } },
+        },
+      });
+    }
+
+    return { success: true, journal: serialize({ ...journal, source_expense }) };
   } catch (error) {
     console.error('Error fetching journal details:', error);
     return { success: false, error: 'Failed to fetch journal details' };

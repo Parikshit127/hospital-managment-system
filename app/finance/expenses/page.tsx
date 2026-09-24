@@ -9,7 +9,7 @@ import { getVendors } from '@/app/actions/expense-actions';
 import {
     Plus, Search, Filter, CheckCircle, XCircle, CreditCard,
     TrendingDown, Clock, AlertCircle, IndianRupee, Receipt,
-    Paperclip, Upload, ExternalLink, Loader2
+    Paperclip, Upload, ExternalLink, Loader2, BookOpen
 } from 'lucide-react';
 import { AppShell } from '@/app/components/layout/AppShell';
 
@@ -265,6 +265,7 @@ function ExpenseTable({ expenses, onApprove, onReject, onPay, onRefresh }: {
                         <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase text-right">Amount</th>
                         <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Status</th>
                         <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Date</th>
+                        <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Journal Entry</th>
                         <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Receipt</th>
                         <th className="px-6 py-3 text-xs font-semibold text-gray-500 uppercase">Actions</th>
                     </tr>
@@ -286,6 +287,20 @@ function ExpenseTable({ expenses, onApprove, onReject, onPay, onRefresh }: {
                             </td>
                             <td className="px-6 py-3 text-sm text-gray-500">
                                 {new Date(exp.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
+                            </td>
+                            <td className="px-6 py-3 text-sm">
+                                {exp.gl_journal ? (
+                                    <a
+                                        href={`/finance/journal-entries/${exp.gl_journal.id}`}
+                                        className="inline-flex items-center gap-1.5 font-mono text-xs text-emerald-700 hover:text-emerald-900 hover:underline"
+                                        onClick={e => e.stopPropagation()}
+                                    >
+                                        <BookOpen className="h-3.5 w-3.5 shrink-0" />
+                                        {exp.gl_journal.journal_number}
+                                    </a>
+                                ) : (
+                                    <span className="text-gray-300 text-xs">—</span>
+                                )}
                             </td>
                             <td className="px-6 py-3">
                                 {exp.receipt_key ? (

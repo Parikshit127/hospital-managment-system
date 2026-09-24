@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, BookOpen, RotateCcw, Calendar, Tag, Hash, FileText } from 'lucide-react';
+import { ArrowLeft, BookOpen, RotateCcw, Calendar, Tag, Hash, FileText, ExternalLink } from 'lucide-react';
 import { AppShell } from '@/app/components/layout/AppShell';
 import { useToast } from '@/app/components/ui/Toast';
 import { Button } from '@/app/components/ui/Button';
@@ -35,6 +35,17 @@ type JournalEntry = {
     reference_type: string | null;
     reference_number: string | null;
     lines: JournalLine[];
+    source_expense: {
+        id: number;
+        expense_number: string;
+        description: string;
+        amount: number;
+        total_amount: number;
+        status: string;
+        created_at: string;
+        category: { name: string } | null;
+        vendor: { vendor_name: string } | null;
+    } | null;
 };
 
 type BadgeVariant = 'warning' | 'success' | 'danger' | 'info' | 'neutral' | 'purple';
@@ -203,6 +214,63 @@ export default function JournalEntryDetailPage() {
                         </div>
                     )}
                 </Card>
+
+                {/* Source Expense — shown when this JV was auto-posted from the Expenses module */}
+                {journal.source_expense && (
+                    <Card>
+                        <CardHeader className="mb-4">
+                            <div className="flex items-center justify-between">
+                                <CardTitle>Source Expense</CardTitle>
+                                <Link
+                                    href="/finance/expenses"
+                                    className="flex items-center gap-1 text-xs text-emerald-600 hover:text-emerald-800"
+                                >
+                                    <ExternalLink className="h-3.5 w-3.5" />
+                                    View all expenses
+                                </Link>
+                            </div>
+                        </CardHeader>
+                        <div className="grid grid-cols-2 gap-x-8 gap-y-4 sm:grid-cols-4">
+                            <div className="flex flex-col gap-1">
+                                <span className="text-xs font-medium text-gray-500">Expense No.</span>
+                                <span className="text-sm font-mono font-semibold text-gray-900">
+                                    {journal.source_expense.expense_number}
+                                </span>
+                            </div>
+                            <div className="flex flex-col gap-1">
+                                <span className="text-xs font-medium text-gray-500">Category</span>
+                                <span className="text-sm text-gray-900">
+                                    {journal.source_expense.category?.name ?? '—'}
+                                </span>
+                            </div>
+                            <div className="flex flex-col gap-1">
+                                <span className="text-xs font-medium text-gray-500">Vendor</span>
+                                <span className="text-sm text-gray-900">
+                                    {journal.source_expense.vendor?.vendor_name ?? '—'}
+                                </span>
+                            </div>
+                            <div className="flex flex-col gap-1">
+                                <span className="text-xs font-medium text-gray-500">Amount</span>
+                                <span className="text-sm font-semibold text-gray-900">
+                                    {Number(journal.source_expense.total_amount).toLocaleString('en-IN', {
+                                        style: 'currency', currency: 'INR', maximumFractionDigits: 2,
+                                    })}
+                                </span>
+                            </div>
+                        </div>
+                        <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between">
+                            <p className="text-sm text-gray-700">{journal.source_expense.description}</p>
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                journal.source_expense.status === 'Paid' ? 'bg-emerald-50 text-emerald-700' :
+                                journal.source_expense.status === 'Approved' ? 'bg-blue-50 text-blue-700' :
+                                journal.source_expense.status === 'Pending' ? 'bg-amber-50 text-amber-700' :
+                                'bg-gray-100 text-gray-500'
+                            }`}>
+                                {journal.source_expense.status}
+                            </span>
+                        </div>
+                    </Card>
+                )}
 
                 {/* Journal Lines */}
                 <Card padding="none">

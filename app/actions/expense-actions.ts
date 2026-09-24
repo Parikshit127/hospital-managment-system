@@ -184,7 +184,22 @@ export async function getExpenses(filters?: {
             orderBy: { created_at: 'desc' },
             take: filters?.limit || 500,
         });
-        return { success: true, data: serialize(expenses) };
+
+        // Batch-fetch linked GL journal entries (one extra query, not N)
+        const expenseIds = expenses.map((e: { id: number }) => e.id.toString());
+        const journals = expenseIds.length > 0
+            ? await db.gL_JournalEntry.findMany({
+                where: { reference_type: 'Expense', reference_id: { in: expenseIds }, status: { not: 'Reversed' } },
+                select: { id: true, journal_number: true, status: true, reference_id: true },
+            })
+            : [];
+        const journalByExpenseId = Object.fromEntries(
+            (journals as { id: string; journal_number: string; status: string; reference_id: string | null }[])
+                .map(j => [j.reference_id, j])
+        );
+        const data = expenses.map((e: { id: number }) => ({ ...e, gl_journal: journalByExpenseId[e.id.toString()] ?? null }));
+
+        return { success: true, data: serialize(data) };
     } catch (error: any) {
         return { success: false, error: error.message };
     }
