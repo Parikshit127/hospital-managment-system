@@ -321,8 +321,11 @@ export async function getInvestorDashboardData(params?: {
         // Revenue number not reconcile against the Finance Dashboard's Total
         // Revenue for the same hospital. Consistency across the app's own
         // screens matters more here than which convention is theoretically purer.
+        // Pharmacy is an outsourced operation, not hospital revenue — excluded
+        // here (same convention as getFinanceDashboardStats/getMISReport) so it
+        // never counts toward Revenue, Collection Efficiency, or Net Profit.
         const revenueInvoices = await prisma.invoices.findMany({
-            where: { organizationId: { in: orgIds }, status: 'Final', created_at: { gte: start, lt: end } },
+            where: { organizationId: { in: orgIds }, status: 'Final', invoice_type: { notIn: ['Pharmacy', 'PHARMACY'] }, created_at: { gte: start, lt: end } },
             select: { organizationId: true, net_amount: true, paid_amount: true, billing_patient_type: true, invoice_type: true, doctor_id: true, id: true },
         }).catch((err) => { console.error('investor: revenue invoices', err); return [] as Array<{ organizationId: string; net_amount: unknown; paid_amount: unknown; billing_patient_type: string | null; invoice_type: string; doctor_id: string | null; id: number }>; });
 
@@ -765,8 +768,9 @@ export async function getInvestorDrilldown(params: {
             }
 
             case 'revenue': {
+                // Pharmacy is outsourced, not hospital revenue — excluded, same as the headline figure.
                 const rows = await prisma.invoices.findMany({
-                    where: { organizationId: { in: orgIds }, status: 'Final', created_at: { gte: start, lt: end } },
+                    where: { organizationId: { in: orgIds }, status: 'Final', invoice_type: { notIn: ['Pharmacy', 'PHARMACY'] }, created_at: { gte: start, lt: end } },
                     select: { id: true, invoice_number: true, patient_id: true, net_amount: true, billing_patient_type: true, invoice_type: true, created_at: true },
                     orderBy: { created_at: 'desc' },
                     take: 5000,
@@ -818,7 +822,7 @@ export async function getInvestorDrilldown(params: {
 
             case 'department': {
                 const invoices = await prisma.invoices.findMany({
-                    where: { organizationId: { in: orgIds }, status: 'Final', doctor_id: { not: null }, created_at: { gte: start, lt: end } },
+                    where: { organizationId: { in: orgIds }, status: 'Final', invoice_type: { notIn: ['Pharmacy', 'PHARMACY'] }, doctor_id: { not: null }, created_at: { gte: start, lt: end } },
                     select: { invoice_number: true, patient_id: true, net_amount: true, created_at: true, doctor_id: true, id: true },
                 });
                 const doctorIds = Array.from(new Set(invoices.map((i) => i.doctor_id).filter((d): d is string => !!d)));
@@ -1031,9 +1035,10 @@ export async function getInvestorDrilldown(params: {
             }
 
             case 'collectionEfficiency': {
+                // Pharmacy is outsourced, not hospital revenue — excluded from Collection Efficiency too.
                 const orgNameById = new Map(activeOrgs.map((o) => [o.id, o.name]));
                 const rows = await prisma.invoices.findMany({
-                    where: { organizationId: { in: orgIds }, status: 'Final', created_at: { gte: start, lt: end } },
+                    where: { organizationId: { in: orgIds }, status: 'Final', invoice_type: { notIn: ['Pharmacy', 'PHARMACY'] }, created_at: { gte: start, lt: end } },
                     select: { id: true, invoice_number: true, patient_id: true, net_amount: true, paid_amount: true, organizationId: true, created_at: true },
                     orderBy: { created_at: 'desc' },
                     take: ROW_CAP + 1,
@@ -1086,8 +1091,9 @@ export async function getInvestorDrilldown(params: {
                 const fyRangeStart = new Date(fyMonths[0].year, fyMonths[0].monthIndex, 1);
                 const fyRangeEnd = new Date(fyMonths[fyMonths.length - 1].year, fyMonths[fyMonths.length - 1].monthIndex + 1, 1);
                 const [periodRevenue, fyExpenses, fyEmployees] = await Promise.all([
+                    // Pharmacy is outsourced, not hospital revenue — excluded, same as the headline Revenue figure.
                     prisma.invoices.findMany({
-                        where: { organizationId: { in: orgIds }, status: 'Final', created_at: { gte: start, lt: end } },
+                        where: { organizationId: { in: orgIds }, status: 'Final', invoice_type: { notIn: ['Pharmacy', 'PHARMACY'] }, created_at: { gte: start, lt: end } },
                         select: { net_amount: true },
                     }),
                     prisma.expense.findMany({
