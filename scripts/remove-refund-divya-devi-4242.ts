@@ -17,29 +17,27 @@ const prisma = new PrismaClient();
 const CONFIRM = process.argv.includes('--confirm');
 
 async function main() {
-  const patient = await prisma.oPD_REG.findFirst({
-    where: { OR: [{ patient_id: 'AVS-2026-01257' }, { full_name: { contains: 'Divya Devi', mode: 'insensitive' } }] },
-  });
-  if (!patient) throw new Error('Patient AVS-2026-01257 / Divya Devi not found.');
-
-  const invoice = await prisma.invoices.findFirst({
-    where: { invoice_number: '4242' },
-  });
-  if (!invoice) throw new Error('Invoice 4242 not found.');
-  if (invoice.patient_id !== patient.patient_id) {
-    throw new Error(
-      `Invoice 4242 belongs to patient_id ${invoice.patient_id}, not ${patient.patient_id} (${patient.full_name}). Aborting — details don't line up.`
-    );
-  }
-
+  // "Invoice 4242" on the patient billing page's Refunds tab renders raw
+  // refund.invoice_id (the invoices.id primary key), NOT invoice_number — so
+  // match on invoice_id directly rather than invoice_number.
   const refund = await prisma.refund.findFirst({
     where: {
-      invoice_id: String(invoice.id),
+      invoice_id: '4242',
       amount: 10000,
       processed_by: { contains: 'Gauttam', mode: 'insensitive' },
     },
   });
-  if (!refund) throw new Error('No ₹10,000 refund by Admin.Gauttam found on invoice 4242.');
+  if (!refund) throw new Error('No ₹10,000 refund by Admin.Gauttam found with invoice_id 4242.');
+
+  const invoice = await prisma.invoices.findUnique({ where: { id: Number(refund.invoice_id) } });
+  if (!invoice) throw new Error(`Refund ${refund.id} points at invoice_id ${refund.invoice_id}, which doesn't exist.`);
+
+  const patient = await prisma.oPD_REG.findUnique({ where: { patient_id: invoice.patient_id } });
+  if (!patient || !/divya devi/i.test(patient.full_name)) {
+    throw new Error(
+      `Invoice ${invoice.id} belongs to patient "${patient?.full_name}" (${invoice.patient_id}), not Divya Devi. Aborting — details don't line up.`
+    );
+  }
 
   const payment = refund.payment_id
     ? await prisma.payments.findUnique({ where: { id: Number(refund.payment_id) } })
