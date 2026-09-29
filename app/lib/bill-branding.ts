@@ -340,7 +340,11 @@ export function deriveInvoiceTotals(invoice: any) {
     // though the app's outstanding (driven off balance_due) has already gone to zero.
     const creditNotes: any[] = invoice?.credit_notes || [];
     const creditNoteTotal = creditNotes.reduce((s, c) => s + Number(c?.total_amount || 0), 0);
-    const balance = net - creditNoteTotal - paid;
+    // Cancelled bills owe nothing regardless of what the line items sum to — the DB's
+    // balance_due is zeroed on cancellation (see the zero_cancelled_invoice_balance
+    // migration); recomputing from items here must agree, or printed bills show a
+    // stale outstanding balance on a bill that was voided.
+    const balance = invoice?.status === 'Cancelled' ? 0 : net - creditNoteTotal - paid;
 
     // ─── TPA split ──────────────────────────────────────────────────────────
     // The stored balance_due (computed by server actions) is the single source of

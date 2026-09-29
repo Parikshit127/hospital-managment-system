@@ -1,6 +1,11 @@
 import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
+// STORAGE_PROVIDER selects the backing object store for patient records.
+// Unset / 's3' → AWS S3 (default — preserves existing AWS deployment behavior).
+// 'azure-blob' → Azure Blob Storage (used by the Azure deployment).
+const STORAGE_PROVIDER = process.env.STORAGE_PROVIDER || 's3';
+
 const s3 = new S3Client({
     region: process.env.AWS_REGION || 'ap-south-1',
     credentials: process.env.AWS_ACCESS_KEY_ID ? {
@@ -12,14 +17,18 @@ const s3 = new S3Client({
 const BUCKET = process.env.AWS_S3_BUCKET || '';
 
 /**
- * Upload a file to S3
- * Returns the S3 key (path) — NOT a public URL
+ * Upload a file to the configured object store.
+ * Returns the object key (path) — NOT a public URL.
  */
 export async function uploadToS3(
     buffer: Buffer,
     key: string,
     contentType: string,
 ): Promise<string> {
+    if (STORAGE_PROVIDER === 'azure-blob') {
+        const { uploadToBlob } = await import('./blob-azure');
+        return uploadToBlob(buffer, key, contentType);
+    }
     await s3.send(new PutObjectCommand({
         Bucket: BUCKET,
         Key: key,
@@ -32,25 +41,33 @@ export async function uploadToS3(
 
 /**
  * Generate a signed URL for temporary read access (default 1 hour)
- * Use this to serve files — never make the bucket public
+ * Use this to serve files — never make the bucket/container public
  */
 export async function getSignedDownloadUrl(
     key: string,
     expiresIn = 3600,
 ): Promise<string> {
+    if (STORAGE_PROVIDER === 'azure-blob') {
+        const { getSignedBlobDownloadUrl } = await import('./blob-azure');
+        return getSignedBlobDownloadUrl(key, expiresIn);
+    }
     const command = new GetObjectCommand({ Bucket: BUCKET, Key: key });
     return getSignedUrl(s3, command, { expiresIn });
 }
 
 /**
- * Delete a file from S3
+ * Delete a file from the configured object store
  */
 export async function deleteFromS3(key: string): Promise<void> {
+    if (STORAGE_PROVIDER === 'azure-blob') {
+        const { deleteFromBlob } = await import('./blob-azure');
+        return deleteFromBlob(key);
+    }
     await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: key }));
 }
 
 /**
- * Build a standardized S3 key for patient records
+ * Build a standardized object key for patient records
  * Format: patient-records/{orgId}/{patientId}/{timestamp}-{random}.{ext}
  */
 export function buildPatientRecordKey(
