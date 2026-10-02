@@ -58,10 +58,14 @@ It prints all the connection strings you need at the end — save them.
 ## Step 2: Set up the VM
 
 ```bash
-ssh azureuser@<VM_IP>
+ssh <your-vm-admin-username>@<VM_IP>
 # copy azure/vm-setup.sh to the VM, or paste its contents, then:
 sudo ./vm-setup.sh
 ```
+
+`vm-setup.sh` auto-detects whatever username you SSH'd in as (via `sudo`) —
+it doesn't assume `azureuser`, so this works with whatever admin username you
+picked when creating the VM.
 
 This installs Node 22, PM2, nginx, the Postgres client, Azure CLI, and a
 firewall — mirroring `aws/ec2-setup.sh`.
@@ -102,7 +106,7 @@ file and these credentials accordingly; delete the dump file once restored.
 ## Step 4: Deploy the app onto the VM
 
 ```bash
-ssh azureuser@<VM_IP>
+ssh <your-vm-admin-username>@<VM_IP>
 git clone https://github.com/Parikshit127/hospital-managment-system.git hospitalos
 cd hospitalos
 cp azure/.env.azure.example .env

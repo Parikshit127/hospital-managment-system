@@ -7,8 +7,10 @@
 
 set -euo pipefail
 
-APP_DIR="/home/azureuser/hospitalos"
-BACKUP_DIR="/home/azureuser/backups"
+# Run as the app user (not root/sudo) — $HOME then resolves to that user's
+# home dir regardless of what admin username you picked for the VM.
+APP_DIR="$HOME/hospitalos"
+BACKUP_DIR="$HOME/backups"
 LOG_DIR="$APP_DIR/logs"
 
 echo "╔══════════════════════════════════════════════════════╗"

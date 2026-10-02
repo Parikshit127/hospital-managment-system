@@ -1,9 +1,15 @@
 // PM2 Process Manager Configuration — Azure VM variant
-// Identical to ecosystem.config.js except paths use the Azure VM's default
-// "azureuser" home directory instead of EC2's "ubuntu".
+// Identical to ecosystem.config.js except paths are derived from whichever
+// user runs `pm2 start`, instead of EC2's hardcoded "ubuntu" home dir — your
+// Azure VM's admin username can be anything (azureuser, parikshit889, ...).
 // Start:   pm2 start azure/ecosystem.azure.config.js
 // Restart: pm2 restart hospitalos
 // Logs:    pm2 logs hospitalos
+
+const path = require("path");
+const os = require("os");
+
+const APP_DIR = path.join(os.homedir(), "hospitalos");
 
 module.exports = {
   apps: [
@@ -11,7 +17,7 @@ module.exports = {
       name: "hospitalos",
       script: "node_modules/.bin/next",
       args: "start -p 3000",
-      cwd: "/home/azureuser/hospitalos",
+      cwd: APP_DIR,
 
       env: {
         NODE_ENV: "production",
@@ -28,8 +34,8 @@ module.exports = {
       restart_delay: 5000,
 
       log_date_format: "YYYY-MM-DD HH:mm:ss",
-      error_file: "/home/azureuser/hospitalos/logs/error.log",
-      out_file: "/home/azureuser/hospitalos/logs/output.log",
+      error_file: path.join(APP_DIR, "logs", "error.log"),
+      out_file: path.join(APP_DIR, "logs", "output.log"),
       merge_logs: true,
       log_type: "json",
 

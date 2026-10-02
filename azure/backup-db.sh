@@ -2,15 +2,15 @@
 # ═══════════════════════════════════════════════════════════════════════════════
 # HospitalOS — Database Backup Script (Azure variant)
 # Dumps PostgreSQL to local file + uploads to Azure Blob Storage
-# Add to crontab: 0 3 * * * /home/azureuser/hospitalos/azure/backup-db.sh
+# Add to crontab (as the app user): 0 3 * * * $HOME/hospitalos/azure/backup-db.sh
 # ═══════════════════════════════════════════════════════════════════════════════
 
 set -euo pipefail
 
 # Load environment
-source /home/azureuser/hospitalos/.env
+source "$HOME/hospitalos/.env"
 
-BACKUP_DIR="/home/azureuser/backups"
+BACKUP_DIR="$HOME/backups"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 FILENAME="hospitalos_${TIMESTAMP}.dump"
 
