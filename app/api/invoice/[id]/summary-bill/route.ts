@@ -4,6 +4,7 @@ import { resolveRouteAuth } from '@/app/lib/route-auth';
 import { getBillBranding, getInvoiceHospitalLabel, getDiscountLabel, letterheadBackgroundHtml, letterheadCss, billFooterHtml, printButtonHtml, fmtBillDate, fmtBillDateTime, deriveInvoiceTotals, deriveInvoiceStatus, deriveTpaStatusPill, medsToggleHtml, type BillBranding } from '@/app/lib/bill-branding';
 import { getBillSections } from '@/app/lib/bill-sections';
 import { formatDoctorName } from '@/app/lib/format-name';
+import { resolveBillPayerType } from '@/app/lib/invoice-payer';
 
 const ALLOWED_STAFF_ROLES = ['admin', 'finance', 'receptionist', 'doctor', 'ipd_manager'];
 
@@ -29,7 +30,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
             where: { id: invoiceId, organizationId: auth.context.organizationId },
             include: {
                 items: true,
-                patient: { select: { full_name: true, patient_id: true, phone: true, age: true, gender: true, department: true } },
+                patient: { select: { full_name: true, patient_id: true, phone: true, age: true, gender: true, department: true, patient_type: true } },
                 payments: { where: { status: { not: 'Reversed' } } },
                 credit_notes: { where: { status: { in: ['Approved', 'Applied'] } }, orderBy: { created_at: 'desc' } },
             },
@@ -78,9 +79,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
             const tpa = await prisma.insurance_providers.findUnique({ where: { id: invoice.tpa_provider_id } });
             tpaProviderName = tpa?.provider_name || '';
         }
-        if (!tpaProviderName && invoice.billing_patient_type === 'tpa_insurance') {
+        if (!tpaProviderName && resolveBillPayerType(invoice, (invoice.patient as any)?.patient_type) === 'tpa_insurance') {
             const policy = await prisma.insurance_policies.findFirst({
-                where: { patient_id: invoice.patient_id },
+                where: { patient_id: invoice.patient_id, status: 'Active' },
+                orderBy: { created_at: 'desc' },
                 include: { provider: { select: { provider_name: true } } },
             });
             tpaProviderName = (policy as any)?.provider?.provider_name || '';
@@ -173,11 +175,13 @@ function generateSummaryBillHTML(invoice: any, admission: any, org: any, deposit
 
     // Patient category — a TPA/insurer attached anywhere (billing type or a policy →
     // tpaProviderName) means it's a CREDIT bill, not Cash/Self-Pay.
-    const billingType = String(invoice.billing_patient_type || (invoice.patient as any)?.patient_type || 'cash').toLowerCase();
+    // IPD invoices stay stamped 'cash' until a claim flips them, so an admission bill
+    // follows the patient's current category (see resolveBillPayerType).
+    const billingType = resolveBillPayerType(invoice, (invoice.patient as any)?.patient_type);
     let patientCategory = 'Cash / Self-Pay';
-    if (billingType === 'tpa_insurance' || billingType === 'insurance' || billingType === 'tpa' || tpaProviderName) {
+    if (billingType === 'tpa_insurance' || tpaProviderName) {
         patientCategory = 'Credit (TPA / Insurance)';
-    } else if (billingType === 'corporate' || (invoice.patient as any)?.corporate) {
+    } else if (billingType === 'corporate') {
         patientCategory = 'Credit (Corporate)';
     }
 

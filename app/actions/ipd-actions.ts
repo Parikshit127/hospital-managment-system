@@ -1987,6 +1987,31 @@ export async function updateAdmissionBasicDetails(data: {
 }
 
 /**
+ * Re-stamp the payer on an admission's bills after a patient-category change.
+ * Skips cancelled bills and any bill that already carries TPA / corporate money,
+ * so real claims are never rewritten.
+ */
+async function syncAdmissionInvoicePayer(
+  tx: any,
+  organizationId: string,
+  admissionId: string,
+  data: Record<string, any>,
+) {
+  await tx.invoices.updateMany({
+    where: {
+      admission_id: admissionId,
+      organizationId,
+      status: { not: 'Cancelled' },
+      tpa_payable: 0,
+      corporate_payable: 0,
+      tpa_approved_amount: 0,
+      tpa_settled_amount: 0,
+    },
+    data,
+  });
+}
+
+/**
  * Change a patient's billing category (Cash / Corporate / TPA-Insurance) from
  * the IPD chart, after admission — e.g. a patient admitted as cash later
  * produces a corporate ID card or insurance policy at the desk.
@@ -2110,6 +2135,13 @@ export async function updateAdmissionPatientCategory(data: {
             employee_id: data.employee_id?.trim() || null,
           },
         });
+        await syncAdmissionInvoicePayer(tx, organizationId, data.admission_id, {
+          billing_patient_type: 'corporate',
+          corporate_id: corporateId,
+          tpa_provider_id: null,
+          pre_auth_id: null,
+          tpa_claim_status: 'not_submitted',
+        });
         return;
       }
 
@@ -2166,6 +2198,24 @@ export async function updateAdmissionPatientCategory(data: {
           });
         }
       }
+
+      // Point this admission's bills at the TPA — the explicitly chosen provider,
+      // else the provider of the patient's now-active policy.
+      let invoiceProviderId: number | null = data.tpa_provider_id ? parseInt(data.tpa_provider_id, 10) : null;
+      if (invoiceProviderId !== null && isNaN(invoiceProviderId)) invoiceProviderId = null;
+      if (invoiceProviderId === null) {
+        const activePolicy = await tx.insurance_policies.findFirst({
+          where: { patient_id: patientId, organizationId, status: 'Active' },
+          orderBy: { created_at: 'desc' },
+          select: { provider_id: true },
+        });
+        invoiceProviderId = activePolicy?.provider_id ?? null;
+      }
+      await syncAdmissionInvoicePayer(tx, organizationId, data.admission_id, {
+        billing_patient_type: 'tpa_insurance',
+        corporate_id: null,
+        ...(invoiceProviderId !== null ? { tpa_provider_id: invoiceProviderId } : {}),
+      });
     });
 
     if (oldPatientType !== data.patient_type) {

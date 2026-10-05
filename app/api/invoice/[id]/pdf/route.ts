@@ -6,6 +6,7 @@ import { getBillBranding, getInvoiceHospitalLabel, getDiscountLabel, inlineHeade
 import { getPharmacyBranding } from '@/app/lib/pharmacy-branding'
 import { getBillSections } from '@/app/lib/bill-sections'
 import { formatDoctorName } from '@/app/lib/format-name'
+import { resolveBillPayerType } from '@/app/lib/invoice-payer'
 import { parseWalkinNote } from '@/app/lib/walkin-note'
 
 const ALLOWED_STAFF_ROLES = ['admin', 'finance', 'receptionist', 'doctor', 'ipd_manager', 'pharmacy', 'pharmacist', 'nurse'];
@@ -115,9 +116,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
             const tpa = await prisma.insurance_providers.findUnique({ where: { id: invoice.tpa_provider_id } });
             tpaProviderName = tpa?.provider_name || '';
         }
-        if (!tpaProviderName && invoice.billing_patient_type === 'tpa_insurance') {
+        if (!tpaProviderName && resolveBillPayerType(invoice, (invoice.patient as any)?.patient_type) === 'tpa_insurance') {
             const policy = await prisma.insurance_policies.findFirst({
-                where: { patient_id: invoice.patient_id },
+                where: { patient_id: invoice.patient_id, status: 'Active' },
+                orderBy: { created_at: 'desc' },
                 include: { provider: { select: { provider_name: true } } },
             });
             tpaProviderName = (policy as any)?.provider?.provider_name || '';
@@ -212,12 +214,13 @@ function generateInvoiceHTML(invoice: any, branding: BillBranding, pharmacy: { n
     const gstin = branding.gstin
 
     // Determine patient category from billing_patient_type
-    const billingType = String(invoice.billing_patient_type || (patient as any).patient_type || 'cash').toLowerCase()
-    // TPA/insurer attached anywhere (billing type or a policy → tpaProviderName) ⇒ credit bill.
+    // IPD invoices stay stamped 'cash' until a claim flips them, so an admission bill
+    // follows the patient's current category (see resolveBillPayerType).
+    const billingType = resolveBillPayerType(invoice, (patient as any).patient_type)
     let patientCategory = 'Cash / Self-Pay'
-    if (billingType === 'tpa_insurance' || billingType === 'insurance' || billingType === 'tpa' || tpaProviderName) {
+    if (billingType === 'tpa_insurance' || tpaProviderName) {
         patientCategory = `Credit (TPA / Insurance)${tpaProviderName ? ` — ${tpaProviderName}` : ''}`
-    } else if (billingType === 'corporate' || (patient as any).corporate) {
+    } else if (billingType === 'corporate') {
         patientCategory = 'Credit (Corporate)'
     }
 
