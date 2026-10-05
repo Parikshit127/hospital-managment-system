@@ -790,7 +790,7 @@ function ReceiptHistory() {
                             >
                                 <option value="">All</option>
                                 <option value="Paid">Paid</option>
-                                <option value="Voided">Voided</option>
+                                <option value="Cancelled">Deleted</option>
                                 <option value="Completed">Completed</option>
                             </select>
                         </div>
@@ -850,13 +850,13 @@ function ReceiptHistory() {
                             </thead>
                             <tbody>
                                 {rows.map(r => (
-                                    <tr key={r.invoice_id} className={`border-t border-gray-100 hover:bg-emerald-50/30 ${r.status === "Voided" ? "opacity-60" : ""}`}>
+                                    <tr key={r.invoice_id} className={`border-t border-gray-100 hover:bg-emerald-50/30 ${isVoidedStatus(r.status) ? "opacity-60" : ""}`}>
                                         <td className="px-3 py-2 whitespace-nowrap">
                                             <div className="font-medium text-gray-700">{fmtDate(r.created_at)}</div>
                                             <div className="text-[10px] text-gray-400">{fmtTime(r.created_at)}</div>
                                         </td>
                                         <td className="px-3 py-2 font-mono text-gray-700">
-                                            {r.status === "Voided"
+                                            {isVoidedStatus(r.status)
                                                 ? `DELETED: ${r.void_reason || "Receipt deleted"}`
                                                 : r.receipt_number || "—"}
                                         </td>
@@ -884,7 +884,7 @@ function ReceiptHistory() {
                                                 >
                                                     <Eye className="h-3.5 w-3.5" />
                                                 </button>
-                                                {canManageReceipts && r.status !== "Voided" && (
+                                                {canManageReceipts && !isVoidedStatus(r.status) && (
                                                     <button
                                                         onClick={() => handleEdit(r.invoice_id)}
                                                         className="p-1.5 text-gray-500 hover:bg-emerald-50 hover:text-emerald-600 rounded-lg"
@@ -893,7 +893,7 @@ function ReceiptHistory() {
                                                         <Pencil className="h-3.5 w-3.5" />
                                                     </button>
                                                 )}
-                                                {canManageReceipts && r.status !== "Voided" && (
+                                                {canManageReceipts && !isVoidedStatus(r.status) && (
                                                     <button
                                                         onClick={() => openDeleteDialog(r)}
                                                         disabled={voidingId === r.invoice_id}
@@ -1159,6 +1159,11 @@ function ReceiptEditorModal({
     );
 }
 
+// Deleting a receipt sets the invoice to "Cancelled" (legacy rows were "Voided").
+function isVoidedStatus(status?: string | null) {
+    return status === "Cancelled" || status === "Voided";
+}
+
 function StatusBadge({ status }: { status: string }) {
     const map: Record<string, string> = {
         Paid: "bg-emerald-100 text-emerald-700",
@@ -1210,7 +1215,7 @@ function SuccessAndPrintModal({
                 </div>
 
                 <div className="p-8 flex-1 space-y-5">
-                    {receipt.status === 'Voided' ? (
+                    {isVoidedStatus(receipt.status) ? (
                         <>
                             <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-5 text-center space-y-1">
                                 <p className="text-xs font-bold uppercase tracking-widest text-rose-600">Receipt Voided</p>
@@ -1306,7 +1311,7 @@ function SuccessAndPrintModal({
                         </div>
                     </div>
 
-                    {receipt.status === 'Voided' ? (
+                    {isVoidedStatus(receipt.status) ? (
                         <div className="rounded-2xl border border-rose-200 bg-rose-50 px-6 py-8 text-center space-y-2">
                             <p className="text-xs font-black uppercase tracking-[0.35em] text-rose-600">Receipt Deleted</p>
                             <p className="text-2xl font-black text-rose-700">{receipt.void_reason || 'No reason recorded'}</p>

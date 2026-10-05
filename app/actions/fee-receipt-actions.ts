@@ -309,7 +309,12 @@ export async function listFeeReceipts(filter: ListFeeReceiptsFilter = {}) {
             is_archived: false,
         };
 
-        if (filter.status) where.status = filter.status;
+        if (filter.status) {
+            // Deleted receipts are "Cancelled" now; legacy rows may still be "Voided".
+            where.status = (filter.status === 'Cancelled' || filter.status === 'Voided')
+                ? { in: ['Cancelled', 'Voided'] }
+                : filter.status;
+        }
 
         if (filter.from || filter.to) {
             where.created_at = {};

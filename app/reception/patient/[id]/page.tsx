@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { AppShell } from '@/app/components/layout/AppShell';
-import { getPatientDetail, updatePatientField, addPatientDues, getPatientExternalRecords, savePatientExternalRecord, deletePatientExternalRecord, archivePatient } from '@/app/actions/reception-actions';
+import { getPatientDetail, updatePatientField, updatePatient, addPatientDues, getPatientExternalRecords, savePatientExternalRecord, deletePatientExternalRecord, archivePatient } from '@/app/actions/reception-actions';
 import { getPatientFinancialProfile } from '@/app/actions/master-billing-actions';
 import { recordPayment, getMyRole } from '@/app/actions/finance-actions';
 import { getCashComplianceConfig } from '@/app/actions/cash-compliance-actions';
@@ -291,7 +291,7 @@ export default function PatientProfilePage() {
             toast.success('Insurance policy added');
             setShowInsuranceModal(false);
             // Also update patient type to tpa_insurance
-            await updatePatientField(patientId, 'patient_type', 'tpa_insurance');
+            await updatePatient(patientId, { patient_type: 'tpa_insurance' });
             loadData();
         } else {
             toast.error(res.error || 'Failed to add policy');
