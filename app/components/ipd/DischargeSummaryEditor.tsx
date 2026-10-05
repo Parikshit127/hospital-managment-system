@@ -8,7 +8,7 @@ import {
     saveDischargeSummary,
     generateDischargeSummaryDraft,
 } from '@/app/actions/discharge-summary-actions';
-import { emptyDischargeData, toIstLocalInput, DISCHARGE_TYPES, type DischargeSummaryData } from '@/app/lib/discharge-summary';
+import { emptyDischargeData, toIstLocalInput, DISCHARGE_TYPES, type DischargeSummaryData } from '@/app/lib/discharge-types';
 import { DischargeMicButton } from './DischargeMicButton';
 
 type Header = {

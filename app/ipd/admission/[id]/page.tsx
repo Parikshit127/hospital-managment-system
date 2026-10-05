@@ -38,7 +38,7 @@ import {
 import { getDoctorsForDropdown } from '@/app/actions/admin-actions';
 import { updatePatientField, updatePatient } from '@/app/actions/reception-actions';
 import { useToast } from '@/app/components/ui/Toast';
-import { DISCHARGE_TYPES } from '@/app/lib/discharge-summary';
+import { DISCHARGE_TYPES } from '@/app/lib/discharge-types';
 import { MANUAL_CHARGE_CATEGORIES } from '@/app/lib/service-categories';
 import { bedLabel } from '@/app/lib/bed-label';
 import {
