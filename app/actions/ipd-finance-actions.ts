@@ -852,6 +852,8 @@ async function recalculateInvoiceWithGstTx(db: any, invoiceId: number) {
 // fall back to the package's cash total_amount. Mirrors the provider-resolution
 // pattern used for discharge-settlement TPA approval (see the tpa_provider_id
 // resolution block further down this file).
+// NOTE: TPA policy lookups below also require patient_type = 'tpa_insurance', so a
+// patient switched back to Cash never gets TPA-negotiated rates / TPA-exclusive packages.
 async function resolvePackagePrice(
     db: any,
     organizationId: string,
@@ -861,7 +863,7 @@ async function resolvePackagePrice(
     fallbackName: string,
 ): Promise<{ amount: number; name: string; providerId: number | null; isTpaRate: boolean }> {
     const policy = await db.insurance_policies.findFirst({
-        where: { patient_id: patientId, status: 'Active' },
+        where: { patient_id: patientId, status: 'Active', patient: { patient_type: 'tpa_insurance' } },
         orderBy: { created_at: 'desc' },
         select: { provider_id: true },
     });
@@ -905,7 +907,7 @@ export async function applyPackageToAdmission(admissionId: string, packageId: nu
         // these out, so a stale client can't post a cross-TPA package.
         if (pkg.exclusive_provider_id) {
             const exclusivityPolicy = await db.insurance_policies.findFirst({
-                where: { patient_id: admissionForPricing?.patient_id ?? '', status: 'Active' },
+                where: { patient_id: admissionForPricing?.patient_id ?? '', status: 'Active', patient: { patient_type: 'tpa_insurance' } },
                 orderBy: { created_at: 'desc' },
                 select: { provider_id: true },
             });
@@ -1038,7 +1040,7 @@ export async function getPackagesForAdmission(admissionId: string) {
         if (!admission) return { success: false, error: 'Admission not found' };
 
         const policy = await db.insurance_policies.findFirst({
-            where: { patient_id: admission.patient_id, status: 'Active' },
+            where: { patient_id: admission.patient_id, status: 'Active', patient: { patient_type: 'tpa_insurance' } },
             orderBy: { created_at: 'desc' },
             select: {
                 provider_id: true,

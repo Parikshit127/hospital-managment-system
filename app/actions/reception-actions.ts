@@ -506,10 +506,26 @@ export async function updatePatient(patientId: string, payload: Record<string, s
             return { success: false, error: 'No editable fields provided' };
         }
 
+        // Switching to Cash drops every payer detail so no TPA / corporate info
+        // lingers on stickers, forms or package pricing.
+        if (data.patient_type === 'cash') {
+            data.corporate_id = null;
+            data.corporate_card_number = null;
+            data.employee_id = null;
+        }
+
         await db.oPD_REG.update({
             where: { patient_id: patientId },
             data,
         });
+
+        if (data.patient_type === 'cash') {
+            // Deactivate (not delete) — claims / pre-auths may reference the policies.
+            await db.insurance_policies.updateMany({
+                where: { patient_id: patientId, status: 'Active' },
+                data: { status: 'Inactive' },
+            });
+        }
 
         revalidatePath(`/reception/patient/${patientId}`);
         revalidatePath(`/admin/patients/${patientId}`);

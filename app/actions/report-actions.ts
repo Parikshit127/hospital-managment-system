@@ -67,7 +67,9 @@ export async function getCollectionsReport(filters: { from: string; to: string; 
         const fromDate = new Date(filters.from + 'T00:00:00+05:30');
         const toDate = new Date(filters.to + 'T23:59:59.999+05:30');
         const where: any = {
-            status: { in: ['Completed', 'Reversed', 'Refunded'] },
+            // Reversed / Cancelled are deleted receipts — returned only so reports can list
+            // them under "Deleted"; `totals` below counts Completed/Refunded only.
+            status: { in: ['Completed', 'Reversed', 'Refunded', 'Cancelled'] },
             created_at: { gte: fromDate, lte: toDate },
         };
         if (filters.method && filters.method !== 'others' && filters.method !== 'all') {

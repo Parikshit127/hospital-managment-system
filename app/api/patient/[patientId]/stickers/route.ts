@@ -33,16 +33,18 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ pati
         });
 
         // Resolve the payer "Category" shown on the sticker (e.g. MEDI ASSIST / a corporate / CASH).
-        const policy = await prisma.insurance_policies.findFirst({
-            where: { patient_id: patientId, organizationId },
-            orderBy: [{ status: 'asc' }, { created_at: 'desc' }],
-            include: { provider: { select: { provider_name: true } } },
-        });
-        const ptype = String((patient as any).patient_type || '').toLowerCase();
+        // patient_type is the source of truth: a Cash patient never shows TPA /
+        // corporate details even if old policy or corporate rows are still around.
+        const ptype = String((patient as any).patient_type || 'cash').toLowerCase();
         let category = 'CASH';
-        if (['tpa_insurance', 'insurance', 'tpa'].includes(ptype) || policy) {
+        if (['tpa_insurance', 'insurance', 'tpa'].includes(ptype)) {
+            const policy = await prisma.insurance_policies.findFirst({
+                where: { patient_id: patientId, organizationId, status: 'Active' },
+                orderBy: { created_at: 'desc' },
+                include: { provider: { select: { provider_name: true } } },
+            });
             category = ((policy as any)?.provider?.provider_name || (policy as any)?.corporate_name || 'TPA / INSURANCE');
-        } else if (ptype === 'corporate' || (patient as any).corporate) {
+        } else if (ptype === 'corporate') {
             category = ((patient as any).corporate?.company_name || 'CORPORATE');
         }
         category = category.toUpperCase();

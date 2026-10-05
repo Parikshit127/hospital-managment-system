@@ -48,7 +48,9 @@ export async function GET(req: NextRequest) {
         const paymentWhere: any = {
             organizationId,
             created_at: { gte: fromDate, lte: toDate },
-            status: { in: ['Completed', 'Reversed'] }
+            // Reversed / Cancelled = deleted receipts (shown in the Deleted column, never as refunds).
+            // Refunded = fully refunded payment: the original receipt still counts as collected.
+            status: { in: ['Completed', 'Refunded', 'Reversed', 'Cancelled'] }
         };
         if (methodFilter && methodFilter !== 'all') {
             paymentWhere.payment_method = { in: tenderVariants(methodFilter) };
@@ -182,7 +184,7 @@ export async function GET(req: NextRequest) {
 
         interface CollectionItem {
             srNo: number;
-            type: 'Receipt' | 'Refund';
+            type: 'Receipt' | 'Refund' | 'Deleted';
             receiptNo: string;
             invoiceNo: string;
             patientName: string;
@@ -232,7 +234,7 @@ export async function GET(req: NextRequest) {
 
             const doctorName = (p.invoice as any)?.doctor_name || '-';
 
-            if (p.status === 'Completed') {
+            if (p.status === 'Completed' || p.status === 'Refunded') {
                 itemsList.push({
                     srNo: sr++,
                     type: 'Receipt',
@@ -250,10 +252,11 @@ export async function GET(req: NextRequest) {
                     counter: 'MAIN CASH COUNTER',
                     department: dept
                 });
-            } else if (p.status === 'Reversed') {
+            } else if (p.status === 'Reversed' || p.status === 'Cancelled') {
+                // A deleted receipt is NOT a refund — only a processed Refund record is.
                 itemsList.push({
                     srNo: sr++,
-                    type: 'Refund',
+                    type: 'Deleted',
                     receiptNo: p.receipt_number,
                     invoiceNo: (p.invoice as any)?.final_bill_number || p.invoice?.invoice_number || '-',
                     patientName,
@@ -387,6 +390,8 @@ export async function GET(req: NextRequest) {
         function buildSummaryMatrix(filteredItems: CollectionItem[]) {
             const receipts: Record<string, Record<string, number>> = {};
             const refunds: Record<string, Record<string, number>> = {};
+            const deleted: Record<string, number> = {};
+            depts.forEach(d => { deleted[d] = 0; });
 
             modeList.forEach(m => {
                 receipts[m] = {};
@@ -398,6 +403,10 @@ export async function GET(req: NextRequest) {
             });
 
             filteredItems.forEach(item => {
+                if (item.type === 'Deleted') {
+                    deleted[item.department] = (deleted[item.department] || 0) + item.amount;
+                    return;
+                }
                 const target = item.type === 'Receipt' ? receipts : refunds;
                 if (target[item.mode] === undefined) {
                     target[item.mode] = {};
@@ -406,7 +415,7 @@ export async function GET(req: NextRequest) {
                 target[item.mode][item.department] += item.amount;
             });
 
-            return { receipts, refunds };
+            return { receipts, refunds, deleted };
         }
 
         // User-wise cash counter: narrow the whole report to a single cashier when
@@ -512,6 +521,16 @@ export async function GET(req: NextRequest) {
                 <td style="padding:6px;border:1px solid #ddd;text-align:right;">${overallNet.toFixed(2)}</td>
             </tr>`;
 
+            // Deleted receipts — informational only, excluded from Refund and Net.
+            const deletedSum = depts.reduce((a, d) => a + (matrix.deleted[d] || 0), 0);
+            if (deletedSum > 0) {
+                html += `<tr style="color:#6b7280;font-style:italic;">
+                    <td style="padding:6px;border:1px solid #ddd;">Deleted Receipts (not counted)</td>
+                    ${depts.map(d => `<td style="padding:6px;border:1px solid #ddd;text-align:right;">${(matrix.deleted[d] || 0).toFixed(2)}</td>`).join('')}
+                    <td style="padding:6px;border:1px solid #ddd;text-align:right;">${deletedSum.toFixed(2)}</td>
+                </tr>`;
+            }
+
             return html;
         }
 
@@ -522,8 +541,10 @@ export async function GET(req: NextRequest) {
 
             let receiptsCount = 0;
             let refundsCount = 0;
+            let deletedCount = 0;
 
             filteredItems.forEach(item => {
+                if (item.type === 'Deleted') { deletedCount++; return; }
                 if (countByMode[item.mode] === undefined) {
                     countByMode[item.mode] = { receipt: 0, refund: 0 };
                 }
@@ -559,7 +580,7 @@ export async function GET(req: NextRequest) {
             return `
             <div style="margin-top:10px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:flex-start;">
                 <div style="font-size:11px;font-weight:bold;color:#333;">
-                    No Of Receipt : ${receiptsCount} &nbsp;&nbsp;&nbsp;&nbsp; No Of Refund : ${refundsCount}
+                    No Of Receipt : ${receiptsCount} &nbsp;&nbsp;&nbsp;&nbsp; No Of Refund : ${refundsCount}${deletedCount > 0 ? ` &nbsp;&nbsp;&nbsp;&nbsp; No Of Deleted : ${deletedCount}` : ''}
                 </div>
                 <table style="width:300px;border-collapse:collapse;font-size:10px;border:1px solid #ddd;">
                     <thead>
@@ -624,9 +645,11 @@ export async function GET(req: NextRequest) {
 
             let deptReceiptAmt = 0;
             let deptRefundAmt = 0;
+            let deptDeletedAmt = 0;
             deptItems.forEach(item => {
                 if (item.type === 'Receipt') deptReceiptAmt += item.amount;
-                else deptRefundAmt += item.amount;
+                else if (item.type === 'Refund') deptRefundAmt += item.amount;
+                else deptDeletedAmt += item.amount;
             });
             const deptNetAmt = deptReceiptAmt - deptRefundAmt;
 
@@ -650,7 +673,7 @@ export async function GET(req: NextRequest) {
                     </td>
                     <td style="padding:5px;border:1px solid #ddd;text-align:right;">${item.type === 'Receipt' ? item.amount.toFixed(2) : '-'}</td>
                     <td style="padding:5px;border:1px solid #ddd;text-align:right;color:#d32f2f;">${item.type === 'Refund' ? item.amount.toFixed(2) : '-'}</td>
-                    <td style="padding:5px;border:1px solid #ddd;text-align:center;">-</td>
+                    <td style="padding:5px;border:1px solid #ddd;text-align:right;color:#6b7280;">${item.type === 'Deleted' ? item.amount.toFixed(2) : '-'}</td>
                     <td style="padding:5px;border:1px solid #ddd;text-align:center;">
                         ${item.cashier.split(' ')[0]}<br/>
                         <span style="color:#666;font-size:9px;">[${item.cashierUsername}]</span>
@@ -663,7 +686,7 @@ export async function GET(req: NextRequest) {
             <div style="margin-top:25px;page-break-inside:avoid;">
                 <div style="font-size:11px;font-weight:bold;margin-bottom:8px;display:flex;justify-content:space-between;background:#f5f5f5;padding:6px;border-bottom:2px solid #333;">
                     <span>${dept.toUpperCase()} Collection :</span>
-                    <span>Receipt Amount: ${deptReceiptAmt.toFixed(2)} &nbsp;&nbsp;&nbsp;&nbsp; Refund Amount: ${deptRefundAmt.toFixed(2)} &nbsp;&nbsp;&nbsp;&nbsp; Net Amount: ${deptNetAmt.toFixed(2)}</span>
+                    <span>Receipt Amount: ${deptReceiptAmt.toFixed(2)} &nbsp;&nbsp;&nbsp;&nbsp; Refund Amount: ${deptRefundAmt.toFixed(2)} &nbsp;&nbsp;&nbsp;&nbsp; Net Amount: ${deptNetAmt.toFixed(2)}${deptDeletedAmt > 0 ? ` &nbsp;&nbsp;&nbsp;&nbsp; Deleted Amount: ${deptDeletedAmt.toFixed(2)}` : ''}</span>
                 </div>
                 <table style="width:100%;border-collapse:collapse;font-size:10px;">
                     <thead>

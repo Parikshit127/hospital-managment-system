@@ -2037,9 +2037,42 @@ export async function updateAdmissionPatientCategory(data: {
 
     await db.$transaction(async (tx: any) => {
       if (data.patient_type === 'cash') {
+        // Going back to Cash must drop every payer detail, otherwise the sticker,
+        // admission form and bills keep showing the old TPA / corporate info.
         await tx.oPD_REG.update({
           where: { patient_id: patientId, organizationId },
-          data: { patient_type: 'cash' },
+          data: {
+            patient_type: 'cash',
+            corporate_id: null,
+            corporate_card_number: null,
+            employee_id: null,
+          },
+        });
+        // Deactivate (not delete) policies — claims/pre-auths may reference them.
+        await tx.insurance_policies.updateMany({
+          where: { patient_id: patientId, organizationId, status: 'Active' },
+          data: { status: 'Inactive' },
+        });
+        // Reset payer on this admission's bills, but only those with no TPA /
+        // corporate money attached (so real claims are never rewritten).
+        await tx.invoices.updateMany({
+          where: {
+            admission_id: data.admission_id,
+            organizationId,
+            status: { not: 'Cancelled' },
+            billing_patient_type: { not: 'cash' },
+            tpa_payable: 0,
+            corporate_payable: 0,
+            tpa_approved_amount: 0,
+            tpa_settled_amount: 0,
+          },
+          data: {
+            billing_patient_type: 'cash',
+            corporate_id: null,
+            tpa_provider_id: null,
+            pre_auth_id: null,
+            tpa_claim_status: 'not_submitted',
+          },
         });
         return;
       }
@@ -2083,8 +2116,32 @@ export async function updateAdmissionPatientCategory(data: {
       // tpa_insurance
       await tx.oPD_REG.update({
         where: { patient_id: patientId, organizationId },
-        data: { patient_type: 'tpa_insurance' },
+        data: {
+          patient_type: 'tpa_insurance',
+          corporate_id: null,
+          corporate_card_number: null,
+          employee_id: null,
+        },
       });
+
+      if (!(data.tpa_provider_id && data.insurance_policy_number)) {
+        // No new policy supplied: if the patient has none active (e.g. was
+        // switched to Cash earlier), bring back the most recent one.
+        const activePolicy = await tx.insurance_policies.findFirst({
+          where: { patient_id: patientId, organizationId, status: 'Active' },
+          select: { id: true },
+        });
+        if (!activePolicy) {
+          const lastPolicy = await tx.insurance_policies.findFirst({
+            where: { patient_id: patientId, organizationId },
+            orderBy: { created_at: 'desc' },
+            select: { id: true },
+          });
+          if (lastPolicy) {
+            await tx.insurance_policies.update({ where: { id: lastPolicy.id }, data: { status: 'Active' } });
+          }
+        }
+      }
 
       if (data.tpa_provider_id && data.insurance_policy_number) {
         const providerId = parseInt(data.tpa_provider_id, 10);

@@ -414,10 +414,11 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
                         counter: 'MAIN CASH COUNTER',
                         department: dept
                     });
-                } else if (p.status === 'Reversed') {
+                } else if (p.status === 'Reversed' || p.status === 'Cancelled') {
+                    // Deleted receipt — goes to the "Deleted Amt" column, never counted as a refund.
                     itemsList.push({
                         srNo: sr++,
-                        type: 'Refund',
+                        type: 'Deleted',
                         receiptNo: p.receipt_number,
                         invoiceNo: p.invoice?.invoice_number || '-',
                         patientName,
@@ -545,6 +546,7 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
                 });
 
                 filteredItems.forEach(item => {
+                    if (item.type === 'Deleted') return; // deleted receipts are neither collection nor refund
                     const target = item.type === 'Receipt' ? receipts : refunds;
                     if (target[item.mode] === undefined) {
                         target[item.mode] = {};
@@ -729,9 +731,11 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
 
                 let deptReceiptAmt = 0;
                 let deptRefundAmt = 0;
+                let deptDeletedAmt = 0;
                 deptItems.forEach(item => {
                     if (item.type === 'Receipt') deptReceiptAmt += item.amount;
-                    else deptRefundAmt += item.amount;
+                    else if (item.type === 'Refund') deptRefundAmt += item.amount;
+                    else deptDeletedAmt += item.amount;
                 });
                 const deptNetAmt = deptReceiptAmt - deptRefundAmt;
 
@@ -740,7 +744,8 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
                     'Sr. No.': '',
                     'Receipt No.': `Receipt Amount: ${deptReceiptAmt.toFixed(2)}`,
                     'Invoice No.': `Refund Amount: ${deptRefundAmt.toFixed(2)}`,
-                    'Patient Name': `Net Amount: ${deptNetAmt.toFixed(2)}`
+                    'Patient Name': `Net Amount: ${deptNetAmt.toFixed(2)}`,
+                    'MRN (Patient ID)': `Deleted Amount: ${deptDeletedAmt.toFixed(2)}`
                 });
 
                 const detailHeaders = ['Sr. No.', 'Receipt No.', 'Invoice No.', 'Patient Name', 'MRN (Patient ID)', 'Payment Mode', 'Date', 'Time', 'Receipt Amt', 'Refund Amt', 'Deleted Amt', 'Cashier', 'Counter'];
@@ -758,7 +763,7 @@ function CollectionsReport({ data, fmt, from, to, quickFilter, setQuickFilter, m
                         'Time': item.time,
                         'Receipt Amt': item.type === 'Receipt' ? item.amount : '-',
                         'Refund Amt': item.type === 'Refund' ? item.amount : '-',
-                        'Deleted Amt': '-',
+                        'Deleted Amt': item.type === 'Deleted' ? item.amount : '-',
                         'Cashier': item.cashier,
                         'Counter': item.counter
                     });

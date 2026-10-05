@@ -29,6 +29,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
                         corporate: { select: { company_name: true, contact_phone: true } },
                         insurance_policies: {
                             include: { provider: { select: { provider_name: true } } },
+                            where: { status: 'Active' },
                             orderBy: { created_at: 'desc' },
                             take: 1,
                         },
@@ -143,8 +144,14 @@ function renderAdmissionFormHtml(admission: any, b: BillBranding, doctor?: any):
     const p = admission.patient || {};
     const ward = admission.ward || {};
     const bed = admission.bed || {};
-    const policy = p.insurance_policies?.[0];
-    const corp = p.corporate;
+    // patient_type is authoritative: show TPA / corporate details only for that
+    // payer type, so a patient switched back to Cash prints clean.
+    const payerType = String(p.patient_type || 'cash').toLowerCase();
+    const isTpa = ['tpa_insurance', 'insurance', 'tpa'].includes(payerType);
+    const isCorporate = payerType === 'corporate';
+    const policy = isTpa ? p.insurance_policies?.find((x: any) => x.status === 'Active') : undefined;
+    const corp = isCorporate ? p.corporate : undefined;
+    const paymentModeLabel = isTpa ? 'TPA / Insurance' : isCorporate ? 'Corporate' : 'Cash';
 
     const accent = b.accentColor || '#1e3a6e';
 
@@ -281,9 +288,9 @@ function renderAdmissionFormHtml(admission: any, b: BillBranding, doctor?: any):
 
                 ${sectionHeader('7. Payer & Financial Category', accent)}
                 <div class="grid-4">
-                    ${field('Payment Mode', p.patient_type)}
+                    ${field('Payment Mode', paymentModeLabel)}
                     ${field('Corporate Sponsor', corp?.company_name)}
-                    ${field('Corporate Card No.', p.corporate_card_number)}
+                    ${field('Corporate Card No.', isCorporate ? p.corporate_card_number : '')}
                     ${field('Insurance / TPA Provider', policy?.provider?.provider_name)}
                 </div>
                 <div class="grid-3" style="margin-top:4px;">
