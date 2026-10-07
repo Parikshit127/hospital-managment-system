@@ -886,6 +886,86 @@ export const bedOccupancyReport: ReportDefinition = {
   },
 };
 
+// Patient-level companion to bedOccupancyReport (which is a ward-level bed count):
+// who is / was lying in which bed during the period, with the full stay details.
+export const patientOccupancyReport: ReportDefinition = {
+  id: 'frontdesk-patient-occupancy',
+  category: ReportCategory.Admission,
+  name: 'Admission Report - Patient Occupancy',
+  description: 'Patient-wise bed occupancy: every patient who held a bed in the period, with ward, bed, admission/discharge, length of stay, doctor, diagnosis and payer.',
+  filters: z.object({
+    date_start: z.string().or(z.date()),
+    date_end: z.string().or(z.date()),
+    ward_id: z.string().optional(),
+  }),
+  filterSpec: { showWard: true },
+  columns: [
+    { key: 'ward', label: 'Ward', type: 'string' },
+    { key: 'ward_type', label: 'Ward Type', type: 'string' },
+    { key: 'bed', label: 'Bed', type: 'string' },
+    { key: 'ip_number', label: 'IP Number', type: 'string' },
+    { key: 'uhid', label: 'UHID', type: 'string' },
+    { key: 'patient_name', label: 'Patient Name', type: 'string' },
+    { key: 'age', label: 'Age', type: 'string' },
+    { key: 'gender', label: 'Gender', type: 'string' },
+    { key: 'phone', label: 'Phone', type: 'string' },
+    { key: 'admission_date', label: 'Admission Date', type: 'date' },
+    { key: 'discharge_date', label: 'Discharge Date', type: 'date' },
+    { key: 'days_occupied', label: 'Days Occupied', type: 'number' },
+    { key: 'admitting_doctor', label: 'Doctor', type: 'string' },
+    { key: 'diagnosis', label: 'Diagnosis', type: 'string' },
+    { key: 'payer_type', label: 'Payer', type: 'string' },
+    { key: 'status', label: 'Status', type: 'string' },
+  ],
+  defaultSort: { column: 'ward', direction: 'asc' },
+  rowLimitSync: 5000,
+  requiredPermission: 'mis_reports.frontdesk.view',
+  queryFn: async (filters: ValidatedFilters, orgId: string) => {
+    const { date_start, date_end, ward_id } = filters;
+    const rows = await prisma.$queryRaw<any[]>`
+      SELECT
+        COALESCE(w.ward_name, 'Unassigned') as "ward",
+        w.ward_type as "ward_type",
+        COALESCE(b.bed_name, adm.bed_id, 'N/A') as "bed",
+        adm.admission_id as "ip_number",
+        adm.patient_id as "uhid",
+        p.full_name as "patient_name",
+        p.age as "age",
+        p.gender as "gender",
+        p.phone as "phone",
+        DATE(adm.admission_date) as "admission_date",
+        DATE(adm.discharge_date) as "discharge_date",
+        GREATEST(1, CEIL(EXTRACT(EPOCH FROM (COALESCE(adm.discharge_date, NOW()) - adm.admission_date)) / 86400.0)) as "days_occupied",
+        COALESCE(adm.doctor_name, 'Unassigned') as "admitting_doctor",
+        adm.diagnosis as "diagnosis",
+        CASE p.patient_type
+          WHEN 'tpa_insurance' THEN 'TPA / Insurance'
+          WHEN 'corporate' THEN 'Corporate'
+          ELSE 'Cash'
+        END as "payer_type",
+        CASE
+          WHEN adm.status = 'Admitted' AND adm.discharge_date IS NOT NULL THEN 'Semi Discharged'
+          ELSE adm.status
+        END as "status"
+      FROM "admissions" adm
+      LEFT JOIN "OPD_REG" p ON adm.patient_id = p.patient_id
+      LEFT JOIN "wards" w ON adm.ward_id = w.ward_id
+      LEFT JOIN "beds" b ON adm.bed_id = b.bed_id
+      WHERE adm."organizationId" = ${orgId}
+        AND adm.status <> 'Cancelled'
+        AND adm.admission_date <= ${toEndOfDay(date_end)}
+        AND (adm.status = 'Admitted' OR adm.discharge_date >= ${toStartOfDay(date_start)})
+        ${ward_id ? Prisma.sql`AND adm.ward_id = ${parseInt(ward_id)}` : Prisma.empty}
+      ORDER BY w.ward_name, b.bed_name, adm.admission_date
+    `;
+
+    return {
+      rows: rows.map(r => ({ ...r, days_occupied: Number(r.days_occupied || 0) })),
+      totals: {},
+    };
+  },
+};
+
 export const emergencyDischargeReport: ReportDefinition = {
   id: 'frontdesk-emergency-discharge',
   category: ReportCategory.Admission,

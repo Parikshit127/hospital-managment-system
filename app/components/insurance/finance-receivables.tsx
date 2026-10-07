@@ -524,6 +524,8 @@ export function InsuranceReceipts({ providers }: { providers: any[] }) {
   const [reverseFor, setReverseFor] = useState<any>(null);
   const [historyFor, setHistoryFor] = useState<any>(null);
   const [editFor, setEditFor] = useState<any>(null);
+  // Edit / Reverse are Admin + Finance only; the server also enforces this.
+  const [canModify, setCanModify] = useState(false);
   const [providerId, setProviderId] = useState('');
   const [payerSearch, setPayerSearch] = useState('');
   const [onlyPending, setOnlyPending] = useState(false);
@@ -554,7 +556,7 @@ export function InsuranceReceipts({ providers }: { providers: any[] }) {
         to: rTo || undefined,
       }),
     ])
-      .then(([s, r]: any[]) => { if (s?.success) setSummary(s.data); if (r?.success) setReceipts(r.data); })
+      .then(([s, r]: any[]) => { if (s?.success) setSummary(s.data); if (r?.success) { setReceipts(r.data); setCanModify(!!r.canModify); } })
       .finally(() => setLoading(false));
   }, [providerId, rDebouncedSearch, rStatus, rFrom, rTo]);
   useEffect(() => { load(); }, [load]);
@@ -573,6 +575,7 @@ export function InsuranceReceipts({ providers }: { providers: any[] }) {
     { header: 'Svc Chg', val: (r) => Number(r.service_charge || 0), num: true, width: 13 },
     { header: 'Disallowed', val: (r) => Number(r.disallowed_total ?? Math.max(0, Number(r.claim_amount || 0) - Number(r.sanctioned_amount || 0))), num: true, width: 15 },
     { header: 'Status', val: (r) => r.status || '', width: 16, nowrap: true },
+    { header: 'Receipt By', val: (r) => r.created_by_name || r.created_by || '', width: 22 },
   ];
   const RECEIPT_ALIGN = RECEIPT_COLS.map((c) => (c.num ? 'right' : 'left')) as ('left' | 'right')[];
   const receiptMetaLines = [
@@ -589,7 +592,7 @@ export function InsuranceReceipts({ providers }: { providers: any[] }) {
     receipts.reduce((t: number, r: any) => t + Number(r.tds_total || 0), 0),
     receipts.reduce((t: number, r: any) => t + Number(r.service_charge || 0), 0),
     receipts.reduce((t: number, r: any) => t + Number(r.disallowed_total ?? Math.max(0, Number(r.claim_amount || 0) - Number(r.sanctioned_amount || 0))), 0),
-    '',
+    '', '',
   ] : undefined;
   const receiptPrintRows = () => receipts.map((r: any) => RECEIPT_COLS.map((c) => (c.num ? fmt(c.val(r) as number) : c.val(r))));
   const receiptPrintTotals = () => { const t = receiptTotalsRow(); return t && t.map((v, i) => (RECEIPT_COLS[i]?.num ? fmt(v as number) : v)); };
@@ -737,6 +740,7 @@ export function InsuranceReceipts({ providers }: { providers: any[] }) {
                 <th className="px-3 py-2.5 text-right font-black text-[11px] uppercase tracking-wider">Svc Chg</th>
                 <th className="px-3 py-2.5 text-right font-black text-[11px] uppercase tracking-wider">Disallowed</th>
                 <th className="px-3 py-2.5 text-left font-black text-[11px] uppercase tracking-wider">Status</th>
+                <th className="px-3 py-2.5 text-left font-black text-[11px] uppercase tracking-wider">Receipt By</th>
                 <th className="px-3 py-2.5"></th>
               </tr>
             </thead>
@@ -776,6 +780,7 @@ export function InsuranceReceipts({ providers }: { providers: any[] }) {
                   <td className="px-3 py-2.5 text-right text-gray-600">{Number(r.service_charge) ? fmt(r.service_charge) : '—'}</td>
                   <td className="px-3 py-2.5 text-right text-rose-600">{disallowed ? fmt(disallowed) : '—'}</td>
                   <td className="px-3 py-2.5"><StatusPill status={r.status} /></td>
+                  <td className="px-3 py-2.5 text-gray-600 text-xs whitespace-nowrap">{r.created_by_name || r.created_by || '—'}</td>
                   <td className="px-3 py-2.5">
                     <div className="flex items-center justify-end gap-1.5">
                       {/* A reversed receipt still reports its full amount as
@@ -798,14 +803,14 @@ export function InsuranceReceipts({ providers }: { providers: any[] }) {
                         className="inline-flex items-center rounded-lg border border-gray-300 p-1.5 text-gray-500 hover:bg-gray-50 hover:text-gray-800">
                         <History className="h-3.5 w-3.5" />
                       </button>
-                      {r.status !== 'Reversed' && (
+                      {canModify && r.status !== 'Reversed' && (
                         <button onClick={() => setEditFor(r)}
                           title="Edit this receipt"
                           className="inline-flex items-center rounded-lg border border-gray-300 p-1.5 text-gray-500 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600">
                           <Pencil className="h-3.5 w-3.5" />
                         </button>
                       )}
-                      {r.status !== 'Reversed' && (
+                      {canModify && r.status !== 'Reversed' && (
                         <button onClick={() => setReverseFor(r)} title="Reverse this receipt"
                           className="inline-flex items-center rounded-lg border border-gray-300 p-1.5 text-gray-400 hover:border-rose-300 hover:bg-rose-50 hover:text-rose-600">
                           <Undo2 className="h-3.5 w-3.5" />
@@ -815,7 +820,7 @@ export function InsuranceReceipts({ providers }: { providers: any[] }) {
                   </td>
                 </tr>
               );})}
-              {receipts.length === 0 && <tr><td colSpan={13} className="px-4 py-8 text-center text-gray-400">No receipts yet</td></tr>}
+              {receipts.length === 0 && <tr><td colSpan={14} className="px-4 py-8 text-center text-gray-400">No receipts yet</td></tr>}
             </tbody>
           </table>
         </div>

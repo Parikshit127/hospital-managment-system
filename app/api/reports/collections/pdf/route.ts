@@ -178,6 +178,36 @@ export async function GET(req: NextRequest) {
             : [];
         const paymentCashierMap = new Map(paymentLogs.map(log => [log.entity_id, log.username]));
 
+        // TPA / insurance settlement payments are created by receipt allocation, not
+        // at the counter, so they carry no cashier and used to print "Not recorded".
+        // Attribute them to whoever recorded the insurance receipt (the payment is
+        // linked back via the allocation, or by its "Insurance receipt <no>" note for
+        // older rows).
+        const paymentIds = payments.map(p => p.id);
+        const tpaAllocations = paymentIds.length
+            ? await prisma.insuranceReceiptAllocation.findMany({
+                where: { organizationId, payment_id: { in: paymentIds } },
+                select: { payment_id: true, receipt: { select: { created_by: true } } }
+            })
+            : [];
+        const tpaCreatorByPaymentId = new Map<number, string>();
+        for (const a of tpaAllocations) {
+            if (a.payment_id && a.receipt?.created_by) tpaCreatorByPaymentId.set(a.payment_id, a.receipt.created_by);
+        }
+        const noteReceiptNos = [...new Set(
+            payments
+                .filter(p => !(p as any).received_by && !paymentCashierMap.get(p.receipt_number) && !tpaCreatorByPaymentId.has(p.id))
+                .map(p => /^Insurance receipt (\S+)/.exec(p.notes || '')?.[1])
+                .filter((n): n is string => !!n)
+        )];
+        const tpaReceiptsByNo = noteReceiptNos.length
+            ? await prisma.insuranceReceipt.findMany({
+                where: { organizationId, receipt_number: { in: noteReceiptNos } },
+                select: { receipt_number: true, created_by: true }
+            })
+            : [];
+        const tpaCreatorByReceiptNo = new Map(tpaReceiptsByNo.map(r => [r.receipt_number, r.created_by || '']));
+
         // 7. Process Data
         const allModes = new Set<string>();
         const cashierList = new Set<string>();
@@ -219,7 +249,10 @@ export async function GET(req: NextRequest) {
             if (isDepositSettlement(p)) return; // Skip deposits applied to bills to avoid double counting
 
             // Prefer the cashier stored on the payment; fall back to the audit log; then 'system'.
-            const cashierUser = (p as any).received_by || paymentCashierMap.get(p.receipt_number) || 'Not recorded';
+            const tpaCreator = tpaCreatorByPaymentId.get(p.id)
+                || tpaCreatorByReceiptNo.get(/^Insurance receipt (\S+)/.exec(p.notes || '')?.[1] || '')
+                || '';
+            const cashierUser = (p as any).received_by || paymentCashierMap.get(p.receipt_number) || tpaCreator || 'Not recorded';
             const cashierName = userMap.get(cashierUser.toLowerCase()) || cashierUser;
             const patientName = p.invoice?.patient?.full_name || '-';
             const patientId = p.invoice?.patient?.patient_id || '-';

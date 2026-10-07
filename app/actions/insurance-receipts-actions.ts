@@ -33,6 +33,9 @@ function round2(n: number): number {
 
 const TOL = 0.01;
 
+// Who may edit or reverse a recorded receipt (moves money on the books). Reception can record but not alter.
+const RECEIPT_MODIFY_ROLES = ['admin', 'finance'];
+
 // Attach, per invoice, how much the patient already paid directly on this
 // bill (outside the TPA settlement) and how much of their deposit is still
 // available/unapplied. Lets the receipt screen show the real remaining gap
@@ -256,7 +259,7 @@ export async function updateInsuranceReceipt(input: {
     const { db, session, organizationId } = await requireTenantContext();
 
     // Editing a receipt moves money on the books. Same bar as unlocking a bill.
-    if (!['admin', 'finance'].includes(session?.role)) {
+    if (!RECEIPT_MODIFY_ROLES.includes(session?.role)) {
       return { success: false, error: 'Only Admin or Finance can edit a receipt.' };
     }
 
@@ -473,6 +476,9 @@ export async function allocateReceipt(input: {
               reference: receipt.reference_number,
               status: 'Completed',
               notes: `Insurance receipt ${receipt.receipt_number}`,
+              // Attribute to whoever recorded the receipt so the Reception
+              // Collection Report names the user instead of "Not recorded".
+              received_by: receipt.created_by || session?.username || session?.name || null,
               organizationId,
               created_at: receipt.receipt_date,
             },
@@ -744,7 +750,7 @@ export async function listInsuranceReceipts(filters?: {
   payer_type?: string; provider_id?: number; corporate_id?: string; status?: string; from?: string; to?: string;
   search?: string;
 }) {
-  const { db, organizationId } = await requireTenantContext();
+  const { db, session, organizationId } = await requireTenantContext();
   const where: any = { organizationId };
   if (filters?.payer_type) where.payer_type = filters.payer_type;
   if (filters?.provider_id) where.provider_id = filters.provider_id;
@@ -785,6 +791,12 @@ export async function listInsuranceReceipts(filters?: {
     orderBy: { receipt_date: 'desc' },
     take: 300,
   });
+  // created_by is a username; show the person's full name wherever we can.
+  const creatorUsernames = [...new Set(receipts.map((r: any) => r.created_by).filter(Boolean))] as string[];
+  const creators = creatorUsernames.length
+    ? await db.user.findMany({ where: { organizationId, username: { in: creatorUsernames } }, select: { username: true, name: true } })
+    : [];
+  const creatorNameMap = new Map<string, string>(creators.map((u: any) => [u.username, u.name || u.username]));
   const data = receipts.map((r: any) => {
     const seen = new Map<string, string>();
     let disallowedTotal = 0;
@@ -795,9 +807,15 @@ export async function listInsuranceReceipts(filters?: {
       }
     }
     const { allocations, ...rest } = r;
-    return { ...rest, patients: Array.from(seen.values()), disallowed_total: round2(disallowedTotal) };
+    return {
+      ...rest,
+      patients: Array.from(seen.values()),
+      disallowed_total: round2(disallowedTotal),
+      created_by_name: r.created_by ? (creatorNameMap.get(r.created_by) || r.created_by) : '',
+    };
   });
-  return { success: true, data: serialize(data) };
+  // Edit / Reverse move money on the books — Admin and Finance only (not Reception).
+  return { success: true, data: serialize(data), canModify: RECEIPT_MODIFY_ROLES.includes(session?.role) };
 }
 
 export async function getInsuranceReceiptDetail(receiptId: number) {
@@ -1055,6 +1073,9 @@ export async function getInsuranceReceiptHistory(receiptId: number) {
 export async function reverseInsuranceReceipt(receiptId: number, reason: string) {
   try {
     const { db, session, organizationId } = await requireTenantContext();
+    if (!RECEIPT_MODIFY_ROLES.includes(session?.role)) {
+      return { success: false, error: 'Only Admin or Finance can reverse a receipt.' };
+    }
     if (!reason || !reason.trim()) return { success: false, error: 'reason is required' };
 
     const receipt = await db.insuranceReceipt.findFirst({
