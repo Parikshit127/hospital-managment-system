@@ -56,11 +56,22 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
             reversal = { reason, at: log?.created_at ?? null };
         }
 
+        // created_by holds the username (or name) of whoever recorded the receipt;
+        // resolve it to the person's full name for the signature block.
+        let preparedBy = receipt.created_by || '';
+        if (receipt.created_by) {
+            const creator = await prisma.user.findFirst({
+                where: { organizationId, username: receipt.created_by },
+                select: { name: true },
+            });
+            if (creator?.name) preparedBy = creator.name;
+        }
+
         const branding = await getBillBranding(organizationId);
         const printedBy = auth.context.kind === 'staff'
             ? { name: auth.context.session.name, role: auth.context.session.role }
             : undefined;
-        return new NextResponse(receiptHTML(receipt, branding, reversal, printedBy), {
+        return new NextResponse(receiptHTML(receipt, branding, reversal, printedBy, preparedBy), {
             headers: { 'Content-Type': 'text/html; charset=utf-8' },
         });
     } catch (error: any) {
@@ -94,7 +105,7 @@ function numberToWords(amount: number): string {
     return `Rupees ${parts.join(' ')}${paise ? ` and ${two(paise)} Paise` : ''} Only`;
 }
 
-function receiptHTML(r: any, b: any, reversal?: { reason: string; at: Date | null } | null, printedBy?: { name: string; role?: string }): string {
+function receiptHTML(r: any, b: any, reversal?: { reason: string; at: Date | null } | null, printedBy?: { name: string; role?: string }, preparedBy?: string): string {
     const accent = b.accentColor || '#1e3a6e';
     const payer = r.provider?.provider_name || r.corporate?.company_name || '—';
     const isReversed = r.status === 'Reversed';
@@ -269,6 +280,7 @@ ${isReversed ? `
             <div style="height:38px;"></div>
             <p style="border-top:1px solid #9ca3af;padding-top:5px;font-size:11px;font-weight:700;min-width:190px;">${esc(b.signatureName || 'Authorised Signatory')}</p>
             <p style="font-size:10px;color:#6b7280;">${esc(b.signatureTitle || 'Insurance / TPA Desk')} — ${esc(b.hospitalName)}</p>
+            ${preparedBy ? `<p style="font-size:10px;color:#374151;margin-top:3px;">Prepared by: <strong>${esc(preparedBy)}</strong></p>` : ''}
         </div>
     </div>
 
