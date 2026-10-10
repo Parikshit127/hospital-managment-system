@@ -28,6 +28,7 @@ export const ADMIN_NAV_SECTIONS: NavSection[] = [
             { label: 'Dashboard', href: '/admin/dashboard', icon: LayoutDashboard },
             { label: 'Analytics', href: '/admin/analytics', icon: LineChart },
             { label: 'MIS Reports', href: '/admin/mis-reports', icon: LineChart },
+            { label: 'Bed Occupancy', href: '/admin/bed-occupancy', icon: BedDouble },
             { label: 'Single Patient Report', href: '/reception/single-patient-report', icon: FileText },
             { label: 'Edit / Cancel Audit', href: '/ipd/audit-trail', icon: ShieldAlert },
         ],

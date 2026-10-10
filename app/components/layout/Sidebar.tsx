@@ -276,6 +276,7 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
       title: "Reports",
       items: [
         { label: "Pharmacy Reports", href: "/pharmacy/reports", icon: BarChart3 },
+        { label: "GST Report", href: "/pharmacy/gst-report", icon: ReceiptText },
         { label: "Indent Report", href: "/pharmacy/indent-report", icon: ClipboardList },
         { label: "MIS Reports", href: "/pharmacy/mis-reports", icon: FileSpreadsheet },
       ],
@@ -327,6 +328,7 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
         { label: "TPA / Insurance", href: "/insurance", icon: ShieldCheck },
         { label: "Revenue Analytics", href: "/finance/revenue", icon: PieChart },
         { label: "Financial Reports", href: "/finance/reports", icon: BarChart3 },
+        { label: "Bed Occupancy", href: "/finance/bed-occupancy", icon: BarChart3 },
         { label: "MIS Reports", href: "/finance/mis-reports", icon: FileSpreadsheet },
         { label: "Fiscal Periods", href: "/finance/periods", icon: CalendarCheck },
         { label: "Bank Recon", href: "/finance/bank-recon", icon: ArrowLeftRight },
@@ -356,6 +358,7 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
         { label: "Ward Rounds", href: "/ipd/ward-rounds", icon: ClipboardCheck },
         { label: "Case Sheet", href: "/ipd/case-sheet", icon: ClipboardList },
         { label: "Census", href: "/ipd/census", icon: PieChart },
+        { label: "Bed Occupancy", href: "/ipd/bed-occupancy", icon: BarChart3 },
         { label: "MIS Reports", href: "/ipd/mis-reports", icon: FileSpreadsheet },
       ],
     },

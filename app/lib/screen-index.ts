@@ -61,6 +61,7 @@ export const SCREEN_INDEX: ScreenEntry[] = [
     { label: 'Patient Reports (IPD/OPD/Walk-in)', href: '/reception/reports', group: 'Reports', roles: FRONT_DESK },
     { label: 'Indent Report', href: '/pharmacy/indent-report', group: 'Reports', keywords: ['indent', 'requisition', 'nurse indent', 'pharmacy indent'], roles: PHARMACY },
     { label: 'Pharmacy Analytics', href: '/pharmacy/reports', group: 'Reports', roles: PHARMACY },
+    { label: 'Pharmacy GST Report', href: '/pharmacy/gst-report', group: 'Reports', keywords: ['gst', 'gstr', 'gstr-1', 'gstr-3b', 'itc', 'tax return', 'pharmacy tax'], roles: PHARMACY },
 
     // Pharmacy
     { label: 'Pharmacy Dispensing', href: '/pharmacy/billing', group: 'Pharmacy', keywords: ['dispense', 'medicine', 'sale', 'counter'], roles: PHARMACY },
@@ -79,6 +80,8 @@ export const SCREEN_INDEX: ScreenEntry[] = [
     { label: 'IPD Dashboard', href: '/ipd', group: 'IPD', keywords: ['inpatient', 'admitted'], roles: WARD },
     { label: 'Admissions Hub', href: '/ipd/admissions-hub', group: 'IPD', keywords: ['admission', 'admitted patients'], roles: WARD },
     { label: 'Bed Matrix', href: '/ipd/bed-matrix', group: 'IPD', keywords: ['bed', 'ward', 'occupancy'], roles: WARD },
+    { label: 'Bed Occupancy Report', href: '/ipd/bed-occupancy', group: 'IPD', keywords: ['bed occupancy', 'occupancy report', 'census', 'bor', 'ward occupancy', 'vacant beds', 'blocked beds'], roles: WARD },
+    { label: 'Bed Occupancy Report (Finance)', href: '/finance/bed-occupancy', group: 'Reports', keywords: ['bed occupancy', 'occupancy report', 'bor'], roles: ['admin', 'finance'] },
     { label: 'Discharge Settlement', href: '/ipd/discharge-settlement', group: 'IPD', keywords: ['discharge', 'final bill', 'settlement'], roles: WARD },
     { label: 'Nursing Station', href: '/ipd/nursing-station', group: 'IPD', keywords: ['nursing', 'ward'], roles: WARD },
 
