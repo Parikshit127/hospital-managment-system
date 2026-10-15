@@ -25,7 +25,7 @@ const PHARMACY_CONFIG: Record<string, PharmacyBranding> = {
         division: '(Division of Garnet Pharmaceutical)',
         address: 'B-162, East of Kailash Road, New Delhi, Delhi 110065',
         gstin: '07AKIPA3324R2ZZ',
-        phone: '9650506959',
+        phone: '93559 05333',
         email: ' garnetmedicare@gmail.com',
         drugLicenseForm20: 'RLF20DL2026003206',
         drugLicenseForm21: 'RLF21DL2026003201',
