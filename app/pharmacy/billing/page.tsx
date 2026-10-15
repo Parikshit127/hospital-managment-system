@@ -2475,7 +2475,9 @@ export default function PharmacyPage() {
                 const billDate = billDateTime ? new Date(billDateTime) : new Date();
                 const hospitalName = branding?.hospitalName || pharmacyBranding?.name || 'Hospital';
                 const hospitalAddress = branding?.hospitalAddress || pharmacyBranding?.address || '';
-                const hospitalPhone = branding?.hospitalPhone || '';
+                // Pharmacy's own contact number first (Garnet Medicare), falling back to the
+                // hospital's — the org phone is the hospital's, not the pharmacy's.
+                const hospitalPhone = pharmacyBranding?.phone || branding?.hospitalPhone || '';
                 const hospitalEmail = branding?.hospitalEmail || '';
                 // This is a pharmacy (Garnet Medicare) bill, so the GSTIN must be the
                 // pharmacy's own — NOT the hospital org GSTIN. Orgs whose pharmacy has no

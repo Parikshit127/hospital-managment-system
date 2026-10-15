@@ -1734,13 +1734,39 @@ export async function reversePayment(paymentId: number, reason: string) {
 
         const paymentBefore = await db.payments.findUnique({
             where: { id: paymentId },
-            select: { status: true, notes: true },
+            select: { status: true, notes: true, payment_method: true, amount: true },
         });
 
         const payment = await db.payments.update({
             where: { id: paymentId },
             data: { status: 'Reversed', notes: reason },
         });
+
+        // A 'Deposit' payment is the bill-side half of applying a patient deposit
+        // (notes: "Applied from deposit <number>", see applyDepositToInvoice). Reversing
+        // only the payment left the deposit stuck as fully 'Applied' with no bill using
+        // it, so the money vanished from both the bill and the deposit balance. Hand the
+        // amount back to the deposit so it can be re-applied or refunded.
+        if (paymentBefore?.status === 'Completed' && paymentBefore.payment_method === 'Deposit') {
+            const depNo = /Applied from deposit\s+(\S+)/.exec(paymentBefore.notes || '')?.[1];
+            if (depNo) {
+                const dep = await db.patientDeposit.findFirst({ where: { deposit_number: depNo, organizationId } });
+                if (dep) {
+                    const newApplied = Math.max(0, Math.round((Number(dep.applied_amount) - Number(paymentBefore.amount)) * 100) / 100);
+                    const used = newApplied + Number(dep.refunded_amount);
+                    await db.patientDeposit.update({
+                        where: { id: dep.id },
+                        data: {
+                            applied_amount: newApplied,
+                            applied_to_invoice: newApplied > 0 ? dep.applied_to_invoice : null,
+                            status: dep.status === 'Cancelled'
+                                ? 'Cancelled'
+                                : used >= Number(dep.amount) - 0.01 ? (newApplied > 0 ? 'Applied' : 'Refunded') : 'Active',
+                        },
+                    });
+                }
+            }
+        }
 
         // Recalculate invoice
         const allPayments = await db.payments.findMany({
