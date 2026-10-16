@@ -33,6 +33,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
                 userRole={session?.role}
                 userId={session?.id}
                 organizationId={session?.organization_id}
+                organizationName={session?.organization_name}
             >
                 {children}
             </AdminLayoutShell>

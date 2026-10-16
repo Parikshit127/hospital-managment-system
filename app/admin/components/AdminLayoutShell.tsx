@@ -10,9 +10,10 @@ interface AdminLayoutShellProps {
     userRole?: string;
     userId?: string;
     organizationId?: string;
+    organizationName?: string;
 }
 
-export default function AdminLayoutShell({ children, userName, userRole, userId, organizationId }: AdminLayoutShellProps) {
+export default function AdminLayoutShell({ children, userName, userRole, userId, organizationId, organizationName }: AdminLayoutShellProps) {
     return (
         <AdminPortalContext.Provider value={true}>
             <div
@@ -31,7 +32,7 @@ export default function AdminLayoutShell({ children, userName, userRole, userId,
                 </div>
                 <div className="flex flex-col flex-1 min-w-0 overflow-hidden relative z-10 print:overflow-visible">
                     <div className="print:hidden">
-                        <Topbar userName={userName} userRole={userRole} userId={userId} organizationId={organizationId} />
+                        <Topbar userName={userName} userRole={userRole} userId={userId} organizationId={organizationId} organizationName={organizationName} />
                     </div>
                     <main className="flex-1 overflow-y-auto print:overflow-visible">
                         <div className="max-w-[1360px] mx-auto px-5 sm:px-8 lg:px-10 py-8 print:max-w-none print:p-0">

@@ -2,6 +2,7 @@
 
 import Breadcrumbs from './Breadcrumbs';
 import AdminPortalNav from './AdminPortalNav';
+import UnitSwitcher from './UnitSwitcher';
 import { User } from 'lucide-react';
 import { NotificationBell } from '@/app/components/NotificationBell';
 import { GlobalPatientSearch } from '@/app/components/layout/GlobalPatientSearch';
@@ -11,6 +12,7 @@ interface TopbarProps {
     userRole?: string;
     userId?: string;
     organizationId?: string;
+    organizationName?: string;
 }
 
 const ROLE_LABELS: Record<string, string> = {
@@ -25,7 +27,7 @@ const ROLE_LABELS: Record<string, string> = {
     lab_technician: 'Lab Technician',
 };
 
-export default function Topbar({ userName, userRole, userId, organizationId }: TopbarProps) {
+export default function Topbar({ userName, userRole, userId, organizationId, organizationName }: TopbarProps) {
     const roleLabel = userRole ? (ROLE_LABELS[userRole] ?? userRole) : '';
 
     return (
@@ -43,6 +45,7 @@ export default function Topbar({ userName, userRole, userId, organizationId }: T
                     global search that every other portal gets from AppShell —
                     which meant Ctrl+K here fell through to the browser and
                     focused the address bar instead. */}
+                {userRole === 'admin' && <UnitSwitcher currentUnitName={organizationName} />}
                 {userRole && <GlobalPatientSearch role={userRole} />}
                 {userId && organizationId && <NotificationBell userId={userId} organizationId={organizationId} />}
                 <AdminPortalNav />
