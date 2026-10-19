@@ -23,7 +23,8 @@ export const loginSchema = z.object({
 });
 
 export const superAdminLoginSchema = z.object({
-    email: z.string().email('Valid email required'),
+    // Login ID: an email or a plain username (stored in super_admins.email).
+    email: z.string().trim().min(1, 'Login ID required'),
     password: z.string().min(1, 'Password is required'),
 });
 
