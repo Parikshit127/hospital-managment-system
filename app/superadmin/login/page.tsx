@@ -29,12 +29,15 @@ export default function SuperAdminLoginPage() {
 
                     <div>
                         <label htmlFor="email" className="block text-sm font-medium text-gray-300 mb-1.5">
-                            Email
+                            Email / User ID
                         </label>
                         <input
                             id="email"
                             name="email"
-                            type="email"
+                            type="text"
+                            autoComplete="username"
+                            autoCapitalize="none"
+                            spellCheck={false}
                             required
                             className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500/50 transition"
                             placeholder="superadmin@hospitalos.com"
