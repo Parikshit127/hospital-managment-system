@@ -2,19 +2,37 @@
 
 import React, { useEffect, useState } from 'react';
 import { Users, Search, Building2, ShieldCheck, Mail, Phone, CalendarClock } from 'lucide-react';
-import { getOrganizationUsers } from '@/app/actions/superadmin-actions';
+import { getOrganizationUsers, getAdminUnitAccess } from '@/app/actions/superadmin-actions';
+import AdminUnitAccessModal, { type AdminUnitAccess, type UnitAccessOrg } from '../components/AdminUnitAccessModal';
 import Link from 'next/link';
 
 export default function GlobalUsersPage() {
     const [users, setUsers] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
+    const [access, setAccess] = useState<Record<string, AdminUnitAccess>>({});
+    const [orgs, setOrgs] = useState<UnitAccessOrg[]>([]);
+    const [editing, setEditing] = useState<AdminUnitAccess | null>(null);
+
+    const loadAccess = async () => {
+        const res = await getAdminUnitAccess();
+        if (res.success && res.data) {
+            setOrgs(res.data.orgs);
+            setAccess(Object.fromEntries(res.data.admins.map(a => [a.id, a])));
+        }
+    };
 
     const loadData = async () => {
         setLoading(true);
-        const res = await getOrganizationUsers(undefined, search);
+        const [res] = await Promise.all([getOrganizationUsers(undefined, search), loadAccess()]);
         if (res.success) setUsers(res.data);
         setLoading(false);
+    };
+
+    const accessSummary = (a?: AdminUnitAccess) => {
+        if (!a) return '—';
+        if (a.canAccessAllUnits) return 'All units';
+        return a.unitIds.length === 0 ? 'Home unit only' : `Home + ${a.unitIds.length} more`;
     };
 
     useEffect(() => {
@@ -60,6 +78,7 @@ export default function GlobalUsersPage() {
                                     <th className="px-6 py-4">Role / Scope</th>
                                     <th className="px-6 py-4">Contact Vector</th>
                                     <th className="px-6 py-4">Tenant Host</th>
+                                    <th className="px-6 py-4">Unit Access</th>
                                     <th className="px-6 py-4">Provisioned</th>
                                 </tr>
                             </thead>
@@ -93,6 +112,19 @@ export default function GlobalUsersPage() {
                                             </Link>
                                         </td>
                                         <td className="px-6 py-4">
+                                            {u.role === 'admin' && access[u.id] ? (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setEditing(access[u.id])}
+                                                    className="text-xs font-bold text-violet-700 bg-violet-50 hover:bg-violet-100 rounded-lg px-2.5 py-1.5"
+                                                >
+                                                    {accessSummary(access[u.id])} · Manage
+                                                </button>
+                                            ) : (
+                                                <span className="text-xs text-gray-300">—</span>
+                                            )}
+                                        </td>
+                                        <td className="px-6 py-4">
                                             <div className="flex items-center gap-1.5 text-xs font-medium text-gray-500">
                                                 <CalendarClock className="h-3.5 w-3.5" />
                                                 {new Date(u.createdAt).toLocaleDateString('en-GB')}
@@ -105,6 +137,16 @@ export default function GlobalUsersPage() {
                     )}
                 </div>
             </div>
+
+            {editing && (
+                <AdminUnitAccessModal
+                    key={editing.id}
+                    admin={editing}
+                    orgs={orgs}
+                    onClose={() => setEditing(null)}
+                    onSaved={() => { setEditing(null); loadAccess(); }}
+                />
+            )}
         </div>
     );
 }

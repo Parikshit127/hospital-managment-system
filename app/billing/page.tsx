@@ -112,6 +112,25 @@ function payerLabel(r: any): { label: string; cls: string } {
   return { label: "Cash", cls: "bg-gray-100 text-gray-700" };
 }
 
+// How each tender is shown under the Payer badge. Keys are the canonical labels
+// from app/lib/payment-tender.ts, so UPI / Card / Cash always look the same.
+const MODE_STYLES: Record<string, string> = {
+  Cash: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  UPI: "bg-sky-50 text-sky-700 border-sky-200",
+  Card: "bg-indigo-50 text-indigo-700 border-indigo-200",
+  "Bank Transfer": "bg-amber-50 text-amber-700 border-amber-200",
+  "NEFT/RTGS": "bg-amber-50 text-amber-700 border-amber-200",
+  Cheque: "bg-orange-50 text-orange-700 border-orange-200",
+  Online: "bg-cyan-50 text-cyan-700 border-cyan-200",
+  Razorpay: "bg-cyan-50 text-cyan-700 border-cyan-200",
+  Deposit: "bg-violet-50 text-violet-700 border-violet-200",
+  Insurance: "bg-purple-50 text-purple-700 border-purple-200",
+  TPA: "bg-purple-50 text-purple-700 border-purple-200",
+};
+const PAYMENT_MODE_FILTERS = [
+  "", "Cash", "UPI", "Card", "Bank Transfer", "NEFT/RTGS", "Cheque", "Online", "Razorpay", "Deposit", "Insurance",
+];
+
 // ── main page ─────────────────────────────────────────────────────────────
 
 // Cancel is offered for any non-terminal invoice. Invoices that already have
@@ -236,7 +255,7 @@ export function MasterBillingContent({ shell = "app" }: { shell?: "app" | "admin
   const clearFilters = () => setFilter({ page: 1, limit: 25 });
   const hasActiveFilters = Boolean(
     filter.search || filter.invoice_status || filter.payment_status ||
-    filter.patient_type || filter.invoice_type || filter.doctor_name ||
+    filter.patient_type || filter.invoice_type || filter.doctor_name || filter.payment_mode ||
     filter.date_from || filter.date_to
   );
 
@@ -264,6 +283,9 @@ export function MasterBillingContent({ shell = "app" }: { shell?: "app" | "admin
         "Payment Status": r.payment_status,
         Total: Number(r.total_amount || 0),
         Paid: Number(r.paid_amount || 0),
+        "Payment Modes": (r.payment_modes ?? [])
+          .map((m: any) => `${m.mode} ${Number(m.amount).toLocaleString("en-IN")}`)
+          .join(", "),
         Outstanding: Number(r.outstanding_amount || 0),
         "Deposit Balance": Number(r.deposit_balance || 0),
         "Aging (days)": r.aging_days,
@@ -365,7 +387,14 @@ export function MasterBillingContent({ shell = "app" }: { shell?: "app" | "admin
                     onChange={(v) => updateFilter({ patient_type: v || undefined })}
                   />
                   <Th align="right">Bill Amount</Th>
-                  <Th align="right">Payment Received</Th>
+                  <ThFilter
+                    label="Payment Received"
+                    value={filter.payment_mode ?? ""}
+                    options={PAYMENT_MODE_FILTERS}
+                    labels={{ "": "All modes" }}
+                    onChange={(v) => updateFilter({ payment_mode: v || undefined })}
+                    align="right"
+                  />
                   <Th align="right">Outstanding</Th>
                   <Th>Invoice #</Th>
                   <ThFilter
@@ -441,6 +470,22 @@ export function MasterBillingContent({ shell = "app" }: { shell?: "app" | "admin
                         <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${payer.cls}`}>
                           {payer.label}
                         </span>
+                        {Array.isArray(r.payment_modes) && r.payment_modes.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1 max-w-[170px]">
+                            {r.payment_modes.map((m: { mode: string; amount: number }) => (
+                              <span
+                                key={m.mode}
+                                title={`${m.mode}: ₹${Number(m.amount).toLocaleString("en-IN")} received`}
+                                className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[10px] font-bold whitespace-nowrap ${
+                                  MODE_STYLES[m.mode] ?? "bg-gray-50 text-gray-600 border-gray-200"
+                                }`}
+                              >
+                                {m.mode}
+                                <span className="font-semibold opacity-80">₹{fmtMoney(m.amount)}</span>
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </Td>
                       <Td align="right">{fmtMoney(r.total_amount)}</Td>
                       <Td align="right">{fmtMoney(r.paid_amount)}</Td>

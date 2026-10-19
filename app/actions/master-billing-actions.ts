@@ -28,6 +28,7 @@
 import { requireTenantContext } from "@/backend/tenant";
 import { getTodayRange } from "@/app/lib/timezone";
 import { buildTrail } from "@/app/lib/patient-trail";
+import { canonicalTender, isDepositSettlement, tenderVariants } from "@/app/lib/payment-tender";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -142,6 +143,7 @@ export interface MasterBillingFilter {
   payment_status?: string;
   patient_type?: string; // cash | corporate | tpa_insurance
   invoice_type?: string; // OPD | IPD | LAB | PHARMACY
+  payment_mode?: string; // canonical tender: Cash | UPI | Card | … (bills with a received payment in it)
   department?: string;
   corporate_id?: string;
   doctor_name?: string;
@@ -167,6 +169,19 @@ export async function getMasterBillingGrid(filter: MasterBillingFilter = {}) {
     if (filter.patient_type) where.billing_patient_type = filter.patient_type;
     if (filter.invoice_type) where.invoice_type = filter.invoice_type;
     if (filter.corporate_id) where.corporate_id = filter.corporate_id;
+    if (filter.payment_mode) {
+      // Match every raw spelling of the tender (see payment-tender.ts). Deposit
+      // settlements are recognised by receipt number too, since the method on
+      // those rows can be edited after the fact.
+      const modeMatch: any[] = [{ payment_method: { in: tenderVariants(filter.payment_mode) } }];
+      if (canonicalTender(filter.payment_mode) === "Deposit") {
+        modeMatch.push({ receipt_number: { startsWith: "RCP-DEP-" } });
+      }
+      where.AND = [
+        ...(where.AND || []),
+        { payments: { some: { status: "Completed", amount: { gt: 0 }, OR: modeMatch } } },
+      ];
+    }
     if (filter.doctor_name && filter.doctor_name.trim()) {
       // A separate `AND` entry (not merged into the `search` OR-block below) so
       // the doctor filter and the free-text search can be applied together.
@@ -256,7 +271,7 @@ export async function getMasterBillingGrid(filter: MasterBillingFilter = {}) {
           payments: {
             where: { status: "Completed" },
             orderBy: { created_at: "desc" },
-            select: { amount: true, payment_method: true, created_at: true },
+            select: { amount: true, payment_method: true, receipt_number: true, created_at: true },
           },
         },
         // Prisma `include` returns all scalar fields by default, so the new
@@ -330,6 +345,19 @@ export async function getMasterBillingGrid(filter: MasterBillingFilter = {}) {
       const depositBalance = depositMap.get(inv.patient_id) || 0;
       const lastPayment = inv.payments[0]?.created_at ?? null;
 
+      // Money received per tender (UPI / Card / Cash …). Net of reversals; the
+      // internal 'Adjustment' transfers between bills are not a tender, so skip them.
+      const modeTotals = new Map<string, number>();
+      for (const p of inv.payments) {
+        const mode = isDepositSettlement(p) ? "Deposit" : canonicalTender(p.payment_method);
+        if (mode === "Adjustment") continue;
+        modeTotals.set(mode, (modeTotals.get(mode) || 0) + decToNum(p.amount));
+      }
+      const paymentModes = [...modeTotals.entries()]
+        .filter(([, amount]) => amount > 0)
+        .map(([mode, amount]) => ({ mode, amount }))
+        .sort((a, b) => b.amount - a.amount);
+
       // TPA settlement derivations.
       const tpaApproved = decToNum(inv.tpa_approved_amount);
       const tpaSettled = decToNum(inv.tpa_settled_amount);
@@ -391,6 +419,7 @@ export async function getMasterBillingGrid(filter: MasterBillingFilter = {}) {
         total_amount: total,
         paid_amount: paid,
         outstanding_amount: balance,
+        payment_modes: paymentModes,
         deposit_balance: depositBalance,
         aging_days: ageDays,
         last_payment_date: lastPayment,

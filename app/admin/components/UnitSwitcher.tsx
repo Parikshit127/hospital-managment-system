@@ -81,6 +81,9 @@ export default function UnitSwitcher({ currentUnitName }: { currentUnitName?: st
                                     <span className={`flex-1 truncate ${unit.isCurrent ? 'font-semibold text-gray-900' : 'text-gray-700'}`}>
                                         {unit.name}
                                     </span>
+                                    {unit.isHome && (
+                                        <span className="text-[9px] font-bold uppercase tracking-wider text-gray-400">Home</span>
+                                    )}
                                     {switchingId === unit.id ? (
                                         <Loader2 className="h-3.5 w-3.5 animate-spin text-gray-400" />
                                     ) : unit.isCurrent ? (

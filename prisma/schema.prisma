@@ -27,6 +27,7 @@ model Organization {
   branding OrganizationBranding?
 
   users                         User[]
+  user_unit_access              UserUnitAccess[]
   patients                      OPD_REG[]
   appointments                  appointments[]
   clinical_ehrs                 Clinical_EHR[]
@@ -572,11 +573,30 @@ model User {
   broadcasts_created                                      Broadcast[]
   notification_receipts                                   NotificationReceipt[]
   organization                                            Organization         @relation(fields: [organizationId], references: [id])
+  // Admin unit-switcher scope: true = may enter every active unit; otherwise only the
+  // home unit (organizationId) plus the rows in unit_access.
+  can_access_all_units                                    Boolean              @default(false)
+  unit_access                                             UserUnitAccess[]
 
   @@index([organizationId])
   @@index([doctor_group_id])
   @@index([branch_id])
   @@map("users")
+}
+
+// Extra units (organizations) an admin may switch into, besides their home unit.
+model UserUnitAccess {
+  id             String       @id @default(uuid())
+  userId         String
+  organizationId String
+  granted_by     String?
+  created_at     DateTime     @default(now())
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organizationId])
+  @@index([organizationId])
+  @@map("user_unit_access")
 }
 
 model OPD_REG {

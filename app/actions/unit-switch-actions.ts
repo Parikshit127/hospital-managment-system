@@ -8,12 +8,15 @@ export interface SwitchableUnit {
     name: string;
     code: string;
     isCurrent: boolean;
+    isHome: boolean;
 }
 
 /**
  * Units = Organizations created from the Super Admin panel. The admin portal lets
- * any admin hop between active units without a logout/login. Admin-portal only:
- * every call re-checks the live session role, never trusts the client.
+ * an admin hop between the units they have been granted without a logout/login.
+ * Admin-portal only: every call re-checks the live session role and the DB grants,
+ * never trusts the client. The signed-in user never changes on a switch, only the
+ * organization the session is scoped to.
  */
 async function requireAdminSession() {
     const session = await getSession();
@@ -21,21 +24,50 @@ async function requireAdminSession() {
     return session;
 }
 
+/**
+ * Units this admin may enter: the home unit (where the user record lives) plus
+ * explicit grants, or every active unit when `can_access_all_units` is set.
+ * Resolved from the DB on each call so revoking access takes effect immediately.
+ */
+async function resolveAccessibleUnits(userId: string) {
+    const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: {
+            is_active: true,
+            role: true,
+            organizationId: true,
+            can_access_all_units: true,
+            unit_access: { select: { organizationId: true } },
+        },
+    });
+    if (!user || !user.is_active || user.role !== 'admin') return null;
+
+    const allowedIds = new Set([user.organizationId, ...user.unit_access.map(a => a.organizationId)]);
+    const orgs = await prisma.organization.findMany({
+        where: {
+            is_active: true,
+            ...(user.can_access_all_units ? {} : { id: { in: [...allowedIds] } }),
+        },
+        select: { id: true, name: true, code: true, slug: true },
+        orderBy: { name: 'asc' },
+    });
+
+    return { homeOrganizationId: user.organizationId, orgs };
+}
+
 export async function getSwitchableUnits(): Promise<SwitchableUnit[]> {
     const session = await requireAdminSession();
     if (!session) return [];
 
-    const orgs = await prisma.organization.findMany({
-        where: { is_active: true },
-        select: { id: true, name: true, code: true },
-        orderBy: { name: 'asc' },
-    });
+    const resolved = await resolveAccessibleUnits(session.id);
+    if (!resolved) return [];
 
-    return orgs.map(o => ({
+    return resolved.orgs.map(o => ({
         id: o.id,
         name: o.name.replace(/\s+/g, ' ').trim(),
         code: o.code,
         isCurrent: o.id === session.organization_id,
+        isHome: o.id === resolved.homeOrganizationId,
     }));
 }
 
@@ -49,30 +81,17 @@ export async function switchUnit(
         return { success: false, error: 'Already in this unit' };
     }
 
-    const org = await prisma.organization.findUnique({ where: { id: targetOrganizationId } });
-    if (!org || !org.is_active) {
-        return { success: false, error: 'Unit not found or inactive' };
+    const resolved = await resolveAccessibleUnits(session.id);
+    const org = resolved?.orgs.find(o => o.id === targetOrganizationId);
+    if (!org) {
+        return { success: false, error: 'You do not have access to this unit' };
     }
 
-    // Session rows are keyed by a real user of the unit (audit/FK lookups depend on it),
-    // so land on the unit's own admin: same username if it exists there, else the oldest.
-    const admins = await prisma.user.findMany({
-        where: { organizationId: org.id, role: 'admin', is_active: true },
-        orderBy: { createdAt: 'asc' },
-    });
-    const target =
-        admins.find(a => a.username.toLowerCase() === session.username.toLowerCase()) ?? admins[0];
+    const fromUnit = { name: session.organization_name, id: session.organization_id };
 
-    if (!target) {
-        return { success: false, error: `${org.name} has no active admin user` };
-    }
-
+    // Same user, different unit: identity fields come from the current session untouched.
     await createSession({
-        id: target.id,
-        username: target.username,
-        role: target.role,
-        name: target.name || '',
-        specialty: target.specialty || null,
+        ...session,
         organization_id: org.id,
         organization_slug: org.slug,
         organization_name: org.name,
@@ -80,15 +99,14 @@ export async function switchUnit(
 
     // Record on both sides so each unit's trail shows who entered/left.
     const details = JSON.stringify({
-        from_unit: session.organization_name,
-        from_unit_id: session.organization_id,
+        from_unit: fromUnit.name,
+        from_unit_id: fromUnit.id,
         to_unit: org.name,
         to_unit_id: org.id,
-        original_admin: session.username,
-        acting_as: target.username,
+        admin: session.username,
     });
     await prisma.system_audit_logs.createMany({
-        data: [session.organization_id, org.id].map(organizationId => ({
+        data: [fromUnit.id, org.id].map(organizationId => ({
             user_id: session.id,
             username: session.username,
             role: session.role,

@@ -39,7 +39,8 @@ export async function changeMyPassword(currentPassword: string, newPassword: str
         }
 
         const user = await prisma.user.findFirst({
-            where: { id: session.id, organizationId: session.organization_id },
+            // By id only: an admin switched into another unit keeps their home-unit user record.
+            where: { id: session.id },
             select: { id: true, username: true, name: true, role: true, password: true },
         });
 

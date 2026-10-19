@@ -555,6 +555,124 @@ export async function getOrganizationUsers(orgId?: string, search?: string) {
 }
 
 // ========================================
+// ADMIN UNIT ACCESS (unit-switcher scope)
+// ========================================
+
+export async function getAdminUnitAccess() {
+    await requireSuperAdmin();
+    try {
+        const [admins, orgs] = await Promise.all([
+            prisma.user.findMany({
+                where: { role: 'admin' },
+                select: {
+                    id: true,
+                    name: true,
+                    username: true,
+                    is_active: true,
+                    organizationId: true,
+                    can_access_all_units: true,
+                    organization: { select: { name: true, code: true } },
+                    unit_access: { select: { organizationId: true } },
+                },
+                orderBy: [{ organizationId: 'asc' }, { createdAt: 'asc' }],
+            }),
+            prisma.organization.findMany({
+                select: { id: true, name: true, code: true, is_active: true },
+                orderBy: { name: 'asc' },
+            }),
+        ]);
+
+        return {
+            success: true,
+            data: {
+                orgs,
+                admins: admins.map(a => ({
+                    id: a.id,
+                    name: a.name,
+                    username: a.username,
+                    is_active: a.is_active,
+                    homeOrganizationId: a.organizationId,
+                    homeOrganizationName: a.organization?.name ?? '',
+                    homeOrganizationCode: a.organization?.code ?? '',
+                    canAccessAllUnits: a.can_access_all_units,
+                    unitIds: a.unit_access.map(u => u.organizationId),
+                })),
+            },
+        };
+    } catch (err: any) {
+        return { success: false, error: err.message };
+    }
+}
+
+/**
+ * Sets which units an admin may switch into besides their home unit.
+ * `allUnits` true = every active unit (including ones created later).
+ */
+export async function setAdminUnitAccess(
+    adminUserId: string,
+    allUnits: boolean,
+    unitIds: string[],
+) {
+    const session = await requireSuperAdmin();
+    try {
+        const admin = await prisma.user.findUnique({
+            where: { id: adminUserId },
+            select: { id: true, role: true, username: true, organizationId: true },
+        });
+        if (!admin || admin.role !== 'admin') {
+            return { success: false, error: 'Admin user not found' };
+        }
+
+        // Home unit is always implicit; only persist the extra grants, and only real orgs.
+        const wanted = [...new Set(unitIds)].filter(id => id !== admin.organizationId);
+        const valid = await prisma.organization.findMany({
+            where: { id: { in: wanted } },
+            select: { id: true },
+        });
+        const grantIds = allUnits ? [] : valid.map(o => o.id);
+
+        await prisma.$transaction(async (tx) => {
+            await tx.user.update({
+                where: { id: admin.id },
+                data: { can_access_all_units: allUnits },
+            });
+            await tx.userUnitAccess.deleteMany({ where: { userId: admin.id } });
+            if (grantIds.length > 0) {
+                await tx.userUnitAccess.createMany({
+                    data: grantIds.map(organizationId => ({
+                        userId: admin.id,
+                        organizationId,
+                        granted_by: session.id,
+                    })),
+                });
+            }
+            await tx.system_audit_logs.create({
+                data: {
+                    action: 'SET_ADMIN_UNIT_ACCESS',
+                    module: 'superadmin',
+                    entity_type: 'user',
+                    entity_id: admin.id,
+                    user_id: session.id,
+                    username: session.email,
+                    role: session.role,
+                    organizationId: admin.organizationId,
+                    details: JSON.stringify({
+                        admin: admin.username,
+                        all_units: allUnits,
+                        unit_ids: grantIds,
+                    }),
+                },
+            });
+        });
+
+        return { success: true };
+    } catch (err: any) {
+        console.error('setAdminUnitAccess error:', err);
+        return { success: false, error: 'Failed to update unit access' };
+    }
+}
+
+// ========================================
 // ORGANIZATION PROFILE UPDATE
 // ========================================
 
