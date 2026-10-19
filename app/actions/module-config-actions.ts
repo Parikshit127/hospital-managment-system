@@ -95,6 +95,17 @@ const DEFAULT_CONFIGS: Record<string, Record<string, any>> = {
         leave_types: ['Casual', 'Sick', 'Earned', 'Maternity', 'Paternity'],
         attendance_mode: 'manual',
         overtime_enabled: false,
+        // Attendance policy (see app/lib/hr/hr-policy.ts)
+        workStart: '09:00',
+        workEnd: '18:00',
+        graceMinutes: 15,
+        fullDayHours: 8,
+        halfDayHours: 4,
+        weeklyOffDays: [0],
+        requireGeo: false,
+        geofence: null,
+        regularizationWindowDays: 7,
+        leaveBackdateDays: 30,
     },
     insurance: {
         pre_auth_required: true,

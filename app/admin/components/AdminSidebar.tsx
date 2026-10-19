@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useBranding } from './ThemeProvider';
 import { logout } from '@/app/login/actions';
-import { Building2, LogOut, ChevronLeft, ChevronRight, Menu, X, ChevronDown, KeyRound } from 'lucide-react';
+import { Building2, LogOut, ChevronLeft, ChevronRight, Menu, X, ChevronDown, KeyRound, UserCircle } from 'lucide-react';
 import PortalSwitcher from './PortalSwitcher';
 import { ADMIN_NAV_SECTIONS } from '@/lib/navigation/admin-nav';
 import { ChangePasswordModal } from '@/app/components/ChangePasswordModal';
@@ -189,6 +189,14 @@ export default function AdminSidebar() {
             {/* Bottom: Portal Switcher + Logout + Collapse */}
             <div className="px-2.5 py-3 space-y-1 shrink-0" style={{ borderTop: '1px solid var(--admin-sidebar-border)' }}>
                 <PortalSwitcher collapsed={collapsed} />
+                <Link
+                    href="/me"
+                    title={collapsed ? 'My Workspace' : undefined}
+                    className={`flex items-center gap-2.5 w-full px-2.5 py-[7px] rounded-lg text-[13px] font-medium text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-all duration-150 ${collapsed ? 'justify-center px-2' : ''}`}
+                >
+                    <UserCircle className="h-4 w-4 shrink-0" />
+                    {!collapsed && <span>My Workspace</span>}
+                </Link>
                 <button
                     onClick={() => { setShowChangePassword(true); setMobileOpen(false); }}
                     title={collapsed ? 'Change Password' : undefined}

@@ -101,6 +101,18 @@ interface NavSection {
   items: NavItem[];
 }
 
+// Every staff login is an employee, so every role gets their own HR portal.
+const MY_WORKSPACE: NavSection = {
+  title: "My Workspace",
+  items: [
+    { label: "My Dashboard", href: "/me", icon: LayoutDashboard },
+    { label: "My Attendance", href: "/me/attendance", icon: Clock },
+    { label: "My Leave", href: "/me/leave", icon: CalendarDays },
+    { label: "My Roster", href: "/me/roster", icon: Timer },
+    { label: "My Profile", href: "/me/profile", icon: UserCheck },
+  ],
+};
+
 const NAV_BY_ROLE: Record<string, NavSection[]> = {
   admin: [
     {
@@ -459,9 +471,12 @@ const NAV_BY_ROLE: Record<string, NavSection[]> = {
         { label: "Dashboard", href: "/hr/dashboard", icon: LayoutDashboard },
         { label: "Employees", href: "/hr/employees", icon: Briefcase },
         { label: "Attendance", href: "/hr/attendance", icon: Clock },
+        { label: "Monthly Sheet", href: "/hr/attendance/monthly", icon: CalendarClock },
+        { label: "Corrections", href: "/hr/regularizations", icon: FileStack },
         { label: "Leave", href: "/hr/leave", icon: CalendarDays },
         { label: "Shifts", href: "/hr/shifts", icon: Timer },
         { label: "Reports", href: "/hr/reports", icon: BarChart3 },
+        { label: "HR Settings", href: "/hr/settings", icon: Settings },
       ],
     },
   ],
@@ -631,6 +646,7 @@ const ADMIN_SWITCH_PORTALS: { label: string; path: string }[] = [
   { label: "Finance", path: "/finance/dashboard" },
   { label: "HR", path: "/hr/dashboard" },
   { label: "Coordinator", path: "/coordinator/dashboard" },
+  { label: "My Workspace", path: "/me" },
 ];
 
 export function Sidebar({ session }: SidebarProps) {
@@ -735,6 +751,7 @@ export function Sidebar({ session }: SidebarProps) {
   // bell's "Help Center" link or a direct URL. Its functionality now lives as tabs
   // inside the /help-center page.
   const sections = [...baseSections];
+  if (session && session.role !== "patient") sections.push(MY_WORKSPACE);
   const orgName = session?.organization_name || "Hospital OS";
 
   const allHrefs = sections.flatMap((s) => s.items.map((i) => i.href));

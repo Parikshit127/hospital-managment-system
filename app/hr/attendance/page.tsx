@@ -7,9 +7,13 @@ import {
     Clock, Loader2, CheckCircle2, XCircle, Users, Calendar
 } from 'lucide-react';
 import { getAttendanceForDate, recordAttendance } from '@/app/actions/hr-actions';
+import { useToast } from '@/app/components/ui/Toast';
+import { istTodayKey, istHHmm } from '@/app/lib/hr/hr-dates';
+import Link from 'next/link';
 
 export default function HRAttendancePage() {
-    const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+    const toast = useToast();
+    const [date, setDate] = useState(istTodayKey());
     const [records, setRecords] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -29,7 +33,8 @@ export default function HRAttendancePage() {
     const handleMark = async (employeeId: number, status: string) => {
         setSaving(employeeId);
         try {
-            await recordAttendance({ employeeId, date, status });
+            const res: any = await recordAttendance({ employeeId, date, status });
+            if (!res.success) toast.error(res.error || 'Could not save attendance');
             await loadData();
         } catch (e) { console.error(e); }
         finally { setSaving(null); }
@@ -41,14 +46,15 @@ export default function HRAttendancePage() {
         const data: any = { employeeId, date, status: currentStatus };
         if (field === 'checkIn') {
             data.checkIn = value;
-            data.checkOut = record?.attendance?.check_out ? new Date(record.attendance.check_out).toTimeString().slice(0, 5) : undefined;
+            data.checkOut = record?.attendance?.check_out ? istHHmm(record.attendance.check_out) || undefined : undefined;
         } else {
-            data.checkIn = record?.attendance?.check_in ? new Date(record.attendance.check_in).toTimeString().slice(0, 5) : undefined;
+            data.checkIn = record?.attendance?.check_in ? istHHmm(record.attendance.check_in) || undefined : undefined;
             data.checkOut = value;
         }
         setSaving(employeeId);
         try {
-            await recordAttendance(data);
+            const res: any = await recordAttendance(data);
+            if (!res.success) toast.error(res.error || 'Could not save time');
             await loadData();
         } catch (e) { console.error(e); }
         finally { setSaving(null); }
@@ -160,13 +166,13 @@ export default function HRAttendancePage() {
                                             </td>
                                             <td className="px-4 py-3 text-center">
                                                 <input type="time"
-                                                    defaultValue={att?.check_in ? new Date(att.check_in).toTimeString().slice(0, 5) : ''}
+                                                    key={`in-${emp.id}-${att?.check_in ?? ''}`} defaultValue={att?.check_in ? istHHmm(att.check_in) : ''}
                                                     onBlur={e => e.target.value && handleTimeUpdate(emp.id, 'checkIn', e.target.value)}
                                                     className="px-2 py-1 border border-gray-200 rounded-lg text-xs w-24 focus:outline-none focus:ring-1 focus:ring-orange-500" />
                                             </td>
                                             <td className="px-4 py-3 text-center">
                                                 <input type="time"
-                                                    defaultValue={att?.check_out ? new Date(att.check_out).toTimeString().slice(0, 5) : ''}
+                                                    key={`out-${emp.id}-${att?.check_out ?? ''}`} defaultValue={att?.check_out ? istHHmm(att.check_out) : ''}
                                                     onBlur={e => e.target.value && handleTimeUpdate(emp.id, 'checkOut', e.target.value)}
                                                     className="px-2 py-1 border border-gray-200 rounded-lg text-xs w-24 focus:outline-none focus:ring-1 focus:ring-orange-500" />
                                             </td>

@@ -47,6 +47,7 @@ const TENANT_SCOPED_MODELS = new Set([
     // Phase 3 models
     'NursingNote', 'MedicationAdministration', 'ShiftHandover',
     'OPDConfig', 'Employee', 'Attendance',
+    'AttendanceEvent', 'AttendanceRegularization', 'Holiday',
     'LeaveType', 'LeaveRequest', 'ShiftPattern', 'ShiftAssignment',
     // Phase 4 models
     'Notification',

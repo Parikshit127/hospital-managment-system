@@ -43,7 +43,7 @@ export default function NewEmployeePage() {
             if (res.success) {
                 router.push('/hr/employees');
             } else {
-                setError(res.error || 'Failed to create employee');
+                setError((res as { error?: string }).error || 'Failed to create employee');
             }
         } catch (e) {
             setError('An unexpected error occurred');

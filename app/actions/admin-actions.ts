@@ -5,6 +5,7 @@ import { prisma } from "@/backend/db";
 import { addUserSchema, updateUserSchema } from "@/app/lib/validations";
 import { attachCancellationReasons } from "@/app/lib/admission-cancellation";
 import * as bcrypt from "bcryptjs";
+import { createEmployeeWithCode, ensureEmployeeForUser } from "@/app/lib/hr/hr-core";
 
 function serialize<T>(data: T): T {
   return JSON.parse(JSON.stringify(data, (key, value) =>
@@ -613,26 +614,32 @@ export async function addUser(data: {
       throw e;
     }
 
-    // Create linked Employee record for HR fields (preferred fields)
-    if (validated.employee_code || validated.designation || validated.date_of_joining) {
-      try {
-        await (db.employee as any).create({
-          data: {
-            user_id: user.id,
-            employee_code: validated.employee_code || `EMP-${Date.now()}`,
-            name: validated.name,
-            designation: validated.designation || validated.role,
-            department_id: null,
-            date_of_joining: validated.date_of_joining
-              ? new Date(validated.date_of_joining)
-              : new Date(),
-            organizationId,
-          },
-        });
-      } catch (hrErr) {
-        // HR record creation is non-blocking — user is still created
-        console.warn('HR employee record creation failed (non-fatal):', hrErr);
+    // Every staff login is an employee: create the linked HR profile with its own portal.
+    // Non-blocking so a HR hiccup never prevents the login from being created.
+    try {
+      const hrFields = {
+        user_id: user.id,
+        name: validated.name,
+        designation: validated.designation || validated.role,
+        department_id: null,
+        date_of_joining: validated.date_of_joining ? new Date(validated.date_of_joining) : new Date(),
+        phone: validated.phone || null,
+        email: validated.email || null,
+        organizationId,
+      };
+      if (validated.employee_code) {
+        try {
+          await db.employee.create({ data: { ...hrFields, employee_code: validated.employee_code } });
+        } catch (codeErr: any) {
+          if (codeErr?.code !== 'P2002') throw codeErr;
+          // Code already taken in this organization: fall back to the next free one.
+          await createEmployeeWithCode(db, organizationId, hrFields);
+        }
+      } else {
+        await createEmployeeWithCode(db, organizationId, hrFields);
       }
+    } catch (hrErr) {
+      console.warn('HR employee record creation failed (non-fatal):', hrErr);
     }
 
     await db.system_audit_logs.create({
@@ -699,23 +706,27 @@ export async function updateUser(
       },
     });
 
-    // Update linked Employee HR record if preferred fields provided
-    if (validated.employee_code || validated.designation || validated.date_of_joining || validated.department) {
-      try {
-        const existing = await (db.employee as any).findFirst({ where: { user_id: userId } });
-        if (existing) {
-          await (db.employee as any).update({
-            where: { id: existing.id },
-            data: {
-              ...(validated.designation && { designation: validated.designation }),
-              ...(validated.date_of_joining && { date_of_joining: new Date(validated.date_of_joining) }),
-              ...(validated.employee_code && { employee_code: validated.employee_code }),
-            },
-          });
-        }
-      } catch (hrErr) {
-        console.warn('HR record update failed (non-fatal):', hrErr);
+    // Keep the linked Employee (HR profile) in step with the login.
+    try {
+      const existing = await (db.employee as any).findFirst({ where: { user_id: userId } });
+      if (existing) {
+        await (db.employee as any).update({
+          where: { id: existing.id },
+          data: {
+            ...(validated.name && { name: validated.name }),
+            ...(validated.phone !== undefined && { phone: validated.phone || null }),
+            ...(validated.email !== undefined && { email: validated.email || null }),
+            ...(data.is_active !== undefined && { is_active: data.is_active }),
+            ...(validated.designation && { designation: validated.designation }),
+            ...(validated.date_of_joining && { date_of_joining: new Date(validated.date_of_joining) }),
+            ...(validated.employee_code && { employee_code: validated.employee_code }),
+          },
+        });
+      } else {
+        await ensureEmployeeForUser(db, organizationId, userId);
       }
+    } catch (hrErr) {
+      console.warn('HR record update failed (non-fatal):', hrErr);
     }
 
     await db.system_audit_logs.create({
@@ -804,6 +815,9 @@ export async function toggleUserActive(userId: string) {
         is_active: true,
       },
     });
+
+    // A deactivated login is out of the workforce roster too (and back in when reactivated).
+    await db.employee.updateMany({ where: { user_id: userId }, data: { is_active: updated.is_active } });
 
     await db.system_audit_logs.create({
       data: {

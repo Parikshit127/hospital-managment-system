@@ -90,6 +90,9 @@ model Organization {
   leave_requests                LeaveRequest[]
   shift_patterns                ShiftPattern[]
   shift_assignments             ShiftAssignment[]
+  attendance_events             AttendanceEvent[]
+  attendance_regularizations    AttendanceRegularization[]
+  holidays                      Holiday[]
   notifications                 Notification[]
   tickets                       Ticket[]
   ticket_notes                  TicketNote[]
@@ -2302,47 +2305,131 @@ model ShiftHandover {
 }
 
 model Employee {
-  id                Int               @id @default(autoincrement())
-  user_id           String?           @unique
-  employee_code     String            @unique
-  name              String
-  designation       String
-  department_id     String?
-  date_of_joining   DateTime
-  salary_basic      Float             @default(0)
-  is_active         Boolean           @default(true)
-  phone             String?
-  email             String?
-  organizationId    String
-  created_at        DateTime          @default(now())
-  updated_at        DateTime          @updatedAt
-  attendances       Attendance[]
-  organization      Organization      @relation(fields: [organizationId], references: [id])
-  user              User?             @relation(fields: [user_id], references: [id])
-  leave_requests    LeaveRequest[]
-  shift_assignments ShiftAssignment[]
+  id                      Int                        @id @default(autoincrement())
+  user_id                 String?                    @unique
+  employee_code           String
+  name                    String
+  designation             String
+  department_id           String?
+  date_of_joining         DateTime
+  salary_basic            Float                      @default(0)
+  is_active               Boolean                    @default(true)
+  phone                   String?
+  email                   String?
+  organizationId          String
+  created_at              DateTime                   @default(now())
+  updated_at              DateTime                   @updatedAt
+  branch_id               String?
+  employment_type         String                     @default("PERMANENT") // PERMANENT, CONTRACT, CONSULTANT_VISITING, CONSULTANT_RETAINER, INTERN
+  reporting_manager_id    Int?
+  gender                  String?
+  date_of_birth           DateTime?
+  blood_group             String?
+  address                 String?
+  emergency_contact_name  String?
+  emergency_contact_phone String?
+  date_of_exit            DateTime?
+  exit_reason             String?
+  attendances             Attendance[]
+  attendance_events       AttendanceEvent[]
+  regularizations         AttendanceRegularization[]
+  organization            Organization               @relation(fields: [organizationId], references: [id])
+  user                    User?                      @relation(fields: [user_id], references: [id])
+  reporting_manager       Employee?                  @relation("EmployeeReporting", fields: [reporting_manager_id], references: [id])
+  direct_reports          Employee[]                 @relation("EmployeeReporting")
+  leave_requests          LeaveRequest[]
+  shift_assignments       ShiftAssignment[]
 
+  @@unique([organizationId, employee_code])
   @@index([organizationId])
+  @@index([branch_id])
+  @@index([reporting_manager_id])
   @@map("employees")
 }
 
 model Attendance {
   id             Int          @id @default(autoincrement())
   employee_id    Int
-  date           DateTime
+  date           DateTime // UTC midnight of the IST calendar day
   check_in       DateTime?
   check_out      DateTime?
   total_hours    Float?
-  status         String       @default("Present")
+  status         String       @default("Present") // Present, Absent, Half-Day, Leave, Holiday, Week-Off
   organizationId String
+  created_at     DateTime     @default(now())
+  source         String       @default("MANUAL") // MANUAL, WEB, MOBILE, BIOMETRIC, REGULARIZED
+  late_minutes   Int          @default(0)
+  employee       Employee     @relation(fields: [employee_id], references: [id])
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  @@unique([employee_id, date])
+  @@index([organizationId])
+  @@index([employee_id])
+  @@index([date])
+  @@map("attendances")
+}
+
+// Immutable raw punch log. Attendance is the derived daily summary.
+model AttendanceEvent {
+  id             Int          @id @default(autoincrement())
+  employee_id    Int
+  organizationId String
+  type           String // IN, OUT
+  occurred_at    DateTime // server time, never client time
+  source         String       @default("WEB") // WEB, MOBILE, BIOMETRIC, MANUAL
+  latitude       Float?
+  longitude      Float?
+  accuracy_m     Float?
+  ip_address     String?
+  user_agent     String?
+  note           String?
   created_at     DateTime     @default(now())
   employee       Employee     @relation(fields: [employee_id], references: [id])
   organization   Organization @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId])
+  @@index([employee_id, occurred_at])
+  @@map("attendance_events")
+}
+
+// Employee asks HR to correct a day (forgot to punch, wrong time, on-duty outside).
+model AttendanceRegularization {
+  id                Int          @id @default(autoincrement())
+  employee_id       Int
+  organizationId    String
+  date              DateTime // UTC midnight of the IST calendar day
+  requested_in      DateTime?
+  requested_out     DateTime?
+  requested_status  String? // Present, Half-Day
+  reason            String
+  status            String       @default("Pending") // Pending, Approved, Rejected, Cancelled
+  reviewed_by       String?
+  reviewed_at       DateTime?
+  review_note       String?
+  created_at        DateTime     @default(now())
+  updated_at        DateTime     @updatedAt
+  employee          Employee     @relation(fields: [employee_id], references: [id])
+  organization      Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
   @@index([employee_id])
+  @@index([status])
+  @@map("attendance_regularizations")
+}
+
+model Holiday {
+  id             Int          @id @default(autoincrement())
+  organizationId String
+  date           DateTime // UTC midnight of the IST calendar day
+  name           String
+  type           String       @default("PUBLIC") // PUBLIC, OPTIONAL
+  created_at     DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  @@unique([organizationId, date, name])
+  @@index([organizationId])
   @@index([date])
-  @@map("attendances")
+  @@map("holidays")
 }
 
 model LeaveType {
@@ -2350,6 +2437,8 @@ model LeaveType {
   name           String
   days_per_year  Int            @default(12)
   carry_forward  Boolean        @default(false)
+  is_paid        Boolean        @default(true)
+  is_active      Boolean        @default(true)
   organizationId String
   created_at     DateTime       @default(now())
   leave_requests LeaveRequest[]
@@ -2366,8 +2455,12 @@ model LeaveRequest {
   from_date      DateTime
   to_date        DateTime
   reason         String?
-  status         String       @default("Pending")
+  status         String       @default("Pending") // Pending, Approved, Rejected, Cancelled
   approved_by    String?
+  is_half_day    Boolean      @default(false)
+  days           Float        @default(1) // working days actually deducted
+  reviewed_at    DateTime?
+  review_note    String?
   organizationId String
   created_at     DateTime     @default(now())
   updated_at     DateTime     @updatedAt

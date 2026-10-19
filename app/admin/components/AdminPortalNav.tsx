@@ -23,6 +23,7 @@ const PORTALS: { label: string; path: string }[] = [
     { label: 'Finance', path: '/finance/dashboard' },
     { label: 'HR', path: '/hr/dashboard' },
     { label: 'Coordinator', path: '/coordinator/dashboard' },
+    { label: 'My Workspace', path: '/me' },
 ];
 
 export default function AdminPortalNav() {

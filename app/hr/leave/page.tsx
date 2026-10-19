@@ -11,8 +11,11 @@ import {
     getLeaveRequests, approveLeave, rejectLeave,
     applyLeave, getLeaveTypes, getEmployeeList
 } from '@/app/actions/hr-actions';
+import { useToast } from '@/app/components/ui/Toast';
+import { fmtIstDate } from '@/app/lib/ist';
 
 export default function HRLeavePage() {
+    const toast = useToast();
     const [requests, setRequests] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -52,7 +55,8 @@ export default function HRLeavePage() {
     const handleApprove = async (id: number) => {
         setActionLoading(id);
         try {
-            await approveLeave(id, session?.id || 'admin');
+            const r: any = await approveLeave(id);
+            if (!r.success) toast.error(r.error || 'Could not approve');
             await loadData();
         } catch (e) { console.error(e); }
         finally { setActionLoading(null); }
@@ -61,7 +65,8 @@ export default function HRLeavePage() {
     const handleReject = async (id: number) => {
         setActionLoading(id);
         try {
-            await rejectLeave(id, session?.id || 'admin');
+            const r: any = await rejectLeave(id);
+            if (!r.success) toast.error(r.error || 'Could not reject');
             await loadData();
         } catch (e) { console.error(e); }
         finally { setActionLoading(null); }
@@ -78,6 +83,7 @@ export default function HRLeavePage() {
                 toDate: applyForm.toDate,
                 reason: applyForm.reason || undefined,
             });
+            if (!res.success) toast.error((res as any).error || 'Could not apply leave');
             if (res.success) {
                 setShowApply(false);
                 setApplyForm({ employeeId: '', leaveTypeId: '', fromDate: '', toDate: '', reason: '' });
@@ -208,7 +214,7 @@ export default function HRLeavePage() {
                                         <p className="font-medium">No leave requests found</p>
                                     </td></tr>
                                 ) : requests.map((req: any) => {
-                                    const days = getDays(req.from_date, req.to_date);
+                                    const days = typeof req.days === 'number' ? req.days : getDays(req.from_date, req.to_date);
                                     const isPending = req.status === 'Pending';
                                     return (
                                         <tr key={req.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
@@ -217,14 +223,15 @@ export default function HRLeavePage() {
                                                 <p className="text-[10px] text-gray-400">{req.employee?.employee_code}</p>
                                             </td>
                                             <td className="px-4 py-3 text-gray-600 font-medium">{req.leave_type?.name || 'N/A'}</td>
-                                            <td className="px-4 py-3 text-gray-600">{new Date(req.from_date).toLocaleDateString('en-GB')}</td>
-                                            <td className="px-4 py-3 text-gray-600">{new Date(req.to_date).toLocaleDateString('en-GB')}</td>
+                                            <td className="px-4 py-3 text-gray-600">{fmtIstDate(req.from_date)}</td>
+                                            <td className="px-4 py-3 text-gray-600">{fmtIstDate(req.to_date)}</td>
                                             <td className="px-4 py-3 text-center font-black text-gray-900">{days}</td>
                                             <td className="px-4 py-3 text-gray-500 max-w-[200px] truncate">{req.reason || '-'}</td>
                                             <td className="px-4 py-3 text-center">
                                                 <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                                                     req.status === 'Approved' ? 'bg-green-100 text-green-700' :
                                                     req.status === 'Rejected' ? 'bg-red-100 text-red-700' :
+                                                    req.status === 'Cancelled' ? 'bg-gray-100 text-gray-500' :
                                                     'bg-yellow-100 text-yellow-700'
                                                 }`}>{req.status}</span>
                                             </td>
