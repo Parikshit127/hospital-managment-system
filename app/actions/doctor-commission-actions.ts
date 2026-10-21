@@ -3,7 +3,9 @@
 import { z } from 'zod';
 import { requireRoleAndTenant } from '@/backend/tenant';
 import { revalidatePath } from 'next/cache';
-import { backfillDoctorCommissions, computeDoctorNetShares, computeCommission, doctorLineShares } from '@/app/lib/doctor-commission';
+import { backfillDoctorCommissions, computeDoctorBillLine } from '@/app/lib/doctor-commission';
+import { applyBillEdit, invoiceTotals, r2, type LineBreakdown } from '@/app/lib/doctor-invoice-calc';
+import { recomputeDoctorStatement, insertDoctorPayment, releaseDoctorLines } from '@/app/lib/doctor-invoice-server';
 import { DOCTOR_SERVICE_TYPES, DOCTOR_COMMISSION_TYPES, DEFAULT_DOCTOR_TDS_PERCENT } from '@/app/lib/doctor-commission-constants';
 import { generateDoctorInvoiceNumber } from '@/app/lib/sequence-generator';
 
@@ -561,16 +563,23 @@ export async function discardDoctorStatement(statementId: string) {
         if (!stmt) return { success: false, error: 'Statement not found' };
         if (stmt.status === 'paid') return { success: false, error: 'Paid statement cannot be discarded' };
 
+        const live = await (db as any).doctorPayoutPayment.count({
+            where: { statement_id: statementId, organizationId, voided_at: null },
+        });
+        if (live > 0) {
+            return { success: false, error: 'This invoice has payments recorded. Void them first, then discard.' };
+        }
+
         await (db as any).$transaction(async (tx: any) => {
-            await tx.doctorCommission.updateMany({
-                where: { statement_id: statementId },
-                data: { status: 'accrued', statement_id: null },
+            const lines = await tx.doctorCommission.findMany({
+                where: { statement_id: statementId, organizationId },
+                select: { id: true },
             });
+            await releaseDoctorLines(tx, organizationId, lines.map((l: any) => l.id));
             await tx.doctorPayoutStatement.delete({ where: { id: statementId } });
         });
 
-        revalidatePath(`/admin/doctor-invoicing/${stmt.doctor_id}`);
-        revalidatePath(`/finance/doctor-invoicing/${stmt.doctor_id}`);
+        revalidateStatement(stmt.doctor_id);
         return { success: true };
     } catch (error) {
         console.error('discardDoctorStatement error:', error);
@@ -586,43 +595,36 @@ export async function markDoctorStatementPaid(input: {
     notes?: string;
 }) {
     try {
-        const { db, organizationId } = await requireRoleAndTenant(MANAGE_ROLES);
+        const { db, session, organizationId } = await requireRoleAndTenant(MANAGE_ROLES);
         const stmt = await (db as any).doctorPayoutStatement.findFirst({
             where: { id: input.statementId, organizationId },
         });
         if (!stmt) return { success: false, error: 'Statement not found' };
         if (stmt.status === 'paid') return { success: false, error: 'Already paid' };
 
-        // Default to the TDS-adjusted net payable. Statements created before this
-        // field existed have net_payable = 0 (schema default), so fall back to the
-        // gross commission for those rather than showing a false ₹0 payout.
-        const defaultPaidAmount = num(stmt.net_payable) > 0 ? num(stmt.net_payable) : num(stmt.total_commission);
-        const paidAmount = input.paid_amount != null ? num(input.paid_amount) : defaultPaidAmount;
-
         await (db as any).$transaction(async (tx: any) => {
-            await tx.doctorPayoutStatement.update({
-                where: { id: input.statementId },
-                data: {
-                    status: 'paid',
-                    paid_at: new Date(),
-                    paid_amount: paidAmount.toFixed(2),
-                    payment_mode: input.payment_mode || null,
-                    payment_reference: input.payment_reference || null,
-                    notes: input.notes || stmt.notes || null,
-                },
-            });
-            await tx.doctorCommission.updateMany({
-                where: { statement_id: input.statementId },
-                data: { status: 'paid' },
+            // Re-derive first so a legacy statement's balance is right before paying it.
+            const cur = await recomputeDoctorStatement(tx, organizationId, input.statementId);
+            const amount = input.paid_amount != null ? num(input.paid_amount) : cur.balance;
+            if (amount <= 0) throw new Error('Nothing left to pay on this invoice');
+            if (amount > cur.balance + 0.005) throw new Error(`Amount exceeds the balance of ₹${cur.balance}`);
+            await insertDoctorPayment(tx, {
+                organizationId,
+                statementId: input.statementId,
+                doctorId: stmt.doctor_id,
+                amount,
+                mode: input.payment_mode,
+                reference: input.payment_reference,
+                notes: input.notes,
+                recordedBy: session?.username ?? null,
             });
         });
 
-        revalidatePath(`/admin/doctor-invoicing/${stmt.doctor_id}`);
-        revalidatePath(`/finance/doctor-invoicing/${stmt.doctor_id}`);
+        revalidateStatement(stmt.doctor_id);
         return { success: true };
     } catch (error) {
         console.error('markDoctorStatementPaid error:', error);
-        return { success: false, error: 'Failed to mark statement paid' };
+        return { success: false, error: error instanceof Error ? error.message : 'Failed to mark statement paid' };
     }
 }
 
@@ -782,11 +784,12 @@ export async function settleDoctorCommissions(input: SettleInput) {
                     period_start: periodStart,
                     period_end: periodEnd,
                     total_commission: total.toFixed(2),
-                    status: 'paid',
-                    paid_at: new Date(),
-                    paid_amount: total.toFixed(2),
-                    payment_mode: payment_mode || null,
-                    payment_reference: payment_reference || null,
+                    // Legacy quick-settle withholds no TDS — say so explicitly rather
+                    // than inherit the column's 10% default.
+                    tds_rate_percent: 0,
+                    total_tds: '0',
+                    net_payable: total.toFixed(2),
+                    status: 'draft',
                     notes: notes || null,
                     created_by: session?.username ?? null,
                 },
@@ -794,23 +797,30 @@ export async function settleDoctorCommissions(input: SettleInput) {
 
             await tx.doctorCommission.updateMany({
                 where: { id: { in: lines.map((l: any) => l.id) } },
-                data: { status: 'paid', statement_id: statement.id },
+                data: { status: 'included_in_statement', statement_id: statement.id, tds_rate_percent: 0, tds_amount: '0' },
+            });
+            await insertDoctorPayment(tx, {
+                organizationId,
+                statementId: statement.id,
+                doctorId,
+                amount: total,
+                mode: payment_mode,
+                reference: payment_reference,
+                notes,
+                recordedBy: session?.username ?? null,
             });
 
             // Reconcile the drafts we just emptied/shrunk (never touch a paid statement).
-            for (const sid of releasedStatementIds) {
-                const remaining = await tx.doctorCommission.findMany({
-                    where: { statement_id: sid },
-                    select: { commission_amount: true },
-                });
-                if (remaining.length === 0) {
-                    await tx.doctorPayoutStatement.deleteMany({ where: { id: sid, status: { not: 'paid' } } });
+            for (const sid of releasedStatementIds as string[]) {
+                const remaining = await tx.doctorCommission.count({ where: { statement_id: sid, organizationId } });
+                if (remaining === 0) {
+                    await tx.doctorPayoutStatement.deleteMany({ where: { id: sid, organizationId, status: { not: 'paid' } } });
                 } else {
-                    const remTotal = remaining.reduce((s: number, l: any) => s + num(l.commission_amount), 0);
-                    await tx.doctorPayoutStatement.updateMany({
-                        where: { id: sid, status: { not: 'paid' } },
-                        data: { total_commission: remTotal.toFixed(2) },
+                    const open = await tx.doctorPayoutStatement.findFirst({
+                        where: { id: sid, organizationId, status: { not: 'paid' } },
+                        select: { id: true },
                     });
+                    if (open) await recomputeDoctorStatement(tx, organizationId, sid);
                 }
             }
 
@@ -860,7 +870,7 @@ type WorkloadBill = {
     attribution: 'attending' | 'rendered' | 'both';
     rendered_services: string[];
     /** Per-service breakdown of this doctor's share, with the rate applied to each. */
-    services: Array<{ name: string; net: number; collected: number; rate: number; amount: number }>;
+    services: Array<{ item_id: number | null; name: string; net: number; collected: number; rate: number; amount: number }>;
     rate_applied: number;
     commission_amount: number;
     commission_status: string | null;
@@ -938,7 +948,8 @@ export async function getDoctorStatementWorkload(doctorId: string, filters?: Doc
                 patient: { select: { full_name: true, phone: true } },
                 admission: { select: { attending_doctor_id: true } },
                 items: {
-                    select: { net_price: true, rendered_by_doctor_id: true, description: true },
+                    select: { id: true, net_price: true, rendered_by_doctor_id: true, description: true },
+                    orderBy: { id: 'asc' },
                 },
             },
             orderBy: { created_at: 'desc' },
@@ -958,46 +969,14 @@ export async function getDoctorStatementWorkload(doctorId: string, filters?: Doc
         for (const inv of invoices) {
             if (String(inv.status || '').toLowerCase() === 'cancelled') continue;
 
-            const attendingId = inv.doctor_id ?? inv.admission?.attending_doctor_id ?? null;
-            const { shares, netAmount } = computeDoctorNetShares(inv.items, inv.net_amount, attendingId);
-            const doctorNet = shares.get(doctorId) ?? 0;
-            if (doctorNet <= 0) continue;
-
-            const paid = num(inv.paid_amount);
-            const doctorCollected = netAmount > 0 ? paid * (doctorNet / netAmount) : 0;
-            // Per-line so a named-service rate can override the invoice_type rate.
-            const lineShares = doctorLineShares(inv.items, netAmount, paid, attendingId, doctorId);
-            const activeConfig = config && config.is_active ? config : null;
-            const { rate, amount } = computeCommission(
-                activeConfig,
-                inv.invoice_type,
-                doctorCollected,
-                defaultPercent,
-                lineShares,
-            );
-
-            // Every service on this doctor's share of the bill, with the rate that
-            // actually applied to each — shown on the statement and its printout.
-            const services = lineShares.map((ln) => {
-                const lineRate = activeConfig
-                    ? computeCommission(activeConfig, inv.invoice_type, ln.collected, defaultPercent, [ln]).rate
-                    : defaultPercent;
-                return {
-                    name: ln.description || '—',
-                    net: ln.net,
-                    collected: ln.collected,
-                    rate: lineRate,
-                    amount: (ln.collected * lineRate) / 100,
-                };
-            });
+            const billLine = computeDoctorBillLine(inv, doctorId, config, defaultPercent);
+            if (!billLine) continue;
+            const { netAmount, paid, doctorNet, doctorCollected, rate, amount, services, attribution } = billLine;
 
             const renderedServices = inv.items
                 .filter((it: any) => it.rendered_by_doctor_id === doctorId)
                 .map((it: any) => it.description)
                 .filter(Boolean);
-            const isAttending = attendingId === doctorId;
-            const attribution: WorkloadBill['attribution'] =
-                renderedServices.length && isAttending ? 'both' : renderedServices.length ? 'rendered' : 'attending';
 
             const ledger = ledgerByInvoice.get(inv.id);
             const locked = !!ledger && ledger.status !== 'accrued' && ledger.status !== 'void';
@@ -1056,6 +1035,26 @@ export async function getDoctorStatementWorkload(doctorId: string, filters?: Doc
         list.sort((a, b) => new Date(b.last_visit ?? 0).getTime() - new Date(a.last_visit ?? 0).getTime());
 
         const allBills = list.flatMap((p: any) => p.bills as WorkloadBill[]);
+
+        // Money already invoiced but not yet paid out — shown on the worksheet so the
+        // biller sees what is owed before raising more.
+        const openStatements = await (db as any).doctorPayoutStatement.findMany({
+            where: { organizationId, doctor_id: doctorId, status: { not: 'paid' } },
+            select: { id: true, total_commission: true, total_tds: true, net_payable: true },
+        });
+        const paidRows = openStatements.length
+            ? await (db as any).doctorPayoutPayment.groupBy({
+                  by: ['statement_id'],
+                  where: { organizationId, statement_id: { in: openStatements.map((x: any) => x.id) }, voided_at: null },
+                  _sum: { amount: true },
+              })
+            : [];
+        const paidByStmt = new Map<string, number>(paidRows.map((r: any) => [r.statement_id, num(r._sum.amount)]));
+        const awaiting = openStatements.reduce((sum: number, x: any) => {
+            const due = num(x.net_payable) > 0 ? num(x.net_payable) : num(x.total_commission);
+            return sum + Math.max(0, due - (paidByStmt.get(x.id) ?? 0));
+        }, 0);
+
         return {
             success: true,
             data: {
@@ -1081,6 +1080,7 @@ export async function getDoctorStatementWorkload(doctorId: string, filters?: Doc
                     collected: allBills.reduce((s, b) => s + b.doctor_collected, 0),
                     commission: allBills.reduce((s, b) => s + b.commission_amount, 0),
                 },
+                awaiting_payment: { count: openStatements.length, amount: r2(awaiting) },
             },
         };
     } catch (error) {
@@ -1089,19 +1089,44 @@ export async function getDoctorStatementWorkload(doctorId: string, filters?: Doc
     }
 }
 
+const billEditSchema = z.object({
+    invoiceId: z.number().int().positive(),
+    /** number = override the bill's payable, null = reset to the engine figure. */
+    amount: z.number().min(0).max(1e9).nullable().optional(),
+    /** New rate per service, keyed by invoice_items.id. */
+    rates: z.record(z.string(), z.number().min(0).max(100)).optional(),
+    note: z.string().trim().max(200).optional(),
+});
+
 const doctorInvoiceSchema = z.object({
     doctorId: z.string().min(1, 'Doctor is required'),
     invoiceIds: z.array(z.number().int().positive()).min(1, 'Select at least one patient').max(2000),
     payment_mode: z.string().trim().max(40).optional(),
     payment_reference: z.string().trim().max(120).optional(),
     notes: z.string().trim().max(500).optional(),
-    /** true → raise and settle in one step; false → leave as a draft to approve later. */
+    /** true → also record a payment right away; false → leave unpaid to pay later. */
     mark_paid: z.boolean().optional(),
+    /** Amount of that first payment. Defaults to the full net. */
+    paid_amount: z.number().positive().max(1e9).optional(),
+    /** When the money actually moved (ISO). Defaults to now. */
+    paid_at: z.string().optional(),
     /** TDS % withheld from the gross commission. Defaults to DEFAULT_DOCTOR_TDS_PERCENT. */
     tds_rate_percent: z.number().min(0).max(100).optional(),
+    /** Per-bill edits made on the worksheet before raising. */
+    edits: z.array(billEditSchema).max(2000).optional(),
+    /** Invoice-level +/- line (bonus, advance recovery, round-off). */
+    adjustment_amount: z.number().min(-1e8).max(1e8).optional(),
+    adjustment_note: z.string().trim().max(200).optional(),
+    invoice_date: z.string().optional(),
 });
 
 export type DoctorInvoiceInput = z.input<typeof doctorInvoiceSchema>;
+
+function parseWhen(v?: string): Date | null {
+    if (!v) return null;
+    const d = new Date(v);
+    return isNaN(d.getTime()) ? null : d;
+}
 
 /**
  * Raise a doctor invoice for an explicitly chosen set of bills.
@@ -1110,6 +1135,10 @@ export type DoctorInvoiceInput = z.input<typeof doctorInvoiceSchema>;
  * this recomputes each bill's doctor share on the spot and upserts the ledger row,
  * so it works even when nothing has accrued yet — including at a 0% rate, where
  * the invoice documents the work done without claiming any payout.
+ *
+ * Per-bill edits (a typed amount or changed service rates) are applied on top of
+ * the engine figure and frozen with the engine figure beside them, so the invoice
+ * always shows what was computed, what was paid, and that someone changed it.
  */
 export async function createDoctorInvoiceForBills(input: DoctorInvoiceInput) {
     try {
@@ -1117,10 +1146,18 @@ export async function createDoctorInvoiceForBills(input: DoctorInvoiceInput) {
         if (!parsed.success) {
             return { success: false, error: parsed.error.issues[0]?.message || 'Invalid request' };
         }
-        const { doctorId, invoiceIds, payment_mode, payment_reference, notes, mark_paid, tds_rate_percent } = parsed.data;
+        const {
+            doctorId, invoiceIds, payment_mode, payment_reference, notes, mark_paid, paid_amount,
+            paid_at, tds_rate_percent, edits, adjustment_amount, adjustment_note, invoice_date,
+        } = parsed.data;
         const { db, session, organizationId } = await requireRoleAndTenant(MANAGE_ROLES);
 
         const tdsRate = tds_rate_percent ?? DEFAULT_DOCTOR_TDS_PERCENT;
+        const editByInvoice = new Map((edits ?? []).map((e) => [e.invoiceId, e]));
+        const when = parseWhen(paid_at);
+        if (when && when.getTime() > Date.now() + 5 * 60_000) {
+            return { success: false, error: 'Payment time cannot be in the future' };
+        }
         const statementNumber = await generateDoctorInvoiceNumber(organizationId, db);
 
         const result = await (db as any).$transaction(async (tx: any) => {
@@ -1140,7 +1177,10 @@ export async function createDoctorInvoiceForBills(input: DoctorInvoiceInput) {
                     id: true, patient_id: true, invoice_type: true, net_amount: true,
                     paid_amount: true, status: true, doctor_id: true, created_at: true,
                     admission: { select: { attending_doctor_id: true } },
-                    items: { select: { net_price: true, rendered_by_doctor_id: true, description: true } },
+                    items: {
+                        select: { id: true, net_price: true, rendered_by_doctor_id: true, description: true },
+                        orderBy: { id: 'asc' },
+                    },
                 },
             });
             if (!invoices.length) throw new Error('None of the selected bills are available');
@@ -1173,47 +1213,49 @@ export async function createDoctorInvoiceForBills(input: DoctorInvoiceInput) {
                     period_end: new Date(Math.max(...dates)),
                     total_commission: '0',
                     tds_rate_percent: tdsRate,
-                    status: mark_paid ? 'paid' : 'draft',
-                    ...(mark_paid
-                        ? { paid_at: new Date(), payment_mode: payment_mode || null, payment_reference: payment_reference || null }
-                        : {}),
+                    adjustment_amount: r2(adjustment_amount ?? 0).toFixed(2),
+                    adjustment_note: adjustment_note || null,
+                    invoice_date: parseWhen(invoice_date) ?? new Date(),
+                    status: 'draft',
                     notes: notes || null,
                     created_by: session?.username ?? null,
                 },
             });
 
-            let total = 0;
-            let totalTds = 0;
+            let used = 0;
+            const lineAmounts: number[] = [];
             for (const inv of eligible) {
-                const attendingId = inv.doctor_id ?? inv.admission?.attending_doctor_id ?? null;
-                const { shares, netAmount } = computeDoctorNetShares(inv.items, inv.net_amount, attendingId);
-                const doctorNet = shares.get(doctorId) ?? 0;
-                if (doctorNet <= 0) continue;
+                const line = computeDoctorBillLine(inv, doctorId, config, defaultPercent);
+                if (!line) continue;
 
-                const doctorCollected = netAmount > 0 ? num(inv.paid_amount) * (doctorNet / netAmount) : 0;
-                const { rate, amount } = computeCommission(
-                    config && config.is_active ? config : null,
-                    inv.invoice_type,
-                    doctorCollected,
-                    defaultPercent,
-                    doctorLineShares(inv.items, netAmount, num(inv.paid_amount), attendingId, doctorId),
-                );
-                total += amount;
-                const lineTds = (amount * tdsRate) / 100;
-                totalTds += lineTds;
+                const edit = editByInvoice.get(inv.id);
+                const applied = applyBillEdit(line.amount, line.services.map((s) => ({ ...s, amount: r2(s.amount) })), edit);
+                lineAmounts.push(applied.final);
+                used++;
 
+                const breakdown: LineBreakdown = {
+                    services: applied.services,
+                    bill_net: line.netAmount,
+                    bill_paid: line.paid,
+                    doctor_net: line.doctorNet,
+                    doctor_collected: line.doctorCollected,
+                    attribution: line.attribution,
+                };
                 const row = {
                     organizationId,
                     doctor_id: doctorId,
                     patient_id: inv.patient_id,
                     invoice_id: inv.id,
                     invoice_type: inv.invoice_type,
-                    eligible_base: doctorCollected.toFixed(2),
-                    rate_applied: rate,
-                    commission_amount: amount.toFixed(2),
+                    eligible_base: line.doctorCollected.toFixed(2),
+                    rate_applied: line.rate,
+                    commission_amount: applied.final.toFixed(2),
+                    computed_amount: r2(line.amount).toFixed(2),
+                    is_adjusted: applied.adjusted,
+                    adjust_note: applied.adjusted ? edit?.note || null : null,
+                    line_breakdown: breakdown as any,
                     tds_rate_percent: tdsRate,
-                    tds_amount: lineTds.toFixed(2),
-                    status: mark_paid ? 'paid' : 'included_in_statement',
+                    status: 'included_in_statement',
                     statement_id: statement.id,
                 };
                 await tx.doctorCommission.upsert({
@@ -1223,35 +1265,48 @@ export async function createDoctorInvoiceForBills(input: DoctorInvoiceInput) {
                         eligible_base: row.eligible_base,
                         rate_applied: row.rate_applied,
                         commission_amount: row.commission_amount,
+                        computed_amount: row.computed_amount,
+                        is_adjusted: row.is_adjusted,
+                        adjust_note: row.adjust_note,
+                        line_breakdown: row.line_breakdown,
                         tds_rate_percent: row.tds_rate_percent,
-                        tds_amount: row.tds_amount,
                         invoice_type: row.invoice_type,
                         status: row.status,
                         statement_id: statement.id,
                     },
                 });
             }
+            if (!used) throw new Error('None of the selected bills carry a share for this doctor');
 
-            const netPayable = total - totalTds;
-            await tx.doctorPayoutStatement.update({
-                where: { id: statement.id },
-                data: {
-                    total_commission: total.toFixed(2),
-                    total_tds: totalTds.toFixed(2),
-                    net_payable: netPayable.toFixed(2),
-                    ...(mark_paid ? { paid_amount: netPayable.toFixed(2) } : {}),
-                },
-            });
+            const totals = invoiceTotals(lineAmounts, adjustment_amount ?? 0, tdsRate);
+            if (totals.net < 0) throw new Error('The adjustment makes the net payable negative');
+
+            let state = await recomputeDoctorStatement(tx, organizationId, statement.id);
+            if (mark_paid && state.net > 0) {
+                const amt = paid_amount ?? state.net;
+                if (amt > state.net + 0.005) throw new Error(`Payment exceeds the net payable of ₹${state.net}`);
+                state = await insertDoctorPayment(tx, {
+                    organizationId,
+                    statementId: statement.id,
+                    doctorId,
+                    amount: amt,
+                    paidAt: when ?? new Date(),
+                    mode: payment_mode,
+                    reference: payment_reference,
+                    recordedBy: session?.username ?? null,
+                });
+            }
 
             return {
                 statementId: statement.id,
                 statementNumber,
-                billCount: eligible.length,
+                billCount: used,
                 skipped: invoices.length - eligible.length,
-                total,
+                total: state.gross,
                 tdsRate,
-                totalTds,
-                netPayable,
+                totalTds: state.tds,
+                netPayable: state.net,
+                paid: state.paid,
             };
         });
 

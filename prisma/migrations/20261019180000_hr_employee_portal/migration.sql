@@ -126,7 +126,7 @@ WHERE "days" = 1 AND "to_date"::date <> "from_date"::date;
 -- Developer / dev-admin accounts are platform staff, not hospital employees.
 WITH existing AS (
     SELECT "organizationId",
-           COALESCE(MAX(NULLIF(regexp_replace("employee_code", '\D', '', 'g'), '')::INTEGER), 0) AS max_n
+           COALESCE(MAX(substring("employee_code" FROM '^EMP-(\d{1,8})$')::INTEGER), 0) AS max_n
     FROM "employees"
     GROUP BY "organizationId"
 ),

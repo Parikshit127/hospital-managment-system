@@ -143,23 +143,77 @@ export function computeCommission(
  * rendered.
  */
 export function doctorLineShares(
-    items: Array<{ net_price?: unknown; rendered_by_doctor_id?: string | null; description?: unknown }>,
+    items: Array<{ id?: number | null; net_price?: unknown; rendered_by_doctor_id?: string | null; description?: unknown }>,
     netAmount: number,
     paidAmount: number,
     attendingDoctorId: string | null | undefined,
     doctorId: string,
-): Array<{ description: string; net: number; collected: number }> {
+): Array<{ item_id: number | null; description: string; net: number; collected: number }> {
     const ratio = netAmount > 0 ? paidAmount / netAmount : 0;
-    const out: Array<{ description: string; net: number; collected: number }> = [];
+    const out: Array<{ item_id: number | null; description: string; net: number; collected: number }> = [];
     for (const it of items) {
         const mine = it.rendered_by_doctor_id
             ? it.rendered_by_doctor_id === doctorId
             : attendingDoctorId === doctorId;
         if (!mine) continue;
         const net = toNum(it.net_price);
-        out.push({ description: String(it.description ?? ''), net, collected: net * ratio });
+        out.push({ item_id: it.id ?? null, description: String(it.description ?? ''), net, collected: net * ratio });
     }
     return out;
+}
+
+/**
+ * One doctor's whole position on one bill: attributed net, collected share, the
+ * engine's payable, and the per-service split with the rate that applied to each.
+ * Returns null when the doctor has no share of the bill.
+ *
+ * Single source for the worksheet preview AND the invoice raise, so what the biller
+ * sees before clicking "create" is exactly what gets frozen onto the invoice.
+ */
+export function computeDoctorBillLine(
+    inv: {
+        invoice_type: string;
+        net_amount: unknown;
+        paid_amount: unknown;
+        doctor_id?: string | null;
+        admission?: { attending_doctor_id?: string | null } | null;
+        items: Array<{ id?: number | null; net_price?: unknown; rendered_by_doctor_id?: string | null; description?: unknown }>;
+    },
+    doctorId: string,
+    config: any,
+    defaultPercent: number,
+) {
+    const attendingId = inv.doctor_id ?? inv.admission?.attending_doctor_id ?? null;
+    const { shares, netAmount } = computeDoctorNetShares(inv.items, inv.net_amount, attendingId);
+    const doctorNet = shares.get(doctorId) ?? 0;
+    if (doctorNet <= 0) return null;
+
+    const paid = toNum(inv.paid_amount);
+    const doctorCollected = netAmount > 0 ? paid * (doctorNet / netAmount) : 0;
+    const lineShares = doctorLineShares(inv.items, netAmount, paid, attendingId, doctorId);
+    const activeConfig = config && config.is_active ? config : null;
+    const { rate, amount } = computeCommission(activeConfig, inv.invoice_type, doctorCollected, defaultPercent, lineShares);
+
+    const services = lineShares.map((ln) => {
+        const lineRate = activeConfig
+            ? computeCommission(activeConfig, inv.invoice_type, ln.collected, defaultPercent, [ln]).rate
+            : defaultPercent;
+        return {
+            item_id: ln.item_id,
+            name: ln.description || '—',
+            net: ln.net,
+            collected: ln.collected,
+            rate: lineRate,
+            amount: (ln.collected * lineRate) / 100,
+        };
+    });
+
+    const renderedCount = inv.items.filter((it) => it.rendered_by_doctor_id === doctorId).length;
+    const isAttending = attendingId === doctorId;
+    const attribution: 'attending' | 'rendered' | 'both' =
+        renderedCount && isAttending ? 'both' : renderedCount ? 'rendered' : 'attending';
+
+    return { netAmount, paid, doctorNet, doctorCollected, rate, amount, services, attribution };
 }
 
 /**

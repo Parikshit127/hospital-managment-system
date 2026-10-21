@@ -17,13 +17,15 @@
  * wrongly reporting that there is nothing to invoice.
  */
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
     ArrowLeft, Loader2, CheckCircle2, Wallet, Printer, Search, Users,
-    FileText, AlertTriangle, ChevronDown, ChevronRight, Lock, Stethoscope, Filter,
+    FileText, AlertTriangle, ChevronDown, ChevronRight, Lock, Stethoscope, Filter, RotateCcw, X, Clock,
 } from 'lucide-react';
 import { getDoctorStatementWorkload, createDoctorInvoiceForBills } from '@/app/actions/doctor-commission-actions';
+import { applyBillEdit, invoiceTotals, PAYMENT_MODES, type BillEdit } from '@/app/lib/doctor-invoice-calc';
 import { fmtIstDate, fmtIstDateTime } from '@/app/lib/ist';
 
 const inr = (n: number) => '₹' + (n || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 });
@@ -42,7 +44,7 @@ type Bill = {
     doctor_collected: number;
     attribution: 'attending' | 'rendered' | 'both';
     rendered_services: string[];
-    services: Array<{ name: string; net: number; collected: number; rate: number; amount: number }>;
+    services: Array<{ item_id: number | null; name: string; net: number; collected: number; rate: number; amount: number; base_rate?: number | null }>;
     rate_applied: number;
     commission_amount: number;
     commission_status: string | null;
@@ -71,6 +73,7 @@ type Data = {
     commission_configured: boolean;
     patients: Patient[];
     totals: { patients: number; bills: number; net: number; collected: number; commission: number };
+    awaiting_payment: { count: number; amount: number };
 };
 
 const INVOICE_TYPES = ['all', 'OPD', 'IPD', 'Pharmacy', 'Lab', 'Procedure'];
@@ -86,14 +89,16 @@ export default function DoctorPayoutStatementClient({ doctorId, basePath }: { do
     const [loading, setLoading] = useState(true);
     const [selected, setSelected] = useState<Set<number>>(new Set());
     const [expanded, setExpanded] = useState<Set<string>>(new Set());
-    const [reference, setReference] = useState('');
-    const [mode, setMode] = useState('Bank Transfer');
-    const [markPaid, setMarkPaid] = useState(true);
+    const router = useRouter();
+    // Unsaved per-bill changes made on this screen, keyed by invoice id. They only
+    // become real when the invoice is created.
+    const [edits, setEdits] = useState<Record<number, BillEdit>>({});
+    const [bulkRate, setBulkRate] = useState('');
+    const [createOpen, setCreateOpen] = useState(false);
     const [tdsPercent, setTdsPercent] = useState(10);
     const tdsTouched = useRef(false);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [done, setDone] = useState<string | null>(null);
 
     // Filters
     const [from, setFrom] = useState('');
@@ -116,6 +121,7 @@ export default function DoctorPayoutStatementClient({ doctorId, basePath }: { do
             const loaded = res.data as unknown as Data;
             setData(loaded);
             setSelected(new Set());
+            setEdits({});
             if (!tdsTouched.current) setTdsPercent(loaded.default_tds_percent);
         } else {
             setError(res.error || 'Failed to load');
@@ -166,37 +172,83 @@ export default function DoctorPayoutStatementClient({ doctorId, basePath }: { do
             return next;
         });
 
+    /** What a bill will pay once the biller's unsaved edits are applied. */
+    const effOf = useCallback(
+        (b: Bill) => {
+            const e = edits[b.invoice_id];
+            if (!e) return { amount: b.commission_amount, services: b.services, changed: false };
+            const a = applyBillEdit(b.commission_amount, b.services as any, e);
+            return { amount: a.final, services: a.services as Bill['services'], changed: a.adjusted };
+        },
+        [edits],
+    );
+
+    const patchEdit = (id: number, p: Partial<BillEdit>) => setEdits((prev) => ({ ...prev, [id]: { ...prev[id], ...p } }));
+    const resetEdit = (id: number) =>
+        setEdits((prev) => {
+            const n = { ...prev };
+            delete n[id];
+            return n;
+        });
+
+    /** Same rate on every ticked bill — "pay this doctor 40% on everything here". */
+    const applyBulkRate = () => {
+        const r = Number(bulkRate);
+        if (!(r >= 0 && r <= 100) || !selected.size) return;
+        setEdits((prev) => {
+            const n = { ...prev };
+            for (const b of patients.flatMap((p) => p.bills)) {
+                if (selected.has(b.invoice_id)) n[b.invoice_id] = { ...n[b.invoice_id], amount: round2((b.doctor_collected * r) / 100) };
+            }
+            return n;
+        });
+    };
+
     /** The chosen subset — this is what totals, the printout and the invoice all use. */
     const selection = useMemo(() => {
         const rows = patients
             .map((p) => ({ ...p, bills: p.bills.filter((b) => selected.has(b.invoice_id)) }))
             .filter((p) => p.bills.length > 0);
         const bills = rows.flatMap((p) => p.bills);
-        const commission = bills.reduce((s, b) => s + b.commission_amount, 0);
+        const commission = round2(bills.reduce((s, b) => s + effOf(b).amount, 0));
         const tds = round2((commission * tdsPercent) / 100);
         return {
             patients: rows,
             billCount: bills.length,
+            changedCount: bills.filter((b) => effOf(b).changed).length,
             net: bills.reduce((s, b) => s + b.doctor_net, 0),
             collected: bills.reduce((s, b) => s + b.doctor_collected, 0),
             commission,
             tds,
             netPayable: round2(commission - tds),
         };
-    }, [patients, selected, tdsPercent]);
+    }, [patients, selected, tdsPercent, effOf]);
 
-    const raiseInvoice = async () => {
+    const createInvoice = async (v: CreateValues) => {
         if (!selected.size) return;
         setBusy(true);
         setError(null);
-        setDone(null);
+        const chosen = patients.flatMap((p) => p.bills).filter((b) => selected.has(b.invoice_id));
         const res = await createDoctorInvoiceForBills({
             doctorId,
-            invoiceIds: Array.from(selected),
-            payment_mode: mode,
-            payment_reference: reference || undefined,
-            mark_paid: markPaid,
-            tds_rate_percent: tdsPercent,
+            invoiceIds: chosen.map((b) => b.invoice_id),
+            tds_rate_percent: v.tds,
+            adjustment_amount: v.adjustment || undefined,
+            adjustment_note: v.adjustmentNote || undefined,
+            notes: v.notes || undefined,
+            invoice_date: v.invoiceDate || undefined,
+            edits: chosen
+                .filter((b) => edits[b.invoice_id])
+                .map((b) => ({ invoiceId: b.invoice_id, amount: edits[b.invoice_id].amount, rates: edits[b.invoice_id].rates, note: edits[b.invoice_id].note })),
+            ...(v.recordNow
+                ? {
+                      mark_paid: true,
+                      paid_amount: v.payAmount || undefined,
+                      paid_at: v.payWhen ? new Date(v.payWhen).toISOString() : undefined,
+                      payment_mode: v.payMode,
+                      payment_reference: v.payRef || undefined,
+                  }
+                : {}),
         });
         setBusy(false);
         if (!res.success) {
@@ -204,12 +256,8 @@ export default function DoctorPayoutStatementClient({ doctorId, basePath }: { do
             return;
         }
         const d = res.data as any;
-        setDone(
-            `Doctor invoice ${d.statementNumber} raised — ${d.billCount} bill(s), ${inr(d.total)} gross − ${inr(d.totalTds)} TDS (${d.tdsRate}%) = ${inr(d.netPayable)} net` +
-                (d.skipped ? ` · ${d.skipped} skipped (already invoiced)` : ''),
-        );
-        setReference('');
-        await load();
+        // Straight to the invoice: review it, pay it, send it.
+        router.push(`${basePath}/${doctorId}/invoices/${d.statementId}`);
     };
 
     if (loading && !data) {
@@ -225,10 +273,17 @@ export default function DoctorPayoutStatementClient({ doctorId, basePath }: { do
     const printedAt = fmtIstDateTime(new Date());
     // Nothing ticked yet → the printout falls back to everything on screen.
     const printPatients = selection.patients.length ? selection.patients : patients;
-    const fallbackTds = round2((data.totals.commission * tdsPercent) / 100);
-    const printTotals = selection.patients.length
-        ? { net: selection.net, collected: selection.collected, commission: selection.commission, bills: selection.billCount, tds: selection.tds, netPayable: selection.netPayable }
-        : { net: data.totals.net, collected: data.totals.collected, commission: data.totals.commission, bills: data.totals.bills, tds: fallbackTds, netPayable: round2(data.totals.commission - fallbackTds) };
+    const printBills = printPatients.flatMap((p) => p.bills);
+    const printCommission = round2(printBills.reduce((sum, b) => sum + effOf(b).amount, 0));
+    const printTds = round2((printCommission * tdsPercent) / 100);
+    const printTotals = {
+        net: printBills.reduce((sum, b) => sum + b.doctor_net, 0),
+        collected: printBills.reduce((sum, b) => sum + b.doctor_collected, 0),
+        commission: printCommission,
+        bills: printBills.length,
+        tds: printTds,
+        netPayable: round2(printCommission - printTds),
+    };
 
     return (
         <div className="p-6 max-w-7xl mx-auto print:p-0 print:max-w-none">
@@ -312,11 +367,11 @@ export default function DoctorPayoutStatementClient({ doctorId, basePath }: { do
                                         <td className="py-1 pr-2 text-right">{inr(b.doctor_net)}</td>
                                         <td className="py-1 pr-2 text-right">{inr(b.doctor_collected)}</td>
                                         <td className="py-1 pr-2 text-right">{b.rate_applied ? `${round2(b.rate_applied)}%` : '—'}</td>
-                                        <td className="py-1 text-right font-bold">{inr(b.commission_amount)}</td>
+                                        <td className="py-1 text-right font-bold">{inr(effOf(b).amount)}</td>
                                     </tr>
                                     {/* Named services behind this bill, each with the rate that applied —
                                         so the doctor can see exactly what they are being paid for. */}
-                                    {(b.services || []).map((s, si) => (
+                                    {effOf(b).services.map((s, si) => (
                                         <tr key={`${b.invoice_id}-s${si}`} className="text-[10px] text-gray-600">
                                             <td />
                                             <td className="py-0.5 pr-2" colSpan={4}>
@@ -388,6 +443,14 @@ export default function DoctorPayoutStatementClient({ doctorId, basePath }: { do
                             )}
                         </div>
                     </div>
+                    <div className="flex items-center gap-2">
+                    <Link
+                        href={`${basePath}/${doctorId}/invoices`}
+                        className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-indigo-200 text-indigo-600 font-bold text-sm hover:bg-indigo-50"
+                    >
+                        <FileText className="h-4 w-4" />
+                        Invoices &amp; payments
+                    </Link>
                     <button
                         onClick={() => window.print()}
                         disabled={patients.length === 0}
@@ -396,23 +459,42 @@ export default function DoctorPayoutStatementClient({ doctorId, basePath }: { do
                         <Printer className="h-4 w-4" />
                         Print {selection.patients.length ? `${selection.patients.length} selected` : 'all'}
                     </button>
+                    </div>
                 </div>
 
                 {/* Summary strip */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-5">
                     {[
                         { label: 'Patients', value: String(data.totals.patients), icon: Users, tone: 'text-indigo-500' },
                         { label: 'Bills', value: String(data.totals.bills), icon: FileText, tone: 'text-blue-500' },
                         { label: 'Collected (doctor share)', value: inr(data.totals.collected), icon: Wallet, tone: 'text-emerald-500' },
                         { label: 'Payable', value: inr(data.totals.commission), icon: Stethoscope, tone: 'text-violet-500' },
-                    ].map((c) => (
-                        <div key={c.label} className="bg-white rounded-2xl border border-gray-100 p-4">
-                            <div className="flex items-center gap-2 text-[10px] uppercase text-gray-400 font-black">
-                                <c.icon className={`h-3.5 w-3.5 ${c.tone}`} /> {c.label}
+                        {
+                            label: 'Invoiced, awaiting payment',
+                            value: inr(data.awaiting_payment?.amount ?? 0),
+                            icon: Clock,
+                            tone: 'text-amber-500',
+                            href: `${basePath}/${doctorId}/invoices`,
+                        },
+                    ].map((c) => {
+                        const body = (
+                            <>
+                                <div className="flex items-center gap-2 text-[10px] uppercase text-gray-400 font-black">
+                                    <c.icon className={`h-3.5 w-3.5 ${c.tone}`} /> {c.label}
+                                </div>
+                                <div className="text-xl font-black text-gray-800 mt-1">{c.value}</div>
+                            </>
+                        );
+                        return c.href ? (
+                            <Link key={c.label} href={c.href} className="bg-white rounded-2xl border border-gray-100 p-4 hover:border-amber-300">
+                                {body}
+                            </Link>
+                        ) : (
+                            <div key={c.label} className="bg-white rounded-2xl border border-gray-100 p-4">
+                                {body}
                             </div>
-                            <div className="text-xl font-black text-gray-800 mt-1">{c.value}</div>
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
 
                 {!data.commission_configured && (
@@ -483,11 +565,6 @@ export default function DoctorPayoutStatementClient({ doctorId, basePath }: { do
                     </div>
                 </div>
 
-                {done && (
-                    <div className="mb-4 flex items-center gap-2 rounded-xl bg-emerald-50 border border-emerald-200 px-4 py-3 text-sm font-bold text-emerald-700">
-                        <CheckCircle2 className="h-4 w-4" /> {done}
-                    </div>
-                )}
                 {error && (
                     <div className="mb-4 rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm font-bold text-red-600">
                         {error}
@@ -515,6 +592,29 @@ export default function DoctorPayoutStatementClient({ doctorId, basePath }: { do
                             <span className="text-[11px] uppercase tracking-wider text-gray-400 font-black">
                                 Select all · {patients.length} patient(s), {selectableBills.length} selectable bill(s)
                             </span>
+                            <div className="ml-auto flex items-center gap-3">
+                                {selected.size > 0 && (
+                                    <div className="flex items-center gap-1.5" title="Set the same payout % on every ticked bill">
+                                        <span className="text-[10px] uppercase text-gray-400 font-black">Set rate</span>
+                                        <input
+                                            type="number" min={0} max={100} step="0.1" value={bulkRate}
+                                            onChange={(e) => setBulkRate(e.target.value)}
+                                            placeholder="%"
+                                            className="w-16 px-2 py-1 border border-gray-200 rounded-lg text-xs text-right"
+                                        />
+                                        <button onClick={applyBulkRate} disabled={bulkRate === ''}
+                                            className="px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-600 text-xs font-bold hover:bg-indigo-100 disabled:opacity-40">
+                                            Apply to {selected.size}
+                                        </button>
+                                    </div>
+                                )}
+                                <button
+                                    onClick={() => setExpanded(expanded.size ? new Set() : new Set(patients.map((p) => p.patient_id)))}
+                                    className="text-xs font-bold text-indigo-600 hover:underline"
+                                >
+                                    {expanded.size ? 'Collapse all' : 'Expand all'}
+                                </button>
+                            </div>
                         </div>
 
                         <div className="divide-y divide-gray-50">
@@ -563,7 +663,9 @@ export default function DoctorPayoutStatementClient({ doctorId, basePath }: { do
                                             </div>
                                             <div className="text-right shrink-0 w-28">
                                                 <div className="text-[10px] uppercase text-gray-400 font-black">Payable</div>
-                                                <div className="text-sm font-black text-gray-800">{inr(p.total_commission)}</div>
+                                                <div className="text-sm font-black text-gray-800">
+                                                    {inr(p.bills.reduce((sum, b) => sum + (b.locked ? b.commission_amount : effOf(b).amount), 0))}
+                                                </div>
                                             </div>
                                         </div>
 
@@ -585,6 +687,9 @@ export default function DoctorPayoutStatementClient({ doctorId, basePath }: { do
                                                     <tbody className="divide-y divide-gray-50">
                                                         {p.bills.map((b) => {
                                                             const badge = ATTRIBUTION_BADGE[b.attribution];
+                                                            const eff = effOf(b);
+                                                            const e = edits[b.invoice_id];
+                                                            const editable = !b.locked;
                                                             return (
                                                                 <tr key={b.invoice_id} className={b.locked ? 'opacity-50' : ''}>
                                                                     <td className="py-2">
@@ -605,16 +710,33 @@ export default function DoctorPayoutStatementClient({ doctorId, basePath }: { do
                                                                             {badge.label}
                                                                         </span>
                                                                         {/* What the doctor is being paid for, and at what rate. */}
-                                                                        {(b.services || []).length > 0 && (
+                                                                        {eff.services.length > 0 && (
                                                                             <div className="mt-1 space-y-0.5">
-                                                                                {b.services.map((s, si) => (
+                                                                                {eff.services.map((s, si) => (
                                                                                     <div key={si} className="text-[10px] text-gray-500 flex items-center gap-1.5">
                                                                                         <span className="max-w-[200px] truncate" title={s.name}>{s.name}</span>
                                                                                         <span className="text-gray-300">·</span>
                                                                                         <span>{inr(s.collected)}</span>
-                                                                                        <span className={`font-bold ${s.rate ? 'text-indigo-500' : 'text-gray-300'}`}>
-                                                                                            @{round2(s.rate)}%
-                                                                                        </span>
+                                                                                        {editable && s.item_id != null ? (
+                                                                                            <span className="inline-flex items-center gap-0.5">
+                                                                                                @<input
+                                                                                                    type="number" min={0} max={100} step="0.1"
+                                                                                                    value={round2(s.rate)}
+                                                                                                    onChange={(ev) =>
+                                                                                                        patchEdit(b.invoice_id, {
+                                                                                                            amount: undefined,
+                                                                                                            rates: { ...(e?.rates ?? {}), [String(s.item_id)]: Math.max(0, Math.min(100, Number(ev.target.value) || 0)) },
+                                                                                                        })
+                                                                                                    }
+                                                                                                    className={`w-12 px-1 py-0.5 border rounded text-right font-bold ${s.base_rate != null ? 'border-amber-300 text-amber-600' : 'border-gray-200 text-indigo-500'}`}
+                                                                                                    aria-label={`Rate for ${s.name}`}
+                                                                                                />%
+                                                                                            </span>
+                                                                                        ) : (
+                                                                                            <span className={`font-bold ${s.rate ? 'text-indigo-500' : 'text-gray-300'}`}>
+                                                                                                @{round2(s.rate)}%
+                                                                                            </span>
+                                                                                        )}
                                                                                         <span className="text-gray-300">=</span>
                                                                                         <span className="font-bold text-gray-600">{inr(s.amount)}</span>
                                                                                     </div>
@@ -630,7 +752,30 @@ export default function DoctorPayoutStatementClient({ doctorId, basePath }: { do
                                                                     <td className="py-2 text-gray-500">{fmtIstDate(b.created_at)}</td>
                                                                     <td className="py-2 text-right text-gray-600">{inr(b.doctor_net)}</td>
                                                                     <td className="py-2 text-right text-gray-600">{inr(b.doctor_collected)}</td>
-                                                                    <td className="py-2 text-right font-bold text-gray-800">{inr(b.commission_amount)}</td>
+                                                                    <td className="py-2 text-right">
+                                                                        {editable ? (
+                                                                            <div className="inline-flex flex-col items-end gap-0.5">
+                                                                                <div className="inline-flex items-center gap-1">
+                                                                                    <span className="text-gray-400">₹</span>
+                                                                                    <input
+                                                                                        type="number" min={0} step="0.01"
+                                                                                        value={e?.amount != null ? e.amount : round2(eff.amount)}
+                                                                                        onChange={(ev) => patchEdit(b.invoice_id, { amount: ev.target.value === '' ? 0 : Number(ev.target.value) })}
+                                                                                        className={`w-24 px-2 py-1 border rounded-lg text-right font-bold ${eff.changed ? 'border-amber-300 bg-amber-50 text-amber-700' : 'border-gray-200 text-gray-800'}`}
+                                                                                        aria-label={`Payable for ${b.invoice_number}`}
+                                                                                    />
+                                                                                    {e && (
+                                                                                        <button onClick={() => resetEdit(b.invoice_id)} title="Reset to computed" className="text-gray-400 hover:text-indigo-600">
+                                                                                            <RotateCcw className="h-3.5 w-3.5" />
+                                                                                        </button>
+                                                                                    )}
+                                                                                </div>
+                                                                                {eff.changed && <span className="text-[10px] text-amber-600 font-bold">was {inr(b.commission_amount)}</span>}
+                                                                            </div>
+                                                                        ) : (
+                                                                            <span className="font-bold text-gray-800">{inr(b.commission_amount)}</span>
+                                                                        )}
+                                                                    </td>
                                                                 </tr>
                                                             );
                                                         })}
@@ -644,59 +789,191 @@ export default function DoctorPayoutStatementClient({ doctorId, basePath }: { do
                         </div>
 
                         {/* Action bar — everything here reflects the SELECTION, not the full list */}
-                        <div className="flex flex-wrap items-center justify-between gap-4 border-t border-gray-100 bg-gray-50/60 px-4 py-4">
-                            <div className="flex flex-wrap items-center gap-3">
-                                <select value={mode} onChange={(e) => setMode(e.target.value)}
-                                    className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white">
-                                    {['Bank Transfer', 'Cash', 'UPI', 'Cheque', 'Other'].map((m) => <option key={m}>{m}</option>)}
-                                </select>
-                                <input
-                                    value={reference}
-                                    onChange={(e) => setReference(e.target.value)}
-                                    placeholder="Reference / txn id (optional)"
-                                    className="px-3 py-2 border border-gray-200 rounded-lg text-sm w-52"
-                                />
-                                <label className="flex items-center gap-2 text-sm text-gray-600 font-bold">
-                                    <input type="checkbox" checked={markPaid} onChange={(e) => setMarkPaid(e.target.checked)} />
-                                    Mark as paid
-                                </label>
-                                <label className="flex items-center gap-2 text-sm text-gray-600 font-bold">
-                                    TDS
-                                    <input
-                                        type="number"
-                                        min={0}
-                                        max={100}
-                                        step={0.1}
-                                        value={tdsPercent}
-                                        onChange={(e) => { tdsTouched.current = true; setTdsPercent(Math.max(0, Math.min(100, Number(e.target.value) || 0))); }}
-                                        className="px-2 py-2 border border-gray-200 rounded-lg text-sm w-16 text-right"
-                                    />
-                                    %
-                                </label>
+                        <div className="sticky bottom-0 flex flex-wrap items-center justify-between gap-4 border-t border-gray-100 bg-gray-50/95 backdrop-blur px-4 py-4">
+                            <div className="text-sm text-gray-500">
+                                {selected.size === 0 ? (
+                                    <span>Tick the patients or bills to pay this doctor for. You can change any amount or rate before creating the invoice.</span>
+                                ) : (
+                                    <span>
+                                        <b className="text-gray-700">{selection.patients.length}</b> patient(s) · <b className="text-gray-700">{selection.billCount}</b> bill(s)
+                                        {selection.changedCount > 0 && <span className="text-amber-600 font-bold"> · {selection.changedCount} edited</span>}
+                                    </span>
+                                )}
                             </div>
                             <div className="flex items-center gap-4">
                                 <div className="text-right">
-                                    <div className="text-[10px] uppercase text-gray-400 font-black">
-                                        {selection.patients.length} patient(s) · {selection.billCount} bill(s)
-                                    </div>
                                     <div className="text-xs text-gray-400">
-                                        {inr(selection.commission)} gross − {inr(selection.tds)} TDS
+                                        {inr(selection.commission)} gross − {inr(selection.tds)} TDS ({tdsPercent}%)
                                     </div>
                                     <div className="text-lg font-black text-gray-800">{inr(selection.netPayable)} net</div>
                                 </div>
                                 <button
-                                    onClick={raiseInvoice}
+                                    onClick={() => { setError(null); setCreateOpen(true); }}
                                     disabled={busy || selected.size === 0}
                                     className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-500 text-white font-bold text-sm hover:bg-emerald-600 disabled:opacity-40 disabled:cursor-not-allowed"
                                 >
-                                    {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
-                                    Raise Doctor Invoice
+                                    <FileText className="h-4 w-4" />
+                                    Review &amp; create invoice
                                 </button>
                             </div>
                         </div>
                     </div>
                 )}
             </div>
+
+            {createOpen && (
+                <CreateInvoiceModal
+                    doctorName={d.name}
+                    patientCount={selection.patients.length}
+                    billCount={selection.billCount}
+                    changedCount={selection.changedCount}
+                    lineAmounts={selection.patients.flatMap((p) => p.bills.map((b) => effOf(b).amount))}
+                    defaultTds={tdsPercent}
+                    busy={busy}
+                    error={error}
+                    onClose={() => setCreateOpen(false)}
+                    onSubmit={(v) => { tdsTouched.current = true; setTdsPercent(v.tds); return createInvoice(v); }}
+                />
+            )}
+        </div>
+    );
+}
+
+type CreateValues = {
+    tds: number;
+    adjustment: number;
+    adjustmentNote: string;
+    notes: string;
+    invoiceDate: string;
+    recordNow: boolean;
+    payAmount: number;
+    payWhen: string;
+    payMode: string;
+    payRef: string;
+};
+
+const localNow = () => {
+    const d = new Date();
+    const p = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+};
+
+function CreateInvoiceModal({
+    doctorName, patientCount, billCount, changedCount, lineAmounts, defaultTds, busy, error, onClose, onSubmit,
+}: {
+    doctorName: string; patientCount: number; billCount: number; changedCount: number; lineAmounts: number[];
+    defaultTds: number; busy: boolean; error: string | null; onClose: () => void; onSubmit: (v: CreateValues) => void | Promise<void>;
+}) {
+    const [tds, setTds] = useState(defaultTds);
+    const [adj, setAdj] = useState('');
+    const [adjNote, setAdjNote] = useState('');
+    const [notes, setNotes] = useState('');
+    const [invoiceDate, setInvoiceDate] = useState(localNow().slice(0, 10));
+    const [recordNow, setRecordNow] = useState(false);
+    const [payAmount, setPayAmount] = useState('');
+    const [payWhen, setPayWhen] = useState(localNow());
+    const [payMode, setPayMode] = useState<string>('Bank Transfer');
+    const [payRef, setPayRef] = useState('');
+
+    const t = invoiceTotals(lineAmounts, Number(adj) || 0, tds);
+
+    return (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4 print:hidden">
+            <div className="bg-white rounded-2xl w-full max-w-lg max-h-[92vh] overflow-y-auto p-6 space-y-4">
+                <div className="flex items-start justify-between">
+                    <div>
+                        <h2 className="text-lg font-black text-gray-800">Create doctor invoice</h2>
+                        <p className="text-xs text-gray-400">
+                            {doctorName} · {patientCount} patient(s), {billCount} bill(s)
+                            {changedCount > 0 && ` · ${changedCount} edited`}
+                        </p>
+                    </div>
+                    <button onClick={onClose} className="text-gray-400 hover:text-gray-600" aria-label="Close"><X className="h-5 w-5" /></button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                    <label className="flex flex-col gap-1">
+                        <span className="text-[10px] uppercase text-gray-400 font-black">Invoice date</span>
+                        <input type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} className="px-3 py-2 border border-gray-200 rounded-lg text-sm" />
+                    </label>
+                    <label className="flex flex-col gap-1">
+                        <span className="text-[10px] uppercase text-gray-400 font-black">TDS %</span>
+                        <input type="number" min={0} max={100} step={0.1} value={tds}
+                            onChange={(e) => setTds(Math.max(0, Math.min(100, Number(e.target.value) || 0)))}
+                            className="px-3 py-2 border border-gray-200 rounded-lg text-sm" />
+                    </label>
+                    <label className="flex flex-col gap-1">
+                        <span className="text-[10px] uppercase text-gray-400 font-black">Adjustment ₹ (+ / −)</span>
+                        <input type="number" step="0.01" value={adj} onChange={(e) => setAdj(e.target.value)} placeholder="0"
+                            className="px-3 py-2 border border-gray-200 rounded-lg text-sm" />
+                    </label>
+                    <label className="flex flex-col gap-1">
+                        <span className="text-[10px] uppercase text-gray-400 font-black">Adjustment reason</span>
+                        <input value={adjNote} onChange={(e) => setAdjNote(e.target.value)} placeholder="bonus, advance recovered…"
+                            className="px-3 py-2 border border-gray-200 rounded-lg text-sm" />
+                    </label>
+                </div>
+                <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Invoice notes (optional, printed for the doctor)"
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm" />
+
+                <div className="rounded-xl bg-gray-50 border border-gray-100 p-3 text-sm space-y-1">
+                    <Row l="Bills subtotal" v={inr(t.lines)} />
+                    {t.adjustment !== 0 && <Row l="Adjustment" v={(t.adjustment > 0 ? '+' : '') + inr(t.adjustment)} />}
+                    <Row l={`TDS (${tds}%)`} v={'−' + inr(t.tds)} muted />
+                    <div className="flex justify-between border-t border-gray-200 pt-1 font-black text-gray-800">
+                        <span>Net payable</span><span>{inr(t.net)}</span>
+                    </div>
+                </div>
+
+                <label className="flex items-center gap-2 text-sm font-bold text-gray-600">
+                    <input type="checkbox" checked={recordNow} onChange={(e) => { setRecordNow(e.target.checked); if (e.target.checked && !payAmount) setPayAmount(String(t.net)); }} />
+                    Also record a payment now
+                </label>
+                {recordNow && (
+                    <div className="grid grid-cols-2 gap-2 rounded-xl border border-emerald-100 bg-emerald-50/40 p-3">
+                        <label className="flex flex-col gap-1">
+                            <span className="text-[10px] text-gray-400 font-bold">Amount paid (₹)</span>
+                            <input type="number" min={0} step="0.01" value={payAmount} placeholder={String(t.net)} onChange={(e) => setPayAmount(e.target.value)}
+                                className="px-2.5 py-2 border border-gray-200 rounded-lg text-sm font-bold bg-white" />
+                        </label>
+                        <label className="flex flex-col gap-1">
+                            <span className="text-[10px] text-gray-400 font-bold">Paid on</span>
+                            <input type="datetime-local" value={payWhen} max={localNow()} onChange={(e) => setPayWhen(e.target.value)}
+                                className="px-2.5 py-2 border border-gray-200 rounded-lg text-xs bg-white" />
+                        </label>
+                        <select value={payMode} onChange={(e) => setPayMode(e.target.value)} className="px-2.5 py-2 border border-gray-200 rounded-lg text-sm bg-white">
+                            {PAYMENT_MODES.map((m) => <option key={m}>{m}</option>)}
+                        </select>
+                        <input value={payRef} onChange={(e) => setPayRef(e.target.value)} placeholder="Reference / txn id"
+                            className="px-2.5 py-2 border border-gray-200 rounded-lg text-sm bg-white" />
+                        <p className="col-span-2 text-[11px] text-gray-400">Part payments are fine — the rest stays as balance due on the invoice.</p>
+                    </div>
+                )}
+
+                {error && <p className="text-sm font-bold text-red-600">{error}</p>}
+                <div className="flex justify-end gap-2">
+                    <button onClick={onClose} className="px-4 py-2 rounded-xl text-gray-500 font-bold text-sm hover:bg-gray-100">Cancel</button>
+                    <button
+                        disabled={busy || t.net < 0}
+                        onClick={() => onSubmit({
+                            tds, adjustment: Number(adj) || 0, adjustmentNote: adjNote, notes, invoiceDate,
+                            recordNow, payAmount: Number(payAmount) || 0, payWhen, payMode, payRef,
+                        })}
+                        className="inline-flex items-center gap-2 px-5 py-2 rounded-xl bg-emerald-500 text-white font-bold text-sm hover:bg-emerald-600 disabled:opacity-50"
+                    >
+                        {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                        Create invoice
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function Row({ l, v, muted }: { l: string; v: string; muted?: boolean }) {
+    return (
+        <div className={`flex justify-between ${muted ? 'text-gray-400' : 'text-gray-600'}`}>
+            <span>{l}</span><span>{v}</span>
         </div>
     );
 }

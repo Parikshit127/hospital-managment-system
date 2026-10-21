@@ -257,6 +257,7 @@ model Organization {
   doctor_service_rates      DoctorServiceRate[]
   doctor_commissions        DoctorCommission[]
   doctor_payout_statements  DoctorPayoutStatement[]
+  doctor_payout_payments    DoctorPayoutPayment[]
 
   // TPA & Insurance Upgrade — receipts, dispatch, denial taxonomy, short-pay, SLA
   insurance_receipts            InsuranceReceipt[]
@@ -5068,8 +5069,15 @@ model ReferralPayoutStatement {
   period_end     DateTime
 
   total_commission Decimal @default(0)
-  // draft | finalized | paid
+  // draft | finalized | partially_paid | paid  (derived from payments once any exist)
   status           String  @default("draft")
+
+  // Invoice-level +/- line (bonus, advance recovery, round-off…). Included in
+  // total_commission so the existing gross/TDS/net maths and reports stay correct;
+  // kept separately so the invoice can show it as its own line.
+  adjustment_amount Decimal @default(0)
+  adjustment_note   String?
+  invoice_date      DateTime?
 
   paid_at           DateTime?
   paid_amount       Decimal?
@@ -5167,6 +5175,16 @@ model DoctorCommission {
   status       String  @default("accrued")
   statement_id String?
 
+  // Doctor-invoice edits. commission_amount is always the FINAL payable on this
+  // bill; computed_amount is what the rate engine produced, kept so a manual
+  // override is visible and can be reset (or restored if the line is released).
+  // line_breakdown freezes the per-service split at raise/edit time so the invoice
+  // sent to the doctor never shifts when the underlying bill changes later.
+  computed_amount Decimal?
+  is_adjusted     Boolean  @default(false)
+  adjust_note     String?
+  line_breakdown  Json?
+
   accrued_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
@@ -5213,11 +5231,39 @@ model DoctorPayoutStatement {
   created_at        DateTime  @default(now())
   updated_at        DateTime  @updatedAt
 
-  organization Organization       @relation(fields: [organizationId], references: [id])
+  organization Organization          @relation(fields: [organizationId], references: [id])
   lines        DoctorCommission[]
+  payments     DoctorPayoutPayment[]
 
   @@index([organizationId, doctor_id])
   @@map("doctor_payout_statements")
+}
+
+// One money-out event against a doctor invoice. An invoice can be settled in
+// several instalments; statement.paid_amount / paid_at / status are derived from
+// the non-voided rows here. Voiding keeps the row (audit) but stops it counting.
+model DoctorPayoutPayment {
+  id             String   @id @default(uuid())
+  organizationId String
+  statement_id   String
+  doctor_id      String
+  amount         Decimal
+  paid_at        DateTime @default(now())
+  payment_mode   String?
+  reference      String?
+  notes          String?
+  recorded_by    String?
+  voided_at      DateTime?
+  void_reason    String?
+  voided_by      String?
+  created_at     DateTime @default(now())
+
+  organization Organization          @relation(fields: [organizationId], references: [id])
+  statement    DoctorPayoutStatement @relation(fields: [statement_id], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, doctor_id])
+  @@index([statement_id])
+  @@map("doctor_payout_payments")
 }
 
 // ========================================

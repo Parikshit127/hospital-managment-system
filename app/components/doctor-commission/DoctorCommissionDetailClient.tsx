@@ -271,6 +271,12 @@ function StatementsTab({
                 </p>
                 <div className="flex items-center gap-2">
                     <Link
+                        href={`${basePath}/${doctorId}/invoices`}
+                        className="inline-flex items-center gap-1 px-3 py-2 rounded-xl border border-gray-200 text-gray-600 font-bold text-sm hover:bg-gray-50"
+                    >
+                        <FileText className="h-4 w-4" /> Invoices &amp; payments
+                    </Link>
+                    <Link
                         href={`${basePath}/${doctorId}/statement`}
                         className="inline-flex items-center gap-1 px-3 py-2 rounded-xl border border-indigo-200 text-indigo-600 font-bold text-sm hover:bg-indigo-50"
                     >
@@ -310,9 +316,14 @@ function StatementsTab({
             {!statements.length ? (
                 <Empty text="No statements yet." />
             ) : (
-                <Table head={['Period', 'Gross', 'TDS', 'Net Payable', 'Status', 'Paid', 'Reference', 'Actions']}>
+                <Table head={['Invoice', 'Period', 'Gross', 'TDS', 'Net Payable', 'Status', 'Paid', 'Reference', 'Actions']}>
                     {statements.map((s) => (
                         <tr key={s.id} className="hover:bg-gray-50/50">
+                            <td className="px-4 py-3">
+                                <Link href={`${basePath}/${doctorId}/invoices/${s.id}`} className="font-bold text-indigo-600 hover:underline">
+                                    {s.statement_number || 'Open'}
+                                </Link>
+                            </td>
                             <td className="px-4 py-3 text-gray-600">
                                 {fmtDate(s.period_start)} – {fmtDate(s.period_end)}
                             </td>
