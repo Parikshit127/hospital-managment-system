@@ -3,6 +3,7 @@
 import { SignJWT, jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
 import { validateServerEnv } from '@/app/lib/env';
+import { isAccessClaims, type AccessClaims } from '@/app/lib/access/claims';
 
 validateServerEnv();
 
@@ -21,6 +22,12 @@ export interface SessionData {
     organization_id: string;
     organization_slug: string;
     organization_name: string;
+    /**
+     * Company-OS access claims. Present ONLY for units whose access_engine flag is `enforce` and whose user has been
+     * provisioned; absent (undefined) for everyone else, so nothing changes for them. Never set by callers —
+     * createSession mints it.
+     */
+    access?: AccessClaims;
 }
 
 export interface SuperAdminSessionData {
@@ -40,7 +47,19 @@ export interface PatientSessionData {
 }
 
 export async function createSession(data: SessionData): Promise<void> {
-    const token = await new SignJWT(data as unknown as Record<string, unknown>)
+    // Company-OS: mint access claims when (and only when) this unit is in `enforce` mode. Returns null — and the
+    // token is byte-for-byte what it always was — in every other case, including any error.
+    const { access: _ignored, ...base } = data;
+    let claims: AccessClaims | null = null;
+    try {
+        const { buildAccessClaims } = await import('@/app/lib/access/claims-server');
+        claims = await buildAccessClaims({ id: base.id, role: base.role, organization_id: base.organization_id });
+    } catch {
+        claims = null;
+    }
+    const payload: Record<string, unknown> = claims ? { ...base, ...claims } : { ...base };
+
+    const token = await new SignJWT(payload)
         .setProtectedHeader({ alg: 'HS256' })
         .setExpirationTime('8h')
         .setIssuedAt()
@@ -79,6 +98,7 @@ export async function getSession(): Promise<SessionData | null> {
             organization_id: (payload.organization_id as string) || '',
             organization_slug: (payload.organization_slug as string) || '',
             organization_name: (payload.organization_name as string) || '',
+            ...(isAccessClaims(payload) ? { access: { cid: (payload.cid as string | null) ?? null, eid: (payload.eid as number | null) ?? null, mods: payload.mods as string[], mv: payload.mv as string, ae: 'enforce' as const } } : {}),
         };
     } catch {
         return null;

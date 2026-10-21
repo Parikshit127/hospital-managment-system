@@ -18,8 +18,8 @@
 import { requireTenantContext } from '@/backend/tenant';
 import { revalidatePath } from 'next/cache';
 import { generateSequentialNumber, generateReceiptNumber as genRcpNum } from '@/app/lib/sequence-generator';
-import { postReceiptAllocationToGL, ensureTpaGlAccounts, postShortPayWriteOffToGL, postShortPayRecoverToGL } from './insurance-gl-actions';
-import { reverseJournalEntry } from './gl-actions';
+import { postReceiptAllocationToGL, ensureTpaGlAccounts, postShortPayWriteOffToGL, postShortPayRecoverToGL } from '@/app/lib/finance/insurance-gl-service';
+import { reverseJournalEntry } from '@/app/lib/finance/gl-service';
 
 function serialize<T>(data: T): T {
   return JSON.parse(JSON.stringify(data, (_, v) =>

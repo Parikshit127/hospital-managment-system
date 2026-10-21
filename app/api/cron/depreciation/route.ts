@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { postMonthlyDepreciation } from '@/app/actions/asset-management-actions';
+import { postMonthlyDepreciation } from '@/app/lib/finance/asset-management-service';
 import { prisma } from '@/backend/db';
 
 /**

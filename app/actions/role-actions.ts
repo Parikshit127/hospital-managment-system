@@ -142,7 +142,10 @@ export async function listRoles() {
     try {
         const { db } = await requireTenantContext();
 
+        // template_key marks Company-OS access templates (Phase 2). They are not editable here and
+        // must not appear in this legacy screen until the new access admin ships (Phase 4).
         const roles = await db.role.findMany({
+            where: { template_key: null },
             orderBy: [{ is_system: 'desc' }, { name: 'asc' }],
         });
 
@@ -309,7 +312,7 @@ export async function seedSystemRoles() {
         const { db, organizationId } = await requireTenantContext();
 
         const existingRoles = await db.role.findMany({
-            where: { is_system: true },
+            where: { is_system: true, template_key: null },
         });
 
         if (existingRoles.length > 0) {

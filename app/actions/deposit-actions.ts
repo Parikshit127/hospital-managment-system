@@ -2,7 +2,7 @@
 
 import { requireTenantContext, requireRoleAndTenant } from '@/backend/tenant';
 import { generateDepositNumber as genDepNum } from '@/app/lib/sequence-generator';
-import { postDepositToGL } from './gl-actions';
+import { postDepositToGL } from '@/app/lib/finance/gl-service';
 import {
     getCashThresholds,
     validateCashCompliance,

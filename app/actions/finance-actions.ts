@@ -6,7 +6,7 @@ import { logAudit } from '@/app/lib/audit';
 import { diffObjects } from '@/app/lib/audit-diff';
 import { sendWhatsAppMessage, formatPhoneNumber } from '@/app/lib/whatsapp';
 import { billingInvoiceMsg, paymentReceiptMsg } from '@/app/lib/whatsapp-templates';
-import { postInvoiceToGL, postPaymentToGL, postRefundToGL, reverseJournalEntry } from './gl-actions';
+import { postInvoiceToGL, postPaymentToGL, postRefundToGL, reverseJournalEntry } from '@/app/lib/finance/gl-service';
 import { getCashThresholds, validateCashCompliance, normalizePan, resolveRegisteredPan, CASH_METHOD } from '@/app/lib/cash-compliance';
 import { generateInvoiceNumber as genInvNum, generateReceiptNumber as genRcpNum, createWithUniqueRetry } from '@/app/lib/sequence-generator';
 import { validateBackdate } from '@/app/lib/backdate';

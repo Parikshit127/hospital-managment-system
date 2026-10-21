@@ -1,8 +1,7 @@
 // @ts-nocheck
-'use server';
 
 import { prisma } from '@/backend/db';
-import { postDepreciationToGL } from './gl-actions';
+import { postDepreciationToGL } from './gl-service';
 
 // ============================================
 // ASSET CATEGORY MANAGEMENT

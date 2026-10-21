@@ -20,6 +20,12 @@ model Organization {
   logo_url   String?
   is_active  Boolean  @default(true)
   plan       String   @default("free") // free, starter, pro, enterprise
+
+  // Company-OS Phase 2: the owning company (nullable until the backfill has run) and the kind of unit.
+  company_id String?
+  unit_type  UnitType @default(hospital)
+  company    Company? @relation(fields: [company_id], references: [id])
+  user_roles UserRole[] @relation("UserRoleUnit")
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
@@ -267,6 +273,7 @@ model Organization {
   claim_short_pays              ClaimShortPay[]
   payer_sla_configs             PayerSlaConfig[]
 
+  @@index([company_id])
   @@map("organizations")
 }
 
@@ -458,12 +465,21 @@ model Role {
   permissions    Json         @default("[]")
   data_scope     String       @default("own")
   description    String?
+
+  // Company-OS Phase 2. template_key marks company-wide access templates (hidden from the legacy roles screen).
+  company_id       String?
+  unit_id          String?
+  template_key     String?
+  company          Company?         @relation(fields: [company_id], references: [id])
+  role_permissions RolePermission[]
+  user_roles       UserRole[]
   created_at     DateTime     @default(now())
   updated_at     DateTime     @updatedAt
   organization   Organization @relation(fields: [organizationId], references: [id])
 
   @@unique([organizationId, slug])
   @@index([organizationId])
+  @@index([company_id])
   @@map("roles")
 }
 
@@ -582,6 +598,16 @@ model User {
   can_access_all_units                                    Boolean              @default(false)
   unit_access                                             UserUnitAccess[]
 
+
+  // Company-OS Phase 2
+  company_id           String?
+  home_app             String?
+  access_version       Int                      @default(1)
+  company              Company?                 @relation(fields: [company_id], references: [id])
+  user_roles           UserRole[]
+  permission_overrides UserPermissionOverride[]
+  @@unique([company_id, username])
+  @@index([company_id])
   @@index([organizationId])
   @@index([doctor_group_id])
   @@index([branch_id])
@@ -2331,6 +2357,14 @@ model Employee {
   emergency_contact_phone String?
   date_of_exit            DateTime?
   exit_reason             String?
+
+  // Company-OS Phase 2
+  company_id         String?
+  org_department_id  String?
+  designation_id     String?
+  company            Company?        @relation(fields: [company_id], references: [id])
+  org_department     OrgDepartment?  @relation(fields: [org_department_id], references: [id])
+  designation_master Designation?    @relation(fields: [designation_id], references: [id])
   attendances             Attendance[]
   attendance_events       AttendanceEvent[]
   regularizations         AttendanceRegularization[]
@@ -2344,6 +2378,9 @@ model Employee {
   @@unique([organizationId, employee_code])
   @@index([organizationId])
   @@index([branch_id])
+  @@index([company_id])
+  @@index([org_department_id])
+  @@index([designation_id])
   @@index([reporting_manager_id])
   @@map("employees")
 }
@@ -6194,3 +6231,216 @@ model InvestorCredential {
   @@map("investor_credentials")
 }
 
+
+// Per-scope feature flags (platform | company | organization). First use: `access_engine`
+// (legacy | shadow | enforce) for the Company-OS access rollout — see docs/COMPANY_OS_PLAN.md.
+// Absence of a row (or of the table itself) means "use the code default", so reads must
+// never throw — see app/lib/feature-flags.ts.
+model FeatureFlag {
+  scope_type String
+  scope_id   String
+  key        String
+  value      String
+  updated_by String?
+  updated_at DateTime @updatedAt
+
+  @@id([scope_type, scope_id, key])
+  @@map("feature_flags")
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Company-OS Phase 2 — company, people master, access tables (docs/COMPANY_OS_PLAN.md §6)
+// Everything below is ADDITIVE and unused by runtime code until Phase 3/4.
+// ═══════════════════════════════════════════════════════════════════════════
+
+enum DataScope {
+  OWN
+  TEAM
+  DEPARTMENT
+  UNIT
+  COMPANY
+}
+
+enum OverrideEffect {
+  GRANT
+  DENY
+}
+
+enum UnitType {
+  hospital
+  clinic
+  pharmacy
+  office
+  warehouse
+  other
+}
+
+// Tenant root. Organization (= unit) belongs to one Company. Today: a single company owns every unit.
+model Company {
+  id             String   @id @default(uuid())
+  name           String
+  slug           String   @unique
+  login_domain   String?  @unique
+  plan_id        String?
+  module_version Int      @default(1)
+  is_active      Boolean  @default(true)
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+
+  organizations   Organization[]
+  users           User[]
+  employees       Employee[]
+  roles           Role[]
+  legal_entities  LegalEntity[]
+  org_departments OrgDepartment[]
+  designations    Designation[]
+  modules         CompanyModule[]
+
+  @@map("companies")
+}
+
+model LegalEntity {
+  id         String   @id @default(uuid())
+  company_id String
+  name       String
+  gstin      String?
+  pan        String?
+  pf_code    String?
+  esi_code   String?
+  is_active  Boolean  @default(true)
+  created_at DateTime @default(now())
+  company    Company  @relation(fields: [company_id], references: [id], onDelete: Cascade)
+
+  @@index([company_id])
+  @@map("legal_entities")
+}
+
+// Company-wide department master. (The existing `Department` model is the CLINICAL department.)
+model OrgDepartment {
+  id         String          @id @default(uuid())
+  company_id String
+  name       String
+  code       String?
+  parent_id  String?
+  is_active  Boolean         @default(true)
+  created_at DateTime        @default(now())
+  company    Company         @relation(fields: [company_id], references: [id], onDelete: Cascade)
+  parent     OrgDepartment?  @relation("OrgDepartmentTree", fields: [parent_id], references: [id])
+  children   OrgDepartment[] @relation("OrgDepartmentTree")
+  employees  Employee[]
+
+  @@unique([company_id, name])
+  @@index([company_id])
+  @@map("org_departments")
+}
+
+model Designation {
+  id         String     @id @default(uuid())
+  company_id String
+  name       String
+  code       String?
+  level      Int?
+  is_active  Boolean    @default(true)
+  created_at DateTime   @default(now())
+  company    Company    @relation(fields: [company_id], references: [id], onDelete: Cascade)
+  employees  Employee[]
+
+  @@unique([company_id, name])
+  @@index([company_id])
+  @@map("designations")
+}
+
+// Permission keys are plain strings validated against the module registry in CI.
+// Phase 2 stores today's legacy `module.action` keys; Phase 3 introduces `module.resource.action`.
+model RolePermission {
+  role_id        String
+  permission_key String
+  scope          DataScope @default(UNIT)
+  role           Role      @relation(fields: [role_id], references: [id], onDelete: Cascade)
+
+  @@id([role_id, permission_key])
+  @@map("role_permissions")
+}
+
+// User x role x unit. unit_id = null means every unit of the company.
+model UserRole {
+  id         String       @id @default(uuid())
+  user_id    String
+  role_id    String
+  unit_id    String?
+  is_primary Boolean      @default(false)
+  valid_from DateTime     @default(now())
+  valid_to   DateTime?
+  granted_by String?
+  created_at DateTime     @default(now())
+  user       User         @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  role       Role         @relation(fields: [role_id], references: [id], onDelete: Cascade)
+  unit       Organization? @relation("UserRoleUnit", fields: [unit_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, role_id, unit_id])
+  @@index([user_id])
+  @@index([role_id])
+  @@index([unit_id])
+  @@map("user_roles")
+}
+
+// Per-user grant/deny of a single permission. Deny beats grant. Reason is mandatory.
+model UserPermissionOverride {
+  id             String         @id @default(uuid())
+  user_id        String
+  permission_key String
+  effect         OverrideEffect
+  scope          DataScope?
+  unit_id        String?
+  expires_at     DateTime?
+  reason         String
+  granted_by     String
+  created_at     DateTime       @default(now())
+  user           User           @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@map("user_permission_overrides")
+}
+
+// Commercial entitlement: which registry modules the company has. source = plan | addon | trial.
+model CompanyModule {
+  company_id String
+  module_key String
+  source     String    @default("plan")
+  expires_at DateTime?
+  created_at DateTime  @default(now())
+  company    Company   @relation(fields: [company_id], references: [id], onDelete: Cascade)
+
+  @@id([company_id, module_key])
+  @@map("company_modules")
+}
+
+// Append-only audit of access changes (who granted what to whom).
+model AccessChangeLog {
+  id             String   @id @default(uuid())
+  company_id     String
+  actor_id       String
+  target_user_id String?
+  change         Json
+  created_at     DateTime @default(now())
+
+  @@index([company_id, created_at])
+  @@index([target_user_id])
+  @@map("access_change_logs")
+}
+
+// Shadow mode: where the new access engine disagreed with the legacy checks.
+model AccessShadowLog {
+  id         String   @id @default(uuid())
+  company_id String
+  user_id    String
+  permission String
+  target     String
+  legacy     Boolean
+  next       Boolean
+  created_at DateTime @default(now())
+
+  @@index([company_id, created_at])
+  @@map("access_shadow_logs")
+}

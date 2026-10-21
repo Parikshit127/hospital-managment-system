@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { jwtVerify } from "jose";
 import { validateServerEnv } from "@/app/lib/env";
+import { claimsAllowPath, isAccessClaims } from "@/app/lib/access/claims";
 
 validateServerEnv();
 
@@ -291,22 +292,32 @@ export async function proxy(request: NextRequest) {
 
     // 6. Role + permission-based route protection
     const userRole = payload.role as string;
-    for (const [routePrefix, allowedRoles] of Object.entries(ROLE_ROUTES)) {
-      if (pathname.startsWith(routePrefix)) {
-        // First check flat role list (backward compatible)
-        if (allowedRoles.includes(userRole)) break;
+    if (isAccessClaims(payload)) {
+      // Company-OS "enforce" unit: the JWT carries the modules this user holds (minted by the access engine,
+      // never present while a unit's access_engine flag is legacy/shadow). Page access is decided by module
+      // membership — longest-prefix routing, so '/opd' no longer swallows '/opd-manager', and previously
+      // ungated pages (/crm, /call-center …) are governed too. The legacy ROLE_ROUTES gate is skipped.
+      if (!claimsAllowPath(payload, pathname)) {
+        return NextResponse.redirect(new URL("/me?reason=no-access", request.url));
+      }
+    } else {
+      for (const [routePrefix, allowedRoles] of Object.entries(ROLE_ROUTES)) {
+        if (pathname.startsWith(routePrefix)) {
+          // First check flat role list (backward compatible)
+          if (allowedRoles.includes(userRole)) break;
 
-        // Then check granular permissions for the route
-        const requiredPermission = PERMISSION_ROUTES[routePrefix];
-        if (requiredPermission) {
-          const userPerms = ROLE_PERMISSIONS[userRole] || [];
-          if (userPerms.includes(requiredPermission)) break;
+          // Then check granular permissions for the route
+          const requiredPermission = PERMISSION_ROUTES[routePrefix];
+          if (requiredPermission) {
+            const userPerms = ROLE_PERMISSIONS[userRole] || [];
+            if (userPerms.includes(requiredPermission)) break;
+          }
+
+          // Neither role nor permission matched — unauthorized
+          return NextResponse.redirect(
+            new URL("/login?reason=unauthorized", request.url),
+          );
         }
-
-        // Neither role nor permission matched — unauthorized
-        return NextResponse.redirect(
-          new URL("/login?reason=unauthorized", request.url),
-        );
       }
     }
 
@@ -344,6 +355,6 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|api/razorpay/webhook|api/session|api/org-lookup|api/health|api/test-whatsapp|api/webhooks/whatsapp).*)",
+    "/((?!_next/static|_next/image|favicon.ico|api/razorpay/webhook|api/session|api/auth/refresh|api/org-lookup|api/health|api/test-whatsapp|api/webhooks/whatsapp).*)",
   ],
 };

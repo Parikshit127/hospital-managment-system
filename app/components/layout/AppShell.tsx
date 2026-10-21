@@ -1,5 +1,6 @@
 "use client";
 
+import { AccessClaimsRefresher } from "@/app/components/AccessClaimsRefresher";
 import React, { useState, useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { Sidebar } from "./Sidebar";
@@ -97,6 +98,7 @@ export function AppShell({
       <div className="blob b3" />
       <div className="grid-bg" />
 
+      <AccessClaimsRefresher enabled={!!session?.access} />
       <Sidebar session={session} />
 
       {/* Main content area */}

@@ -1,7 +1,7 @@
 import {
     LayoutDashboard, LineChart,
     Stethoscope, Bed, BedDouble, FlaskConical, Pill, DollarSign, Receipt, CreditCard, Briefcase,
-    Users, UserCog, Building2, ShieldCheck, UserRound,
+    Users, UserCog, Building2, ShieldCheck, UserRound, KeyRound,
     Settings, Palette, FileText, Bell, Plug, BarChart3, Lock,
     Workflow, Scissors, GitBranch, DatabaseBackup, BookOpen, Database,
     ShieldAlert, Scale, Siren, SlidersHorizontal, UserCheck, Megaphone, Package,
@@ -67,6 +67,7 @@ export const ADMIN_NAV_SECTIONS: NavSection[] = [
             { label: 'Departments', href: '/admin/departments', icon: Building2 },
             { label: 'Patients', href: '/admin/patients', icon: UserRound },
             { label: 'Roles & Permissions', href: '/admin/roles', icon: ShieldCheck },
+            { label: 'Access Control', href: '/admin/access/users', icon: KeyRound },
         ],
     },
     {

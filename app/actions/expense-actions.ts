@@ -1,7 +1,7 @@
 'use server';
 
-import { postExpenseToGL, postExpensePaymentToGL } from './gl-actions';
-import { syncExpenseToBudget } from './budget-actions';
+import { postExpenseToGL, postExpensePaymentToGL } from '@/app/lib/finance/gl-service';
+import { syncExpenseToBudget } from '@/app/lib/finance/budget-service';
 import { sendExpenseApprovedEmail, sendExpenseRejectedEmail, sendExpensePaidEmail } from '@/backend/email';
 import { getSignedDownloadUrl } from '@/app/lib/s3';
 

@@ -1,0 +1,653 @@
+// @ts-nocheck
+
+import { prisma } from '@/backend/db';
+import { requireTenantContext } from '@/backend/tenant';
+import { writeFile, mkdir } from 'fs/promises';
+import { join } from 'path';
+import { revalidatePath } from 'next/cache';
+
+// Resolve organizationId from server session — no localStorage needed
+export async function getMyOrganizationId() {
+    try {
+        const { organizationId } = await requireTenantContext();
+        return { success: true, organizationId };
+    } catch {
+        return { success: false, organizationId: null };
+    }
+}
+
+// ========================================
+// Types & Interfaces
+// ========================================
+
+interface TallyExportOptions {
+  organizationId: string;
+  export_type: 'Vouchers' | 'Ledgers' | 'Masters' | 'Full';
+  start_date?: Date;
+  end_date?: Date;
+  include_invoices?: boolean;
+  include_payments?: boolean;
+  include_expenses?: boolean;
+  created_by?: string;
+}
+
+interface TallyVoucher {
+  voucher_type: string;
+  date: Date;
+  voucher_number: string;
+  narration: string;
+  entries: {
+    ledger_name: string;
+    amount: number;
+    is_debit: boolean;
+  }[];
+}
+
+// ========================================
+// Main Export Functions
+// ========================================
+
+export async function generateTallyXML(options: TallyExportOptions) {
+  try {
+    // Convert IST date boundaries to UTC for correct DB filtering
+    // IST = UTC+5:30 → subtract 5h30m for start, add 18h29m59s for end
+    const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+    const toISTDayStart = (d: Date) => new Date(d.getTime() - IST_OFFSET_MS);
+    const toISTDayEnd   = (d: Date) => new Date(d.getTime() + (24 * 60 * 60 * 1000) - IST_OFFSET_MS - 1);
+
+    const normalizedOptions = {
+      ...options,
+      start_date: options.start_date ? toISTDayStart(new Date(options.start_date)) : options.start_date,
+      end_date: options.end_date ? toISTDayEnd(new Date(options.end_date)) : options.end_date,
+    };
+
+    console.log('[TallyExport] date filter UTC:', {
+      start: normalizedOptions.start_date?.toISOString(),
+      end: normalizedOptions.end_date?.toISOString(),
+    });
+    // Create export record
+    const year = new Date().getFullYear();
+    const lastExport = await prisma.tallyExport.findFirst({
+      where: {
+        organizationId: options.organizationId,
+        export_number: { startsWith: `TALLY-${year}-` },
+      },
+      orderBy: { export_number: 'desc' },
+    });
+
+    let nextNumber = 1;
+    if (lastExport) {
+      const match = lastExport.export_number.match(/TALLY-\d{4}-(\d+)/);
+      if (match) {
+        nextNumber = parseInt(match[1]) + 1;
+      }
+    }
+    const export_number = `TALLY-${year}-${nextNumber.toString().padStart(4, '0')}`;
+
+    const exportRecord = await prisma.tallyExport.create({
+      data: {
+        organizationId: normalizedOptions.organizationId,
+        export_number,
+        export_type: normalizedOptions.export_type,
+        export_format: 'XML',
+        start_date: normalizedOptions.start_date,
+        end_date: normalizedOptions.end_date,
+        status: 'Processing',
+        created_by: normalizedOptions.created_by,
+      },
+    });
+
+    try {
+      let xmlContent = '';
+      let recordCount = 0;
+
+      switch (normalizedOptions.export_type) {
+        case 'Vouchers':
+          const vouchersResult = await buildVoucherXML(normalizedOptions);
+          xmlContent = vouchersResult.xml;
+          recordCount = vouchersResult.count;
+          break;
+
+        case 'Ledgers':
+          const ledgersResult = await buildLedgerXML(normalizedOptions.organizationId);
+          xmlContent = ledgersResult.xml;
+          recordCount = ledgersResult.count;
+          break;
+
+        case 'Masters':
+          const mastersResult = await buildMasterXML(normalizedOptions.organizationId);
+          xmlContent = mastersResult.xml;
+          recordCount = mastersResult.count;
+          break;
+
+        case 'Full':
+          const [vouchers, ledgers, masters] = await Promise.all([
+            buildVoucherXML(normalizedOptions),
+            buildLedgerXML(normalizedOptions.organizationId),
+            buildMasterXML(normalizedOptions.organizationId),
+          ]);
+          // Each builder already wraps its own XML — for Full export we need
+          // to extract the raw TALLYMESSAGE blocks and wrap them ONCE together.
+          const extractContent = (xml: string) => {
+            const match = xml.match(/<REQUESTDATA>([\s\S]*?)<\/REQUESTDATA>/);
+            return match ? match[1] : '';
+          };
+          xmlContent = wrapTallyXML(
+            extractContent(vouchers.xml) +
+            extractContent(ledgers.xml) +
+            extractContent(masters.xml)
+          );
+          recordCount = vouchers.count + ledgers.count + masters.count;
+          break;
+      }
+
+      // Save XML file
+      const exportsDir = join(process.cwd(), 'exports', 'tally');
+      await mkdir(exportsDir, { recursive: true });
+
+      const filename = `${export_number}_${normalizedOptions.export_type.toLowerCase()}.xml`;
+      const filepath = join(exportsDir, filename);
+
+      await writeFile(filepath, xmlContent, 'utf-8');
+
+      const fileSize = Buffer.byteLength(xmlContent, 'utf-8');
+
+      // Update export record
+      await prisma.tallyExport.update({
+        where: { id: exportRecord.id },
+        data: {
+          file_path: filepath,
+          file_size: BigInt(fileSize),
+          record_count: recordCount,
+          status: 'Completed',
+          completed_at: new Date(),
+        },
+      });
+
+      revalidatePath('/finance/tally-export');
+      return {
+        success: true,
+        export_number,
+        file_path: filepath,
+        record_count: recordCount,
+        exportId: exportRecord.id,
+      };
+    } catch (error) {
+      // Update export record with error
+      await prisma.tallyExport.update({
+        where: { id: exportRecord.id },
+        data: {
+          status: 'Failed',
+          error_message: error instanceof Error ? error.message : 'Unknown error',
+        },
+      });
+      throw error;
+    }
+  } catch (error) {
+    console.error('Error generating Tally XML:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to generate export',
+    };
+  }
+}
+
+// ========================================
+// XML Building Functions
+// ========================================
+
+async function getLedgerName(organizationId: string, accountCode: string, defaultName: string): Promise<string> {
+  const acc = await prisma.gL_Account.findFirst({
+    where: {
+      organizationId,
+      account_code: accountCode,
+      is_active: true,
+    },
+  });
+  return acc?.tally_ledger_name || acc?.account_name || defaultName;
+}
+
+export async function buildVoucherXML(options: TallyExportOptions): Promise<{ xml: string; count: number }> {
+  const vouchers: string[] = [];
+
+  // Fetch journal entries
+  const journals = await prisma.gL_JournalEntry.findMany({
+    where: {
+      organizationId: options.organizationId,
+      status: 'Posted',
+      ...((options.start_date || options.end_date) && {
+        entry_date: {
+          ...(options.start_date && { gte: options.start_date }),
+          ...(options.end_date && { lte: options.end_date }),
+        },
+      }),
+    },
+    include: {
+      lines: {
+        include: {
+          account: true,
+        },
+      },
+    },
+    orderBy: { entry_date: 'asc' },
+  });
+
+  for (const journal of journals) {
+    const voucherXML = `
+    <TALLYMESSAGE xmlns:UDF="TallyUDF">
+      <VOUCHER VCHTYPE="Journal" ACTION="Create">
+        <DATE>${formatTallyDate(journal.entry_date)}</DATE>
+        <VOUCHERNUMBER>${escapeXML(journal.journal_number)}</VOUCHERNUMBER>
+        <NARRATION>${escapeXML(journal.narration)}</NARRATION>
+        <VOUCHERTYPENAME>Journal</VOUCHERTYPENAME>
+        <REFERENCE>${escapeXML(journal.reference_number || '')}</REFERENCE>
+${journal.lines
+  .map((line) => {
+    const isDebit = line.debit_amount.toNumber() > 0;
+    const amount = isDebit ? line.debit_amount.toNumber() : line.credit_amount.toNumber();
+    const tallyAmount = isDebit ? -amount : amount;
+    const isDeemedPositive = isDebit ? 'Yes' : 'No';
+    return `        <ALLLEDGERENTRIES.LIST>
+          <LEDGERNAME>${escapeXML(line.account.tally_ledger_name || line.account.account_name)}</LEDGERNAME>
+          <ISDEEMEDPOSITIVE>${isDeemedPositive}</ISDEEMEDPOSITIVE>
+          <AMOUNT>${tallyAmount}</AMOUNT>
+        </ALLLEDGERENTRIES.LIST>`;
+  })
+  .join('\n')}
+      </VOUCHER>
+    </TALLYMESSAGE>`;
+
+    vouchers.push(voucherXML);
+  }
+
+  // Optionally include invoice vouchers
+  if (options.include_invoices) {
+    const invoiceVouchers = await buildInvoiceVoucherXML(options);
+    vouchers.push(...invoiceVouchers);
+  }
+
+  // Optionally include payment vouchers
+  if (options.include_payments) {
+    const paymentVouchers = await buildPaymentVoucherXML(options);
+    vouchers.push(...paymentVouchers);
+  }
+
+  // Optionally include expense vouchers
+  if (options.include_expenses) {
+    const expenseVouchers = await buildExpenseVoucherXML(options);
+    vouchers.push(...expenseVouchers);
+  }
+
+  const xml = wrapTallyXML(vouchers.join('\n'));
+  return { xml, count: vouchers.length };
+}
+
+export async function buildInvoiceVoucherXML(options: TallyExportOptions): Promise<string[]> {
+  const startDate = options.start_date ? new Date(options.start_date) : undefined;
+  const endDate   = options.end_date   ? new Date(options.end_date)   : undefined;
+  console.log('[buildInvoiceVoucherXML] date filter:', { startDate: startDate?.toISOString(), endDate: endDate?.toISOString() });
+  const invoices = await prisma.invoices.findMany({
+    where: {
+      organizationId: options.organizationId,
+      ...((startDate || endDate) && {
+        created_at: {
+          ...(startDate && { gte: startDate }),
+          ...(endDate   && { lte: endDate   }),
+        },
+      }),
+    },
+    include: {
+      patient: true,
+    },
+  });
+
+  const receivableLedger = await getLedgerName(options.organizationId, '1130', 'Sundry Debtors - Patients');
+  const revenueLedger = await getLedgerName(options.organizationId, '6000', 'Sales Account');
+  const cgstLedger = await getLedgerName(options.organizationId, '3120', 'CGST Payable');
+  const sgstLedger = await getLedgerName(options.organizationId, '3121', 'SGST Payable');
+  const igstLedger = await getLedgerName(options.organizationId, '3122', 'IGST Payable');
+
+  return Promise.all(invoices.map(async (invoice: any) => {
+    const total = invoice.total_amount.toNumber();
+    const cgst = invoice.cgst_amount?.toNumber() || 0;
+    const sgst = invoice.sgst_amount?.toNumber() || 0;
+    const igst = invoice.igst_amount?.toNumber() || 0;
+    const taxableAmount = total - (cgst + sgst + igst);
+
+    return `
+    <TALLYMESSAGE xmlns:UDF="TallyUDF">
+      <VOUCHER VCHTYPE="Sales" ACTION="Create">
+        <DATE>${formatTallyDate(invoice.created_at)}</DATE>
+        <VOUCHERNUMBER>${escapeXML(invoice.invoice_number)}</VOUCHERNUMBER>
+        <NARRATION>Sales Invoice - ${escapeXML(invoice.patient?.full_name || invoice.patient_name || 'Patient')}</NARRATION>
+        <VOUCHERTYPENAME>Sales</VOUCHERTYPENAME>
+        <PARTYLEDGERNAME>${escapeXML(receivableLedger)}</PARTYLEDGERNAME>
+        <LEDGERENTRIES.LIST>
+          <LEDGERNAME>${escapeXML(receivableLedger)}</LEDGERNAME>
+          <ISDEEMEDPOSITIVE>Yes</ISDEEMEDPOSITIVE>
+          <AMOUNT>${-total}</AMOUNT>
+        </LEDGERENTRIES.LIST>
+        <LEDGERENTRIES.LIST>
+          <LEDGERNAME>${escapeXML(revenueLedger)}</LEDGERNAME>
+          <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>
+          <AMOUNT>${taxableAmount}</AMOUNT>
+        </LEDGERENTRIES.LIST>
+${
+  cgst > 0
+    ? `        <LEDGERENTRIES.LIST>
+          <LEDGERNAME>${escapeXML(cgstLedger)}</LEDGERNAME>
+          <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>
+          <AMOUNT>${cgst}</AMOUNT>
+        </LEDGERENTRIES.LIST>`
+    : ''
+}
+${
+  sgst > 0
+    ? `        <LEDGERENTRIES.LIST>
+          <LEDGERNAME>${escapeXML(sgstLedger)}</LEDGERNAME>
+          <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>
+          <AMOUNT>${sgst}</AMOUNT>
+        </LEDGERENTRIES.LIST>`
+    : ''
+}
+${
+  igst > 0
+    ? `        <LEDGERENTRIES.LIST>
+          <LEDGERNAME>${escapeXML(igstLedger)}</LEDGERNAME>
+          <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>
+          <AMOUNT>${igst}</AMOUNT>
+        </LEDGERENTRIES.LIST>`
+    : ''
+}
+      </VOUCHER>
+    </TALLYMESSAGE>`;
+  }));
+}
+
+async function buildPaymentVoucherXML(options: TallyExportOptions): Promise<string[]> {
+  const startDate = options.start_date ? new Date(options.start_date) : undefined;
+  const endDate   = options.end_date   ? new Date(options.end_date)   : undefined;
+  const payments = await prisma.payments.findMany({
+    where: {
+      organizationId: options.organizationId,
+      ...((startDate || endDate) && {
+        created_at: {
+          ...(startDate && { gte: startDate }),
+          ...(endDate   && { lte: endDate   }),
+        },
+      }),
+    },
+  });
+
+  const receivableLedger = await getLedgerName(options.organizationId, '1130', 'Sundry Debtors - Patients');
+  const cashLedger = await getLedgerName(options.organizationId, '1110', 'Cash');
+  const bankLedger = await getLedgerName(options.organizationId, '1120', 'Bank Accounts');
+
+  return Promise.all(payments.map(async (payment: any) => {
+    const isCash = payment.payment_method === 'Cash';
+    const cashOrBankLedger = isCash ? cashLedger : bankLedger;
+    const amount = payment.amount.toNumber();
+
+    return `
+    <TALLYMESSAGE xmlns:UDF="TallyUDF">
+      <VOUCHER VCHTYPE="Receipt" ACTION="Create">
+        <DATE>${formatTallyDate(payment.created_at)}</DATE>
+        <VOUCHERNUMBER>${escapeXML(payment.receipt_number || payment.reference || String(payment.id))}</VOUCHERNUMBER>
+        <NARRATION>Payment received - ${escapeXML(payment.payment_method)}</NARRATION>
+        <VOUCHERTYPENAME>Receipt</VOUCHERTYPENAME>
+        <ALLLEDGERENTRIES.LIST>
+          <LEDGERNAME>${escapeXML(cashOrBankLedger)}</LEDGERNAME>
+          <ISDEEMEDPOSITIVE>Yes</ISDEEMEDPOSITIVE>
+          <AMOUNT>${-amount}</AMOUNT>
+        </ALLLEDGERENTRIES.LIST>
+        <ALLLEDGERENTRIES.LIST>
+          <LEDGERNAME>${escapeXML(receivableLedger)}</LEDGERNAME>
+          <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>
+          <AMOUNT>${amount}</AMOUNT>
+        </ALLLEDGERENTRIES.LIST>
+      </VOUCHER>
+    </TALLYMESSAGE>`;
+  }));
+}
+
+async function buildExpenseVoucherXML(options: TallyExportOptions): Promise<string[]> {
+  const startDate = options.start_date ? new Date(options.start_date) : undefined;
+  const endDate   = options.end_date   ? new Date(options.end_date)   : undefined;
+  const expenses = await prisma.expense.findMany({
+    where: {
+      organizationId: options.organizationId,
+      ...((startDate || endDate) && {
+        created_at: {
+          ...(startDate && { gte: startDate }),
+          ...(endDate   && { lte: endDate   }),
+        },
+      }),
+    },
+  });
+
+  const expenseLedger = await getLedgerName(options.organizationId, '8000', 'Operating Expenses');
+  const cashLedger = await getLedgerName(options.organizationId, '1110', 'Cash');
+  const payableLedger = await getLedgerName(options.organizationId, '3110', 'Sundry Creditors');
+
+  return Promise.all(expenses.map(async (expense: any) => {
+    const isPaid = expense.status === 'Paid';
+    const paymentLedgerName = isPaid ? cashLedger : payableLedger;
+    const expenseDate = expense.payment_date || expense.created_at;
+    const amount = expense.amount.toNumber();
+
+    return `
+    <TALLYMESSAGE xmlns:UDF="TallyUDF">
+      <VOUCHER VCHTYPE="Payment" ACTION="Create">
+        <DATE>${formatTallyDate(expenseDate)}</DATE>
+        <VOUCHERNUMBER>${escapeXML(expense.expense_number || String(expense.id))}</VOUCHERNUMBER>
+        <NARRATION>${escapeXML(expense.description || 'Expense')}</NARRATION>
+        <VOUCHERTYPENAME>Payment</VOUCHERTYPENAME>
+        <ALLLEDGERENTRIES.LIST>
+          <LEDGERNAME>${escapeXML(expenseLedger)}</LEDGERNAME>
+          <ISDEEMEDPOSITIVE>Yes</ISDEEMEDPOSITIVE>
+          <AMOUNT>${-amount}</AMOUNT>
+        </ALLLEDGERENTRIES.LIST>
+        <ALLLEDGERENTRIES.LIST>
+          <LEDGERNAME>${escapeXML(paymentLedgerName)}</LEDGERNAME>
+          <ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE>
+          <AMOUNT>${amount}</AMOUNT>
+        </ALLLEDGERENTRIES.LIST>
+      </VOUCHER>
+    </TALLYMESSAGE>`;
+  }));
+}
+
+async function buildLedgerXML(organizationId: string): Promise<{ xml: string; count: number }> {
+  const accounts = await prisma.gL_Account.findMany({
+    where: {
+      organizationId,
+      is_active: true,
+    },
+    orderBy: { account_code: 'asc' },
+  });
+
+  const ledgers = accounts.map((account: any) => {
+    // Map account type to Tally group
+    const tallyGroup = account.tally_group || mapAccountTypeToTallyGroup(account.account_type);
+
+    return `
+    <TALLYMESSAGE xmlns:UDF="TallyUDF">
+      <LEDGER NAME="${escapeXML(account.tally_ledger_name || account.account_name)}" ACTION="Create">
+        <NAME>${escapeXML(account.tally_ledger_name || account.account_name)}</NAME>
+        <PARENT>${escapeXML(tallyGroup)}</PARENT>
+        <ISBILLWISEON>No</ISBILLWISEON>
+        <ISCOSTCENTRESON>No</ISCOSTCENTRESON>
+        <OPENINGBALANCE>${account.opening_balance.toNumber()}</OPENINGBALANCE>
+      </LEDGER>
+    </TALLYMESSAGE>`;
+  });
+
+  const xml = wrapTallyXML(ledgers.join('\n'));
+  return { xml, count: ledgers.length };
+}
+
+
+async function buildMasterXML(organizationId: string): Promise<{ xml: string; count: number }> {
+  // Export vendors as party ledgers (patients table doesn't exist in schema)
+  const vendors = await prisma.vendor.findMany({
+    where: { organizationId },
+    take: 100,
+  });
+
+  const masters: string[] = [];
+
+  // Vendors
+  for (const vendor of vendors) {
+    masters.push(`
+    <TALLYMESSAGE xmlns:UDF="TallyUDF">
+      <LEDGER NAME="${escapeXML(vendor.vendor_name)}" ACTION="Create">
+        <NAME>${escapeXML(vendor.vendor_name)}</NAME>
+        <PARENT>Sundry Creditors</PARENT>
+        <ISBILLWISEON>Yes</ISBILLWISEON>
+        <ADDRESS.LIST>
+          <ADDRESS>${escapeXML(vendor.address || '')}</ADDRESS>
+        </ADDRESS.LIST>
+        ${vendor.gst_number ? `<GSTIN>${escapeXML(vendor.gst_number)}</GSTIN>` : ''}
+        ${vendor.pan_number ? `<INCOMETAXNUMBER>${escapeXML(vendor.pan_number)}</INCOMETAXNUMBER>` : ''}
+      </LEDGER>
+    </TALLYMESSAGE>`);
+  }
+
+  const xml = wrapTallyXML(masters.join('\n'));
+  return { xml, count: masters.length };
+}
+// ========================================
+// Export Management Functions
+// ========================================
+
+export async function getTallyExports(organizationId: string, filters?: {
+  status?: string;
+  export_type?: string;
+  limit?: number;
+}) {
+  try {
+    const exports = await prisma.tallyExport.findMany({
+      where: {
+        organizationId,
+        ...(filters?.status && { status: filters.status }),
+        ...(filters?.export_type && { export_type: filters.export_type }),
+      },
+      orderBy: { created_at: 'desc' },
+      take: filters?.limit || 50,
+    });
+
+    return { success: true, exports };
+  } catch (error) {
+    console.error('Error fetching exports:', error);
+    return { success: false, error: 'Failed to fetch exports', exports: [] };
+  }
+}
+
+export async function downloadTallyExport(exportId: string) {
+  try {
+    const exportRecord = await prisma.tallyExport.findUnique({
+      where: { id: exportId },
+    });
+
+    if (!exportRecord || !exportRecord.file_path) {
+      return { success: false, error: 'Export not found or file missing' };
+    }
+
+    return {
+      success: true,
+      file_path: exportRecord.file_path,
+      export_number: exportRecord.export_number,
+    };
+  } catch (error) {
+    console.error('Error downloading export:', error);
+    return { success: false, error: 'Failed to download export' };
+  }
+}
+
+export async function deleteTallyExport(exportId: string) {
+  try {
+    await prisma.tallyExport.delete({
+      where: { id: exportId },
+    });
+
+    revalidatePath('/finance/tally-export');
+    return { success: true };
+  } catch (error) {
+    console.error('Error deleting export:', error);
+    return { success: false, error: 'Failed to delete export' };
+  }
+}
+
+export async function mapAccountToTally(
+  accountId: string,
+  tally_ledger_name: string,
+  tally_group: string
+) {
+  try {
+    const account = await prisma.gL_Account.update({
+      where: { id: accountId },
+      data: {
+        tally_ledger_name,
+        tally_group,
+      },
+    });
+
+    revalidatePath('/finance/chart-of-accounts');
+    revalidatePath('/finance/tally-export');
+    return { success: true, account };
+  } catch (error) {
+    console.error('Error mapping account to Tally:', error);
+    return { success: false, error: 'Failed to map account' };
+  }
+}
+
+// ========================================
+// Utility Functions
+// ========================================
+
+function wrapTallyXML(content: string): string {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<ENVELOPE>
+  <HEADER>
+    <TALLYREQUEST>Import Data</TALLYREQUEST>
+  </HEADER>
+  <BODY>
+    <IMPORTDATA>
+      <REQUESTDESC>
+        <REPORTNAME>All Masters</REPORTNAME>
+      </REQUESTDESC>
+      <REQUESTDATA>
+${content}
+      </REQUESTDATA>
+    </IMPORTDATA>
+  </BODY>
+</ENVELOPE>`;
+}
+
+function formatTallyDate(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}${month}${day}`;
+}
+
+function escapeXML(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+function mapAccountTypeToTallyGroup(accountType: string): string {
+  const mapping: Record<string, string> = {
+    Asset: 'Current Assets',
+    Liability: 'Current Liabilities',
+    Equity: 'Capital Account',
+    Revenue: 'Sales Accounts',
+    Expense: 'Indirect Expenses',
+  };
+
+  return mapping[accountType] || 'Sundry Debtors';
+}

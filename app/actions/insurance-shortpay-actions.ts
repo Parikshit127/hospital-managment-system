@@ -9,7 +9,7 @@
 
 import { requireTenantContext } from '@/backend/tenant';
 import { revalidatePath } from 'next/cache';
-import { postShortPayWriteOffToGL } from './insurance-gl-actions';
+import { postShortPayWriteOffToGL } from '@/app/lib/finance/insurance-gl-service';
 
 function serialize<T>(data: T): T {
   return JSON.parse(JSON.stringify(data, (_, v) =>

@@ -7,7 +7,7 @@ import {
     Pencil, Calendar, Clock, FileText, Shield, ShieldOff,
     CheckCircle, XCircle, MinusCircle, Briefcase, Mail, Phone
 } from 'lucide-react';
-import { getEmployeeDetail, updateEmployee, getLeaveBalance } from '@/app/actions/hr-actions';
+import { getEmployeeDetail, updateEmployee, getLeaveBalance, listOrgMasters } from '@/app/actions/hr-actions';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 
@@ -35,16 +35,22 @@ export default function EmployeeDetailPage() {
         salaryBasic: 0,
         phone: '',
         email: '',
+        designationId: '',
+        orgDepartmentId: '',
     });
+    // Company-wide masters (Company-OS Phase 2). Empty until the backfill has run → pickers stay hidden.
+    const [masters, setMasters] = useState<{ designations: { id: string; name: string }[]; departments: { id: string; name: string }[] }>({ designations: [], departments: [] });
 
     const loadData = useCallback(async () => {
         setLoading(true);
         setError(false);
         try {
-            const [empRes, balRes] = await Promise.all([
+            const [empRes, balRes, mastersRes] = await Promise.all([
                 getEmployeeDetail(employeeId),
                 getLeaveBalance(employeeId),
+                listOrgMasters(),
             ]);
+            if (mastersRes.success) setMasters(mastersRes.data);
             if (empRes.success && empRes.data) {
                 setEmployee(empRes.data);
                 setEditForm({
@@ -53,6 +59,8 @@ export default function EmployeeDetailPage() {
                     salaryBasic: empRes.data.salary_basic || 0,
                     phone: empRes.data.phone || '',
                     email: empRes.data.email || '',
+                    designationId: empRes.data.designation_id || '',
+                    orgDepartmentId: empRes.data.org_department_id || '',
                 });
             } else {
                 setError(true);
@@ -77,6 +85,9 @@ export default function EmployeeDetailPage() {
                 salaryBasic: editForm.salaryBasic,
                 phone: editForm.phone || undefined,
                 email: editForm.email || undefined,
+                // only sent when the master pickers are in use, so saving an employee never touches them otherwise
+                ...(masters.designations.length ? { designationId: editForm.designationId || null } : {}),
+                ...(masters.departments.length ? { orgDepartmentId: editForm.orgDepartmentId || null } : {}),
             });
             if (res.success) {
                 setEditing(false);
@@ -247,6 +258,35 @@ export default function EmployeeDetailPage() {
                                         className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
                                     />
                                 </div>
+                                {masters.designations.length > 0 && (
+                                    <div>
+                                        <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide block mb-1">Designation (company master)</label>
+                                        <select
+                                            value={editForm.designationId}
+                                            onChange={(e) => {
+                                                const m = masters.designations.find((d) => d.id === e.target.value);
+                                                setEditForm({ ...editForm, designationId: e.target.value, designation: m ? m.name : editForm.designation });
+                                            }}
+                                            className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 bg-white"
+                                        >
+                                            <option value="">— not linked —</option>
+                                            {masters.designations.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                                        </select>
+                                    </div>
+                                )}
+                                {masters.departments.length > 0 && (
+                                    <div>
+                                        <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide block mb-1">Department (company master)</label>
+                                        <select
+                                            value={editForm.orgDepartmentId}
+                                            onChange={(e) => setEditForm({ ...editForm, orgDepartmentId: e.target.value })}
+                                            className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 bg-white"
+                                        >
+                                            <option value="">— not linked —</option>
+                                            {masters.departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                                        </select>
+                                    </div>
+                                )}
                                 <div>
                                     <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide block mb-1">Basic Salary</label>
                                     <input
@@ -292,6 +332,8 @@ export default function EmployeeDetailPage() {
                                                 salaryBasic: employee.salary_basic || 0,
                                                 phone: employee.phone || '',
                                                 email: employee.email || '',
+                                                designationId: employee.designation_id || '',
+                                                orgDepartmentId: employee.org_department_id || '',
                                             });
                                         }}
                                         className="px-5 py-2.5 rounded-xl border border-gray-200 text-sm font-bold text-gray-600 hover:bg-gray-50 flex items-center gap-2 transition-colors"

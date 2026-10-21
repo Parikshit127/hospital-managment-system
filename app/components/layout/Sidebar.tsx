@@ -7,6 +7,7 @@ import { logout } from "@/app/login/actions";
 import { getPortalBranding, type PortalBranding } from "@/app/lib/get-portal-branding";
 import { ChangePasswordModal } from "@/app/components/ChangePasswordModal";
 import BrandWordmark from "@/app/components/ui/BrandWordmark";
+import { buildNav } from "@/app/lib/access/claims";
 import {
   LayoutDashboard,
   Users,
@@ -582,6 +583,8 @@ interface SidebarProps {
     specialty?: string;
     organization_name?: string;
     organization_slug?: string;
+    /** Company-OS access claims — present only for units in `enforce` mode (see /api/session). */
+    access?: { mods: string[] };
   } | null;
 }
 
@@ -648,6 +651,20 @@ const ADMIN_SWITCH_PORTALS: { label: string; path: string }[] = [
   { label: "Coordinator", path: "/coordinator/dashboard" },
   { label: "My Workspace", path: "/me" },
 ];
+
+/**
+ * Company-OS: navigation for a unit in `enforce` mode. `buildNav` (app/lib/access/claims.ts) decides WHICH entries a
+ * user sees from the modules in their access claims; this re-attaches the icon components, which live here.
+ * Only used when the session carries claims — otherwise NAV_BY_ROLE is used exactly as before.
+ */
+function navFromClaims(role: string, claims: { mods: string[] }): NavSection[] {
+  const iconByHref = new Map<string, React.ElementType>();
+  for (const sections of Object.values(NAV_BY_ROLE)) for (const sec of sections) for (const item of sec.items) if (!iconByHref.has(item.href)) iconByHref.set(item.href, item.icon);
+  return buildNav(role, claims).map((sec) => ({
+    title: sec.title,
+    items: sec.items.map((i) => ({ label: i.label, href: i.href, icon: iconByHref.get(i.href) ?? LayoutDashboard })),
+  }));
+}
 
 export function Sidebar({ session }: SidebarProps) {
   const pathname = usePathname();
@@ -745,7 +762,10 @@ export function Sidebar({ session }: SidebarProps) {
     };
   }, [saveSidebarScroll]);
 
-  const baseSections = effectiveRole ? NAV_BY_ROLE[effectiveRole] || [] : [];
+  const accessClaims = session?.access && Array.isArray(session.access.mods) ? (session.access as { mods: string[] }) : null;
+  const baseSections = effectiveRole
+    ? (accessClaims ? navFromClaims(effectiveRole, accessClaims) : NAV_BY_ROLE[effectiveRole] || [])
+    : [];
   // Help Center (Raise Ticket / Track Tickets) is intentionally NOT linked from
   // any sidebar per PRD v3 Addendum §4 — it is reachable only via the notification
   // bell's "Help Center" link or a direct URL. Its functionality now lives as tabs

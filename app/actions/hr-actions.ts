@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { prisma } from '@/backend/db';
 import { hasPermission } from '@/app/lib/session';
 import { logAudit } from '@/app/lib/audit';
 import {
@@ -40,7 +41,7 @@ function titleCase(s: string) {
 
 export async function getHRDashboard() {
     try {
-        const { db } = await requireHr('view');
+        const { db } = await requireHr('view', 'dashboard');
         const todayKey = istTodayKey();
         const today = dayStartUtc(todayKey);
         const tomorrow = dayStartUtc(addDaysKey(todayKey, 1));
@@ -125,7 +126,7 @@ export async function getHRDashboard() {
 /** Create the missing HR profile for every active login user. */
 export async function syncEmployeesFromUsers() {
     try {
-        const { db, organizationId } = await requireHr('create');
+        const { db, organizationId } = await requireHr('create', 'employee');
         const users = await db.user.findMany({
             where: { is_active: true, is_dev_admin: false, is_developer: false, employee_profile: { is: null } },
             select: { id: true },
@@ -158,7 +159,7 @@ export async function getEmployeeList(options?: {
     limit?: number;
 }) {
     try {
-        const { db } = await requireHr('view');
+        const { db } = await requireHr('view', 'employee');
         const canSeePay = await hasPermission('hr.edit');
 
         const page = Math.max(1, options?.page || 1);
@@ -194,9 +195,29 @@ export async function getEmployeeList(options?: {
     }
 }
 
+/**
+ * Company-wide designation + department masters for the caller's company (Company-OS Phase 2).
+ * Empty lists until scripts/backfill-company-os.ts has run, which is how the UI knows to hide the pickers.
+ */
+export async function listOrgMasters() {
+    try {
+        const { organizationId } = await requireHr('view', 'employee');
+        const org = await prisma.organization.findUnique({ where: { id: organizationId }, select: { company_id: true } });
+        if (!org?.company_id) return { success: true, data: { designations: [], departments: [] } };
+        const [designations, departments] = await Promise.all([
+            prisma.designation.findMany({ where: { company_id: org.company_id, is_active: true }, orderBy: { name: 'asc' }, select: { id: true, name: true } }),
+            prisma.orgDepartment.findMany({ where: { company_id: org.company_id, is_active: true }, orderBy: { name: 'asc' }, select: { id: true, name: true } }),
+        ]);
+        return { success: true, data: { designations, departments } };
+    } catch (error) {
+        console.error('listOrgMasters error:', error);
+        return { success: false, data: { designations: [], departments: [] } };
+    }
+}
+
 export async function getEmployeeDetail(id: number) {
     try {
-        const { db } = await requireHr('view');
+        const { db } = await requireHr('view', 'employee');
         const canSeePay = await hasPermission('hr.edit');
 
         const employee = await db.employee.findFirst({
@@ -230,6 +251,9 @@ interface EmployeeInput {
     branchId?: string | null;
     employmentType?: string;
     reportingManagerId?: number | null;
+    /** Company-OS Phase 2: company-wide masters (see listOrgMasters). */
+    designationId?: string | null;
+    orgDepartmentId?: string | null;
     gender?: string | null;
     dateOfBirth?: string | null;
     bloodGroup?: string | null;
@@ -301,7 +325,7 @@ function profileFields(data: EmployeeInput) {
 
 export async function createEmployee(data: EmployeeInput & { name: string; designation: string; dateOfJoining: string }) {
     try {
-        const { db, organizationId } = await requireHr('create');
+        const { db, organizationId } = await requireHr('create', 'employee');
         const fields = profileFields(data);
         if (!fields.name || !fields.designation || !fields.date_of_joining) throw new HrError('Name, designation and joining date are required');
 
@@ -336,7 +360,7 @@ export async function createEmployee(data: EmployeeInput & { name: string; desig
 
 export async function updateEmployee(id: number, data: EmployeeInput) {
     try {
-        const { db } = await requireHr('edit');
+        const { db } = await requireHr('edit', 'employee');
         const before = await loadEmployee(db, id);
         const fields = profileFields(data);
 
@@ -347,6 +371,30 @@ export async function updateEmployee(id: number, data: EmployeeInput) {
         if (data.reportingManagerId !== undefined) {
             if (data.reportingManagerId) await assertNoManagerCycle(db, id, data.reportingManagerId);
             fields.reporting_manager_id = data.reportingManagerId || null;
+        }
+        // Company masters must belong to the employee's own company (never trust a client-supplied id).
+        if (data.designationId !== undefined || data.orgDepartmentId !== undefined) {
+            if (!before.company_id) throw new HrError('Company setup is not complete for this unit yet.');
+            if (data.designationId !== undefined) {
+                if (data.designationId) {
+                    const d = await prisma.designation.findFirst({ where: { id: data.designationId, company_id: before.company_id, is_active: true } });
+                    if (!d) throw new HrError('Unknown designation');
+                    fields.designation_id = d.id;
+                    // keep the legacy text column in step so every existing screen shows the same thing
+                    if (data.designation === undefined) fields.designation = d.name;
+                } else {
+                    fields.designation_id = null;
+                }
+            }
+            if (data.orgDepartmentId !== undefined) {
+                if (data.orgDepartmentId) {
+                    const d = await prisma.orgDepartment.findFirst({ where: { id: data.orgDepartmentId, company_id: before.company_id, is_active: true } });
+                    if (!d) throw new HrError('Unknown department');
+                    fields.org_department_id = d.id;
+                } else {
+                    fields.org_department_id = null;
+                }
+            }
         }
         if (data.isActive !== undefined) {
             fields.is_active = data.isActive;
@@ -373,6 +421,7 @@ export async function updateEmployee(id: number, data: EmployeeInput) {
         const pick = (e: any) => ({
             name: e.name, designation: e.designation, department_id: e.department_id, branch_id: e.branch_id,
             employment_type: e.employment_type, reporting_manager_id: e.reporting_manager_id,
+            designation_id: e.designation_id, org_department_id: e.org_department_id,
             is_active: e.is_active, salary_basic: e.salary_basic,
         });
         await logAudit({
@@ -399,7 +448,7 @@ export async function recordAttendance(data: {
     status: string;
 }) {
     try {
-        const { db, organizationId } = await requireHr('edit');
+        const { db, organizationId } = await requireHr('edit', 'attendance');
         if (!isDayKey(data.date)) throw new HrError('Invalid date');
         if (data.date > istTodayKey()) throw new HrError('Cannot mark attendance for a future date');
         if (!ATTENDANCE_STATUSES.includes(data.status as any)) throw new HrError('Invalid status');
@@ -441,7 +490,7 @@ export async function recordAttendance(data: {
 
 export async function getAttendanceForDate(date: string) {
     try {
-        const { db } = await requireHr('view');
+        const { db } = await requireHr('view', 'attendance');
         if (!isDayKey(date)) throw new HrError('Invalid date');
 
         const [employees, attendances, leaves] = await Promise.all([
@@ -470,7 +519,7 @@ export async function getAttendanceForDate(date: string) {
 /** Month sheet for everyone: per-employee day statuses + payable-day summary. */
 export async function getMonthlyAttendance(monthKey: string, filters?: { search?: string; designation?: string }) {
     try {
-        const { db } = await requireHr('view');
+        const { db } = await requireHr('view', 'attendance');
         if (!isMonthKey(monthKey)) throw new HrError('Invalid month');
 
         const ctx = await loadMonthContext(db, monthKey);
@@ -526,7 +575,7 @@ export async function getMonthlyAttendance(monthKey: string, filters?: { search?
 
 export async function getRegularizations(filter: 'pending' | 'approved' | 'rejected' | 'all' = 'pending') {
     try {
-        const { db } = await requireHr('view');
+        const { db } = await requireHr('view', 'attendance');
         const where: any = {};
         if (filter !== 'all') where.status = filter.charAt(0).toUpperCase() + filter.slice(1);
         const data = await db.attendanceRegularization.findMany({
@@ -614,7 +663,7 @@ export async function applyLeave(data: {
     isHalfDay?: boolean;
 }) {
     try {
-        const ctx = await requireHr('edit');
+        const ctx = await requireHr('edit', 'leave');
         if (!isDayKey(data.fromDate) || !isDayKey(data.toDate)) throw new HrError('Invalid dates');
         const employee = await loadEmployee(ctx.db, data.employeeId);
         await createLeaveRequest(ctx, employee, data);
@@ -685,7 +734,7 @@ export async function rejectLeave(id: number, note?: string) {
 /** HR cancels any leave (pending or approved), restoring the attendance sheet. */
 export async function cancelLeaveByHr(id: number) {
     try {
-        const { db, session } = await requireHr('approve');
+        const { db, session } = await requireHr('approve', 'leave');
         const leave = await db.leaveRequest.findFirst({ where: { id } });
         if (!leave) throw new HrError('Leave request not found');
         if (leave.status === 'Cancelled' || leave.status === 'Rejected') throw new HrError('Already closed');
@@ -747,7 +796,7 @@ export async function saveLeaveType(data: {
     id?: number; name: string; daysPerYear: number; isPaid?: boolean; carryForward?: boolean; isActive?: boolean;
 }) {
     try {
-        const { db } = await requireHr('edit');
+        const { db } = await requireHr('edit', 'policy');
         const name = clean(data.name, 60);
         if (!name) throw new HrError('Name is required');
         if (!Number.isInteger(data.daysPerYear) || data.daysPerYear < 0 || data.daysPerYear > 366) throw new HrError('Days per year must be 0–366');
@@ -775,7 +824,7 @@ export async function saveLeaveType(data: {
 
 export async function getLeaveBalance(employeeId: number) {
     try {
-        const { db } = await requireHr('view');
+        const { db } = await requireHr('view', 'leave');
         const employee = await loadEmployee(db, employeeId);
         return { success: true, data: await getLeaveBalances(db, employee.id) };
     } catch (error) {
@@ -805,7 +854,7 @@ export async function getHolidays(year: number) {
 
 export async function addHoliday(data: { date: string; name: string; type?: 'PUBLIC' | 'OPTIONAL' }) {
     try {
-        const { db } = await requireHr('edit');
+        const { db } = await requireHr('edit', 'holiday');
         if (!isDayKey(data.date)) throw new HrError('Invalid date');
         const name = clean(data.name, 100);
         if (!name) throw new HrError('Holiday name is required');
@@ -823,7 +872,7 @@ export async function addHoliday(data: { date: string; name: string; type?: 'PUB
 
 export async function deleteHoliday(id: number) {
     try {
-        const { db } = await requireHr('edit');
+        const { db } = await requireHr('edit', 'holiday');
         const h = await db.holiday.findFirst({ where: { id } });
         if (!h) throw new HrError('Holiday not found');
         await db.holiday.delete({ where: { id: h.id } });
@@ -841,7 +890,7 @@ export async function deleteHoliday(id: number) {
 
 export async function getHrPolicySettings() {
     try {
-        const { db } = await requireHr('view');
+        const { db } = await requireHr('view', 'policy');
         return { success: true, data: await loadHrPolicy(db) };
     } catch (error) {
         return { ...hrFail(error, 'Failed to load policy'), data: null };
@@ -850,7 +899,7 @@ export async function getHrPolicySettings() {
 
 export async function updateHrPolicy(patch: Record<string, unknown>) {
     try {
-        const { db, organizationId } = await requireHr('edit');
+        const { db, organizationId } = await requireHr('edit', 'policy');
         const row = await db.moduleConfig.findFirst({ where: { module_key: 'hr' } });
         const current = (row?.config_json && typeof row.config_json === 'object' ? row.config_json : {}) as Record<string, any>;
         const merged = { ...current, ...patch };
@@ -888,7 +937,7 @@ export async function getShiftPatterns() {
 
 export async function createShiftPattern(data: { name: string; startTime: string; endTime: string }) {
     try {
-        const { db } = await requireHr('edit');
+        const { db } = await requireHr('edit', 'roster');
         const name = clean(data.name, 60);
         if (!name) throw new HrError('Shift name is required');
         if (!TIME_RE.test(data.startTime) || !TIME_RE.test(data.endTime)) throw new HrError('Times must be HH:mm');
@@ -908,7 +957,7 @@ export async function createShiftRoster(data: {
     endDate: string;
 }) {
     try {
-        const { db } = await requireHr('edit');
+        const { db } = await requireHr('edit', 'roster');
         if (!isDayKey(data.startDate) || !isDayKey(data.endDate)) throw new HrError('Invalid dates');
         if (data.endDate < data.startDate) throw new HrError('End date is before start date');
         const keys = eachDayKey(data.startDate, data.endDate, 63);
@@ -942,7 +991,7 @@ export async function createShiftRoster(data: {
 
 export async function removeShiftAssignment(id: number) {
     try {
-        const { db } = await requireHr('edit');
+        const { db } = await requireHr('edit', 'roster');
         const a = await db.shiftAssignment.findFirst({ where: { id } });
         if (!a) throw new HrError('Assignment not found');
         await db.shiftAssignment.delete({ where: { id: a.id } });

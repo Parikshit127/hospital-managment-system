@@ -30,6 +30,53 @@ jobs:
 
       - run: npm run typecheck
 
+      - run: npm run typecheck:scripts
+
       - run: npm run lint:ci
 
+      - run: npm run check:guards
+
+      - run: npm run check:scoped-models
+
+      - run: npm run check:registry
+
+      - run: npm run check:parity
+
+      - run: npm run check:migrations
+
+      - run: npm test
+
       - run: npm run build
+
+  # Database-backed tests of the Company-OS access engine (backfill, role/permission resolution, overrides,
+  # module toggles, shadow log, claims) against a throwaway Postgres.
+  access-integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: access_it
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U ci -d access_it"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql://ci:ci@localhost:5432/access_it
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - run: npm ci
+
+      - run: npx prisma generate
+
+      - run: npm run test:integration

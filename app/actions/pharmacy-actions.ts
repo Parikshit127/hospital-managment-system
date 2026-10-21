@@ -29,8 +29,8 @@ import { postChargeToIpdBill } from '@/app/actions/ipd-finance-actions';
 import { notifyUsersByRole } from '@/app/actions/notification-actions';
 import { isBillClosedForCharges, BILL_FINALIZED_INTENT_MSG } from '@/app/lib/bill-status';
 import { scheduleMedicationAdministrations } from '@/app/actions/ipd-emr-actions';
-import { postInvoiceToGL } from '@/app/actions/gl-actions';
-import { syncInvoiceToGSTRegister } from '@/app/actions/gst-compliance-actions';
+import { postInvoiceToGL } from '@/app/lib/finance/gl-service';
+import { syncInvoiceToGSTRegister } from '@/app/lib/finance/gst-compliance-service';
 import { generateSequentialNumber, generateReceiptNumber as genRcpNum } from '@/app/lib/sequence-generator';
 
 import { validateBackdate } from '@/app/lib/backdate';
@@ -42,7 +42,7 @@ async function postPharmacyJournal(db: any, organizationId: string, data: {
     reference_number?: string;
     lines: Array<{ account_code: string; debit: number; credit: number; description?: string }>;
 }) {
-    const { createJournalEntry } = await import('@/app/actions/gl-actions');
+    const { createJournalEntry } = await import('@/app/lib/finance/gl-service');
     const resolvedLines = [];
     for (const line of data.lines) {
         const account = await db.gL_Account.findFirst({
@@ -956,7 +956,7 @@ export async function generateInvoice(
             console.error('GST sync failed for pharmacy invoice:', invoice.id, err)
         );
         if (payment) {
-            const { postPaymentToGL } = await import('@/app/actions/gl-actions');
+            const { postPaymentToGL } = await import('@/app/lib/finance/gl-service');
             postPaymentToGL(payment.id).catch(err =>
                 console.error('GL payment posting failed for pharmacy invoice:', payment.id, err)
             );
@@ -1269,7 +1269,7 @@ export async function markOrderAsPaid(orderId: number, paymentMethod: string = '
                 });
 
                 // Post payment to GL (non-blocking)
-                const { postPaymentToGL } = await import('@/app/actions/gl-actions');
+                const { postPaymentToGL } = await import('@/app/lib/finance/gl-service');
                 postPaymentToGL(payment.id).catch(err =>
                     console.error('GL payment posting failed:', payment.id, err)
                 );
@@ -3957,7 +3957,7 @@ export async function getPharmacyOrderDetails(orderId: number) {
 export async function cancelPharmacyIndent(orderId: number, reason: string) {
     // The ward raises indents, so nurses and IPD managers can withdraw their own
     // mistakes; pharmacy and admin can cancel any.
-    const denied = await denyUnlessPharmacyRole(['admin', 'pharmacist', 'nurse', 'ipd_manager']);
+    const denied = await denyUnlessPharmacyRole(['admin', 'pharmacist', 'nurse', 'ipd_manager'], 'pharmacy.indent.cancel');
     if (denied) return denied;
 
     try {

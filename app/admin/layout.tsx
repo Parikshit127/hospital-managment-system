@@ -3,6 +3,7 @@ import { getSession } from '@/app/lib/session';
 import { prisma } from '@/backend/db';
 import AdminLayoutShell from './components/AdminLayoutShell';
 import ThemeProvider from './components/ThemeProvider';
+import { AccessClaimsRefresher } from '@/app/components/AccessClaimsRefresher';
 
 export const metadata: Metadata = {
     title: 'Admin Panel — Hospital OS',
@@ -28,6 +29,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
     return (
         <ThemeProvider branding={branding}>
+            <AccessClaimsRefresher enabled={!!session?.access} />
             <AdminLayoutShell 
                 userName={session?.name} 
                 userRole={session?.role}

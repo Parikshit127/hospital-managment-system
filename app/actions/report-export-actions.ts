@@ -16,7 +16,7 @@ import ExcelJS from 'exceljs';
 import { getFinanceDashboardStats } from '@/app/actions/finance-actions';
 import { getExpenseDashboardStats, getExpenseCategories } from '@/app/actions/expense-actions';
 import { getIndentReport, type IndentReportFilters } from '@/app/actions/indent-report-actions';
-import { getFixedAssets } from '@/app/actions/asset-management-actions';
+import { getFixedAssets } from '@/app/lib/finance/asset-management-service';
 import { getAssetDepreciationReport } from '@/app/actions/asset-register-actions';
 import { EDIT_CANCEL_ACTIONS, resolveAuditActionFilter, auditActionLabel, auditActorFromDetails } from '@/app/lib/audit-actions';
 import { getDayRange, getOrgTimezone } from '@/app/lib/timezone';

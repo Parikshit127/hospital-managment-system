@@ -1,5 +1,4 @@
 // @ts-nocheck
-'use server';
 
 /**
  * GL posting for the TPA & Insurance receivables module.
@@ -22,7 +21,7 @@
  */
 
 import { prisma } from '@/backend/db';
-import { createJournalEntry } from './gl-actions';
+import { createJournalEntry } from './gl-service';
 import {
   receivableCode,
   BANK_CODE,

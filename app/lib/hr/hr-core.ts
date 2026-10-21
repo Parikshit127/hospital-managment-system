@@ -11,6 +11,7 @@
 import { headers } from 'next/headers';
 import { requireTenantContext, ForbiddenError } from '@/backend/tenant';
 import { hasPermission } from '@/app/lib/session';
+import { requireAccess } from '@/app/lib/access/require-access';
 import { istDayKey } from '@/app/lib/ist';
 import {
     addDaysKey, dayStartUtc, eachDayKey, istDayBounds, istTimeOnDay, istTodayKey,
@@ -46,13 +47,29 @@ export async function requireStaff(): Promise<HrCtx> {
 
 export type HrAction = 'view' | 'create' | 'edit' | 'approve' | 'export';
 
-/** Staff member holding hr.<action> (admin always passes). */
-export async function requireHr(action: HrAction): Promise<HrCtx> {
+/** Resource part of the `hr.<resource>.<action>` permission (see the hr entry in app/lib/modules/registry.ts). */
+export type HrResource = 'dashboard' | 'employee' | 'attendance' | 'leave' | 'roster' | 'holiday' | 'policy' | 'report';
+
+/** The pre-Company-OS check, kept verbatim as the `legacy` leg of requireAccess. */
+async function legacyRequireHr(action: HrAction): Promise<HrCtx> {
     const ctx = await requireStaff();
     if (!(await hasPermission(`hr.${action}`))) {
         throw new ForbiddenError(`FORBIDDEN_ERROR: hr.${action} required`);
     }
     return ctx;
+}
+
+/**
+ * Staff member allowed to do `action` on an HR `resource` (admin always passes today).
+ *
+ * Goes through requireAccess('hr.<resource>.<action>'): while the unit's access_engine flag is `legacy`
+ * (the default) this is EXACTLY the old check; in `shadow` the new engine is compared against it and
+ * disagreements are logged; in `enforce` the new engine decides. Each permission is tied to the legacy
+ * `hr.<action>` key, so the two agree by construction (tests/access/permission-parity.test.ts).
+ */
+export async function requireHr(action: HrAction, resource: HrResource): Promise<HrCtx> {
+    const ctx = await requireAccess(`hr.${resource}.${action}`, { legacy: () => legacyRequireHr(action) });
+    return ctx as unknown as HrCtx;
 }
 
 /** Shape server-action errors into the { success:false, error } the UI expects. */

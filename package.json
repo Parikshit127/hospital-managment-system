@@ -18,8 +18,16 @@
     "lint": "eslint",
     "lint:ci": "eslint --max-warnings=0 app/lib/env.ts app/lib/route-auth.ts app/lib/password-setup.ts app/lib/login-rate-limit.ts app/patient/setup-password",
     "typecheck": "tsc --noEmit",
+    "typecheck:scripts": "tsc --noEmit -p tsconfig.scripts.json",
     "check:prisma": "prisma validate",
     "check:deps": "node scripts/check-deps-sync.js",
+    "check:guards": "tsx scripts/check-action-guards.ts",
+    "check:scoped-models": "tsx scripts/check-scoped-models.ts",
+    "check:registry": "tsx scripts/check-registry.ts",
+    "check:parity": "tsx scripts/check-access-parity.ts",
+    "check:migrations": "tsx scripts/check-migrations.ts",
+    "test": "vitest run",
+    "test:integration": "bash scripts/test-integration.sh",
     "db:migrate:prod": "prisma migrate deploy",
     "db:migrate:dev": "prisma migrate dev",
     "db:status": "prisma migrate status",
@@ -84,6 +92,7 @@
     "tailwindcss": "^4",
     "ts-node": "^10.9.2",
     "tsx": "^4.23.12",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^3.2.7"
   }
 }

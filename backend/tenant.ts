@@ -46,6 +46,31 @@ export async function requireTenantContext(): Promise<{
 }
 
 /**
+ * Staff-only tenant context: like requireTenantContext() but WITHOUT the patient-session
+ * fallback, so a patient logged into the portal cannot satisfy it by POSTing a server
+ * action id directly. Still authentication only — pair it with a role/permission check
+ * (requireRoleAndTenant, or requireAccess once the access engine ships).
+ *
+ * Additive: nothing calls this yet. Adopt it in staff-only actions module by module;
+ * see docs/COMPANY_OS_PLAN.md Phase 0 / Phase 3.
+ */
+export async function requireStaffContext(): Promise<{
+    db: ReturnType<typeof getTenantPrisma>;
+    session: SessionData;
+    organizationId: string;
+}> {
+    const session = await getSession();
+    if (!session) throw new AuthError();
+    if (!session.organization_id) throw new Error('TENANT_ERROR: No organization');
+
+    return {
+        db: getTenantPrisma(session.organization_id),
+        session,
+        organizationId: session.organization_id,
+    };
+}
+
+/**
  * Session-agnostic tenant context: accepts a hospital staff session, a patient
  * session, OR a dev-portal session. Use this for shared, non-privileged actions
  * that are legitimately reached from BOTH the hospital app and the Dev Portal

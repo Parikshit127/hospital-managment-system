@@ -23,7 +23,7 @@ async function main() {
     process.exit(1);
   }
 
-  const { postDepositToGL, postRefundToGL } = await import('../app/actions/gl-actions');
+  const { postDepositToGL, postRefundToGL } = await import('../app/lib/finance/gl-service');
 
   // --- Deposit ---
   const deposit = await prisma.patientDeposit.create({

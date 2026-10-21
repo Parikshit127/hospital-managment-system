@@ -1,6 +1,6 @@
 import { prisma } from '../backend/db';
-import { getBalanceSheet } from '../app/actions/gl-actions';
-import { buildVoucherXML, buildInvoiceVoucherXML } from '../app/actions/tally-export-actions';
+import { getBalanceSheet } from '../app/lib/finance/gl-service';
+import { buildVoucherXML, buildInvoiceVoucherXML } from '../app/lib/finance/tally-export-service';
 
 // ============================================================
 // helper to coerce decimal values

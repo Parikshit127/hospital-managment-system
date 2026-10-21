@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { checkBudgetThresholds, updateActuals } from '@/app/actions/budget-actions';
+import { checkBudgetThresholds, updateActuals } from '@/app/lib/finance/budget-service';
 import { prisma } from '@/backend/db';
 
 /**

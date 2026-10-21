@@ -3,7 +3,7 @@
 import { requireTenantContext } from '@/backend/tenant';
 import { logAudit } from '@/app/lib/audit';
 import { diffObjects } from '@/app/lib/audit-diff';
-import { createJournalEntry } from './gl-actions';
+import { createJournalEntry } from '@/app/lib/finance/gl-service';
 import { accrueIPDDailyCharges } from '@/app/actions/ipd-actions';
 import { getPackageGSTRate, getRoomGSTRate } from '@/app/lib/gst';
 import { generateInvoiceNumber as genInvNum } from '@/app/lib/sequence-generator';
@@ -3077,7 +3077,7 @@ interface GLEntry {
 // Requires account code mapping to GL account IDs
 
 
-export async function postToGL(entries: GLEntry[]) {
+async function postToGL(entries: GLEntry[]) {
     // Validate double-entry: total debits must equal total credits
     const totalDebit = entries.reduce((s, e) => s + e.debit, 0);
     const totalCredit = entries.reduce((s, e) => s + e.credit, 0);
@@ -3111,7 +3111,7 @@ export async function postToGL(entries: GLEntry[]) {
 }
 
 // Hook: auto-post GL when a charge is posted to IPD bill
-export async function postChargeToGL(data: {
+async function postChargeToGL(data: {
     admission_id: string;
     amount: number;
     tax_amount: number;

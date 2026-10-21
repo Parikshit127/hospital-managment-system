@@ -1,5 +1,4 @@
 // @ts-nocheck
-'use server';
 
 import { prisma } from '@/backend/db';
 import { revalidatePath } from 'next/cache';

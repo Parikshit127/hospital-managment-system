@@ -25,7 +25,7 @@ import {
     transferAsset,
     recordMaintenance,
     disposeAsset,
-} from '@/app/actions/asset-management-actions';
+} from '@/app/lib/finance/asset-management-service';
 
 function serialize<T>(v: T): T {
     return JSON.parse(JSON.stringify(v, (_k, val) => (typeof val === 'bigint' ? Number(val) : val)));

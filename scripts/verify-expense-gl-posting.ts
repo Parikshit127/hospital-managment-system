@@ -58,7 +58,7 @@ async function main() {
   }
 
   await prisma.expense.update({ where: { id: expense.id }, data: { status: 'Approved' } });
-  const { postExpenseToGL, postExpensePaymentToGL } = await import('../app/actions/gl-actions');
+  const { postExpenseToGL, postExpensePaymentToGL } = await import('../app/lib/finance/gl-service');
   const postResult = await postExpenseToGL(expense.id);
   console.log('postExpenseToGL result:', postResult);
   if (!(postResult as any).success) {

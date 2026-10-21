@@ -1,4 +1,6 @@
 import { getSession } from '@/app/lib/session';
+import { requireAccess } from '@/app/lib/access/require-access';
+import { AuthError, ForbiddenError } from '@/backend/tenant';
 
 /**
  * Role gate for the pharmacy server-action layer.
@@ -64,13 +66,51 @@ export type PharmacyDenial = { success: false; error: string };
  */
 export async function denyUnlessPharmacyRole(
     allowedRoles: readonly string[],
+    permission?: string,
 ): Promise<PharmacyDenial | null> {
+    // Company-OS: each tier has an equivalent `pharmacy.*` permission (proven equal to the role list by
+    // tests/access/permission-parity.test.ts). The OLD role-list check below is still what decides while the
+    // unit's access_engine flag is `legacy` (default) or `shadow`; only `enforce` lets the new engine decide.
+    const perm = permission ?? TIER_PERMISSION.get(allowedRoles);
+    if (!perm) return legacyDenial(allowedRoles);
+
+    try {
+        await requireAccess(perm, {
+            target: perm,
+            legacy: async () => {
+                const denial = await legacyDenial(allowedRoles);
+                if (denial) throw new ForbiddenError(denial.error);
+            },
+        });
+        return null;
+    } catch (e) {
+        if (e instanceof AuthError) return { success: false, error: NOT_SIGNED_IN };
+        if (e instanceof ForbiddenError) {
+            // A legacy denial carries its own message; an engine denial gets the standard one.
+            return { success: false, error: e.message.startsWith('FORBIDDEN_ERROR') ? await standardDenial(allowedRoles) : e.message };
+        }
+        // Anything unexpected inside the new machinery must not change pharmacy behaviour: answer exactly as before.
+        console.error('[pharmacy-access] access engine error — using the legacy role check', e);
+        return legacyDenial(allowedRoles);
+    }
+}
+
+const NOT_SIGNED_IN = 'Not signed in as staff. Please log in.';
+
+async function standardDenial(allowedRoles: readonly string[]): Promise<string> {
+    const session = await getSession();
+    void allowedRoles;
+    return `Access denied — your role (${session?.role || 'unknown'}) cannot perform this pharmacy action.`;
+}
+
+/** The original role-list check, unchanged. */
+async function legacyDenial(allowedRoles: readonly string[]): Promise<PharmacyDenial | null> {
     const session = await getSession();
 
     // No staff session at all — either signed out, or holding only a patient /
     // super-admin / dev-portal cookie. None of those may touch pharmacy data.
     if (!session?.organization_id) {
-        return { success: false, error: 'Not signed in as staff. Please log in.' };
+        return { success: false, error: NOT_SIGNED_IN };
     }
 
     if (!allowedRoles.includes(session.role)) {
@@ -82,3 +122,12 @@ export async function denyUnlessPharmacyRole(
 
     return null;
 }
+
+/** Tier (by array identity) → the equivalent permission in the module registry. */
+const TIER_PERMISSION = new Map<readonly string[], string>([
+    [PHARMACY_CATALOG_ROLES, 'pharmacy.catalog.view'],
+    [PHARMACY_OPERATE_ROLES, 'pharmacy.dispense.execute'],
+    [PHARMACY_PROCUREMENT_ROLES, 'pharmacy.purchase.create'],
+    [PHARMACY_PO_APPROVE_ROLES, 'pharmacy.purchase.approve'],
+    [PHARMACY_RETURN_ROLES, 'pharmacy.return.create'],
+]);

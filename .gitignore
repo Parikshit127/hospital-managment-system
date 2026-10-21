@@ -93,4 +93,6 @@ TEST-OBSERVATIONS.md
 docs/testing/
 HospitalOS_BlackBox_Testing_Report.pdf
 *.pdf
-
+
+# local script output (backfill diff etc. contains usernames)
+/tmp/
