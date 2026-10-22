@@ -606,6 +606,8 @@ model User {
   company              Company?                 @relation(fields: [company_id], references: [id])
   user_roles           UserRole[]
   permission_overrides UserPermissionOverride[]
+  mobile_sessions                                         MobileSession[]
+
   @@unique([company_id, username])
   @@index([company_id])
   @@index([organizationId])
@@ -2428,6 +2430,35 @@ model AttendanceEvent {
   @@index([organizationId])
   @@index([employee_id, occurred_at])
   @@map("attendance_events")
+}
+
+// One row per logged-in phone for the HR mobile app. Refresh tokens are stored only as SHA-256 hashes and
+// rotate on every use; presenting a rotated-out token revokes the whole session (token theft signal).
+// Uses `org_id` (not organizationId) on purpose: this is auth plumbing read with the raw client, not tenant data.
+model MobileSession {
+  id                String    @id @default(uuid())
+  user_id           String
+  org_id            String
+  device_id         String
+  device_name       String?
+  platform          String? // android, ios
+  app_version       String?
+  refresh_hash      String    @unique
+  prev_refresh_hash String?
+  login_lat         Float?
+  login_lng         Float?
+  login_accuracy_m  Float?
+  login_ip          String?
+  created_at        DateTime  @default(now())
+  last_used_at      DateTime  @default(now())
+  expires_at        DateTime
+  revoked_at        DateTime?
+  revoked_reason    String?
+  user              User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id, revoked_at])
+  @@index([org_id])
+  @@map("mobile_sessions")
 }
 
 // Employee asks HR to correct a day (forgot to punch, wrong time, on-duty outside).

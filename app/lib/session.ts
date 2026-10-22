@@ -4,6 +4,7 @@ import { SignJWT, jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
 import { validateServerEnv } from '@/app/lib/env';
 import { isAccessClaims, type AccessClaims } from '@/app/lib/access/claims';
+import { mobileRequest } from '@/app/lib/mobile/request-context';
 
 validateServerEnv();
 
@@ -83,6 +84,9 @@ export async function createSession(data: SessionData): Promise<void> {
 }
 
 export async function getSession(): Promise<SessionData | null> {
+    // Mobile API request (Bearer token already verified by withMobileAuth) — no cookie involved.
+    const mobile = mobileRequest.getStore();
+    if (mobile) return mobile;
     try {
         const cookieStore = await cookies();
         const token = cookieStore.get('session')?.value;

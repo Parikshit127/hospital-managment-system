@@ -86,6 +86,8 @@ export async function proxy(request: NextRequest) {
     // itself — bypassing the session-cookie gate here is safe and necessary so
     // the scheduler (Vercel cron / external) is not redirected to /login.
     pathname.startsWith("/api/cron/") ||
+    // Mobile app API: Bearer-token auth is done inside each handler (app/lib/mobile/api.ts mobileRoute).
+    pathname.startsWith("/api/v1/") ||
     pathname.startsWith("/api/reports/") ||
     pathname.startsWith("/api/invoice/") ||
     pathname.startsWith("/api/discharge/") ||
