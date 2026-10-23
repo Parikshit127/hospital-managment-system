@@ -165,7 +165,7 @@ export const MODULES: readonly ModuleDef[] = [
     {
         key: 'hr', name: 'HR & Attendance', layer: 'business', dataLevel: 'company',
         routePrefixes: ['/hr'],
-        actionsFiles: ['hr-actions'],
+        actionsFiles: ['hr-actions', 'access-profile-actions'],
         legacyPermissions: perms('hr'),
         permissions: [
             { key: 'hr.dashboard.view', legacyKey: 'hr.view', description: 'HR dashboard' },
@@ -186,6 +186,9 @@ export const MODULES: readonly ModuleDef[] = [
             { key: 'hr.policy.view', legacyKey: 'hr.view', description: 'View HR policy' },
             { key: 'hr.policy.edit', legacyKey: 'hr.edit', description: 'Change HR policy and leave types' },
             { key: 'hr.report.export', legacyKey: 'hr.export', description: 'Export HR data' },
+            // Tied to hr.create: today exactly admin and the HR role hold it. In a per-employee access profile it is its own
+            // checkbox and only an Admin can grant or remove it (app/lib/access/presets.ts ADMIN_ONLY_PERMISSIONS).
+            { key: 'hr.access.assign', legacyKey: 'hr.create', description: 'Create employee logins and choose which modules an employee can use (never Admin, Finance or Insurance)' },
         ],
         // Ownership used by scopeWhere(): which column ties a row to an employee / unit.
         models: {

@@ -606,6 +606,7 @@ model User {
   company              Company?                 @relation(fields: [company_id], references: [id])
   user_roles           UserRole[]
   permission_overrides UserPermissionOverride[]
+  access_profile       UserAccessProfile?
   mobile_sessions                                         MobileSession[]
 
   @@unique([company_id, username])
@@ -6414,6 +6415,27 @@ model UserRole {
   @@index([role_id])
   @@index([unit_id])
   @@map("user_roles")
+}
+
+// Per-employee access profile ("module by module"). A row makes the user "managed": the engine treats them as
+// `enforce` regardless of the unit flag and the profile is the WHOLE truth (their role template and one-off
+// overrides are ignored). No row = today's behaviour. `modules` are app keys from the module registry;
+// `permissions` maps catalogue keys (module.resource.action) to a data scope.
+model UserAccessProfile {
+  user_id     String   @id
+  company_id  String?
+  preset      String
+  modules     String[]
+  permissions Json     @default("{}")
+  note        String?
+  created_by  String?
+  updated_by  String?
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+  user        User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([company_id])
+  @@map("user_access_profiles")
 }
 
 // Per-user grant/deny of a single permission. Deny beats grant. Reason is mandatory.

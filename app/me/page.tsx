@@ -27,6 +27,9 @@ export default function MyWorkspacePage() {
     // Offset between the server clock and this device, so the on-screen clock is the server's.
     const skew = useRef(0);
     const [now, setNow] = useState<Date>(new Date());
+    // proxy.ts sends people here with ?reason=no-access when they open an app that is not on their access profile
+    const [noAccess, setNoAccess] = useState(false);
+    useEffect(() => { setNoAccess(new URLSearchParams(window.location.search).get('reason') === 'no-access'); }, []);
 
     const load = useCallback(async () => {
         const res = await getMyWorkspace();
@@ -110,6 +113,12 @@ export default function MyWorkspacePage() {
     return (
         <AppShell pageTitle="My Workspace" pageIcon={<Home className="h-5 w-5" />} onRefresh={load}>
             <div className="space-y-5 max-w-6xl">
+                {noAccess && (
+                    <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                        <AlertCircle className="h-5 w-5 shrink-0 mt-0.5" />
+                        <div><span className="font-bold">That app is not part of your access.</span> Ask HR or your administrator if you need it added.</div>
+                    </div>
+                )}
                 <div>
                     <h2 className="text-xl font-black text-gray-900">{greeting(now)}, {ws.employee.name.split(' ')[0]}</h2>
                     <p className="text-sm text-gray-500">

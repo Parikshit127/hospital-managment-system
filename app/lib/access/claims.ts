@@ -44,7 +44,9 @@ const PROXY_PERMS = generateProxyRolePermissions();
  *   always followed — the proxy.ts page gate for that role, or "open to any staff" where it never had a gate —
  *   so turning `enforce` on for a unit can never lock users out of modules Phase 3 has not reached.
  */
-export function claimModules(ent: Pick<Entitlements, 'modules' | 'permissions'>, role: string): string[] {
+export function claimModules(ent: Pick<Entitlements, 'modules' | 'permissions'> & Partial<Pick<Entitlements, 'managed' | 'appModules'>>, role: string): string[] {
+    // A per-employee access profile is explicit and complete: the apps they hold are exactly the apps on it.
+    if (ent.managed && ent.appModules) return [...ent.appModules].sort();
     const out: string[] = [];
     for (const m of MODULES) {
         if (!ent.modules.has(m.key)) continue;

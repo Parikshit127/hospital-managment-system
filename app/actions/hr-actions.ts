@@ -323,11 +323,53 @@ function profileFields(data: EmployeeInput) {
     return out;
 }
 
+/** The company a unit belongs to (null until the Company-OS backfill has run). */
+async function companyOfUnit(organizationId: string): Promise<string | null> {
+    const org = await prisma.organization.findUnique({ where: { id: organizationId }, select: { company_id: true } });
+    return org?.company_id ?? null;
+}
+
+/**
+ * Company masters (designation / department) must belong to the employee's own company - never trust a client-supplied
+ * id. Writes the checked ids into `fields`; also keeps the legacy `designation` text in step with the master.
+ */
+async function applyOrgMasters(fields: Record<string, any>, data: EmployeeInput, companyId: string | null) {
+    if (data.designationId === undefined && data.orgDepartmentId === undefined) return;
+    if (!companyId) throw new HrError('Company setup is not complete for this unit yet.');
+    if (data.designationId !== undefined) {
+        if (data.designationId) {
+            const d = await prisma.designation.findFirst({ where: { id: data.designationId, company_id: companyId, is_active: true } });
+            if (!d) throw new HrError('Unknown designation');
+            fields.designation_id = d.id;
+            if (data.designation === undefined) fields.designation = d.name;
+        } else {
+            fields.designation_id = null;
+        }
+    }
+    if (data.orgDepartmentId !== undefined) {
+        if (data.orgDepartmentId) {
+            const d = await prisma.orgDepartment.findFirst({ where: { id: data.orgDepartmentId, company_id: companyId, is_active: true } });
+            if (!d) throw new HrError('Unknown department');
+            fields.org_department_id = d.id;
+        } else {
+            fields.org_department_id = null;
+        }
+    }
+}
+
 export async function createEmployee(data: EmployeeInput & { name: string; designation: string; dateOfJoining: string }) {
     try {
         const { db, organizationId } = await requireHr('create', 'employee');
+        const companyId = await companyOfUnit(organizationId);
+        // A company designation can stand in for the free-text one.
+        if (data.designationId && !data.designation) {
+            const d = await prisma.designation.findFirst({ where: { id: data.designationId, ...(companyId ? { company_id: companyId } : {}) }, select: { name: true } });
+            if (d) data = { ...data, designation: d.name };
+        }
         const fields = profileFields(data);
         if (!fields.name || !fields.designation || !fields.date_of_joining) throw new HrError('Name, designation and joining date are required');
+        if (companyId) fields.company_id = companyId;
+        await applyOrgMasters(fields, data, companyId);
 
         if (data.salaryBasic !== undefined) {
             if (!isFinite(data.salaryBasic) || data.salaryBasic < 0) throw new HrError('Invalid salary');
@@ -372,30 +414,7 @@ export async function updateEmployee(id: number, data: EmployeeInput) {
             if (data.reportingManagerId) await assertNoManagerCycle(db, id, data.reportingManagerId);
             fields.reporting_manager_id = data.reportingManagerId || null;
         }
-        // Company masters must belong to the employee's own company (never trust a client-supplied id).
-        if (data.designationId !== undefined || data.orgDepartmentId !== undefined) {
-            if (!before.company_id) throw new HrError('Company setup is not complete for this unit yet.');
-            if (data.designationId !== undefined) {
-                if (data.designationId) {
-                    const d = await prisma.designation.findFirst({ where: { id: data.designationId, company_id: before.company_id, is_active: true } });
-                    if (!d) throw new HrError('Unknown designation');
-                    fields.designation_id = d.id;
-                    // keep the legacy text column in step so every existing screen shows the same thing
-                    if (data.designation === undefined) fields.designation = d.name;
-                } else {
-                    fields.designation_id = null;
-                }
-            }
-            if (data.orgDepartmentId !== undefined) {
-                if (data.orgDepartmentId) {
-                    const d = await prisma.orgDepartment.findFirst({ where: { id: data.orgDepartmentId, company_id: before.company_id, is_active: true } });
-                    if (!d) throw new HrError('Unknown department');
-                    fields.org_department_id = d.id;
-                } else {
-                    fields.org_department_id = null;
-                }
-            }
-        }
+        await applyOrgMasters(fields, data, before.company_id ?? (await companyOfUnit(before.organizationId)));
         if (data.isActive !== undefined) {
             fields.is_active = data.isActive;
             if (data.isActive === false && data.dateOfExit === undefined && !before.date_of_exit) {

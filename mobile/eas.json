@@ -30,6 +30,15 @@
       "env": {
         "EXPO_PUBLIC_API_URL": "https://axtenos.com"
       }
+    },
+    "lan": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "http://10.5.48.212:3000"
+      }
     }
   }
 }

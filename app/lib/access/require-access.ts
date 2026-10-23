@@ -7,6 +7,7 @@ import { getEntitlements } from './entitlements';
 import { can, type Entitlements } from './resolve';
 import { scopeWhere } from './scope';
 import { reportIds } from './scope-db';
+import { isProfileManaged } from './profile-store';
 
 /**
  * The single server-side guard for the new access model — docs/COMPANY_OS_PLAN.md §7.3.
@@ -22,6 +23,9 @@ import { reportIds } from './scope-db';
  *            access_shadow_logs — this is how we learn who would be affected before anything is enforced.
  *   enforce  the NEW engine decides. Users the backfill has not provisioned yet fall back to the old check, so a
  *            half-migrated company can never be locked out.
+ *
+ * A user with a per-employee ACCESS PROFILE (ACCESS_PROFILES_PLAN.md) is always treated as `enforce`, whatever the
+ * unit flag says - that is the per-employee switch. The only cost to everyone else is one cached (30 s) lookup.
  *
  * In every mode only a STAFF session is accepted (patient / investor / dev-portal / superadmin cookies are not).
  */
@@ -72,7 +76,8 @@ export async function requireAccess(permission: string, opts: AccessOptions = {}
     const db = getTenantPrisma(unitId);
 
     const companyId = await getCompanyIdForOrg(unitId);
-    const mode = await getAccessEngineMode(unitId, companyId);
+    let mode = await getAccessEngineMode(unitId, companyId);
+    if (mode !== 'enforce' && (await isProfileManaged(session.id))) mode = 'enforce';
 
     // Run the old check first, remembering — not yet throwing — its verdict.
     let legacyError: unknown = null;

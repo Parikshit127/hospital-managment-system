@@ -8,6 +8,7 @@ import {
     addOverrideAction, assignRoleAction, getUserAccessDetailAction, getWizardLookupsAction, listChangeLogAction, offboardUserAction,
     removeOverrideAction, revokeUserRoleAction,
 } from '@/app/actions/access-admin-actions';
+import { EmployeeAccessPanel } from '@/app/components/access/EmployeeAccessPanel';
 import { Btn, Card, Chip, Field, Notice, fmt, inputCls, prettyKey } from '../../ui';
 
 type Detail = Extract<Awaited<ReturnType<typeof getUserAccessDetailAction>>, { success: true }>['data'];
@@ -89,6 +90,16 @@ export default function UserAccessPage() {
                     </div>
                 )}
             </Card>
+
+            {d.employee?.id != null && (
+                <Card title="Module access (per-employee profile)">
+                    <p className="text-xs text-gray-500 mb-4">
+                        Choose module by module what this person can open and do. Once a profile is saved it is the whole truth for this person — the roles and
+                        one-off exceptions further down are then ignored for them. Removing the profile puts them back on their base role.
+                    </p>
+                    <EmployeeAccessPanel employeeId={d.employee.id} onChanged={load} />
+                </Card>
+            )}
 
             <div className="grid lg:grid-cols-2 gap-6">
                 <Card title="Roles">

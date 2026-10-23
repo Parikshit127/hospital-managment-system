@@ -98,7 +98,7 @@ export function AppShell({
       <div className="blob b3" />
       <div className="grid-bg" />
 
-      <AccessClaimsRefresher enabled={!!session?.access} />
+      <AccessClaimsRefresher enabled={!!session} />
       <Sidebar session={session} />
 
       {/* Main content area */}

@@ -5,7 +5,8 @@
  */
 
 import { getTenantPrisma } from '@/backend/db';
-import { hasPermission, type SessionData } from '@/app/lib/session';
+import type { SessionData } from '@/app/lib/session';
+import { hasAccess } from '@/app/lib/access/check-access';
 import { ensureEmployeeForUser, loadHrPolicy } from '@/app/lib/hr/hr-core';
 import { haversineM } from '@/app/lib/hr/hr-policy';
 import type { LoginLocation } from './mobile-auth';
@@ -15,8 +16,8 @@ export async function describeSession(session: SessionData) {
     const employee = await ensureEmployeeForUser(db, session.organization_id, session.id);
     const [reports, hrView, hrEdit, hrApprove, hrCreate, hrExport] = await Promise.all([
         db.employee.count({ where: { reporting_manager_id: employee.id, is_active: true } }),
-        hasPermission('hr.view'), hasPermission('hr.edit'), hasPermission('hr.approve'),
-        hasPermission('hr.create'), hasPermission('hr.export'),
+        hasAccess('hr.dashboard.view', 'hr.view'), hasAccess('hr.employee.edit', 'hr.edit'), hasAccess('hr.leave.approve', 'hr.approve'),
+        hasAccess('hr.employee.create', 'hr.create'), hasAccess('hr.report.export', 'hr.export'),
     ]);
 
     return {

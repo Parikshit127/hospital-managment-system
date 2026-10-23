@@ -65,3 +65,6 @@ export function seededPermissions(): { def: PermissionDef; module: ModuleDef }[]
 export function isCatalogueKey(key: string): boolean {
     return PERMISSION_BY_KEY.has(key);
 }
+
+/** Apps every signed-in employee can reach whatever their access profile says (their own workspace, bell, help). */
+export const IMPLICIT_APPS: readonly string[] = ['ess', 'notifications', 'help_center'];

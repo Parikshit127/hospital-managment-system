@@ -4,10 +4,12 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { AppShell } from '@/app/components/layout/AppShell';
 import {
     User, Loader2, AlertCircle, ArrowLeft, Save, X,
-    Pencil, Calendar, Clock, FileText, Shield, ShieldOff,
+    Pencil, Calendar, Clock, FileText, Shield, ShieldOff, KeyRound,
     CheckCircle, XCircle, MinusCircle, Briefcase, Mail, Phone
 } from 'lucide-react';
 import { getEmployeeDetail, updateEmployee, getLeaveBalance, listOrgMasters } from '@/app/actions/hr-actions';
+import { setEmployeeLoginActiveAction } from '@/app/actions/access-profile-actions';
+import { EmployeeAccessPanel } from '@/app/components/access/EmployeeAccessPanel';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 
@@ -26,7 +28,7 @@ export default function EmployeeDetailPage() {
     const [leaveBalances, setLeaveBalances] = useState<LeaveBalance[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(false);
-    const [activeTab, setActiveTab] = useState<'overview' | 'attendance' | 'leaves' | 'shifts'>('overview');
+    const [activeTab, setActiveTab] = useState<'overview' | 'attendance' | 'leaves' | 'shifts' | 'access'>('overview');
     const [editing, setEditing] = useState(false);
     const [saving, setSaving] = useState(false);
     const [editForm, setEditForm] = useState({
@@ -101,10 +103,18 @@ export default function EmployeeDetailPage() {
 
     const handleToggleActive = async () => {
         if (!employee) return;
+        // A leaver should not keep a working login: offer to switch it off (or back on) together with the employee.
+        const hasLogin = !!employee.user;
+        const turningOff = employee.is_active;
+        const syncLogin = hasLogin && (turningOff ? employee.user.is_active : !employee.user.is_active)
+            && confirm(turningOff ? 'Also switch off this employee’s login so they can no longer sign in?' : 'Also switch this employee’s login back on?');
         setSaving(true);
         try {
             const res = await updateEmployee(employeeId, { isActive: !employee.is_active });
-            if (res.success) loadData();
+            if (res.success) {
+                if (syncLogin) await setEmployeeLoginActiveAction(employeeId, !turningOff);
+                loadData();
+            }
         } catch {
             // error handled silently
         }
@@ -116,6 +126,7 @@ export default function EmployeeDetailPage() {
         { key: 'attendance' as const, label: 'Attendance History', icon: Clock },
         { key: 'leaves' as const, label: 'Leave History', icon: FileText },
         { key: 'shifts' as const, label: 'Shift History', icon: Calendar },
+        { key: 'access' as const, label: 'Login & Access', icon: KeyRound },
     ];
 
     const formatDate = (d: string | null) => d ? new Date(d).toLocaleDateString('en-GB') : '-';
@@ -236,6 +247,11 @@ export default function EmployeeDetailPage() {
 
             {/* Tab Content */}
             <div className="bg-white border border-gray-200 shadow-sm rounded-2xl overflow-hidden">
+                {activeTab === 'access' && (
+                    <div className="p-6">
+                        <EmployeeAccessPanel employeeId={employeeId} onChanged={loadData} />
+                    </div>
+                )}
                 {activeTab === 'overview' && (
                     <div className="p-6">
                         {editing ? (

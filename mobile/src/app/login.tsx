@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { useAuth } from '@/auth/AuthContext';
 import { Button, Card, Field, Screen, T, errText } from '@/components/ui';
-import { APP_VERSION } from '@/config';
+import { APP_VERSION, API_URL } from '@/config';
 import { space, useTheme } from '@/theme';
 
 export default function Login() {
@@ -56,7 +56,7 @@ export default function Login() {
                     <T v="sub" style={{ textAlign: 'center' }}>Your location is recorded when you sign in and when you punch.</T>
                 </Card>
             )}
-            <T v="sub" style={{ textAlign: 'center', marginTop: space.lg }}>Version {APP_VERSION}</T>
+            <T v="sub" style={{ textAlign: 'center', marginTop: space.lg }}>Version {APP_VERSION} · {API_URL.replace(/^https?:\/\//, '')}</T>
         </Screen>
     );
 }

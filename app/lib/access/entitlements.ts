@@ -2,6 +2,7 @@ import { prisma } from '@/backend/db';
 import type { DataScope } from '../modules/types';
 import { isDataScope } from './permissions';
 import { resolveEntitlements, type Entitlements } from './resolve';
+import { loadProfile } from './profile-store';
 
 /**
  * Entitlement loader — reads the Phase 2 tables and hands them to the pure resolver (resolve.ts).
@@ -37,7 +38,7 @@ export async function getEntitlements(userId: string, unitId: string): Promise<E
     if (hit && Date.now() - hit.at < TTL_MS) return hit.ent;
 
     const now = new Date();
-    const [companyModules, disabledConfigs, userRoles, overrides, employee] = await Promise.all([
+    const [companyModules, disabledConfigs, userRoles, overrides, employee, profile] = await Promise.all([
         company && company.is_active
             ? prisma.companyModule.findMany({
                 where: { company_id: company.id, OR: [{ expires_at: null }, { expires_at: { gt: now } }] },
@@ -64,6 +65,7 @@ export async function getEntitlements(userId: string, unitId: string): Promise<E
             select: { permission_key: true, effect: true, scope: true },
         }),
         prisma.employee.findFirst({ where: { user_id: userId }, select: { id: true, org_department_id: true } }),
+        loadProfile(userId), // null when the user has none (or the table does not exist yet)
     ]);
 
     const ent = resolveEntitlements({
@@ -81,6 +83,7 @@ export async function getEntitlements(userId: string, unitId: string): Promise<E
         overrides: overrides.map((o) => ({ key: o.permission_key, effect: o.effect, scope: o.scope && isDataScope(o.scope) ? o.scope : null })),
         employeeId: employee?.id ?? null,
         departmentId: employee?.org_department_id ?? null,
+        profile: profile ? { preset: profile.preset, modules: profile.modules, permissions: profile.permissions } : null,
     });
 
     cache.set(key, { at: Date.now(), ent });

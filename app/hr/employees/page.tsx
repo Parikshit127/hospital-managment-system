@@ -7,6 +7,7 @@ import {
     ChevronLeft, ChevronRight, Filter, UserX
 } from 'lucide-react';
 import { getEmployeeList } from '@/app/actions/hr-actions';
+import { getAccessStatusAction } from '@/app/actions/access-profile-actions';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
@@ -18,7 +19,10 @@ interface Employee {
     email: string | null;
     phone: string | null;
     is_active: boolean;
+    user?: { role: string; username: string } | null;
 }
+
+type AccessInfo = { hasLogin: boolean; username: string | null; loginActive: boolean; role: string | null; managed: boolean; moduleCount: number | null };
 
 export default function EmployeeListPage() {
     const router = useRouter();
@@ -31,6 +35,8 @@ export default function EmployeeListPage() {
     const [page, setPage] = useState(1);
     const [totalPages, setTotalPages] = useState(0);
     const [total, setTotal] = useState(0);
+    // login + access-profile status per employee on this page (best effort: the list works without it)
+    const [access, setAccess] = useState<Record<number, AccessInfo>>({});
 
     const loadData = useCallback(async () => {
         setLoading(true);
@@ -47,6 +53,7 @@ export default function EmployeeListPage() {
                 setEmployees(res.data as Employee[]);
                 setTotalPages(res.totalPages);
                 setTotal(res.total);
+                getAccessStatusAction((res.data as Employee[]).map((e) => e.id)).then((a) => { if (a.success) setAccess(a.data); });
             } else {
                 setError(true);
             }
@@ -155,6 +162,8 @@ export default function EmployeeListPage() {
                                         <th className="text-left px-4 py-3 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Designation</th>
                                         <th className="text-left px-4 py-3 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Email</th>
                                         <th className="text-left px-4 py-3 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Phone</th>
+                                        <th className="text-left px-4 py-3 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Login</th>
+                                        <th className="text-left px-4 py-3 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Access</th>
                                         <th className="text-left px-4 py-3 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Status</th>
                                     </tr>
                                 </thead>
@@ -170,6 +179,18 @@ export default function EmployeeListPage() {
                                             <td className="px-4 py-3 text-gray-600">{emp.designation}</td>
                                             <td className="px-4 py-3 text-gray-500">{emp.email || '-'}</td>
                                             <td className="px-4 py-3 text-gray-500">{emp.phone || '-'}</td>
+                                            <td className="px-4 py-3 text-xs">
+                                                {(access[emp.id]?.hasLogin ?? !!emp.user) ? (
+                                                    <span className="font-mono text-gray-700">{access[emp.id]?.username ?? emp.user?.username}</span>
+                                                ) : <span className="text-gray-400">No login</span>}
+                                            </td>
+                                            <td className="px-4 py-3 text-xs">
+                                                {(access[emp.id]?.hasLogin ?? !!emp.user) ? (
+                                                    access[emp.id]?.managed
+                                                        ? <span className="px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 font-bold" title="Custom access profile">Custom · {access[emp.id]?.moduleCount} module(s)</span>
+                                                        : <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 font-semibold">{(access[emp.id]?.role ?? emp.user?.role ?? '').replace(/_/g, ' ')} role</span>
+                                                ) : <span className="text-gray-300">—</span>}
+                                            </td>
                                             <td className="px-4 py-3">
                                                 <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                                                     emp.is_active

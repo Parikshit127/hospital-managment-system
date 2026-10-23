@@ -11,7 +11,7 @@
  */
 import { MODULES } from '../modules/registry';
 import type { DataScope } from '../modules/types';
-import { ALL_PERMISSION_KEYS, SCOPE_ORDER, legacyKeyOf, moduleOfPermission, storageKeysFor, widerScope } from './permissions';
+import { ALL_PERMISSION_KEYS, IMPLICIT_APPS, SCOPE_ORDER, legacyKeyOf, moduleOfPermission, storageKeysFor, widerScope } from './permissions';
 
 export interface ResolveInput {
     userId: string;
@@ -30,6 +30,11 @@ export interface ResolveInput {
     overrides: readonly { key: string; effect: 'GRANT' | 'DENY'; scope: DataScope | null }[];
     employeeId: number | null;
     departmentId: string | null;
+    /**
+     * The user's per-employee access profile, if they have one (ACCESS_PROFILES_PLAN.md). A profile is the WHOLE
+     * truth: roles and one-off overrides are ignored. null/undefined ⇒ the usual role + override resolution.
+     */
+    profile?: { preset: string; modules: readonly string[]; permissions: Readonly<Record<string, DataScope>> } | null;
 }
 
 export interface Entitlements {
@@ -50,6 +55,10 @@ export interface Entitlements {
     /** Holds the 'admin' template company-wide (UserRole.unit_id = null): may administer every unit. */
     isCompanyOwner: boolean;
     version: string;
+    /** Follows a per-employee access profile (not roles). The engine treats such a user as `enforce`. */
+    managed: boolean;
+    /** The apps (sidebar + page gate) a managed user holds. Meaningless — empty — for everyone else. */
+    appModules: ReadonlySet<string>;
 }
 
 /** Company entitlement ∩ unit toggle ∩ dependency closure. `alwaysOn` modules (My Workspace) are exempt. */
@@ -78,8 +87,10 @@ export function resolveEntitlements(input: ResolveInput): Entitlements {
         companyId: input.companyId, userId: input.userId, unitId: input.unitId,
         employeeId: input.employeeId, departmentId: input.departmentId,
         provisioned: false, modules: new Set(), permissions: new Map(), denied: new Set(), isAdmin: false, isCompanyOwner: false, version: input.version,
+        managed: false, appModules: new Set(),
     };
     if (!input.userActive) return empty;
+    if (input.profile) return resolveProfile(input, empty);
 
     const activeRoles = input.roles.filter((r) => r.isActive);
     const provisioned = !!input.entitledModules && input.entitledModules.size > 0 && activeRoles.length > 0;
@@ -122,6 +133,34 @@ export function resolveEntitlements(input: ResolveInput): Entitlements {
     }
 
     return { ...empty, provisioned, modules, permissions: perms, denied, isAdmin, isCompanyOwner };
+}
+
+/**
+ * A user with an access profile: apps = the profile's apps (∩ what the company has, the unit has not switched off
+ * and whose dependencies exist) + the implicit ones; permissions = exactly the profile's catalogue keys. Roles and
+ * overrides play no part, and a profile can never make someone an administrator.
+ */
+function resolveProfile(input: ResolveInput, empty: Entitlements): Entitlements {
+    const profile = input.profile!;
+    const modules = effectiveModules(input.entitledModules, input.disabledModules);
+    const appModules = new Set<string>();
+    for (const m of MODULES) {
+        if (!modules.has(m.key)) continue;
+        if (m.alwaysOn || IMPLICIT_APPS.includes(m.key) || profile.modules.includes(m.key)) appModules.add(m.key);
+    }
+
+    const perms = new Map<string, DataScope>();
+    for (const [key, scope] of Object.entries(profile.permissions)) {
+        const mod = moduleOfPermission(key);
+        if (mod && modules.has(mod.key)) perms.set(key, scope);
+    }
+    for (const m of MODULES) if (m.alwaysOn) for (const p of m.permissions ?? []) perms.set(p.key, 'OWN');
+
+    return {
+        ...empty,
+        provisioned: !!input.entitledModules && input.entitledModules.size > 0,
+        modules, permissions: perms, managed: true, appModules,
+    };
 }
 
 /** The scope at which `key` is held, or null. `key` may be a new-style or a legacy key. */

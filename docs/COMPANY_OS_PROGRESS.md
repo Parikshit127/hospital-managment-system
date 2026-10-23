@@ -235,3 +235,13 @@ Admin reaches all new pages (200); a doctor is bounced to `/login?reason=unautho
 - **Delete the legacy maps and retire the parity test** — only after a stable pilot, by design.
 - Per-request `is_active` check (above) and forced password change.
 - The remaining ~820 server actions (Phase 3 gate) — until they are on `requireAccess`, `enforce` governs only HR, pharmacy, finance-ledger/Tally, admin-access and the module-level page gate.
+
+
+## Per-employee access profiles  (2026-10-23) - built, verified; migration `20261023120000_user_access_profiles` NOT applied
+
+Plan + status: `ACCESS_PROFILES_PLAN.md` (project root). A third way to govern a user, alongside legacy and the unit-wide
+engine: a row in `user_access_profiles` makes ONE employee follow the new engine (always `enforce` for them) with an explicit
+module list + catalogue permissions, regardless of the unit's `access_engine` flag. No row = unchanged behaviour. HR and Admin
+set it from the Add Employee screen / the employee's "Login & Access" tab; HR may not hand out Admin, Finance or Insurance
+(`app/lib/access/presets.ts` `checkProfileChange`). Page level covers every module; action level only HR, Pharmacy and
+Finance-ledger (catalogue modules). Next module to give a catalogue: Reception.

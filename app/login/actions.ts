@@ -7,6 +7,7 @@ import { redirect } from 'next/navigation';
 import { isMfaRequiredRole } from '@/app/actions/mfa-actions';
 import { createSession, createMfaPendingSession, getMfaPendingSession } from '@/app/lib/session';
 import { loginSchema } from '@/app/lib/validations';
+import { managedLanding } from '@/app/lib/access/landing';
 import {
     checkLoginAttempt,
     clearLoginFailures,
@@ -146,6 +147,10 @@ export async function login(prevState: any, formData: FormData) {
     // Redirect based on role
     const user = await prisma.user.findUnique({ where: { username } });
     if (!user) return { success: false, error: 'User not found' };
+
+    // Employees with a per-employee access profile land on an app they actually hold.
+    const profileHome = await managedLanding({ id: user.id, role: user.role, organization_id: user.organizationId });
+    if (profileHome) redirect(profileHome);
 
     switch (user.role) {
         case 'receptionist': redirect('/reception');
